@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Langes Drücken 2x</string>
     <string name="gesture_seek">Wischspulen</string>
     <string name="gesture_fullscreen_swipe">Vollbild ein/aus</string>
-    <string name="enable_in_windowed">Im Fenstermodus aktivieren</string>
+    <string name="enable_in_embedded">Im eingebetteten Player aktivieren</string>
     <string name="enable_in_fullscreen">Im Vollbild aktivieren</string>
     <string name="brightness">Helligkeit</string>
     <string name="volume">Lautstärke</string>

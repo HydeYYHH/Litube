@@ -1,12 +1,10 @@
 package com.hhst.youtubelite.browser
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -14,11 +12,15 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.content.ActivityNotFoundException
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.webkit.WebViewFeature
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.createBitmap
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.extension.ExtensionInjector
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -36,10 +38,18 @@ object WebViewFactory {
     private const val NAV_JS = "script/nav.js"
     private const val WATCH_ID_JS = "script/watch-id.js"
     private const val INNERTUBE_JS = "script/innertube.js"
-    /** Master-branch interface name kept for injected page scripts. */
-    private const val LITE_ALIAS = "lite"
+    private const val PLAYER_HOOK_JS = "script/player-hook.js"
+    private const val DISLIKES_JS = "script/display_dislikes.js"
+    private const val HIDE_SHORTS_JS = "script/hide_shorts.js"
+    private const val SHORTS_ADS_JS = "script/remove_shorts_ads.js"
+    /** Injected page scripts address the bridge as `lite`. */
+    internal const val LITE_ALIAS = "lite"
 
     private val navScript = PageScript(NAV_JS, "WebViewFactory")
+    private val playerHookScript = PageScript(PLAYER_HOOK_JS, "PlayerHook")
+    private val dislikesScript = PageScript(DISLIKES_JS, "Dislikes")
+    private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
+    private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "ShortsAds")
 
     @SuppressLint("SetJavaScriptEnabled")
     fun create(
@@ -50,6 +60,11 @@ object WebViewFactory {
         onRefresh: (WebView) -> Unit,
         extractor: Extractor,
         playerCache: PlayerCache,
+        playerHooks: PlayerHooks,
+        onAddToQueue: ((Bridge.QueueItemJson?) -> Unit)? = null,
+        onShowMediaItemMenu: ((Bridge.QueueItemJson) -> Unit)? = null,
+        onPlaylistPresence: ((Boolean) -> Unit)? = null,
+        tabId: Long = 0L,
     ): BrowserHost {
         val appContext = context.applicationContext
         val injector = ExtensionInjector(appContext)
@@ -58,6 +73,11 @@ object WebViewFactory {
             onOpenExtension = onOpenExtension,
             extensionManager = extensionManager,
             extractor = extractor,
+            playerHooks = playerHooks,
+            onAddToQueue = onAddToQueue,
+            onShowMediaItemMenu = onShowMediaItemMenu,
+            onPlaylistPresence = onPlaylistPresence,
+            tabId = tabId,
         )
         val netTracer = NetTracer()
         val watchId = PageScript(WATCH_ID_JS, "WatchId")
@@ -96,9 +116,14 @@ object WebViewFactory {
             }
             addJavascriptInterface(bridge, Bridge.NAME)
             addJavascriptInterface(bridge, LITE_ALIAS)
+            navScript.install(appContext, this)
             netTracer.install(appContext, this)
             watchId.install(appContext, this)
             innertube.install(appContext, this)
+            playerHookScript.install(appContext, this)
+            dislikesScript.install(appContext, this)
+            hideShortsScript.install(appContext, this)
+            shortsAdsScript.install(appContext, this)
             webViewClient = BrowserWebViewClient(
                 appContext = appContext,
                 callbacks = callbacks,
@@ -106,6 +131,10 @@ object WebViewFactory {
                 netTracer = netTracer,
                 watchId = watchId,
                 innertube = innertube,
+                playerHook = playerHookScript,
+                dislikes = dislikesScript,
+                hideShorts = hideShortsScript,
+                shortsAds = shortsAdsScript,
                 bridge = bridge,
                 playerCache = playerCache,
                 swipeRefresh = swipeRefresh,
@@ -136,6 +165,10 @@ private class BrowserWebViewClient(
     private val netTracer: NetTracer,
     private val watchId: PageScript,
     private val innertube: PageScript,
+    private val playerHook: PageScript,
+    private val dislikes: PageScript,
+    private val hideShorts: PageScript,
+    private val shortsAds: PageScript,
     private val bridge: Bridge,
     private val playerCache: PlayerCache,
     private val swipeRefresh: SwipeRefreshLayout,
@@ -173,10 +206,9 @@ private class BrowserWebViewClient(
 
     private fun respondPlayer(videoId: String): WebResourceResponse? {
         val bytes = playerCache.get(videoId) ?: return null
-        Log.d(TAG, "player cache hit $videoId")
         return WebResourceResponse(
             "application/json",
-            "utf-8",
+            Charsets.UTF_8.name(),
             200,
             "OK",
             emptyMap(),
@@ -204,28 +236,33 @@ private class BrowserWebViewClient(
         return false
     }
 
-    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-        super.onPageStarted(view, url, favicon)
-        updateRefreshEnabled(url)
+    /** Inject every page script in dependency order. */
+    private fun injectAll(view: WebView) {
         WebViewFactory.injectNavScript(appContext, view)
         netTracer.inject(appContext, view)
         watchId.inject(appContext, view)
         innertube.inject(appContext, view)
+        playerHook.inject(appContext, view)
+        dislikes.inject(appContext, view)
+        hideShorts.inject(appContext, view)
+        shortsAds.inject(appContext, view)
         injector.inject(view)
+    }
+
+    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+        super.onPageStarted(view, url, favicon)
+        updateRefreshEnabled(url)
+        bridge.onDocumentStarted()
+        if (!hasDocumentStartScript) injectAll(view)
         callbacks.onPageStarted(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
     }
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
-        WebViewFactory.injectNavScript(appContext, view)
-        netTracer.inject(appContext, view)
-        watchId.inject(appContext, view)
-        innertube.inject(appContext, view)
-        injector.inject(view)
+        if (hasDocumentStartScript) injector.inject(view) else injectAll(view)
         callbacks.onPageFinished(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
-        netTracer.dump()
     }
 
     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -242,8 +279,23 @@ private class BrowserWebViewClient(
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
             true
         } catch (_: ActivityNotFoundException) {
+            externalLinkUnavailable(context)
+            true
+        } catch (_: SecurityException) {
+            // An OEM-banned package.
+            externalLinkUnavailable(context)
             true
         }
+    }
+
+    private fun externalLinkUnavailable(context: Context) {
+        // A silent dead tap looks broken, so surface it. Still true: letting
+        // the WebView load the link would bypass the host allowlist.
+        Toast.makeText(
+            context,
+            R.string.application_not_found,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     /** Pull-to-refresh only on pages without conflicting vertical gestures. */
@@ -252,9 +304,18 @@ private class BrowserWebViewClient(
     }
 
     private companion object {
-        const val TAG = "WebViewClient"
         const val PLAYER_PATH = "/youtubei/v1/player"
-        const val PLAYER_WAIT_MS = 2000L
+
+        /**
+         * How long an intercepted page /player POST waits for the native
+         * prefetch before falling through to the network. Deliberately short
+         * (was 2000 ms): blocking the WebView request thread for seconds cost
+         * more latency than the occasional duplicate /player fetch it was
+         * meant to save — warm-cache hits still answer instantly above.
+         */
+        const val PLAYER_WAIT_MS = 250L
+        val hasDocumentStartScript =
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         val REFRESH_KINDS = setOf(
             Constants.PAGE_HOME,
             Constants.PAGE_SUBSCRIPTIONS,

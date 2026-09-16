@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Pulsación larga 2x</string>
     <string name="gesture_seek">Deslizar para buscar</string>
     <string name="gesture_fullscreen_swipe">Entrar/salir de pantalla completa</string>
-    <string name="enable_in_windowed">Activar en modo ventana</string>
+    <string name="enable_in_embedded">Activar en el reproductor integrado</string>
     <string name="enable_in_fullscreen">Activar en pantalla completa</string>
     <string name="brightness">Brillo</string>
     <string name="volume">Volumen</string>

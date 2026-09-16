@@ -11,6 +11,7 @@ data class Extension(
     @param:StringRes val title: Int,
     @param:DrawableRes val icon: Int = 0,
     val children: List<Extension> = emptyList(),
+    @param:StringRes val summary: Int = 0,
 ) {
     val isGroup: Boolean get() = children.isNotEmpty()
 
@@ -21,7 +22,17 @@ data class Extension(
                 title = R.string.interface_category,
                 icon = R.drawable.ic_settings,
                 children = listOf(
-                    toggle(PreferenceKeys.ENABLE_DISPLAY_DISLIKES, R.string.display_dislikes),
+                    toggle(
+                        PreferenceKeys.ENABLE_DISPLAY_DISLIKES,
+                        R.string.display_dislikes,
+                        R.string.display_dislikes_summary,
+                    ),
+                    // Same RYD request as dislikes, so the privacy note applies here too.
+                    toggle(
+                        PreferenceKeys.ENABLE_SHOW_LIKES,
+                        R.string.show_likes,
+                        R.string.display_dislikes_summary,
+                    ),
                     toggle(PreferenceKeys.ENABLE_HIDE_SHORTS, R.string.hide_shorts),
                 ),
             ),
@@ -34,6 +45,7 @@ data class Extension(
                     toggle(PreferenceKeys.REMEMBER_QUALITY, R.string.remember_quality),
                     toggle(PreferenceKeys.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
                     toggle(PreferenceKeys.REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
+                    toggle(PreferenceKeys.USE_ORIGINAL_TITLE, R.string.use_original_title),
                 ),
             ),
             group(
@@ -43,7 +55,7 @@ data class Extension(
                 children = listOf(
                     group(
                         id = "gesture_windowed",
-                        title = R.string.enable_in_windowed,
+                        title = R.string.enable_in_embedded,
                         children = listOf(
                             toggle(PreferenceKeys.GESTURE_TAP_WINDOWED, R.string.gesture_single_tap),
                             toggle(PreferenceKeys.GESTURE_DOUBLE_TAP_WINDOWED, R.string.gesture_double_tap),
@@ -87,6 +99,7 @@ data class Extension(
                     toggle(PreferenceKeys.SKIP_SPONSORS, R.string.skip_sponsors),
                     toggle(PreferenceKeys.SKIP_SELF_PROMO, R.string.skip_sponsors_selfpromo),
                     toggle(PreferenceKeys.SKIP_POI_HIGHLIGHT, R.string.skip_sponsors_highlight),
+                    toggle(PreferenceKeys.SPONSOR_COUNTDOWN, R.string.sponsor_countdown),
                 ),
             ),
         )
@@ -98,7 +111,11 @@ data class Extension(
             children: List<Extension>,
         ): Extension = Extension(id = id, title = title, icon = icon, children = children)
 
-        fun toggle(key: String, @StringRes title: Int): Extension =
-            Extension(id = key, key = key, title = title)
+        fun toggle(
+            key: String,
+            @StringRes title: Int,
+            @StringRes summary: Int = 0,
+        ): Extension =
+            Extension(id = key, key = key, title = title, summary = summary)
     }
 }

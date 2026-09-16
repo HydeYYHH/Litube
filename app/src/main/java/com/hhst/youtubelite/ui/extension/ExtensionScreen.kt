@@ -230,6 +230,7 @@ private fun GroupBlock(
                     val key = child.key ?: continue
                     ToggleRow(
                         title = child.title,
+                        summary = child.summary,
                         checked = toggles[key] == true,
                         depth = depth + 1,
                         onCheckedChange = { onToggle(key, it) },
@@ -243,6 +244,7 @@ private fun GroupBlock(
 @Composable
 private fun ToggleRow(
     title: Int,
+    summary: Int,
     checked: Boolean,
     depth: Int,
     onCheckedChange: (Boolean) -> Unit,
@@ -256,14 +258,20 @@ private fun ToggleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = stringResource(title),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp),
-        )
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = stringResource(title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (summary != 0) {
+                Text(
+                    text = stringResource(summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,

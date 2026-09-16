@@ -1,16 +1,32 @@
 package com.hhst.youtubelite.extractor
 
+import java.util.concurrent.ConcurrentHashMap
+
 /**
  * Reads mem first, then disk. Writes fill both so player hits stay hot in RAM.
+ *
+ * Disk hits are promoted into mem with the disk entry's remaining lifetime:
+ * re-boxing with a fresh TTL would let the mem copy outlive the disk entry and
+ * keep serving expired googlevideo URLs, which 403 on the player.
+ *
+ * Stream get / put / invalidate for one id share a lock so a disk→mem
+ * promotion cannot resurrect an entry [invalidateStream] just cleared.
  */
 class LayeredCache(
-    private val mem: Cache,
-    private val disk: Cache,
+    private val mem: MemCache,
+    private val disk: DiskCache,
 ) : Cache {
+
+    private val streamLocks = ConcurrentHashMap<String, Any>()
+
+    private fun streamLock(videoId: String): Any =
+        streamLocks.computeIfAbsent(videoId) { Any() }
 
     override fun getMetadata(videoId: String): Metadata? {
         mem.getMetadata(videoId)?.let { return it }
-        return disk.getMetadata(videoId)?.also { mem.putMetadata(videoId, it) }
+        val (value, until) = disk.getMetadataWithExpiry(videoId) ?: return null
+        mem.putMetadata(videoId, value, until)
+        return value
     }
 
     override fun putMetadata(videoId: String, metadata: Metadata) {
@@ -19,27 +35,37 @@ class LayeredCache(
     }
 
     override fun getStream(videoId: String): Stream? {
-        mem.getStream(videoId)?.let { return it }
-        return disk.getStream(videoId)?.also { mem.putStream(videoId, it) }
+        synchronized(streamLock(videoId)) {
+            mem.getStream(videoId)?.let { return it }
+            val (value, until) = disk.getStreamWithExpiry(videoId) ?: return null
+            mem.putStream(videoId, value, until)
+            return value
+        }
     }
 
     override fun putStream(videoId: String, stream: Stream) {
-        mem.putStream(videoId, stream)
-        disk.putStream(videoId, stream)
+        synchronized(streamLock(videoId)) {
+            mem.putStream(videoId, stream)
+            disk.putStream(videoId, stream)
+        }
     }
 
     override fun invalidateStream(videoId: String) {
-        mem.invalidateStream(videoId)
-        disk.invalidateStream(videoId)
+        synchronized(streamLock(videoId)) {
+            mem.invalidateStream(videoId)
+            disk.invalidateStream(videoId)
+        }
     }
 
-    override fun getSegment(videoId: String): Segment? {
-        mem.getSegment(videoId)?.let { return it }
-        return disk.getSegment(videoId)?.also { mem.putSegment(videoId, it) }
+    override fun getChapters(videoId: String): ChapterList? {
+        mem.getChapters(videoId)?.let { return it }
+        val (value, until) = disk.getChaptersWithExpiry(videoId) ?: return null
+        mem.putChapters(videoId, value, until)
+        return value
     }
 
-    override fun putSegment(videoId: String, segment: Segment) {
-        mem.putSegment(videoId, segment)
-        disk.putSegment(videoId, segment)
+    override fun putChapters(videoId: String, chapters: ChapterList) {
+        mem.putChapters(videoId, chapters)
+        disk.putChapters(videoId, chapters)
     }
 }

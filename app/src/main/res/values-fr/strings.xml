@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Appui long 2x</string>
     <string name="gesture_seek">Balayage pour chercher</string>
     <string name="gesture_fullscreen_swipe">Entrer/sortir du plein écran</string>
-    <string name="enable_in_windowed">Activer en mode fenêtré</string>
+    <string name="enable_in_embedded">Activer dans le lecteur intégré</string>
     <string name="enable_in_fullscreen">Activer en plein écran</string>
     <string name="brightness">Luminosité</string>
     <string name="volume">Volume</string>

@@ -5,7 +5,6 @@
 
   const SLOW = 500;
   const MAX_URL = 512;
-  let seq = 0;
 
   function clip(s) {
     s = String(s || '');
@@ -28,18 +27,16 @@
     return false;
   }
 
-  function emit(hit) {
-    if (noise(hit.url, hit.src)) return;
-    hit.id = ++seq;
-    hit.ts = Date.now();
+  function emit(record) {
+    if (noise(record.url, record.src)) return;
     try {
-      if (window.NetTrace && typeof window.NetTrace.onHit === 'function') {
-        window.NetTrace.onHit(JSON.stringify(hit));
+      if (window.NetTrace && typeof window.NetTrace.onRequestLogged === 'function') {
+        window.NetTrace.onRequestLogged(JSON.stringify(record));
       }
     } catch {}
-    const tag = hit.ms >= SLOW ? 'SLOW' : 'ok';
-    const line = `[NetTracer:${tag}] ${hit.method} ${hit.ms}ms #${hit.status} ${hit.src} ${clip(hit.url)}`;
-    if (hit.ms >= SLOW) console.warn(line);
+    const tag = record.ms >= SLOW ? 'SLOW' : 'ok';
+    const line = `[NetTracer:${tag}] ${record.method} ${record.ms}ms #${record.status} ${record.src} ${clip(record.url)}`;
+    if (record.ms >= SLOW) console.warn(line);
     else console.debug(line);
   }
 
@@ -66,7 +63,6 @@
           url: clip(url),
           status: res ? res.status : 0,
           ms: Math.round(now() - t0),
-          ok: !!(res && res.ok),
         });
         return res;
       }, (err) => {
@@ -76,7 +72,6 @@
           url: clip(url),
           status: 0,
           ms: Math.round(now() - t0),
-          ok: false,
           err: String(err && err.message || err),
         });
         throw err;
@@ -110,7 +105,6 @@
         url: meta.url,
         status: this.status || 0,
         ms: Math.round(now() - meta.t0),
-        ok: this.status >= 200 && this.status < 400,
       });
     };
     this.addEventListener('loadend', done);

@@ -8,8 +8,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Raw WEB-client /player responses keyed by video id, served to the WebView to
- * avoid duplicate requests. The TTL is short because stream URLs expire quickly.
- * In-flight fetches are tracked so callers can wait for a pending response.
+ * avoid duplicate requests. The TTL mirrors [CacheTtl.STREAM_MS] — both count
+ * the same googlevideo URL freshness — and [Extractor.invalidateStream] drops
+ * entries here alongside the Cache layer. In-flight fetches are tracked so
+ * callers can wait for a pending response.
  */
 class PlayerCache {
     private val entries = LruCache<String, Entry>(MAX)
@@ -27,16 +29,27 @@ class PlayerCache {
     }
 
     fun put(videoId: String, bytes: ByteArray) {
+        if (!acceptsBody(bytes.size)) return
         entries.put(videoId, Entry(bytes, SystemClock.elapsedRealtime()))
     }
 
+    /** True when [size] fits the in-memory /player body cap. */
+    internal fun acceptsBody(size: Int): Boolean = size in 1..MAX_ENTRY_BYTES
+
+    /** Drops any cached raw /player response for [videoId]. */
+    fun invalidate(videoId: String) {
+        entries.remove(videoId)
+    }
+
     /** Runs [block] while the fetch of [videoId] is marked in-flight. */
-    fun <T> tracking(videoId: String, block: () -> T): T {
-        begin(videoId)
+    fun <T> withInFlight(videoId: String, block: () -> T): T {
+        val latch = CountDownLatch(1)
+        inFlight[videoId] = latch
         try {
             return block()
         } finally {
-            end(videoId)
+            inFlight.remove(videoId, latch)
+            latch.countDown()
         }
     }
 
@@ -51,16 +64,10 @@ class PlayerCache {
         }
     }
 
-    private fun begin(videoId: String) {
-        inFlight.putIfAbsent(videoId, CountDownLatch(1))
-    }
-
-    private fun end(videoId: String) {
-        inFlight.remove(videoId)?.countDown()
-    }
-
     private companion object {
-        val TTL_MS = TimeUnit.MINUTES.toMillis(2)
+        /** Same freshness window as the native stream cache — single source. */
+        val TTL_MS: Long = CacheTtl.STREAM_MS
         const val MAX = 16
+        const val MAX_ENTRY_BYTES = 2 * 1024 * 1024
     }
 }

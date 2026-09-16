@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">길게 누름 2x</string>
     <string name="gesture_seek">스와이프로 탐색</string>
     <string name="gesture_fullscreen_swipe">전체화면 진입/종료</string>
-    <string name="enable_in_windowed">창 모드에서 활성화</string>
+    <string name="enable_in_embedded">임베디드 플레이어에서 사용</string>
     <string name="enable_in_fullscreen">전체화면에서 활성화</string>
     <string name="brightness">밝기</string>
     <string name="volume">볼륨</string>

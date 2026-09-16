@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">長押し 2x</string>
     <string name="gesture_seek">スワイプでシーク</string>
     <string name="gesture_fullscreen_swipe">全画面の開始/終了</string>
-    <string name="enable_in_windowed">ウィンドウモードで有効</string>
+    <string name="enable_in_embedded">埋め込みプレーヤーで有効</string>
     <string name="enable_in_fullscreen">全画面で有効</string>
     <string name="brightness">明るさ</string>
     <string name="volume">音量</string>

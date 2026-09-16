@@ -3,10 +3,10 @@ package com.hhst.youtubelite.extractor
 /**
  * In-memory [Cache] for unit / network tests only.
  */
-class MemoryCache : Cache {
+class FakeCache : Cache {
     private val metadata = mutableMapOf<String, Metadata>()
     private val streams = mutableMapOf<String, Stream>()
-    private val segments = mutableMapOf<String, Segment>()
+    private val chapterLists = mutableMapOf<String, ChapterList>()
 
     override fun getMetadata(videoId: String): Metadata? = metadata[videoId]
     override fun putMetadata(videoId: String, metadata: Metadata) {
@@ -22,8 +22,8 @@ class MemoryCache : Cache {
         streams.remove(videoId)
     }
 
-    override fun getSegment(videoId: String): Segment? = segments[videoId]
-    override fun putSegment(videoId: String, segment: Segment) {
-        segments[videoId] = segment
+    override fun getChapters(videoId: String): ChapterList? = chapterLists[videoId]
+    override fun putChapters(videoId: String, chapters: ChapterList) {
+        chapterLists[videoId] = chapters
     }
 }

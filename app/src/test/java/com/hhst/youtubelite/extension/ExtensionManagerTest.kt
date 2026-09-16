@@ -26,13 +26,15 @@ class ExtensionManagerTest {
     }
 
     @Test
-    fun defaultsMatchMasterLayout() {
+    fun defaultsMatchLayout() {
         val expected = mapOf(
             "enable_display_dislikes" to true,
+            "enable_show_likes" to true,
             "enable_hide_shorts" to false,
             "skip_sponsors" to true,
             "skip_self_promo" to true,
             "skip_poi_highlight" to true,
+            "sponsor_countdown" to true,
             "remember_last_position" to true,
             "remember_quality" to true,
             "enable_background_play" to true,
@@ -92,6 +94,17 @@ class ExtensionManagerTest {
         assertFalse(manager.isEnabled(PreferenceKeys.ENABLE_HIDE_SHORTS))
         assertTrue(manager.isEnabled(PreferenceKeys.SKIP_SPONSORS))
         assertTrue(manager.version() > afterEdits)
+    }
+
+    @Test
+    fun resetToDefault_notifiesOnceWithWildcard() {
+        val keys = mutableListOf<String>()
+        manager.addOnChangedListener { keys += it }
+        manager.setEnabled(PreferenceKeys.ENABLE_HIDE_SHORTS, true)
+        manager.setEnabled(PreferenceKeys.SKIP_SPONSORS, false)
+        keys.clear()
+        manager.resetToDefault()
+        assertEquals(listOf("*"), keys)
     }
 
     @Test

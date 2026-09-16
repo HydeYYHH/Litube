@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">लंबा दबाएँ 2x</string>
     <string name="gesture_seek">स्वाइप सीक</string>
     <string name="gesture_fullscreen_swipe">फुलस्क्रीन एंटर/एग्ज़िट</string>
-    <string name="enable_in_windowed">विंडो में सक्षम</string>
+    <string name="enable_in_embedded">एम्बेडेड प्लेयर में सक्षम करें</string>
     <string name="enable_in_fullscreen">फुलस्क्रीन में सक्षम</string>
     <string name="brightness">चमक</string>
     <string name="volume">आवाज़</string>

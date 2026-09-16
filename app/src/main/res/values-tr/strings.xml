@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Uzun basış 2x</string>
     <string name="gesture_seek">Kaydırarak geç</string>
     <string name="gesture_fullscreen_swipe">Tam ekrana gir/çık</string>
-    <string name="enable_in_windowed">Pencere modunda etkinleştir</string>
+    <string name="enable_in_embedded">Gömülü oynatıcıda etkinleştir</string>
     <string name="enable_in_fullscreen">Tam ekranda etkinleştir</string>
     <string name="brightness">Parlaklık</string>
     <string name="volume">Ses</string>

@@ -25,6 +25,16 @@ class ClientOrderStore(
 
     /** Persists the current order after a successful player response. */
     fun save() {
+        persist()
+    }
+
+    /** Pushes a client that 403'd during playback to the end of the trial order. */
+    fun demote(clientName: String) {
+        YoutubeStreamExtractor.demoteClient(clientName)
+        persist()
+    }
+
+    private fun persist() {
         val order = YoutubeStreamExtractor.getClientOrder()
         if (order.isEmpty()) return
         kv.encode(KEY, order.joinToString(SEPARATOR))

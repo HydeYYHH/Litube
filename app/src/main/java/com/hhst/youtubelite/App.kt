@@ -4,6 +4,7 @@ import android.app.Application
 import com.hhst.youtubelite.di.appModule
 import com.hhst.youtubelite.extractor.PoTokenProvider
 import com.hhst.youtubelite.extractor.Promise
+import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.tencent.mmkv.MMKV
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
@@ -26,5 +27,10 @@ class App : Application() {
         val poToken = get<PoTokenProvider>()
         poToken.initialize()
         Promise.DEFAULT_SCOPE.launch { poToken.warmUp() }
+        // SimpleCache opens its SQLite index on first touch; keep that off
+        // the main thread.
+        Promise.DEFAULT_SCOPE.launch {
+            PlayerDataSource.warmUp(this@App)
+        }
     }
 }

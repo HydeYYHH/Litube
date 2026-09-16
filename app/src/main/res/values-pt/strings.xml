@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Pressionar e segurar 2x</string>
     <string name="gesture_seek">Buscar deslizando</string>
     <string name="gesture_fullscreen_swipe">Entrar/sair de tela cheia</string>
-    <string name="enable_in_windowed">Ativar em janela</string>
+    <string name="enable_in_embedded">Ativar no player incorporado</string>
     <string name="enable_in_fullscreen">Ativar em tela cheia</string>
     <string name="brightness">Brilho</string>
     <string name="volume">Volume</string>

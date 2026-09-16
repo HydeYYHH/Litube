@@ -1,10 +1,34 @@
 package com.hhst.youtubelite.extension
 
+import android.util.Log
+
 /** MMKV-backed toggle store under the `preferences:` prefix. */
 class ExtensionManager(private val store: PrefStore) {
 
     init {
         seedDefaults()
+    }
+
+    private val listeners = mutableListOf<(String) -> Unit>()
+
+    /**
+     * Notifies [listener] whenever a toggle actually flips. Listeners that
+     * touch WebView should hop to the main thread themselves.
+     */
+    fun addOnChangedListener(listener: (String) -> Unit) {
+        synchronized(listeners) { listeners += listener }
+    }
+
+    fun removeOnChangedListener(listener: (String) -> Unit) {
+        synchronized(listeners) { listeners -= listener }
+    }
+
+    private fun notifyChanged(key: String) {
+        val toCall = synchronized(listeners) { listeners.toList() }
+        toCall.forEach {
+            runCatching { it(key) }
+                .onFailure { Log.w(TAG, "preference listener failed key=$key", it) }
+        }
     }
 
     fun isEnabled(key: String): Boolean {
@@ -18,19 +42,25 @@ class ExtensionManager(private val store: PrefStore) {
         val default = PreferenceKeys.DEFAULTS[key] == true
         val previous = if (store.contains(pref)) store.getBool(pref, default) else default
         store.putBool(pref, enabled)
-        if (previous != enabled) bumpVersion()
+        if (previous != enabled) {
+            bumpVersion()
+            notifyChanged(key)
+        }
     }
 
     fun resetToDefault() {
-        var changed = false
+        val changedKeys = mutableListOf<String>()
         for ((key, value) in PreferenceKeys.DEFAULTS) {
             val pref = prefKey(key)
             if (!store.contains(pref) || store.getBool(pref, value) != value) {
-                changed = true
+                changedKeys += key
             }
             store.putBool(pref, value)
         }
-        if (changed) bumpVersion()
+        if (changedKeys.isNotEmpty()) {
+            bumpVersion()
+            notifyChanged("*")
+        }
     }
 
     fun allPreferences(): Map<String, Boolean> =
@@ -68,6 +98,7 @@ class ExtensionManager(private val store: PrefStore) {
     private fun prefKey(key: String): String = "$PREFIX$key"
 
     private companion object {
+        const val TAG = "ExtensionManager"
         const val PREFIX = "preferences:"
         const val KEY_VERSION = "preferences:version"
     }

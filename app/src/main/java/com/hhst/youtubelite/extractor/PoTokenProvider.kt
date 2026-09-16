@@ -35,10 +35,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * WEB [NpPoTokenProvider] via a hidden WebView (`assets/potoken/potoken.js`).
  *
  * [getWebClientPoToken] mints synchronously on miss (blocks the caller).
- * Do not call from the main thread. Per-video results are cached in memory;
- * the video-independent parts (visitor data, integrity, streaming token) are
- * shared across videos until their TTLs lapse. Call [warmUp] off the main
- * thread at app start to move that cost out of the first video switch.
+ * Do not call from the main thread. All results are cached in memory with
+ * TTLs. Call [warmUp] off the main thread at app start to move that cost out
+ * of the first video switch.
  */
 class PoTokenProvider(
     context: Context,
@@ -52,24 +51,31 @@ class PoTokenProvider(
     private val ready = CountDownLatch(1)
     private val requestSeq = AtomicLong()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<String>>()
-    private val cache = ConcurrentHashMap<String, PoTokenResult>()
+    private val cache = ConcurrentHashMap<String, TtlValue<PoTokenResult>>()
 
     @Volatile private var webView: WebView? = null
     @Volatile private var integrity: TtlValue<Unit>? = null
     @Volatile private var visitor: TtlValue<String>? = null
-    @Volatile private var streaming: TtlValue<String>? = null
 
     /** Value with a capture time, readable while younger than a TTL. */
     private class TtlValue<T>(val value: T, val at: Long = System.currentTimeMillis()) {
         fun get(ttlMs: Long): T? = if (System.currentTimeMillis() - at < ttlMs) value else null
     }
 
+    /** Expired entries are dropped on read so a long session cannot accumulate them. */
+    private fun freshToken(videoId: String): PoTokenResult? {
+        val entry = cache[videoId] ?: return null
+        val fresh = entry.get(PLAYER_TTL_MS)
+        if (fresh == null) cache.remove(videoId, entry)
+        return fresh
+    }
+
     override fun getWebClientPoToken(videoId: String): PoTokenResult? {
-        cache[videoId]?.let { return it }
+        freshToken(videoId)?.let { return it }
         // NewPipe calls this on the extraction thread.
         if (Looper.myLooper() == Looper.getMainLooper()) return null
         return synchronized(mintLock) {
-            cache[videoId]?.let { return it }
+            freshToken(videoId)?.let { return it }
             runCatching { mint(videoId) }
                 .onFailure { Log.w(TAG, "mint failed for $videoId", it) }
                 .getOrNull()
@@ -80,15 +86,25 @@ class PoTokenProvider(
 
     override fun getAndroidClientPoToken(videoId: String): PoTokenResult? = null
 
+    // WEB-minted tokens are client-bound: an IOS URL carrying one is rejected
+    // even where the pot-less URL would play. No iOS-context minter exists yet.
     override fun getIosClientPoToken(videoId: String): PoTokenResult? = null
 
-    /** Warms the video-independent pipeline (integrity, visitor, streaming). */
+    /**
+     * Drops the cached token for [videoId]; a pot-bearing URL still 403ing
+     * means the pairing was rejected and re-minting is needed.
+     */
+    fun evict(videoId: String) {
+        cache.remove(videoId)
+    }
+
+    /** Warms the video-independent pipeline (integrity, visitor). */
     fun warmUp() {
         if (Looper.myLooper() == Looper.getMainLooper()) return
         runCatching {
             synchronized(mintLock) {
                 if (!ensureReady() || !ensureIntegrity()) return@runCatching
-                ensureVisitor()?.let { ensureStreaming(it) }
+                ensureVisitor()
             }
         }.onFailure { Log.w(TAG, "warm-up failed", it) }
     }
@@ -99,8 +115,9 @@ class PoTokenProvider(
         if (!ensureIntegrity()) return null
         val visitorData = ensureVisitor() ?: return null
         val player = mintToken(videoId) ?: return null
-        val streamingToken = ensureStreaming(visitorData) ?: player
-        return PoTokenResult(visitorData, player, streamingToken).also { cache[videoId] = it }
+        // googlevideo 403s visitorData-bound GVS tokens (2026). Bind `pot` to the video id.
+        return PoTokenResult(visitorData, player, player)
+            .also { cache[videoId] = TtlValue(it) }
     }
 
     private fun ensureReady(): Boolean {
@@ -131,11 +148,20 @@ class PoTokenProvider(
         val fetched = runCatching {
             val info = InnertubeClientRequestInfo.ofWebClient()
             info.clientInfo.clientVersion = YoutubeParsingHelper.getClientVersion()
+            val headers = YoutubeParsingHelper.getYouTubeHeaders().toMutableMap()
+            // Same browser session the WebView page uses: the visitor must
+            // match the session that mints and then fetches stream URLs.
+            runCatching {
+                android.webkit.CookieManager.getInstance()
+                    .getCookie("https://www.youtube.com")
+            }.getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { cookie -> headers["Cookie"] = listOf(cookie) }
             YoutubeParsingHelper.getVisitorDataFromInnertube(
                 info,
                 Localization.DEFAULT,
                 ContentCountry.DEFAULT,
-                YoutubeParsingHelper.getYouTubeHeaders(),
+                headers,
                 YoutubeParsingHelper.YOUTUBEI_V1_URL,
                 null,
                 false,
@@ -143,13 +169,6 @@ class PoTokenProvider(
         }.getOrNull() ?: return null
         visitor = TtlValue(fetched)
         return fetched
-    }
-
-    private fun ensureStreaming(visitorData: String): String? {
-        streaming?.get(STREAM_TTL_MS)?.let { return it }
-        val minted = mintToken(visitorData) ?: return null
-        streaming = TtlValue(minted)
-        return minted
     }
 
     /** Creates the host WebView early. Safe on any thread. */
@@ -200,7 +219,7 @@ class PoTokenProvider(
     }
 
     /**
-     * Eval [script] (which must return "ok" when queued) then wait for Bridge
+     * Eval [script] (which must return "ok" when queued) then wait for PotokenJsBridge
      * onSuccess/onError for the generated request id.
      */
     private fun bridgeCall(timeoutMs: Long, script: (requestId: String) -> String): String? {
@@ -240,7 +259,7 @@ class PoTokenProvider(
         view.settings.domStorageEnabled = false
         view.settings.blockNetworkLoads = true
         view.settings.userAgentString = DESKTOP_UA
-        view.addJavascriptInterface(Bridge(), JS_BRIDGE)
+        view.addJavascriptInterface(PotokenJsBridge(), JS_BRIDGE)
         view.webViewClient = object : WebViewClient() {
             override fun onPageFinished(v: WebView?, url: String?) {
                 ready.countDown()
@@ -250,9 +269,9 @@ class PoTokenProvider(
         val script = app.assets.open("potoken/potoken.js").use { it.readBytes().decodeToString() }
         view.loadDataWithBaseURL(
             "https://www.youtube.com",
-            "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>$script</script></head><body></body></html>",
+            "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><script>$script</script></head><body></body></html>",
             "text/html",
-            "utf-8",
+            Charsets.UTF_8.name(),
             null,
         )
     }
@@ -295,7 +314,7 @@ class PoTokenProvider(
         }
     }
 
-    private inner class Bridge {
+    private inner class PotokenJsBridge {
         @JavascriptInterface
         fun onSuccess(requestId: String, value: String) {
             pending.remove(requestId)?.complete(value)
@@ -319,10 +338,12 @@ class PoTokenProvider(
         const val MINT_MS = 3_000L
         const val IDLE_FALLBACK_MS = 1_000L
 
-        // Conservative TTLs; shorten if googlevideo starts rejecting stale tokens.
+        // Integrity/visitor are session-scoped; the player token is minted per
+        // video and remains valid for hours (2026 googlevideo). A rejected
+        // pairing recovers via [evict] + re-mint, not via a shorter TTL.
         val INTEGRITY_TTL_MS = TimeUnit.HOURS.toMillis(6)
         val VISITOR_TTL_MS = TimeUnit.HOURS.toMillis(6)
-        val STREAM_TTL_MS = TimeUnit.MINUTES.toMillis(30)
+        val PLAYER_TTL_MS = TimeUnit.HOURS.toMillis(6)
 
         val JSON_PROTOBUF = "application/json+protobuf".toMediaType()
     }

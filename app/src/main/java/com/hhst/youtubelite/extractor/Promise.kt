@@ -9,24 +9,31 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Coroutine-backed async fill of a mutable [value].
  *
- * [work] runs on [scope] (IO). Call [get] only for branches you need.
+ * [work] runs on [scope]. Call [get] only for branches you need.
+ *
+ * Pass autostart `false` when the caller must finish registering this
+ * promise (in-flight tables, [whenDone] listeners) before [work] can settle
+ * and mutate those same structures.
  */
 class Promise<T>(
     val value: T,
-    scope: CoroutineScope = DEFAULT_SCOPE,
-    work: (Promise<T>) -> Unit,
+    private val scope: CoroutineScope = DEFAULT_SCOPE,
+    autostart: Boolean = true,
+    private val work: (Promise<T>) -> Unit,
 ) {
     private val startedAtNs = System.nanoTime()
     private val deferred = CompletableDeferred<T>()
     private val failure = AtomicReference<Throwable?>(null)
     private val doneListeners = CopyOnWriteArrayList<() -> Unit>()
     private val doneLock = Any()
+    private val started = AtomicBoolean(false)
 
     @Volatile
     var done: Boolean = false
@@ -44,7 +51,13 @@ class Promise<T>(
         get() = done && failure.get() == null
 
     init {
-        scope.launch(Dispatchers.IO) {
+        if (autostart) start()
+    }
+
+    /** Launches [work] once. Safe to call more than once. */
+    internal fun start() {
+        if (!started.compareAndSet(false, true)) return
+        scope.launch {
             try {
                 work(this@Promise)
                 deferred.complete(value)
@@ -53,11 +66,13 @@ class Promise<T>(
                 deferred.completeExceptionally(t)
             } finally {
                 elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+                val listeners: List<() -> Unit>
                 synchronized(doneLock) {
                     done = true
-                    doneListeners.forEach { listener -> runCatching { listener() } }
+                    listeners = doneListeners.toList()
                     doneListeners.clear()
                 }
+                listeners.forEach { listener -> runCatching { listener() } }
             }
         }
     }
@@ -66,6 +81,9 @@ class Promise<T>(
     fun get(): T = runBlocking {
         deferred.await()
     }
+
+    /** Suspends until complete; rethrows if [work] failed. */
+    suspend fun await(): T = deferred.await()
 
     /** Like [get], with timeout. */
     fun get(timeout: Long, unit: TimeUnit): T = runBlocking {
@@ -81,13 +99,16 @@ class Promise<T>(
 
     /** Runs [listener] once after settlement (success or failure). */
     fun whenDone(listener: () -> Unit) {
+        val runNow: Boolean
         synchronized(doneLock) {
             if (done) {
-                listener()
-                return
+                runNow = true
+            } else {
+                doneListeners.add(listener)
+                runNow = false
             }
-            doneListeners.add(listener)
         }
+        if (runNow) listener()
     }
 
     companion object {

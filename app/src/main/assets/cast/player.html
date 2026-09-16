@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>__VIDEO_TITLE__</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; background: #000; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+#player-container { display: flex; flex-direction: column; height: 100%; }
+#title-bar { padding: 12px 16px; font-size: 15px; font-weight: 600; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; background: #111; flex-shrink: 0; }
+#video-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#error-msg { display: none; padding: 24px; text-align: center; color: #ff6b6b; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="player-container">
+    <div id="title-bar">__VIDEO_TITLE__</div>
+    <div id="video-wrapper">
+        <video id="video" controls autoplay playsinline></video>
+    </div>
+    <div id="error-msg"></div>
+</div>
+<script src="dash.all.min.js"></script>
+<script>
+(function() {
+    var manifestUrl = __MANIFEST_URL__;
+    var video = document.getElementById('video');
+    var errorEl = document.getElementById('error-msg');
+
+    if (!manifestUrl || (manifestUrl.indexOf('http://') !== 0 && manifestUrl.indexOf('https://') !== 0)) {
+        errorEl.textContent = 'No manifest URL available.';
+        errorEl.style.display = 'block';
+        video.style.display = 'none';
+        return;
+    }
+
+    var BUFFER_SETTINGS = {
+        streaming: {
+            abr: { ABRStrategy: 'abrThroughput' },
+            buffer: {
+                fastSwitchEnabled: false,
+                bufferTimeAtTopQuality: 30,
+                bufferTimeAtTopQualityLongForm: 40,
+                initialBufferLevel: 8,
+                bufferTimeDefault: 20,
+                stableBufferTime: 20,
+                bufferToKeep: 20,
+                bufferPruningInterval: 20
+            }
+        }
+    };
+
+    var player = null;
+    var probeTimer = null;
+    var currentVid = null;
+
+    function onError(e) {
+        if (e.error && e.error.message) {
+            errorEl.textContent = 'Playback error: ' + e.error.message;
+        } else {
+            errorEl.textContent = 'Playback error.';
+        }
+        errorEl.style.display = 'block';
+        stopProbe();
+    }
+
+    function attachPlayer() {
+        if (player) {
+            // destroy() also resets; a separate reset() call is redundant.
+            try { player.destroy(); } catch (err) {}
+            player = null;
+        }
+        player = dashjs.MediaPlayer().create();
+        player.updateSettings(BUFFER_SETTINGS);
+        player.initialize(video, manifestUrl, true);
+        player.on(dashjs.MediaPlayer.events.ERROR, onError);
+    }
+
+    function parseVid(xml) {
+        var m = xml.match(/<!--\s*vid:([0-9A-Za-z_\-]+)\s*-->/);
+        return m ? m[1] : null;
+    }
+
+    function stopProbe() {
+        if (probeTimer) {
+            window.clearInterval(probeTimer);
+            probeTimer = null;
+        }
+    }
+
+    function probeManifest() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', manifestUrl, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                var vid = parseVid(xhr.responseText);
+                if (!vid) return;
+                if (currentVid === null) {
+                    currentVid = vid;
+                    return;
+                }
+                if (vid !== currentVid) {
+                    currentVid = vid;
+                    attachPlayer();
+                }
+            }
+        };
+        xhr.send();
+    }
+
+    attachPlayer();
+    probeTimer = window.setInterval(probeManifest, 15000);
+    window.addEventListener('online', probeManifest);
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') probeManifest();
+    });
+    window.addEventListener('pagehide', stopProbe);
+})();
+</script>
+</body>
+</html>

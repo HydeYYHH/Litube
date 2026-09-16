@@ -5,10 +5,19 @@
 
   const BRIDGE = 'Bridge';
 
+  function isYoutubeHost(hostname) {
+    // Strict suffix match mirroring Kotlin UrlPolicy/PageKind: a substring
+    // test would treat lookalike hosts as cross-tab routes here while the
+    // native side rejects them, silently dropping the navigation.
+    return hostname === 'youtube.com' ||
+      hostname.endsWith('.youtube.com') ||
+      hostname === 'youtu.be';
+  }
+
   function kind(url) {
     try {
       const u = new URL(String(url).toLowerCase(), location.href);
-      if (!u.hostname.includes('youtube.com') && u.hostname !== 'youtu.be') return 'unknown';
+      if (!isYoutubeHost(u.hostname)) return 'unknown';
       if (u.hostname === 'youtu.be') {
         const segs = u.pathname.split('/').filter(Boolean);
         return segs.length ? 'watch' : 'unknown';
@@ -18,6 +27,8 @@
       const first = segments[0];
       if (first === 'shorts') return 'shorts';
       if (first === 'watch') return 'watch';
+      if (first === 'live') return 'watch';
+      if (first === 'embed') return 'watch';
       if (first === 'channel') return 'channel';
       if (first === 'gaming') return 'gaming';
       if (first === 'select_site') return 'select_site';
@@ -66,6 +77,9 @@
     }
   }
 
+  // One of four independent history.pushState/replaceState wrappers
+  // (watch-id.js, player-hook.js and display_dislikes.js stack their own);
+  // kept separate on purpose — merging would couple script injection order.
   const originalPushState = history.pushState;
   const originalReplaceState = history.replaceState;
 
@@ -91,25 +105,31 @@
   };
 
   document.addEventListener('click', (event) => {
-    const anchor = event.target.closest && event.target.closest('a');
-    const logo = event.target.closest && event.target.closest('ytm-home-logo');
-    const nav = event.target.closest && event.target.closest('ytm-pivot-bar-item-renderer');
+    try {
+      const target = event.target;
+      const anchor = target && target.closest && target.closest('a');
+      const logo = target && target.closest && target.closest('ytm-home-logo');
+      const nav = target && target.closest && target.closest('ytm-pivot-bar-item-renderer');
 
-    let href;
-    if (nav && nav.data && nav.data.navigationEndpoint) {
-      href = nav.data.navigationEndpoint.commandMetadata
-        && nav.data.navigationEndpoint.commandMetadata.webCommandMetadata
-        && nav.data.navigationEndpoint.commandMetadata.webCommandMetadata.url;
-    } else if (anchor && anchor.href) {
-      href = anchor.getAttribute('href');
-    } else if (logo) {
-      href = '/';
-    }
-    if (!href) return;
+      let href;
+      // Bottom-bar internals are Polymer data YouTube can reshuffle; the
+      // whole read is guarded so a changed shape never breaks clicks.
+      const endpoint = nav?.data?.navigationEndpoint;
+      if (endpoint) {
+        href = endpoint.commandMetadata?.webCommandMetadata?.url;
+      } else if (anchor && anchor.href) {
+        href = anchor.getAttribute('href');
+      } else if (logo) {
+        href = '/';
+      }
+      if (!href) return;
 
-    if (maybeOpen(href)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      if (maybeOpen(href)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    } catch (e) {
+      // Routing is best-effort; let the page handle the click instead.
     }
   }, true);
 })();

@@ -13,15 +13,22 @@ class MmkvJsonCache(
     private data class Entry(val until: Long, val json: String)
 
     override fun <T> get(key: String, type: Class<T>): T? {
+        return getWithExpiry(key, type)?.first
+    }
+
+    override fun <T> getWithExpiry(key: String, type: Class<T>): Pair<T, Long?>? {
         val raw = kv.decodeString(key, null)
         if (raw.isNullOrEmpty()) return null
         return try {
             val entry = gson.fromJson(raw, Entry::class.java) ?: return null
             if (entry.until <= System.currentTimeMillis()) {
+                // Expired entries must actually go — progress keys would
+                // otherwise accumulate one dead entry per watched video.
                 Log.d(TAG, "expired key=$key")
+                kv.removeValueForKey(key)
                 return null
             }
-            gson.fromJson(entry.json, type)
+            gson.fromJson(entry.json, type)?.let { it to entry.until }
         } catch (e: RuntimeException) {
             Log.w(TAG, "decode failed key=$key type=${type.simpleName}", e)
             null

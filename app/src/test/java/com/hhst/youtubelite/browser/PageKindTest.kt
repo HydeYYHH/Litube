@@ -2,6 +2,8 @@ package com.hhst.youtubelite.browser
 
 import com.hhst.youtubelite.core.Constants
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PageKindTest {
@@ -11,6 +13,14 @@ class PageKindTest {
         for ((url, kind) in known) {
             assertEquals(url, kind, PageKind.of(url))
         }
+    }
+
+    @Test
+    fun playerSurface_watchAndShorts() {
+        assertTrue(PageKind.isPlayerSurface(Constants.PAGE_WATCH))
+        assertTrue(PageKind.isPlayerSurface(Constants.PAGE_SHORTS))
+        assertFalse(PageKind.isPlayerSurface(Constants.PAGE_HOME))
+        assertFalse(PageKind.isPlayerSurface(null))
     }
 
     @Test
@@ -28,6 +38,8 @@ class PageKindTest {
             "https://m.youtube.com/watch?v=1" to Constants.PAGE_WATCH,
             "https://www.youtube.com/watch?v=1" to Constants.PAGE_WATCH,
             "https://youtu.be/xyz" to Constants.PAGE_WATCH,
+            "https://m.youtube.com/live/abc" to Constants.PAGE_WATCH,
+            "https://www.youtube.com/embed/xyz" to Constants.PAGE_WATCH,
             "https://m.youtube.com/feed/subscriptions" to Constants.PAGE_SUBSCRIPTIONS,
             "https://m.youtube.com/feed/library" to Constants.PAGE_LIBRARY,
         )

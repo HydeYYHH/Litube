@@ -1,5 +1,5 @@
 [versions]
-agp = "8.9.3"
+agp = "8.10.1"
 kotlin = "2.2.20"
 koin = "4.1.0"
 coreKtx = "1.16.0"
@@ -14,6 +14,12 @@ webkit = "1.14.0"
 okhttp = "4.12.0"
 gson = "2.13.2"
 mmkv = "1.3.12"
+media3 = "1.10.0"
+nanohttpd = "2.3.1"
+playServicesCast = "22.1.0"
+# Declared explicitly because CastController uses androidx.mediarouter directly;
+# cast-framework 22.1.0 pulls 1.8.0-beta01 transitively while 1.8.1 is what resolves.
+mediarouter = "1.8.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -45,6 +51,17 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 mmkv = { group = "com.tencent", name = "mmkv", version.ref = "mmkv" }
 newpipe-extractor = { group = "net.newpipe", name = "extractor", version = "0.26.0-aria" }
+
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+media3-exoplayer-dash = { group = "androidx.media3", name = "media3-exoplayer-dash", version.ref = "media3" }
+media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media3" }
+media3-datasource = { group = "androidx.media3", name = "media3-datasource", version.ref = "media3" }
+media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
+media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
+play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

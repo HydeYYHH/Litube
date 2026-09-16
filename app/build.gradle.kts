@@ -35,6 +35,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -52,6 +53,9 @@ android {
 
     lint {
         abortOnError = false
+        // Only en/zh/zh-rTW are maintained; the other locales fall back to the
+        // default (English) strings by design, so a missing key is expected.
+        warning += "MissingTranslation"
     }
 
     testOptions {
@@ -93,11 +97,24 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.mmkv)
-    implementation(libs.newpipe.extractor)
+    implementation(libs.newpipe.extractor) {
+        exclude(group = "org.mozilla", module = "rhino-engine")
+    }
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.dash)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.datasource)
+    implementation(libs.media3.session)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.cast)
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.androidx.mediarouter)
+    implementation(libs.nanohttpd)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }

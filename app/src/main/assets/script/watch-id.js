@@ -10,6 +10,9 @@
   let lastId = null;
   let lastAt = 0;
 
+  // Mirrors player-hook.js watchIdOf() (display_dislikes.js getVideoId() is
+  // a partial copy too); kept separate on purpose — merging would couple
+  // the scripts' injection order.
   function videoId(url) {
     try {
       const u = new URL(url || location.href, location.href);
@@ -78,6 +81,9 @@
     emit(readId());
   }
 
+  // One of four independent history.pushState/replaceState wrappers (nav.js
+  // routes cross-tab, player-hook.js syncs the player, display_dislikes.js
+  // rebinds vote buttons); kept separate on purpose.
   const _push = history.pushState;
   const _replace = history.replaceState;
   history.pushState = function () {

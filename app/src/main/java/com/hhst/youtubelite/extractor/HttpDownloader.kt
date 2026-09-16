@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.extractor
 
 import android.util.Log
+import android.webkit.CookieManager
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.hhst.youtubelite.core.Constants
@@ -11,7 +12,6 @@ import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.io.IOException
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 /** OkHttp [Downloader] for NewPipe extraction traffic. */
@@ -37,20 +37,58 @@ class HttpDownloader(
         val builder = okhttp3.Request.Builder()
             .url(url)
             .method(method, request.dataToSend()?.toRequestBody())
-            .header("User-Agent", Constants.USER_AGENT)
 
         request.headers()?.forEach { (name, values) ->
             builder.removeHeader(name)
             values.forEach { value -> builder.addHeader(name, value) }
         }
-
         val cache = playerCache
         val playerId = webPlayerId(url, method, request.dataToSend())
+        unifyWebSession(builder, url, request, webPlayer = playerId != null)
+        // Requests NewPipe sends without a UA would otherwise go out stamped
+        // okhttp/4.x (BridgeInterceptor's default); keep the app UA as fallback.
+        if (builder.build().header("User-Agent") == null) {
+            builder.header("User-Agent", Constants.USER_AGENT)
+        }
         return if (cache != null && playerId != null) {
-            cache.tracking(playerId) { fetch(builder, url, cache, playerId) }
+            cache.withInFlight(playerId) { fetch(builder, url, cache, playerId) }
         } else {
             fetch(builder, url, cache, playerId)
         }
+    }
+
+    /**
+     * Makes the WEB client's `*.youtube.com` requests belong to the WebView's
+     * browser session (same UA and cookies): googlevideo rejects URLs whose
+     * minting session differs from the requesting one.
+     *
+     * Scoped to WEB /player requests — other clients (ANDROID_VR, IOS,
+     * TVHTML5) mint URLs bound to their own user agents, and overriding the
+     * UA here breaks those URLs at googlevideo.
+     */
+    private fun unifyWebSession(
+        builder: okhttp3.Request.Builder,
+        url: String,
+        request: Request,
+        webPlayer: Boolean,
+    ) {
+        if (!webPlayer) return
+        builder.header("User-Agent", Constants.USER_AGENT)
+        val requestCookies = request.headers()?.entries
+            ?.firstOrNull { it.key.equals("Cookie", ignoreCase = true) }
+            ?.value.orEmpty().joinToString("; ")
+        val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return
+        val webViewCookies = runCatching {
+            CookieManager.getInstance().getCookie("https://$host")
+        }.getOrNull().orEmpty()
+        // Same cookie name with different values (e.g. SOCS): keep one, not both.
+        val byName = LinkedHashMap<String, String>()
+        for (part in requestCookies.split(';') + webViewCookies.split(';')) {
+            val name = part.substringBefore('=').trim()
+            if (name.isNotEmpty()) byName[name] = part.trim()
+        }
+        val merged = byName.values.joinToString("; ")
+        if (merged.isNotEmpty()) builder.header("Cookie", merged)
     }
 
     private fun fetch(
@@ -87,7 +125,7 @@ class HttpDownloader(
         if (!url.contains(PLAYER_PATH, ignoreCase = true)) return null
         return try {
             val json = gson.fromJson(
-                String(bodyBytes ?: return null, StandardCharsets.UTF_8),
+                String(bodyBytes ?: return null, Charsets.UTF_8),
                 JsonObject::class.java,
             )
             val clientName = json.getAsJsonObject("context")
@@ -108,7 +146,7 @@ class HttpDownloader(
                 ?.get("status")?.asString == "OK"
         }.getOrDefault(false)
         if (playable) {
-            cache.put(videoId, body.toByteArray(StandardCharsets.UTF_8))
+            cache.put(videoId, body.toByteArray(Charsets.UTF_8))
             Log.d(TAG, "player response cached $videoId")
         }
     }

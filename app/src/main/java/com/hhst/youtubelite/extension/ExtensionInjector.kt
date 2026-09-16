@@ -3,7 +3,6 @@ package com.hhst.youtubelite.extension
 import android.content.Context
 import android.util.Log
 import android.webkit.WebView
-import java.nio.charset.StandardCharsets
 
 /** Evaluates `script/extension.js` and logs [InjectReport]. */
 class ExtensionInjector(private val context: Context) {
@@ -54,7 +53,7 @@ class ExtensionInjector(private val context: Context) {
         script?.let { return it }
         return try {
             context.assets.open(ASSET)
-                .bufferedReader(StandardCharsets.UTF_8)
+                .bufferedReader(Charsets.UTF_8)
                 .use { it.readText() }
                 .also { script = it }
         } catch (e: Exception) {

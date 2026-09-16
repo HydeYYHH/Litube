@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">ضغط مطول 2x</string>
     <string name="gesture_seek">تقديم بالتمرير</string>
     <string name="gesture_fullscreen_swipe">دخول/خروج ملء الشاشة</string>
-    <string name="enable_in_windowed">تفعيل في النافذة</string>
+    <string name="enable_in_embedded">تفعيل في المشغّل المدمج</string>
     <string name="enable_in_fullscreen">تفعيل في ملء الشاشة</string>
     <string name="brightness">السطوع</string>
     <string name="volume">مستوى الصوت</string>

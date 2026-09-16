@@ -14,7 +14,7 @@
     <string name="gesture_long_press_speed">Долгое нажатие 2x</string>
     <string name="gesture_seek">Проведите для перемотки</string>
     <string name="gesture_fullscreen_swipe">Войти/выйти из полноэкранного режима</string>
-    <string name="enable_in_windowed">Включить в оконном режиме</string>
+    <string name="enable_in_embedded">Встроенный плеер: включить</string>
     <string name="enable_in_fullscreen">Включить в полноэкранном режиме</string>
     <string name="brightness">Яркость</string>
     <string name="volume">Громкость</string>

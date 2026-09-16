@@ -17,6 +17,9 @@ object PreferenceKeys {
     const val SKIP_SPONSORS = "skip_sponsors"
     const val SKIP_SELF_PROMO = "skip_self_promo"
     const val SKIP_POI_HIGHLIGHT = "skip_poi_highlight"
+    const val SPONSOR_COUNTDOWN = "sponsor_countdown"
+
+    const val ENABLE_SHOW_LIKES = "enable_show_likes"
 
     /** Legacy master switch; only used to seed [GESTURE_KEYS]. */
     const val ENABLE_PLAYER_GESTURES = "enable_player_gestures"
@@ -55,10 +58,12 @@ object PreferenceKeys {
 
     val DEFAULTS: Map<String, Boolean> = mapOf(
         ENABLE_DISPLAY_DISLIKES to true,
+        ENABLE_SHOW_LIKES to true,
         ENABLE_HIDE_SHORTS to false,
         SKIP_SPONSORS to true,
         SKIP_SELF_PROMO to true,
         SKIP_POI_HIGHLIGHT to true,
+        SPONSOR_COUNTDOWN to true,
         REMEMBER_LAST_POSITION to true,
         REMEMBER_QUALITY to true,
         ENABLE_BACKGROUND_PLAY to true,
