@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 rootProject.name = "litube"
 include(":app")
 
-// Local NewPipeExtractor (v0.26.0-aria fork) for in-tree patches during the rewrite.
+// Local NewPipeExtractor fork; the aria line carries the app's extractor patches.
 includeBuild("external/NewPipeExtractor") {
     dependencySubstitution {
         substitute(module("net.newpipe:extractor")).using(project(":extractor"))

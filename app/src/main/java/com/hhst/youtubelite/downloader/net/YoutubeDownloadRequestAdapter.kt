@@ -96,7 +96,7 @@ object YoutubeDownloadRequestAdapter {
         "ANDROID" -> "com.google.android.youtube/19.47.53"
         "IOS" -> "com.google.ios.youtube/20.11.6"
         "TVHTML5" -> "Mozilla/5.0 (ChromiumStyleTv)"
-        else -> Constants.USER_AGENT
+        else -> Constants.userAgent()
     }
 }
 

@@ -3,6 +3,7 @@ package com.hhst.youtubelite
 import android.app.Application
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.di.appModule
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
 import com.hhst.youtubelite.downloader.ui.DownloadUi
@@ -19,11 +20,12 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 
-/** Process entry: MMKV, Koin, WorkManager, and poToken WebView warm-up. */
+/** Process entry: MMKV, Koin, WorkManager, and poToken WebView setup. */
 class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Constants.genuineUserAgent = android.webkit.WebSettings.getDefaultUserAgent(this)
         MMKV.initialize(this)
         startKoin {
             androidLogger(Level.ERROR)
@@ -38,9 +40,9 @@ class App : Application() {
         )
         val poToken = get<PoTokenProvider>()
         poToken.initialize()
-        Promise.DEFAULT_SCOPE.launch { poToken.warmUp() }
+        Promise.DEFAULT_SCOPE.launch { poToken.precache() }
         Promise.DEFAULT_SCOPE.launch {
-            PlayerDataSource.warmUp(this@App)
+            PlayerDataSource.precache(this@App)
         }
         Promise.DEFAULT_SCOPE.launch {
             get<DownloadStartupReconciler>().reconcile()

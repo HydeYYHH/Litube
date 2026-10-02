@@ -60,6 +60,7 @@ interface WatchPage {
 class Bridge(
     private val onOpenTab: (url: String) -> Unit,
     private val onOpenExtension: () -> Unit,
+    private val onOpenDownloads: () -> Unit = {},
     private val extensionManager: ExtensionManager,
     private val extractor: Extractor? = null,
     private val playerHooks: PlayerHooks? = null,
@@ -104,6 +105,11 @@ class Bridge(
     @JavascriptInterface
     fun extension() {
         main.post(onOpenExtension)
+    }
+
+    @JavascriptInterface
+    fun download() {
+        main.post(onOpenDownloads)
     }
 
     @JavascriptInterface

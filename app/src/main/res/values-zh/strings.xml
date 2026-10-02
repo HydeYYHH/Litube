@@ -156,7 +156,6 @@
     <string name="download_failed">下载失败</string>
     <string name="downloads">下载</string>
     <string name="download">下载</string>
-    <string name="download_downloaded">已下载</string>
     <string name="download_video">视频</string>
     <string name="download_audio">音频</string>
     <string name="download_quality">下载画质</string>
@@ -211,4 +210,13 @@
     <string name="download_reason_quality">所选画质已不可用，请重新选择</string>
     <string name="download_queue">下载队列</string>
     <string name="download_legacy_interrupted">旧版下载已中断</string>
+    <string name="download_added">已加入下载</string>
+    <string name="download_empty">暂无下载</string>
+    <string name="download_kind_attachments">附件</string>
+    <string name="download_batch_progress">已完成 %1$d/%2$d</string>
+    <string name="download_batch_failed_count">%1$d 个失败</string>
+    <string name="download_pause_all">全部暂停</string>
+    <string name="download_resume_all">全部恢复</string>
+    <string name="download_delete_batch">删除整批</string>
+    <string name="download_history_cleared">历史已清除</string>
 </resources>

@@ -33,6 +33,11 @@ import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
  * Position and buffered position arrive as [State]s and are read inside the
  * draw scope, so a 4 Hz playback tick only redraws the bar instead of
  * recomposing the caller's tree.
+ *
+ * The 48 dp hit area stays centered for the finger, but the visible track is
+ * drawn [VISUAL_BOTTOM_PAD_DP] above the canvas bottom: BottomBar stacks the
+ * 36 dp controls row below this canvas, so the track sits just above the
+ * row's text.
  */
 @Composable
 fun PlayerTimeBar(
@@ -101,7 +106,8 @@ fun PlayerTimeBar(
         val buffered = PlayerUi.bufferedFraction(bufferedPositionState.value, durationMs)
 
         val thickness = PlayerUi.TIME_BAR_THICKNESS_DP.dp.toPx()
-        val y = (size.height - thickness) / 2f
+        val centerY = size.height - VISUAL_BOTTOM_PAD_DP.dp.toPx() - thickness / 2f
+        val y = centerY - thickness / 2f
         val barSize = Size(size.width, thickness)
 
         drawRect(PlayerUi.Unplayed, topLeft = Offset(0f, y), size = barSize)
@@ -129,7 +135,15 @@ fun PlayerTimeBar(
         drawCircle(
             color = PlayerUi.YtRed,
             radius = thumbR,
-            center = Offset(size.width * played, size.height / 2f),
+            center = Offset(size.width * played, centerY),
         )
     }
 }
+
+/**
+ * Bottom clearance of the visible track inside the 48 dp hit canvas: the
+ * BottomBar's 36 dp controls row follows below, and 10 dp keeps the 2 dp
+ * track clear of the row's text baseline while staying nearer it than the
+ * old mid-canvas center (which sat 24 dp up).
+ */
+private const val VISUAL_BOTTOM_PAD_DP = 10

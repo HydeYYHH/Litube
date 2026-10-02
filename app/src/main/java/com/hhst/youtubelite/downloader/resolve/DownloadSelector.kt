@@ -206,26 +206,31 @@ object DownloadSelector {
             return DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, match)))
         }
 
-        val unique = candidates.distinctBy { audioKey(it) }
-        val originals = unique.filter {
+        // Group by track identity. Streams WITHOUT track metadata share one
+        // "unknown" bucket — bitrate variants of a single track must never
+        // read as separate dubs (that dead-ends the sheet with no chips).
+        val tracks = candidates.groupBy { AudioTrackIdentity.key(it) }
+        fun original(group: List<Format>) = group.first().let {
             it.audioTrackOriginal || it.audioTrackType.equals("original", ignoreCase = true)
         }
-        when {
-            originals.size == 1 ->
-                return DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, originals.single())))
-            originals.size > 1 -> return ambiguousAudio()
+        fun flaggedDefault(group: List<Format>) =
+            group.first().audioTrackType.equals("default", ignoreCase = true)
+
+        val originals = tracks.values.filter(::original)
+        if (originals.size > 1) return ambiguousAudio()
+        val defaults = tracks.values.filter(::flaggedDefault)
+        if (defaults.size > 1) return ambiguousAudio()
+
+        val chosenGroup = when {
+            originals.size == 1 -> originals.single()
+            defaults.size == 1 -> defaults.single()
+            tracks.size == 1 -> tracks.values.single()
+            else -> return ambiguousAudio()
         }
-        val defaults = unique.filter { it.audioTrackType.equals("default", ignoreCase = true) }
-        when {
-            defaults.size == 1 ->
-                return DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, defaults.single())))
-            defaults.size > 1 -> return ambiguousAudio()
-        }
-        return if (unique.size == 1) {
-            DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, unique.single())))
-        } else {
-            ambiguousAudio()
-        }
+        // One track, several renditions: take the highest bitrate.
+        return DownloadSelection.Ready(
+            DownloadPlan(audio = mediaChoice(videoId, chosenGroup.maxBy { it.bitrate })),
+        )
     }
 
     /** Subtitle selection never aborts the media plan; failures ride along. */
@@ -306,9 +311,6 @@ object DownloadSelector {
             audioTrackKey = AudioTrackIdentity.key(format).takeIf { it.isNotBlank() },
         )
     }
-
-    private fun audioKey(format: Format): String =
-        AudioTrackIdentity.key(format).ifBlank { "url:${format.url}" }
 
     private fun codecUnavailable() = fail(
         DownloadUnavailableReason.CODEC_NOT_ENABLED,

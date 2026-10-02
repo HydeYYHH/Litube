@@ -156,7 +156,6 @@
     <string name="download_failed">Download failed</string>
     <string name="downloads">Downloads</string>
     <string name="download">Download</string>
-    <string name="download_downloaded">Downloaded</string>
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Download quality</string>
@@ -211,4 +210,13 @@
     <string name="download_reason_quality">That quality is no longer available; choose again</string>
     <string name="download_queue">Download queue</string>
     <string name="download_legacy_interrupted">Previous download was interrupted</string>
+    <string name="download_added">Added to downloads</string>
+    <string name="download_empty">No downloads yet</string>
+    <string name="download_kind_attachments">Attachments</string>
+    <string name="download_batch_progress">%1$d of %2$d done</string>
+    <string name="download_batch_failed_count">%1$d failed</string>
+    <string name="download_pause_all">Pause all</string>
+    <string name="download_resume_all">Resume all</string>
+    <string name="download_delete_batch">Delete batch</string>
+    <string name="download_history_cleared">History cleared</string>
 </resources>

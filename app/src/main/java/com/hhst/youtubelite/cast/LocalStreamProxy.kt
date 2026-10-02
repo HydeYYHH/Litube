@@ -57,7 +57,7 @@ class LocalStreamProxy(
     private val appContext = context.applicationContext
     private val dataSourceFactory = YoutubeHttpDataSource.Factory(
         http,
-        Constants.USER_AGENT,
+        Constants.userAgent(),
     )
         .setConnectTimeoutMs(30_000)
         .setReadTimeoutMs(10_000)

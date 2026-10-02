@@ -152,6 +152,33 @@ object DownloadPresentation {
             .sortedDescending()
             .map { "${it}p" }
 
+    /** Phases where bytes are actively moving or about to move. */
+    fun isActivePhase(phase: DownloadPhase): Boolean = when (phase) {
+        DownloadPhase.RESOLVE,
+        DownloadPhase.TRANSFER,
+        DownloadPhase.WAITING_PROCESS,
+        DownloadPhase.MERGE_VERIFY,
+        DownloadPhase.SAVE,
+        -> true
+
+        else -> false
+    }
+
+    /** "3.4 MB / 12.0 MB" while transferring, "3.4 MB" when the total is unknown. */
+    fun progressText(status: DownloadStatus, progressBytes: Long, expectedBytes: Long?): String? {
+        if (status != DownloadStatus.RUNNING || progressBytes <= 0L) return null
+        return if (expectedBytes != null && expectedBytes > 0L) {
+            "${formatBytes(progressBytes)} / ${formatBytes(expectedBytes)}"
+        } else {
+            formatBytes(progressBytes)
+        }
+    }
+
+    fun progressFraction(progressBytes: Long, expectedBytes: Long?): Float? {
+        if (expectedBytes == null || expectedBytes <= 0L || progressBytes <= 0L) return null
+        return (progressBytes.toFloat() / expectedBytes.toFloat()).coerceIn(0f, 1f)
+    }
+
     fun actionsFor(item: DownloadItemUiState): List<DownloadRowAction> =
         buildList {
             // Completion and failure are orthogonal: a partially completed task

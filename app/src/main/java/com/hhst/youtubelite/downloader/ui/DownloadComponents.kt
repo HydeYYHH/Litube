@@ -1,9 +1,8 @@
 package com.hhst.youtubelite.downloader.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -20,6 +19,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,14 +35,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.downloader.core.DownloadStatus
+import com.hhst.youtubelite.ui.YoutubeThumb
 
+/** Real thumbnail with the placeholder box as the load-failure fallback. */
 @Composable
-fun DownloadThumbnail(modifier: Modifier = Modifier) {
-    Box(
+fun DownloadThumbnail(url: String?, modifier: Modifier = Modifier) {
+    YoutubeThumb(
+        url = url,
         modifier = modifier
             .aspectRatio(DownloadTokens.ThumbAspect)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(RoundedCornerShape(12.dp)),
     )
 }
 
@@ -53,6 +56,7 @@ fun DownloadCapsuleButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentDescription: String? = null,
+    iconRes: Int = 0,
 ) {
     val desc = contentDescription ?: text
     Button(
@@ -67,8 +71,17 @@ fun DownloadCapsuleButton(
             contentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
     ) {
-        Text(text, fontWeight = FontWeight.Medium)
+        if (iconRes != 0) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
     }
 }
 
@@ -105,83 +118,22 @@ fun DownloadHairline() {
 }
 
 @Composable
-fun DownloadedBadge(
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit = {},
-) {
-    val downloaded = stringResource(R.string.download_downloaded)
-    Row(
-        modifier = modifier
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(DownloadTokens.Capsule))
-            .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp)
-            .semantics { contentDescription = downloaded },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_download),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(DownloadTokens.Icon),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = stringResource(R.string.download_downloaded),
-            color = MaterialTheme.colorScheme.onPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-        )
-    }
-}
-
-@Composable
-fun DownloadWatchEntry(
-    downloaded: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (downloaded) {
-        DownloadedBadge(modifier = modifier, onClick = onClick)
-    } else {
-        val download = stringResource(R.string.download)
-        Row(
-            modifier = modifier
-                .heightIn(min = 40.dp)
-                .clip(RoundedCornerShape(DownloadTokens.Capsule))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp)
-                .semantics { contentDescription = download },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_download),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(DownloadTokens.Icon),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.download),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 11.sp,
-            )
-        }
-    }
-}
-
-@Composable
 fun DownloadItemRow(
     item: DownloadItemUiState,
     onOpen: () -> Unit,
     onAction: (DownloadRowAction) -> Unit,
+    onMore: () -> Unit,
 ) {
     val phase = DownloadPresentation.phaseCopy(item)
     val phaseText = stringResource(phaseString(phase))
     val quality = item.qualityLabel.orEmpty()
     val size = item.expectedBytes?.let { DownloadPresentation.formatBytes(it) }.orEmpty()
+    val kind = when {
+        item.attachmentsOnly -> stringResource(R.string.download_kind_attachments)
+        item.audioOnly -> stringResource(R.string.download_audio)
+        else -> ""
+    }
+    val progressText = DownloadPresentation.progressText(item.status, item.progressBytes, item.expectedBytes)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -190,7 +142,7 @@ fun DownloadItemRow(
             .padding(horizontal = DownloadTokens.PageInset, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DownloadThumbnail(Modifier.width(120.dp))
+        DownloadThumbnail(item.thumbnailUrl, Modifier.width(120.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -210,7 +162,7 @@ fun DownloadItemRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val meta = listOf(quality, size).filter { it.isNotBlank() }.joinToString(" · ")
+            val meta = listOf(kind, quality, size).filter { it.isNotBlank() }.joinToString(" · ")
             if (meta.isNotBlank()) {
                 Text(
                     text = meta,
@@ -225,6 +177,33 @@ fun DownloadItemRow(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
             )
+            progressText?.let {
+                Text(
+                    text = it,
+                    maxLines = 1,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                )
+            }
+            if (item.status == DownloadStatus.RUNNING && DownloadPresentation.isActivePhase(item.phase)) {
+                val fraction = DownloadPresentation.progressFraction(item.progressBytes, item.expectedBytes)
+                val barModifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                if (fraction != null) {
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = barModifier,
+                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f),
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        modifier = barModifier,
+                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f),
+                    )
+                }
+            }
         }
         val primary = DownloadPresentation.actionsFor(item).firstOrNull {
             it == DownloadRowAction.PAUSE ||
@@ -250,7 +229,7 @@ fun DownloadItemRow(
             }
         }
         IconButton(
-            onClick = { onAction(DownloadRowAction.DELETE) },
+            onClick = onMore,
             modifier = Modifier
                 .size(DownloadTokens.MinTouch)
                 .semantics { contentDescription = moreLabel },

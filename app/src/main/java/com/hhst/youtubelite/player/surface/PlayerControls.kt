@@ -317,7 +317,8 @@ fun CenterControls(
 }
 
 /**
- * Bottom: 2 dp time bar, then position / duration | speed | quality | fullscreen.
+ * Bottom: 2 dp time bar (drawn just above the controls row), then
+ * position / duration | speed | quality | fullscreen.
  *
  * Position/buffered arrive as [State]s and are consumed only by the time bar
  * and [PositionText], so 4 Hz playback ticks never recompose this bar.

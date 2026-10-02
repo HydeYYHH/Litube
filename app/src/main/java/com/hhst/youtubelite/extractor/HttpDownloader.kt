@@ -48,7 +48,7 @@ class HttpDownloader(
         // Requests NewPipe sends without a UA would otherwise go out stamped
         // okhttp/4.x (BridgeInterceptor's default); keep the app UA as fallback.
         if (builder.build().header("User-Agent") == null) {
-            builder.header("User-Agent", Constants.USER_AGENT)
+            builder.header("User-Agent", Constants.userAgent())
         }
         return if (cache != null && playerId != null) {
             cache.withInFlight(playerId) { fetch(builder, url, cache, playerId) }
@@ -73,7 +73,7 @@ class HttpDownloader(
         webPlayer: Boolean,
     ) {
         if (!webPlayer) return
-        builder.header("User-Agent", Constants.USER_AGENT)
+        builder.header("User-Agent", Constants.userAgent())
         val requestCookies = request.headers()?.entries
             ?.firstOrNull { it.key.equals("Cookie", ignoreCase = true) }
             ?.value.orEmpty().joinToString("; ")

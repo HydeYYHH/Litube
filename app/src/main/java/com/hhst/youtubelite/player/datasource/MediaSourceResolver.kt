@@ -37,7 +37,10 @@ import androidx.core.net.toUri
  *    head), which still serves dynamic Range-based seeks — NOT a static stream.
  * 3. Adaptive DASH from a window-exempt client (VISIONOS direct URLs). Full
  *    quality without a poToken; outranks muxed and HLS.
- * 4. HLS manifest (iOS/WEB).
+ * 4. HLS (iOS/WEB) is deliberately NOT a VOD fallback: an HLS load error
+ *    walks Media3 1.10.0's HlsChunkSource fallback selection into a fatal
+ *    ArrayIndexOutOfBoundsException inside BaseTrackSelection — the error
+ *    path itself crashes the app. Live stays on HLS.
  * 5. Remote DASH manifest URL.
  * 6. Muxed floor when no exempt adaptive pool exists at all.
  * 7. Adaptive DASH from window-bound clients without pot — subject to the
@@ -136,13 +139,9 @@ class MediaSourceResolver(
             )?.let { return it }
         }
 
-        // 4. HLS (iOS/WEB) — not subject to the googlevideo poToken 403.
-        stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
-            return Resolved(
-                withSubtitles(hlsSource(url, meta), subtitles),
-                null, null,
-            )
-        }
+        // 4. HLS is deliberately skipped for VOD (see the class doc): its
+        //    load errors crash inside Media3 instead of surfacing as
+        //    recoverable playback errors.
 
         // 5. Remote DASH manifest URL.
         stream.dashUrl?.takeIf { it.isNotBlank() }?.let {
@@ -166,7 +165,7 @@ class MediaSourceResolver(
         }
 
         // 7. Adaptive DASH from window-bound clients without pot (64 s window
-        //    applies — only reached when muxed and HLS were both absent).
+        //    applies).
         if (!forceMuxed) {
             adaptive(
                 formats, subtitles, durationMs, preferredQuality, audioTrackKey,
@@ -234,11 +233,6 @@ class MediaSourceResolver(
             videoFormats = videoPool,
         )
     }
-
-    private fun hlsSource(url: String, meta: MediaMetadata): MediaSource =
-        HlsMediaSource.Factory(dataSources.ytProgressive)
-            .setAllowChunklessPreparation(true)
-            .createMediaSource(MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build())
 
     // -- live --
 

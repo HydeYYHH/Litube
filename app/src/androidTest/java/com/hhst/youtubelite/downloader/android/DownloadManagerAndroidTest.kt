@@ -2,7 +2,6 @@ package com.hhst.youtubelite.downloader.android
 
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -19,7 +18,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.ui.DownloadManagerScreen
 import com.hhst.youtubelite.downloader.ui.DownloadTokens
-import com.hhst.youtubelite.downloader.ui.DownloadWatchEntry
 import com.hhst.youtubelite.ui.theme.AppTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -113,24 +111,6 @@ class DownloadManagerAndroidTest {
 
         assertTrue(seeded.runningBatchId.isNotBlank())
         DeviceEvidence.captureScene("03-download-manager")
-    }
-
-    @Test
-    fun watchBadge_notForAttachmentsOnly_fileMissingCopy() {
-        composeRule.setContent {
-            AppTheme(darkTheme = true, dynamicColor = false) {
-                Column {
-                    DownloadWatchEntry(downloaded = false, onClick = {})
-                    DownloadWatchEntry(downloaded = true, onClick = {})
-                }
-            }
-        }
-        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.download))
-            .assertIsDisplayed()
-        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.download_downloaded))
-            .assertIsDisplayed()
-        DeviceEvidence.captureScene("01-watch-page-download-entry")
-        DeviceEvidence.captureScene("02-completed-state")
     }
 
     @Test

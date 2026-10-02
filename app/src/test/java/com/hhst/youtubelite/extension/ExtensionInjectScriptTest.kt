@@ -1,10 +1,11 @@
 package com.hhst.youtubelite.extension
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Contract checks for settings-button inject script. */
+/** Contract checks for the settings-button inject script. */
 class ExtensionInjectScriptTest {
 
     private val script: String by lazy { readExtensionScript() }
@@ -21,40 +22,53 @@ class ExtensionInjectScriptTest {
         // Without this viewBox the path draws off-canvas on YouTube's svg.
         assertTrue(script.contains(ExtensionInjector.ICON_VIEW_BOX))
         assertTrue(script.contains("setAttribute('viewBox'"))
-        assertTrue(script.contains("set_viewBox"))
+        assertTrue(script.contains("setPath"))
     }
 
     @Test
-    fun iconPathMustBeAppliedForSuccess() {
-        assertTrue(script.contains("set_path"))
+    fun iconPathAndButtonIdPresent() {
         assertTrue(script.contains("pathSet"))
-        assertTrue(script.contains("icon_failed") || script.contains("verify_path"))
-        assertTrue(script.contains("verify_icon") || script.contains("verify_viewBox"))
-    }
-
-    @Test
-    fun successRequiresIconVerification() {
-        assertTrue(script.contains("verifyIcon") || script.contains("verify_icon"))
         assertTrue(script.contains("M384-144"))
         assertTrue(script.contains(ExtensionInjector.BUTTON_ID))
+        assertTrue(script.contains("downloaderButton"))
     }
 
     @Test
     fun reportsNamedElementsWhenDomMissing() {
+        // Failure taxonomy: missing settings root vs template clone failure.
         val required = listOf(
             "ytm-settings",
             "template_button",
-            "svg",
-            "svg_path",
-            "svg_viewBox",
-            "label",
-            "bridge",
-            "insert",
-            "verify",
+            "settings list root missing",
         )
         for (element in required) {
             assertTrue("missing failure element `$element`", script.contains(element))
         }
+    }
+
+    @Test
+    fun noOverlayFallbackWithoutYtmSettingsRoot() {
+        // List entries exist only as clones of the ytm-settings template row.
+        // Layouts without that root report missing_settings_root and retry —
+        // no fixed overlay, no foreign node in the app shell.
+        assertTrue(script.contains("missing_settings_root"))
+        assertFalse(script.contains("liteSettingsFab"))
+        assertFalse(script.contains("position:fixed"))
+        assertFalse(script.contains("floating_fallback"))
+        assertFalse(script.contains("removeFab"))
+        // No inserting before an arbitrary app-shell child.
+        assertFalse(script.contains("insertBefore(button, anchorRoot"))
+    }
+
+    @Test
+    fun noMutationObserverFreezeLoop() {
+        // Repair is event + retry-chain driven only; an observer-driven loop
+        // can re-run mid-navigation and freeze the page. Assert the mechanism
+        // rather than a comment word.
+        assertFalse(script.contains("new MutationObserver"))
+        assertFalse(script.contains("__liteExtObserver"))
+        assertTrue(script.contains("scheduleRetries"))
+        assertTrue(script.contains("RETRY_MS"))
     }
 
     @Test
@@ -66,13 +80,18 @@ class ExtensionInjectScriptTest {
 
     @Test
     fun retriesWhenSettingsDomLate() {
-        assertTrue(script.contains("MutationObserver") || script.contains("__liteExtObserver"))
         assertTrue(script.contains("scheduleRetries") || script.contains("RETRY_MS"))
+        // SPA navigations re-trigger the retry chain without an observer.
+        assertTrue(script.contains("yt-navigate-finish"))
+        assertTrue(script.contains("yt-page-data-updated"))
     }
 
     @Test
-    fun opensExtensionViaBridge() {
-        assertTrue(script.contains("bridge.extension") || script.contains(".extension()"))
+    fun opensExtensionAndDownloadsViaBridge() {
+        // Sibling settings entries route through one dynamic bridge dispatch.
+        assertTrue(script.contains("bridge[action]()"))
+        assertTrue(script.contains("'extension'"))
+        assertTrue(script.contains("'download'"))
         assertTrue(script.contains("window.lite") || script.contains("window.Bridge"))
     }
 
@@ -93,9 +112,12 @@ class ExtensionInjectScriptTest {
     }
 
     @Test
-    fun repairsBrokenExistingButtonIcon() {
-        assertTrue(script.contains("repair_failed") || script.contains("already_present"))
-        assertTrue(script.contains("setPath") || script.contains("set_viewBox"))
+    fun reEvaluationIsIdempotent() {
+        // Native re-injects on every SPA navigation: existing rows short-circuit
+        // with reads only, and the retry chain is single-flight guarded.
+        assertTrue(script.contains("getElementById(id)"))
+        assertTrue(script.contains("__liteExtRetrying"))
+        assertTrue(script.contains("__liteExtSpaBound"))
     }
 
     private fun readExtensionScript(): String {

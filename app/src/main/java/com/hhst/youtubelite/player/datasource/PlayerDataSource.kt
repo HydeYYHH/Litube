@@ -56,7 +56,7 @@ class PlayerDataSource private constructor(
         }
 
         /** Builds the cache off the main thread before playback needs it. */
-        fun warmUp(context: Context) {
+        fun precache(context: Context) {
             getCache(context)
         }
 
@@ -64,7 +64,7 @@ class PlayerDataSource private constructor(
             val ytDashUpstream = youtubeFactory(http, range = true, rn = true)
             val ytProgressiveUpstream = youtubeFactory(http, range = false, rn = true)
             val liveUpstream = DefaultHttpDataSource.Factory()
-                .setUserAgent(Constants.USER_AGENT)
+                .setUserAgent(Constants.userAgent())
                 .setConnectTimeoutMs(30_000)
                 .setReadTimeoutMs(45_000)
 
@@ -83,7 +83,7 @@ class PlayerDataSource private constructor(
             range: Boolean,
             rn: Boolean,
         ): YoutubeHttpDataSource.Factory =
-            YoutubeHttpDataSource.Factory(http, Constants.USER_AGENT)
+            YoutubeHttpDataSource.Factory(http, Constants.userAgent())
                 .setConnectTimeoutMs(30_000)
                 .setReadTimeoutMs(30_000)
                 .setRangeParameterEnabled(range)

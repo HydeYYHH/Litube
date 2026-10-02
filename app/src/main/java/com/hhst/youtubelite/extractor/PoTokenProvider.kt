@@ -15,6 +15,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -39,8 +41,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * [getWebClientPoToken] mints synchronously on miss (blocks the caller).
  * Do not call from the main thread: WebView create / eval / loadUrl /
  * timer occupancy are posted to the main looper and awaited. All results
- * are cached in memory with TTLs. Call [warmUp] off the main thread at
- * app start to move that cost out of the first video switch.
+ * are cached in memory with TTLs. Call [precache] off the main thread at
+ * app start so the first mint reuses cached integrity and visitor.
  */
 class PoTokenProvider(
     context: Context,
@@ -103,8 +105,8 @@ class PoTokenProvider(
         cache.remove(videoId)
     }
 
-    /** Warms the video-independent pipeline (integrity, visitor). */
-    fun warmUp() {
+    /** Fills the video-independent cache entries (integrity, visitor). */
+    fun precache() {
         if (main.isOnMain) return
         runCatching {
             synchronized(mintLock) {
@@ -113,7 +115,24 @@ class PoTokenProvider(
                     ensureVisitor()
                 }
             }
-        }.onFailure { Log.w(TAG, "warm-up failed", it) }
+        }.onFailure { failure ->
+            Log.w(TAG, "precache failed", failure)
+            // App-startup can jam the main thread past the WebView gate's
+            // timeout, leaving integrity uninitialized; one delayed retry
+            // covers the jam window.
+            Promise.DEFAULT_SCOPE.launch {
+                delay(PRECACHE_RETRY_MS)
+                runCatching {
+                    synchronized(mintLock) {
+                        withPoTokenTimers {
+                            if (!ensureReady()) return@withPoTokenTimers
+                            ensureIntegrity()
+                            ensureVisitor()
+                        }
+                    }
+                }.onFailure { Log.w(TAG, "precache retry failed", failure) }
+            }
+        }
     }
 
     /** Caller must hold [mintLock]. Only the player token is video-specific. */
@@ -353,6 +372,7 @@ class PoTokenProvider(
                 "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         const val INIT_MS = 4_000L
         const val MINT_MS = 3_000L
+        const val PRECACHE_RETRY_MS = 30_000L
 
         // Integrity/visitor are session-scoped; the player token is minted per
         // video and remains valid for hours (2026 googlevideo). A rejected

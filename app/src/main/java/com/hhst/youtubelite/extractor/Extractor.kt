@@ -42,31 +42,29 @@ class Extractor(
     fun extract(urlOrId: String): Extraction {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
-        while (true) {
-            val (slot, created) = streamEpochs.withLock(id) {
-                val existing = inFlight[id]
-                if (existing != null) {
-                    existing to false
-                } else {
-                    val createdSlot = Inflight.create(id, cache, scope, clientOrder, streamEpochs)
-                    inFlight[id] = createdSlot
-                    createdSlot to true
-                }
+        val (slot, created) = streamEpochs.withLock(id) {
+            val existing = inFlight[id]
+            if (existing != null) {
+                existing to false
+            } else {
+                val createdSlot = Inflight.create(id, cache, scope, clientOrder, streamEpochs)
+                inFlight[id] = createdSlot
+                createdSlot to true
             }
-            if (!created) return slot.extraction
-
-            val remaining = AtomicInteger(3)
-            val onSettled = {
-                if (remaining.decrementAndGet() == 0) {
-                    inFlight.remove(id, slot)
-                }
-            }
-            slot.extraction.metadata.whenDone(onSettled)
-            slot.extraction.stream.whenDone(onSettled)
-            slot.extraction.chapters.whenDone(onSettled)
-            slot.start()
-            return slot.extraction
         }
+        if (!created) return slot.extraction
+
+        val remaining = AtomicInteger(3)
+        val onSettled = {
+            if (remaining.decrementAndGet() == 0) {
+                inFlight.remove(id, slot)
+            }
+        }
+        slot.extraction.metadata.whenDone(onSettled)
+        slot.extraction.stream.whenDone(onSettled)
+        slot.extraction.chapters.whenDone(onSettled)
+        slot.start()
+        return slot.extraction
     }
 
     /**

@@ -3,6 +3,10 @@
 
   var NS = '__litubeDownload';
   var BUTTON_ID = 'litube-download-entry';
+  var ACTION_HOST = '.ytSpecButtonViewModelHost, .ytButtonViewModelHost, button-view-model';
+  var ACTION_NESTED = 'like-button-view-model, dislike-button-view-model, ' +
+    'segmented-like-dislike-button-view-model, ytm-subscribe-button-renderer, ' +
+    'ytm-slim-video-metadata-section-renderer';
   var DOWNLOAD_ICON =
     'M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z';
   var VIEW_BOX = '0 -960 960 960';
@@ -157,6 +161,114 @@
     return svg;
   }
 
+  function fitIcon(root, size) {
+    if (!(root instanceof Element)) return;
+    // Size the icon hosts whose geometry YouTube derives from the icon, not
+    // the generic .yt-spec-button-shape-next__icon container — forcing that
+    // one distorts templates that size it from padding instead.
+    var px = (size || 24) + 'px';
+    var targets = [root.querySelector('c3-icon'), root.querySelector('.yt-icon-shape')];
+    var svg = root.querySelector('svg');
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i] instanceof Element) {
+        targets[i].style.width = px;
+        targets[i].style.height = px;
+      }
+    }
+    if (svg instanceof Element) {
+      svg.setAttribute('width', String(size || 24));
+      svg.setAttribute('height', String(size || 24));
+      svg.style.width = px;
+      svg.style.height = px;
+    }
+  }
+
+  /**
+   * The real actions row of the slim action bar. Like/dislike (a segmented
+   * control), the subscribe button, and channel metadata render OUTSIDE or
+   * AROUND it — anchoring anywhere else corrupts their layout.
+   */
+  function actionsRow() {
+    return document.querySelector('ytm-slim-video-action-bar-renderer .slim-video-action-bar-actions') ||
+      document.querySelector('.slim-video-action-bar-actions') ||
+      document.querySelector('ytm-slim-video-action-bar-renderer');
+  }
+
+  /**
+   * Clone source for an action-bar chip. Prefer a real chip (share/save);
+   * if the row only has like/dislike, clone that visual but still insert
+   * as a sibling of the segmented control — never as a child of it.
+   */
+  function templateButton(row) {
+    if (!(row instanceof Element)) return null;
+    var hosts = row.querySelectorAll(ACTION_HOST);
+    var nested = null;
+    for (var i = 0; i < hosts.length; i++) {
+      if (hosts[i].closest(ACTION_NESTED)) {
+        if (!nested) nested = hosts[i];
+        continue;
+      }
+      return hosts[i];
+    }
+    return nested;
+  }
+
+  function insertAction(row, button, template) {
+    // Requirement: the entry sits after the like/dislike pair — and after
+    // every native chip, never before the channel avatar or subscribe
+    // button. Anchor on dislike when present (rollouts that keep the
+    // segmented pair in the row); otherwise append after the LAST native
+    // chip in the row.
+    var anchor = dislikeAnchor(row);
+    if (anchor) {
+      var at = anchor;
+      while (at && at.parentElement !== row) at = at.parentElement;
+      if (at) {
+        row.insertBefore(button, at.nextSibling);
+        return;
+      }
+    }
+    // No dislike in this rollout (real-device DOM: [avatar, subscribe,
+    // chip, script] — like/dislike live elsewhere). Insert after the last
+    // native chip instead of guessing a "first safe child", which landed
+    // the entry in front of the avatar.
+    var point = lastNativeChip(row, template);
+    if (point) row.insertBefore(button, point.nextSibling);
+    else row.appendChild(button);
+  }
+
+  /**
+   * The last child of [row] that is a native action chip — never an avatar,
+   * subscribe button, injected entry, or script. [template] counts as a
+   * chip when it is a direct child.
+   */
+  function lastNativeChip(row, template) {
+    var last = null;
+    var kids = row.children;
+    for (var i = 0; i < kids.length; i++) {
+      var child = kids[i];
+      if (!(child instanceof Element)) continue;
+      if (child.id === BUTTON_ID || child.id === 'liteQueueButton') continue;
+      var tag = child.tagName && child.tagName.toLowerCase();
+      if (tag === 'script') continue;
+      if (child.matches(ACTION_NESTED + ', .slim-video-owner-icon, .slim-subscribe-button')) continue;
+      last = child;
+    }
+    if (last) return last;
+    // Row holds no native chip at all (only avatar/subscribe): the template
+    // is the sole visual reference — still insert after it, not in front.
+    return template.parentElement === row ? template : null;
+  }
+
+  /** The dislike half of the like/dislike pair: the wrapper element or its
+   *  host button, depending on which shape the rollout renders. */
+  function dislikeAnchor(row) {
+    return row.querySelector(
+      'segmented-like-dislike-button-view-model, dislike-button-view-model, ' +
+      '.ytDislikeButtonViewModelHost'
+    );
+  }
+
   function cloneAction(template, id, text) {
     var button = template.cloneNode(true);
     button.id = id;
@@ -177,26 +289,43 @@
       path.indexOf('/live/') === 0 || path.indexOf('/embed/') === 0;
   }
 
+  /** True when [el] sits right after [anchor] among [row] children. */
+  function isRightAfter(row, el, anchor) {
+    if (!el || !anchor || el.parentElement !== row) return false;
+    var at = anchor;
+    while (at && at.parentElement !== row) at = at.parentElement;
+    if (!at) return false;
+    return at.nextElementSibling === el;
+  }
+
   function ensureWatchButton() {
     var old = document.getElementById(BUTTON_ID);
     if (!isWatchPath()) {
       if (old) old.remove();
       return;
     }
-    if (old && old.isConnected && old.parentElement &&
+    var actionBar0 = actionsRow();
+    if (old && old.isConnected && old.parentElement && actionBar0 &&
+        old.parentElement === actionBar0 &&
         old.parentElement.querySelector('#' + BUTTON_ID) === old &&
-        old.parentElement.querySelector('.ytSpecButtonViewModelHost')) {
+        old.parentElement.querySelector(ACTION_HOST) &&
+        // Position guard: an entry injected before dislike rendered sits at
+        // the row tail; once dislike appears it must move next to it.
+        isRightAfter(actionBar0, old, dislikeAnchor(actionBar0))) {
       if (lastStatus) applyStatus(lastStatus);
       return;
     }
-    var saveButton = document.querySelector(
-      '.ytSpecButtonViewModelHost.slim_video_action_bar_renderer_button'
-    ) || document.querySelector('ytm-slim-video-action-bar-renderer .ytSpecButtonViewModelHost') ||
-      document.querySelector('.slim-video-action-bar-renderer .ytSpecButtonViewModelHost');
-    if (!(saveButton instanceof Element) || !saveButton.parentElement) return;
-    var actionBar = saveButton.parentElement;
-    if (old && (old.parentElement !== actionBar || !old.isConnected)) old.remove();
-    if (actionBar.querySelector('#' + BUTTON_ID)) return;
+    var actionBar = actionsRow();
+    if (!(actionBar instanceof Element)) return;
+    var saveButton = templateButton(actionBar);
+    if (!(saveButton instanceof Element)) return;
+    // Misplaced but present: move it instead of skipping (position guard above).
+    if (old && old.parentElement === actionBar && old.isConnected) {
+      insertAction(actionBar, old, saveButton);
+      if (lastStatus) applyStatus(lastStatus);
+      return;
+    }
+    if (old) old.remove();
     var text = label(LABELS);
     var button = cloneAction(saveButton, BUTTON_ID, text);
     button.addEventListener('click', function (event) {
@@ -216,7 +345,10 @@
         author: video.author
       });
     }, true);
-    actionBar.insertBefore(button, saveButton);
+    insertAction(actionBar, button, saveButton);
+    // Native chips render 24 px icons; match them so the entry reads as
+    // action-bar chrome, not a smaller outsider.
+    fitIcon(button);
     var video = currentVideo();
     if (video) post({ type: 'requestStatus', videoId: video.videoId });
   }

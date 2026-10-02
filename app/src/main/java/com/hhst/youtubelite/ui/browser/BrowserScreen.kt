@@ -37,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -66,11 +65,8 @@ import com.hhst.youtubelite.browser.WebViewFactory
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.SnapshotReject
 import com.hhst.youtubelite.downloader.share.DownloadShareParser
-import com.hhst.youtubelite.downloader.ui.DownloadEntries
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.downloader.ui.DownloadUiStart
-import com.hhst.youtubelite.downloader.ui.DownloadViewModel
-import com.hhst.youtubelite.downloader.ui.DownloadWatchEntry
 import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
 import com.hhst.youtubelite.downloader.webview.WebViewTimerHandle
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
@@ -105,7 +101,6 @@ import org.koin.compose.koinInject
 fun BrowserScreen(
     viewModel: BrowserViewModel = koinViewModel(),
     playerViewModel: PlayerViewModel = koinInject(),
-    downloadViewModel: DownloadViewModel = koinViewModel(),
     extensionManager: ExtensionManager = koinInject(),
     extractor: Extractor = koinInject(),
     playerCache: PlayerCache = koinInject(),
@@ -138,6 +133,7 @@ fun BrowserScreen(
     val forward = uiState.forward
     val tabs = uiState.tabs
     val onOpenExtension = remember { { showExtension = true } }
+    val onOpenDownloads = remember(context) { { DownloadUi.openManager(context) } }
 
     // Share / open-with intents: route to a tab; the watch hook starts
     // playback. Clearing after consumption lets the same URL re-share.
@@ -231,7 +227,8 @@ fun BrowserScreen(
     }
     LaunchedEffect(liveTabIds) {
         createHosts(
-            tabs, hosts, context, viewModel, extensionManager, onOpenExtension, extractor,
+            tabs, hosts, context, viewModel, extensionManager, onOpenExtension,
+            onOpenDownloads, extractor,
             playerCache, playerViewModel, onAddToQueue, onShowMediaItemMenu,
             onPlaylistPresence = onPlaylistPresence,
         )
@@ -664,52 +661,6 @@ fun BrowserScreen(
             }
         }
 
-        val watchVideoId = VideoId.parse(uiState.url)
-            ?.takeIf { PageKind.isPlayerSurface(PageKind.of(uiState.url)) }
-        val watchDownloaded by produceState(false, watchVideoId, downloadViewModel) {
-            val id = watchVideoId
-            if (id == null) {
-                value = false
-                return@produceState
-            }
-            downloadViewModel.observeVideo(id).collect { value = it.watchPageDownloaded }
-        }
-        if (watchVideoId != null && !inPip && !playerState.fullscreen) {
-            val density = LocalDensity.current
-            val layoutDir = LocalLayoutDirection.current
-            val screenWidthDp = LocalConfiguration.current.screenWidthDp
-            val topInsetDp = with(density) {
-                WindowInsets.safeDrawing.getTop(this).toDp().value.toInt()
-            }
-            val leftInsetDp = with(density) {
-                WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
-            }
-            val rightInsetDp = with(density) {
-                WindowInsets.safeDrawing.getRight(this, layoutDir).toDp().value.toInt()
-            }
-            val availableWidthDp = (screenWidthDp - leftInsetDp - rightInsetDp).coerceAtLeast(1)
-            val topDp = PlayerUi.playerTopOffsetDp(false, playerState.pageTopDp, topInsetDp)
-            val heightDp = PlayerUi.embeddedHeightDp(playerState.pageHeightDp, availableWidthDp)
-            DownloadWatchEntry(
-                downloaded = watchDownloaded,
-                onClick = {
-                    if (watchDownloaded) {
-                        DownloadUi.openManager(context)
-                    } else {
-                        DownloadEntries.single(
-                            watchVideoId,
-                            playerState.title.takeIf { playerState.videoId == watchVideoId }.orEmpty(),
-                            playerState.author.takeIf { playerState.videoId == watchVideoId },
-                            VideoId.thumbnailUrl(watchVideoId),
-                        )?.let { DownloadEntries.show(context, it) }
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = (topDp + heightDp + 8).dp, start = 16.dp),
-            )
-        }
-
         // The PiP window must show the video: the extension screen is an
         // opaque full-size sheet that would otherwise cover it.
         if (showExtension && !inPip) {
@@ -750,6 +701,7 @@ private fun createHosts(
     viewModel: BrowserViewModel,
     extensionManager: ExtensionManager,
     onOpenExtension: () -> Unit,
+    onOpenDownloads: () -> Unit,
     extractor: Extractor,
     playerCache: PlayerCache,
     playerHooks: PlayerHooks,
@@ -765,6 +717,7 @@ private fun createHosts(
             callbacks = viewModel.callbacksFor(tabId),
             extensionManager = extensionManager,
             onOpenExtension = onOpenExtension,
+            onOpenDownloads = onOpenDownloads,
             onRefresh = { webView ->
                 viewModel.onRefreshStarted(tabId)
                 webView.reload()

@@ -59,6 +59,7 @@ object WebViewFactory {
         callbacks: WebViewCallbacks,
         extensionManager: ExtensionManager,
         onOpenExtension: () -> Unit,
+        onOpenDownloads: () -> Unit,
         onRefresh: (WebView) -> Unit,
         extractor: Extractor,
         playerCache: PlayerCache,
@@ -73,6 +74,7 @@ object WebViewFactory {
         val bridge = Bridge(
             onOpenTab = callbacks::onOpenTab,
             onOpenExtension = onOpenExtension,
+            onOpenDownloads = onOpenDownloads,
             extensionManager = extensionManager,
             extractor = extractor,
             playerHooks = playerHooks,
@@ -118,7 +120,6 @@ object WebViewFactory {
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                userAgentString = Constants.USER_AGENT
             }
             addJavascriptInterface(bridge, Bridge.NAME)
             addJavascriptInterface(bridge, LITE_ALIAS)

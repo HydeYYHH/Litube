@@ -51,7 +51,7 @@ class OEmbedTitleFetcher(
                         "https://www.youtube.com/oembed?url=" +
                             java.net.URLEncoder.encode(watch, Charsets.UTF_8.name()),
                     )
-                    .header("User-Agent", Constants.USER_AGENT)
+                    .header("User-Agent", Constants.userAgent())
                     .get()
                     .build()
                 http.newCall(request).execute().use { response ->
