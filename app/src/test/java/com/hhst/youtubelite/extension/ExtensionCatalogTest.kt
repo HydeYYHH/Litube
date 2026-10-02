@@ -13,7 +13,7 @@ class ExtensionCatalogTest {
     fun catalogHasTopLevelGroups() {
         val catalog = Extension.catalog()
         assertTrue(catalog.size >= 5)
-        catalog.forEach { assertTrue(it.isGroup) }
+        catalog.forEach { assertTrue(it.isGroup || it.isNav) }
     }
 
     @Test
@@ -69,6 +69,9 @@ class ExtensionCatalogTest {
                 if (node.isGroup) {
                     assertEquals(null, node.key)
                     walk(node.children)
+                } else if (node.isNav) {
+                    assertEquals(null, node.key)
+                    assertFalse(node.isGroup)
                 } else {
                     assertNotNull(node.key)
                     assertFalse(node.isGroup)
@@ -76,6 +79,16 @@ class ExtensionCatalogTest {
             }
         }
         walk(Extension.catalog())
+    }
+
+    @Test
+    fun downloadsNav_opensManagerAndSkipsToggleReset() {
+        val nav = Extension.catalog().single { it.id == Extension.NAV_DOWNLOADS }
+        assertTrue(nav.isNav)
+        assertEquals(null, nav.key)
+        val keys = collectToggleKeys(Extension.catalog())
+        assertFalse(keys.contains(Extension.NAV_DOWNLOADS))
+        assertFalse(PreferenceKeys.DEFAULTS.containsKey(Extension.NAV_DOWNLOADS))
     }
 
     private fun collectToggleKeys(nodes: List<Extension>): Set<String> {

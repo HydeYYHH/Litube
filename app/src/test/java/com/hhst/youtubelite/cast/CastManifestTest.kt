@@ -98,6 +98,14 @@ class CastManifestTest {
         assertFalse(mpd.contains("<S d=\"1000000\" t="))
     }
 
+    @Test
+    fun optionsProvider_classNameMatchesManifestMetaData() {
+        assertEquals(
+            "com.hhst.youtubelite.cast.CastOptionsProvider",
+            CastOptionsProvider::class.java.name,
+        )
+    }
+
     private fun video() = Format(
         url = "https://example.com/v",
         itag = 137,

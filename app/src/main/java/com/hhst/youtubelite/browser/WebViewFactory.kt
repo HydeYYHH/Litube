@@ -22,6 +22,7 @@ import androidx.core.graphics.createBitmap
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.Constants
+import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
 import com.hhst.youtubelite.extension.ExtensionInjector
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
@@ -50,6 +51,7 @@ object WebViewFactory {
     private val dislikesScript = PageScript(DISLIKES_JS, "Dislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
     private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "ShortsAds")
+    private val downloadScript = PageScript(DownloadWebBridge.ASSET, "DownloadBridge")
 
     @SuppressLint("SetJavaScriptEnabled")
     fun create(
@@ -90,6 +92,10 @@ object WebViewFactory {
             setColorSchemeColors(YtRed.toArgb())
             setProgressViewOffset(true, 24, 96)
         }
+        val downloadBridge = DownloadWebBridge(
+            appContext = appContext,
+            tabId = tabId,
+        )
         val webView = WebView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -124,6 +130,8 @@ object WebViewFactory {
             dislikesScript.install(appContext, this)
             hideShortsScript.install(appContext, this)
             shortsAdsScript.install(appContext, this)
+            downloadScript.install(appContext, this)
+            downloadBridge.attach(this)
             webViewClient = BrowserWebViewClient(
                 appContext = appContext,
                 callbacks = callbacks,
@@ -135,6 +143,8 @@ object WebViewFactory {
                 dislikes = dislikesScript,
                 hideShorts = hideShortsScript,
                 shortsAds = shortsAdsScript,
+                downloadScript = downloadScript,
+                downloadBridge = downloadBridge,
                 bridge = bridge,
                 playerCache = playerCache,
                 swipeRefresh = swipeRefresh,
@@ -145,7 +155,7 @@ object WebViewFactory {
         swipeRefresh.addView(webView)
         swipeRefresh.setOnRefreshListener { onRefresh(webView) }
 
-        return BrowserHost(swipeRefresh, webView)
+        return BrowserHost(swipeRefresh, webView, downloadBridge)
     }
 
     internal fun injectNavScript(context: Context, webView: WebView) {
@@ -156,6 +166,7 @@ object WebViewFactory {
 data class BrowserHost(
     val container: SwipeRefreshLayout,
     val webView: WebView,
+    val downloadBridge: DownloadWebBridge? = null,
 )
 
 private class BrowserWebViewClient(
@@ -169,6 +180,8 @@ private class BrowserWebViewClient(
     private val dislikes: PageScript,
     private val hideShorts: PageScript,
     private val shortsAds: PageScript,
+    private val downloadScript: PageScript,
+    private val downloadBridge: DownloadWebBridge,
     private val bridge: Bridge,
     private val playerCache: PlayerCache,
     private val swipeRefresh: SwipeRefreshLayout,
@@ -246,6 +259,8 @@ private class BrowserWebViewClient(
         dislikes.inject(appContext, view)
         hideShorts.inject(appContext, view)
         shortsAds.inject(appContext, view)
+        downloadBridge.stamp(view)
+        downloadScript.inject(appContext, view)
         injector.inject(view)
     }
 
@@ -253,6 +268,8 @@ private class BrowserWebViewClient(
         super.onPageStarted(view, url, favicon)
         updateRefreshEnabled(url)
         bridge.onDocumentStarted()
+        downloadBridge.bumpPage()
+        downloadBridge.stamp(view)
         if (!hasDocumentStartScript) injectAll(view)
         callbacks.onPageStarted(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
@@ -260,7 +277,13 @@ private class BrowserWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
-        if (hasDocumentStartScript) injector.inject(view) else injectAll(view)
+        if (hasDocumentStartScript) {
+            injector.inject(view)
+            downloadBridge.stamp(view)
+            downloadScript.inject(appContext, view)
+        } else {
+            injectAll(view)
+        }
         callbacks.onPageFinished(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
     }
@@ -270,6 +293,9 @@ private class BrowserWebViewClient(
         // SPA navigations often skip full reloads; re-run inject for settings.
         updateRefreshEnabled(url)
         injector.inject(view)
+        downloadBridge.bumpPage()
+        downloadBridge.stamp(view)
+        downloadScript.inject(appContext, view)
         callbacks.onHistoryChanged(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
     }

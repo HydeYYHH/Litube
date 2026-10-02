@@ -69,6 +69,45 @@ class Extractor(
         }
     }
 
+    /**
+     * Suspend until metadata and stream are ready. Cancelling the caller only
+     * cancels this wait — the shared parse and `/player` request keep running
+     * for other waiters (playback).
+     */
+    suspend fun awaitMedia(urlOrId: String): Pair<Metadata, Stream> {
+        val extraction = extract(urlOrId)
+        val metadata = extraction.metadata.await()
+        val stream = extraction.stream.await()
+        return metadata to stream
+    }
+
+    /**
+     * Independent `/player` fetch that does not join or replace the shared
+     * in-flight table and does not write stream URLs into the playback cache
+     * or [playerCache]. Used for download 403 URL refresh.
+     */
+    fun extractFresh(urlOrId: String): Extraction {
+        val id = VideoId.parse(urlOrId)
+            ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
+        val slot = Inflight.create(
+            id,
+            StreamWriteDisabledCache(cache),
+            scope,
+            clientOrder,
+            streamEpochs,
+        )
+        slot.start()
+        return slot.extraction
+    }
+
+    /** Like [awaitMedia] but on [extractFresh]. Cancel cancels only this wait. */
+    suspend fun awaitFreshMedia(urlOrId: String): Pair<Metadata, Stream> {
+        val extraction = extractFresh(urlOrId)
+        val metadata = extraction.metadata.await()
+        val stream = extraction.stream.await()
+        return metadata to stream
+    }
+
     /** Invalidates cached stream data so the next [extract] refetches `/player`. */
     fun invalidateStream(videoId: String) {
         val id = VideoId.parse(videoId) ?: return
@@ -128,6 +167,18 @@ private class Inflight(
             return Inflight(id, epoch, extraction)
         }
     }
+}
+
+/**
+ * Download 403 refresh must not persist googlevideo URLs into the playback
+ * stream cache or reuse [PlayerCache] as download storage.
+ */
+internal class StreamWriteDisabledCache(
+    private val inner: Cache,
+) : Cache by inner {
+    override fun getStream(videoId: String): Stream? = null
+    override fun putStream(videoId: String, stream: Stream) = Unit
+    override fun invalidateStream(videoId: String) = Unit
 }
 
 /**

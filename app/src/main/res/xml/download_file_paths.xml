@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="download_tmp" path="download/" />
+    <files-path name="download_files" path="download/" />
+    <external-files-path name="download_ext" path="Download/Litube/" />
+</paths>

@@ -17,6 +17,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.UrlPolicy
+import com.hhst.youtubelite.downloader.pip.PipAutoEnter
+import com.hhst.youtubelite.downloader.share.DownloadShareParser
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -33,6 +35,9 @@ class MainActivity : ComponentActivity() {
     private val prefs: ExtensionManager by inject()
     private val playerViewModel: PlayerViewModel by inject()
 
+    @Volatile
+    private var pipEligibilityLocked = false
+
     /** Set by BrowserScreen while the player overlay is eligible for auto-PiP. */
     @Volatile
     private var playerActive = false
@@ -43,25 +48,35 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var playerHeight = 0
 
+    /**
+     * Instrumentation: hold player PiP eligibility without a live stream so
+     * API 31+ [PictureInPictureParams.setAutoEnterEnabled] can be asserted
+     * against real DownloadActivity / sheet / share overlays.
+     */
+    fun setPlayerPipEligible(eligible: Boolean) {
+        pipEligibilityLocked = eligible
+        playerActive = eligible
+        playerPlaying = eligible
+        if (eligible && (playerWidth <= 0 || playerHeight <= 0)) {
+            playerWidth = 1280
+            playerHeight = 720
+        }
+        syncPipParams()
+    }
+
     /** Share-intent URL consumed once by BrowserScreen. */
     private val sharedUrl = MutableStateFlow<String?>(null)
+
+    /** Playlist share: open the page, then batch the already-loaded snapshot. */
+    private val pendingPlaylistDownload = MutableStateFlow<String?>(null)
 
     /** PiP mode state consumed by BrowserScreen (no recreate on config change). */
     private val inPip = MutableStateFlow(false)
 
     private var pipPrefListenerRef: ((String) -> Unit)? = null
 
-    /**
-     * App-initiated launches (share chooser, external links) also raise
-     * [onUserLeaveHint]; on API 26-30 that would shrink the playing video
-     * into PiP behind the other window. Timestamp every launch and skip
-     * legacy PiP entry for a short window after it.
-     */
-    @Volatile
-    private var suppressPipUntil = 0L
-
     override fun startActivity(intent: Intent) {
-        suppressPipUntil = SystemClock.elapsedRealtime() + SUPPRESS_PIP_WINDOW_MS
+        PipAutoEnter.noteLegacyLaunch()
         super.startActivity(intent)
     }
 
@@ -73,13 +88,14 @@ class MainActivity : ComponentActivity() {
         ReplaceWith("super.startActivityForResult(intent, requestCode, options)"),
     )
     override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
-        suppressPipUntil = SystemClock.elapsedRealtime() + SUPPRESS_PIP_WINDOW_MS
+        PipAutoEnter.noteLegacyLaunch()
         super.startActivityForResult(intent, requestCode, options)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        PipAutoEnter.register(this)
         if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) {
             NotificationPermission.requestIfNeeded(this)
         }
@@ -95,9 +111,12 @@ class MainActivity : ComponentActivity() {
                 ) {
                     BrowserScreen(
                         sharedUrl = sharedUrl,
+                        pendingPlaylistUrl = pendingPlaylistDownload,
                         inPipFlow = inPip,
                         onSharedUrlConsumed = { sharedUrl.value = null },
+                        onPendingPlaylistConsumed = { pendingPlaylistDownload.value = null },
                         onPlayerActiveChanged = { active, playing, width, height ->
+                            if (pipEligibilityLocked) return@BrowserScreen
                             playerActive = active
                             playerPlaying = playing
                             playerWidth = width
@@ -138,6 +157,14 @@ class MainActivity : ComponentActivity() {
      * through silently.
      */
     private fun handleLaunchIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(DownloadShareParser.EXTRA_PENDING_PLAYLIST, false) == true) {
+            val url = extractSharedUrl(intent)
+            if (url != null) {
+                sharedUrl.value = url
+                pendingPlaylistDownload.value = url
+            }
+            return
+        }
         val url = extractSharedUrl(intent)
         if (url != null) {
             sharedUrl.value = url
@@ -152,10 +179,8 @@ class MainActivity : ComponentActivity() {
         super.onUserLeaveHint()
         // API 31+ uses PictureInPictureParams.setAutoEnterEnabled.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
-        // Skip app-initiated leaves (share chooser, external links) — see
-        // [suppressPipUntil].
-        if (SystemClock.elapsedRealtime() < suppressPipUntil) return
-        // minSdk 26: PictureInPictureParams exists everywhere (no O check).
+        if (SystemClock.elapsedRealtime() < PipAutoEnter.legacySuppressUntil) return
+        if (PipAutoEnter.isSuppressed()) return
         if (pipEligible()) {
             runCatching { enterPictureInPictureMode(pipParams(autoEnter = false)) }
         }
@@ -183,11 +208,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncPipParams() {
-        // minSdk 26: setPictureInPictureParams exists everywhere.
-        runCatching { setPictureInPictureParams(pipParams(autoEnter = pipEligible())) }
+        val (n, d) = PlayerUi.pipAspect(playerWidth, playerHeight)
+        PipAutoEnter.apply(
+            this,
+            autoEnter = PipAutoEnter.shouldAutoEnter(pipEligible(), Build.VERSION.SDK_INT),
+            aspect = Rational(n, d),
+        )
     }
 
     override fun onDestroy() {
+        PipAutoEnter.unregister(this)
         pipPrefListenerRef?.let { prefs.removeOnChangedListener(it) }
         pipPrefListenerRef = null
         inPip.value = false
@@ -195,10 +225,6 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        /** How long app-initiated activity launches suppress legacy PiP entry. */
-        private const val SUPPRESS_PIP_WINDOW_MS = 1_500L
-
-        /** Any http(s) URL in shared text; sentence punctuation excluded. */
         private val URL_RE = Regex("""https?://\S+[^\s.,;:!?)]""")
 
         private fun extractSharedUrl(intent: Intent?): String? {

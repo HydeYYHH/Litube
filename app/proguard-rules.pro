@@ -6,23 +6,38 @@
 }
 
 # Gson models persist queue, progress, captions, extraction, and inject reports.
+# -keep class (not only keepclassmembers): R8 otherwise abstracts classes that
+# are only constructed via Gson.fromJson, which crashes WebView inject callbacks.
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 
--keepclassmembers class com.hhst.youtubelite.player.queue.QueueItem { <fields>; }
--keepclassmembers class com.hhst.youtubelite.player.queue.QueueState { <fields>; }
--keepclassmembers class com.hhst.youtubelite.player.engine.ResumePoint { <fields>; }
--keepclassmembers class com.hhst.youtubelite.player.surface.SubtitleStyle { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extractor.Format { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extractor.Metadata { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extractor.Subtitle { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extractor.Chapter { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extractor.Stream { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extension.InjectReport { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extension.InjectFailure { <fields>; }
--keepclassmembers class com.hhst.youtubelite.extension.InjectIconState { <fields>; }
+-keep class com.hhst.youtubelite.player.queue.QueueItem { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.queue.QueueState { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.engine.ResumePoint { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.surface.SubtitleStyle { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.Format { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.Metadata { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.Subtitle { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.Chapter { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.Stream { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.ChapterList { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extension.InjectReport { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extension.InjectFailure { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extension.InjectIconState { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.downloader.core.DownloadConfig { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.downloader.core.EnqueueResult { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.downloader.core.TaskRef { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.browser.Bridge$QueueItemJson { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.core.MmkvJsonCache$Entry { <init>(...); <fields>; }
+
+# Manifest meta-data class name is a string; R8 must not rename it.
+-keep class com.hhst.youtubelite.cast.CastOptionsProvider { *; }
+-keep class com.hhst.youtubelite.downloader.work.DownloadTransferWorker { *; }
+-keep class com.hhst.youtubelite.downloader.work.DownloadFinalizeWorker { *; }
+-keep class com.hhst.youtubelite.downloader.work.DownloadUidtJobService { *; }
+-keep class com.hhst.youtubelite.downloader.work.KoinDownloadWorkerFactory { *; }
 
 # Optional jsoup / NewPipe paths unused on Android.
 -dontwarn java.beans.**

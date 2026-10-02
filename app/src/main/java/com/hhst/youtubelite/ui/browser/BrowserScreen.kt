@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -36,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -47,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -55,10 +58,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.browser.Bridge
 import com.hhst.youtubelite.browser.BrowserHost
+import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.Tab
 import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.browser.WebViewFactory
+import com.hhst.youtubelite.downloader.core.BatchSnapshot
+import com.hhst.youtubelite.downloader.core.SnapshotReject
+import com.hhst.youtubelite.downloader.share.DownloadShareParser
+import com.hhst.youtubelite.downloader.ui.DownloadEntries
+import com.hhst.youtubelite.downloader.ui.DownloadUi
+import com.hhst.youtubelite.downloader.ui.DownloadUiStart
+import com.hhst.youtubelite.downloader.ui.DownloadViewModel
+import com.hhst.youtubelite.downloader.ui.DownloadWatchEntry
+import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
+import com.hhst.youtubelite.downloader.webview.WebViewTimerHandle
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.extension.Extension
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
@@ -75,8 +92,10 @@ import com.hhst.youtubelite.player.surface.PlayerSurface
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import com.hhst.youtubelite.ui.extension.ExtensionScreen
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -86,13 +105,17 @@ import org.koin.compose.koinInject
 fun BrowserScreen(
     viewModel: BrowserViewModel = koinViewModel(),
     playerViewModel: PlayerViewModel = koinInject(),
+    downloadViewModel: DownloadViewModel = koinViewModel(),
     extensionManager: ExtensionManager = koinInject(),
     extractor: Extractor = koinInject(),
     playerCache: PlayerCache = koinInject(),
     miniPlayerStore: MiniPlayerStore = koinInject(),
+    webViewTimers: WebViewTimerOccupancy = koinInject(),
     sharedUrl: StateFlow<String?>? = null,
+    pendingPlaylistUrl: StateFlow<String?>? = null,
     inPipFlow: StateFlow<Boolean>? = null,
     onSharedUrlConsumed: () -> Unit = {},
+    onPendingPlaylistConsumed: () -> Unit = {},
     onPlayerActiveChanged: (active: Boolean, playing: Boolean, width: Int, height: Int) -> Unit = { _, _, _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -124,6 +147,39 @@ fun BrowserScreen(
                 viewModel.openTab(url)
                 onSharedUrlConsumed()
             }
+        }
+    }
+    var pendingPlaylist by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingPlaylistUrl) {
+        pendingPlaylistUrl?.collect { url -> pendingPlaylist = url }
+    }
+    LaunchedEffect(uiState.url, uiState.isLoading, pendingPlaylist, hosts[activeId]) {
+        val pending = pendingPlaylist ?: return@LaunchedEffect
+        if (uiState.isLoading) return@LaunchedEffect
+        val current = uiState.url ?: return@LaunchedEffect
+        if (!DownloadShareParser.samePlaylist(current, pending)) return@LaunchedEffect
+        val host = hosts[activeId] ?: return@LaunchedEffect
+        val bridge = host.downloadBridge ?: return@LaunchedEffect
+        repeat(5) {
+            delay(400)
+            val snapshot = CompletableDeferred<BatchSnapshot?>()
+            bridge.collectLoadedSnapshot(host.webView) { snapshot.complete(it) }
+            val loaded = snapshot.await() ?: return@repeat
+            pendingPlaylist = null
+            onPendingPlaylistConsumed()
+            when (val start = DownloadUi.showBatchConfirm(context, loaded)) {
+                is DownloadUiStart.Rejected -> {
+                    val msg = when (start.reason) {
+                        is SnapshotReject.TooManyItems ->
+                            context.getString(R.string.download_snapshot_too_many)
+                        is SnapshotReject.TooLarge ->
+                            context.getString(R.string.download_snapshot_too_large)
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+                is DownloadUiStart.Started -> Unit
+            }
+            return@LaunchedEffect
         }
     }
 
@@ -224,18 +280,27 @@ fun BrowserScreen(
         }
     }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, webViewTimers) {
+        var timerHandle: WebViewTimerHandle? = null
+        fun acquireTimers() {
+            if (timerHandle != null) return
+            timerHandle = webViewTimers.acquire(WebViewTimerOwner.BROWSER)
+        }
+        fun releaseTimers() {
+            timerHandle?.release()
+            timerHandle = null
+        }
         val observer = LifecycleEventObserver { _, event ->
             val active = latestHosts.value[latestActiveId.value]?.webView
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     active?.onResume()
-                    active?.resumeTimers()
+                    acquireTimers()
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     val pausedInPip = activity?.isInPictureInPictureMode == true
                     latestHosts.value.values.forEach { it.webView.onPause() }
-                    active?.pauseTimers()
+                    releaseTimers()
                     // "Visible" not "playing": pausing an already-paused player is harmless.
                     val playerVisible = playerViewModel.uiState.value.visible
                     if (playerVisible && !pausedInPip &&
@@ -259,8 +324,12 @@ fun BrowserScreen(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            acquireTimers()
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            releaseTimers()
             hosts.values.forEach { destroyHost(it) }
             hosts.clear()
         }
@@ -595,6 +664,52 @@ fun BrowserScreen(
             }
         }
 
+        val watchVideoId = VideoId.parse(uiState.url)
+            ?.takeIf { PageKind.isPlayerSurface(PageKind.of(uiState.url)) }
+        val watchDownloaded by produceState(false, watchVideoId, downloadViewModel) {
+            val id = watchVideoId
+            if (id == null) {
+                value = false
+                return@produceState
+            }
+            downloadViewModel.observeVideo(id).collect { value = it.watchPageDownloaded }
+        }
+        if (watchVideoId != null && !inPip && !playerState.fullscreen) {
+            val density = LocalDensity.current
+            val layoutDir = LocalLayoutDirection.current
+            val screenWidthDp = LocalConfiguration.current.screenWidthDp
+            val topInsetDp = with(density) {
+                WindowInsets.safeDrawing.getTop(this).toDp().value.toInt()
+            }
+            val leftInsetDp = with(density) {
+                WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
+            }
+            val rightInsetDp = with(density) {
+                WindowInsets.safeDrawing.getRight(this, layoutDir).toDp().value.toInt()
+            }
+            val availableWidthDp = (screenWidthDp - leftInsetDp - rightInsetDp).coerceAtLeast(1)
+            val topDp = PlayerUi.playerTopOffsetDp(false, playerState.pageTopDp, topInsetDp)
+            val heightDp = PlayerUi.embeddedHeightDp(playerState.pageHeightDp, availableWidthDp)
+            DownloadWatchEntry(
+                downloaded = watchDownloaded,
+                onClick = {
+                    if (watchDownloaded) {
+                        DownloadUi.openManager(context)
+                    } else {
+                        DownloadEntries.single(
+                            watchVideoId,
+                            playerState.title.takeIf { playerState.videoId == watchVideoId }.orEmpty(),
+                            playerState.author.takeIf { playerState.videoId == watchVideoId },
+                            VideoId.thumbnailUrl(watchVideoId),
+                        )?.let { DownloadEntries.show(context, it) }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = (topDp + heightDp + 8).dp, start = 16.dp),
+            )
+        }
+
         // The PiP window must show the video: the extension screen is an
         // opaque full-size sheet that would otherwise cover it.
         if (showExtension && !inPip) {
@@ -603,7 +718,15 @@ fun BrowserScreen(
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing),
             ) {
-                ExtensionScreen(onClose = { showExtension = false })
+                ExtensionScreen(
+                    onClose = { showExtension = false },
+                    onNavigate = { id ->
+                        if (id == Extension.NAV_DOWNLOADS) {
+                            showExtension = false
+                            DownloadUi.openManager(context)
+                        }
+                    },
+                )
             }
         }
 
@@ -662,10 +785,12 @@ private fun createHosts(
 private fun destroyHost(host: BrowserHost) {
     host.container.isRefreshing = false
     val webView: WebView = host.webView
+    host.downloadBridge?.detach(webView)
     webView.stopLoading()
     webView.removeJavascriptInterface(Bridge.NAME)
     webView.removeJavascriptInterface(WebViewFactory.LITE_ALIAS)
     webView.removeJavascriptInterface(NetTracer.JS_NAME)
+    webView.removeJavascriptInterface(DownloadWebBridge.FALLBACK_NAME)
     webView.loadUrl("about:blank")
     (webView.parent as? ViewGroup)?.removeView(webView)
     (host.container.parent as? ViewGroup)?.removeView(host.container)

@@ -4,7 +4,9 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.hhst.youtubelite.R
 
-/** Settings catalog node: group (children) or toggle (key). */
+enum class ExtensionKind { GROUP, TOGGLE, NAV }
+
+/** Settings catalog node: group (children), toggle (key), or navigation. */
 data class Extension(
     val id: String,
     val key: String? = null,
@@ -12,8 +14,10 @@ data class Extension(
     @param:DrawableRes val icon: Int = 0,
     val children: List<Extension> = emptyList(),
     @param:StringRes val summary: Int = 0,
+    val kind: ExtensionKind = if (children.isNotEmpty()) ExtensionKind.GROUP else ExtensionKind.TOGGLE,
 ) {
     val isGroup: Boolean get() = children.isNotEmpty()
+    val isNav: Boolean get() = kind == ExtensionKind.NAV
 
     companion object {
         fun catalog(): List<Extension> = listOf(
@@ -102,7 +106,14 @@ data class Extension(
                     toggle(PreferenceKeys.SPONSOR_COUNTDOWN, R.string.sponsor_countdown),
                 ),
             ),
+            nav(
+                id = NAV_DOWNLOADS,
+                title = R.string.downloads,
+                icon = R.drawable.ic_download,
+            ),
         )
+
+        const val NAV_DOWNLOADS = "downloads"
 
         fun group(
             id: String,
@@ -116,6 +127,12 @@ data class Extension(
             @StringRes title: Int,
             @StringRes summary: Int = 0,
         ): Extension =
-            Extension(id = key, key = key, title = title, summary = summary)
+            Extension(id = key, key = key, title = title, summary = summary, kind = ExtensionKind.TOGGLE)
+
+        fun nav(
+            id: String,
+            @StringRes title: Int,
+            @DrawableRes icon: Int = 0,
+        ): Extension = Extension(id = id, title = title, icon = icon, kind = ExtensionKind.NAV)
     }
 }

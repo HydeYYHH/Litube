@@ -1,0 +1,257 @@
+package com.hhst.youtubelite.downloader.resolve
+
+import com.hhst.youtubelite.downloader.core.DownloadConfig
+import com.hhst.youtubelite.player.datasource.StreamSelection
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DownloadSelectorTest {
+
+    private val ladder = listOf(
+        videoFormat(480),
+        videoFormat(720),
+        videoFormat(1080),
+        videoFormat(1440),
+        videoFormat(1080, codec = "vp9", itag = 248),
+        audioFormat(original = true),
+    )
+
+    @Test
+    fun defaultQuality_highestNotExceeding1080() {
+        val selected = DownloadSelector.select(catalog(ladder), DownloadConfig())
+        val ready = selected as DownloadSelection.Ready
+        assertEquals(1080, ready.plan.video!!.format.height)
+        assertEquals("avc1.640028", ready.plan.video!!.format.codec)
+        assertEquals(1440, StreamSelection.selectVideo(ladder.filter { it.videoOnly }, null)!!.height)
+    }
+
+    @Test
+    fun userHigherQuality_canExceed1080() {
+        val selected = DownloadSelector.select(
+            catalog(ladder),
+            DownloadConfig(videoQuality = "1440p"),
+        ) as DownloadSelection.Ready
+        assertEquals(1440, selected.plan.video!!.format.height)
+    }
+
+    @Test
+    fun retry_keepsExplicitQualityAndAudio() {
+        val config = DownloadConfig(videoQuality = "720p", audioTrack = "id:en")
+        val first = DownloadSelector.select(catalog(ladder), config) as DownloadSelection.Ready
+        val second = DownloadSelector.select(catalog(ladder), config) as DownloadSelection.Ready
+        assertEquals(720, first.plan.video!!.format.height)
+        assertEquals(first.plan.video!!.format.itag, second.plan.video!!.format.itag)
+        assertEquals(first.plan.audio!!.audioTrackKey, second.plan.audio!!.audioTrackKey)
+        assertEquals("id:en", first.plan.audio!!.audioTrackKey)
+    }
+
+    @Test
+    fun batchQualityCap_appliedPerItem() {
+        val same = catalog(ladder)
+        val cap720 = DownloadSelector.select(same, DownloadConfig(videoQuality = "720p")) as DownloadSelection.Ready
+        val cap1080 = DownloadSelector.select(same, DownloadConfig(videoQuality = "1080p")) as DownloadSelection.Ready
+        assertEquals(720, cap720.plan.video!!.format.height)
+        assertEquals(1080, cap1080.plan.video!!.format.height)
+    }
+
+    @Test
+    fun defaultAudio_prefersOriginal() {
+        val formats = listOf(
+            videoFormat(720),
+            audioFormat(language = "ja", original = false, itag = 141, trackId = "ja"),
+            audioFormat(language = "en", original = true, itag = 140, trackId = "en"),
+        )
+        val ready = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Ready
+        assertEquals("id:en", ready.plan.audio!!.audioTrackKey)
+    }
+
+    @Test
+    fun defaultAudio_usesExplicitDefaultWhenNoOriginal() {
+        val formats = listOf(
+            videoFormat(720),
+            audioFormat(language = "ja", original = false, itag = 141, trackId = "ja", trackType = "dubbed"),
+            audioFormat(language = "en", original = false, itag = 140, trackId = "en", trackType = "default"),
+        )
+        val ready = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Ready
+        assertEquals("id:en", ready.plan.audio!!.audioTrackKey)
+    }
+
+    @Test
+    fun defaultAudio_ambiguousRequiresChoice() {
+        val formats = listOf(
+            videoFormat(720),
+            audioFormat(language = "en", original = true, itag = 140, trackId = "en"),
+            audioFormat(language = "en", original = true, itag = 141, trackId = "en-orig-2"),
+        )
+        val failed = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.AUDIO_TRACK_AMBIGUOUS, failed.reason)
+    }
+
+    @Test
+    fun specifiedAudioLanguage_doesNotSilentFallback() {
+        val formats = listOf(
+            videoFormat(720),
+            audioFormat(language = "en", original = true, trackId = "en"),
+        )
+        val failed = DownloadSelector.select(
+            catalog(formats),
+            DownloadConfig(audioTrack = "id:fr"),
+        ) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.AUDIO_LANGUAGE_UNAVAILABLE, failed.reason)
+    }
+
+    @Test
+    fun specifiedSubtitleLanguage_doesNotSilentFallback() {
+        val formats = listOf(videoFormat(720), audioFormat())
+        // R14: an unavailable subtitle fails its own asset; media still resolves.
+        val ready = DownloadSelector.select(
+            catalog(formats, subtitles = listOf(subtitle("en"))),
+            DownloadConfig(includeSubtitle = true, subtitleLanguage = "fr"),
+        ) as DownloadSelection.Ready
+        assertEquals(DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE, ready.plan.subtitleFailure)
+        assertNull(ready.plan.subtitle)
+        assertNotNull(ready.plan.video)
+    }
+
+    @Test
+    fun subtitleKeepsRealExtension() {
+        val formats = listOf(videoFormat(720), audioFormat())
+        val ready = DownloadSelector.select(
+            catalog(formats, subtitles = listOf(subtitle("en", mime = "application/ttml+xml"))),
+            DownloadConfig(includeSubtitle = true, subtitleLanguage = "en"),
+        ) as DownloadSelection.Ready
+        assertEquals("ttml", ready.plan.subtitle!!.extension)
+        assertEquals("application/ttml+xml", ready.plan.subtitle!!.mimeType)
+    }
+
+    @Test
+    fun sameQuality_prefersAvc() {
+        val formats = listOf(
+            videoFormat(1080, codec = "vp9", itag = 248),
+            videoFormat(1080, codec = "avc1.640028", itag = 137),
+            audioFormat(),
+        )
+        val ready = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Ready
+        assertEquals(137, ready.plan.video!!.format.itag)
+        assertTrue(ready.plan.video!!.format.codec!!.startsWith("avc"))
+    }
+
+    @Test
+    fun gatedHevc_unavailableWithReason() {
+        val formats = listOf(
+            videoFormat(1080, codec = "hvc1.1.6.L93", itag = 266),
+            audioFormat(),
+        )
+        val failed = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.CODEC_NOT_ENABLED, failed.reason)
+    }
+
+    @Test
+    fun gatedOpusAudio_unavailableWithReason() {
+        val formats = listOf(
+            videoFormat(720),
+            audioFormat(codec = "opus", itag = 251, bitrate = 160_000),
+        )
+        val failed = DownloadSelector.select(catalog(formats), DownloadConfig()) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.CODEC_NOT_ENABLED, failed.reason)
+    }
+
+    @Test
+    fun live_distinctReason() {
+        val failed = DownloadSelector.select(
+            catalog(ladder, isLive = true, durationSec = 0L),
+            DownloadConfig(),
+        ) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.LIVE, failed.reason)
+    }
+
+    @Test
+    fun premiereUnstarted_distinctReason() {
+        val failed = DownloadSelector.select(
+            catalog(emptyList(), isLive = true, durationSec = 3600L),
+            DownloadConfig(),
+        ) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.PREMIERE_UNSTARTED, failed.reason)
+    }
+
+    @Test
+    fun noFileStreams_distinctReason() {
+        val failed = DownloadSelector.select(
+            catalog(emptyList(), isLive = false),
+            DownloadConfig(),
+        ) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.NO_FILE_STREAMS, failed.reason)
+        assertTrue(failed.reason != DownloadUnavailableReason.LIVE)
+        assertTrue(failed.reason != DownloadUnavailableReason.PREMIERE_UNSTARTED)
+    }
+
+    @Test
+    fun thumbnailKeepsExtension() {
+        val ready = DownloadSelector.select(
+            catalog(
+                ladder,
+                thumbnailUrl = "https://i.ytimg.com/vi/$TEST_VIDEO_ID/hqdefault.webp",
+            ),
+            DownloadConfig(includeCover = true),
+        ) as DownloadSelection.Ready
+        assertEquals("webp", ready.plan.cover!!.extension)
+        assertEquals("image/webp", ready.plan.cover!!.mimeType)
+    }
+
+    @Test
+    fun audioOnly_usesAacM4a() {
+        val ready = DownloadSelector.select(
+            catalog(listOf(audioFormat())),
+            DownloadConfig(audioOnly = true),
+        ) as DownloadSelection.Ready
+        assertNull(ready.plan.video)
+        assertEquals("mp4a.40.2", ready.plan.audio!!.format.codec)
+    }
+
+    @Test
+    fun attachmentsOnly_skipsMediaAndKeepsSidecars() {
+        val ready = DownloadSelector.select(
+            catalog(
+                ladder,
+                subtitles = listOf(subtitle("en")),
+                thumbnailUrl = "https://i.ytimg.com/vi/$TEST_VIDEO_ID/hqdefault.jpg",
+            ),
+            DownloadConfig(
+                attachmentsOnly = true,
+                includeSubtitle = true,
+                subtitleLanguage = "en",
+                includeCover = true,
+            ),
+        ) as DownloadSelection.Ready
+        assertNull(ready.plan.video)
+        assertNull(ready.plan.audio)
+        assertEquals("en", ready.plan.subtitle!!.language)
+        assertEquals("jpg", ready.plan.cover!!.extension)
+    }
+
+    @Test
+    fun itagHint_usedWhenPresent_failsWhenMissing() {
+        val formats = listOf(
+            videoFormat(720, itag = 136),
+            videoFormat(1080, itag = 137),
+            audioFormat(),
+        )
+        val hinted = DownloadSelector.select(
+            catalog(formats),
+            DownloadConfig(videoQuality = "1080p", videoItagHint = 136),
+        ) as DownloadSelection.Ready
+        assertEquals(136, hinted.plan.video!!.format.itag)
+        assertEquals(720, hinted.plan.video!!.format.height)
+
+        // R13: an explicit confirm-sheet itag is EXACT — a missing itag must
+        // fail with a reselect reason, never silently drop a quality tier.
+        val missing = DownloadSelector.select(
+            catalog(formats),
+            DownloadConfig(videoQuality = "1080p", videoItagHint = 999),
+        ) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.QUALITY_UNAVAILABLE, missing.reason)
+    }
+}

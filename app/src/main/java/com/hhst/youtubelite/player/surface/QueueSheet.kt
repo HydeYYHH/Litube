@@ -69,6 +69,8 @@ internal fun QueueSheet(
     onLoop: () -> Unit,
     onClose: () -> Unit,
     onMove: (Int, Int) -> Unit,
+    onDownloadAll: () -> Unit = {},
+    onDownloadItem: (QueueItem) -> Unit = {},
 ) {
     // Working copy: drag reorders locally and commits once per drop, so the
     // persisted queue is not rewritten on every animation frame. pointerInput
@@ -214,6 +216,14 @@ internal fun QueueSheet(
                 modifier = Modifier.size(40.dp),
                 enabled = items.isNotEmpty(),
             )
+            PlayerIconButton(
+                icon = R.drawable.ic_download,
+                contentDescription = stringResource(R.string.download_queue),
+                onClick = onDownloadAll,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(40.dp),
+                enabled = items.isNotEmpty(),
+            )
             Spacer(Modifier.weight(1f))
             Text(
                 text = stringResource(R.string.queue_autoplay),
@@ -333,6 +343,7 @@ internal fun QueueSheet(
                             // Keep the local order on screen; the repository
                             // re-emission (or the resync above) reconciles drift.
                         },
+                        onDownload = { onDownloadItem(item) },
                     )
                 }
             }
@@ -355,6 +366,7 @@ private fun DraggableQueueRow(
     onDragPointer: (Float) -> Unit,
     onDrag: (Int) -> Unit,
     onDragEnd: () -> Unit,
+    onDownload: () -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var rowHeightPx by remember { mutableFloatStateOf(0f) }
@@ -440,6 +452,16 @@ private fun DraggableQueueRow(
                 )
             }
         }
+        Icon(
+            painter = painterResource(R.drawable.ic_download),
+            contentDescription = stringResource(R.string.download),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDownload)
+                .padding(6.dp),
+        )
         Icon(
             painter = painterResource(R.drawable.ic_close),
             contentDescription = stringResource(R.string.queue_remove),

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.browser.Bridge
+import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.ui.YoutubeThumb
 
@@ -109,6 +110,26 @@ fun MediaItemMenuDialog(
                         Icon(
                             painter = painterResource(R.drawable.ic_queue_add),
                             contentDescription = stringResource(R.string.add_to_queue),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            VideoId.parse(item.url)?.let { id ->
+                                DownloadUi.showSingleConfirm(
+                                    context,
+                                    id,
+                                    item.title.orEmpty(),
+                                    item.author,
+                                    VideoId.thumbnailUrl(id),
+                                )
+                            }
+                            onDismiss()
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_download),
+                            contentDescription = stringResource(R.string.download),
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }

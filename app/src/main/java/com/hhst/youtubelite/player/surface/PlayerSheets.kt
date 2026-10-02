@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.downloader.ui.DownloadEntries
+import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
 
@@ -75,6 +78,7 @@ fun PlayerSheetHost(
     onOpenDialog: (PlayerDialog) -> Unit,
 ) {
     if (sheet == null) return
+    val context = LocalContext.current
     PlayerModalSheet(onDismiss = onDismiss) {
         when (sheet) {
             PlayerSheet.More -> MoreSheet(
@@ -100,6 +104,15 @@ fun PlayerSheetHost(
                     onDismiss()
                     onOpenDialog(PlayerDialog.Info)
                 },
+                onDownload = {
+                    DownloadEntries.single(
+                        state.videoId,
+                        state.title,
+                        state.author,
+                        state.videoId?.let(VideoId::thumbnailUrl),
+                    )?.let { DownloadEntries.show(context, it) }
+                    onDismiss()
+                },
                 onShare = { callbacks.onShare(); onDismiss() },
             )
             PlayerSheet.Queue -> QueueSheet(
@@ -114,6 +127,12 @@ fun PlayerSheetHost(
                 onLoop = callbacks::onLoop,
                 onClose = onDismiss,
                 onMove = callbacks::onQueueMove,
+                onDownloadAll = {
+                    DownloadUi.showBatchConfirm(context, DownloadEntries.queueSnapshot(state.queueItems))
+                },
+                onDownloadItem = { item ->
+                    DownloadEntries.single(item)?.let { DownloadEntries.show(context, it) }
+                },
             )
         }
     }
@@ -202,6 +221,7 @@ private fun MoreSheet(
     onAudio: () -> Unit,
     onSubtitleStyle: () -> Unit,
     onInfo: () -> Unit,
+    onDownload: () -> Unit,
     onShare: () -> Unit,
 ) {
     Column(
@@ -216,6 +236,7 @@ private fun MoreSheet(
         MoreRow(R.drawable.ic_track, stringResource(R.string.audio_track), onAudio)
         MoreRow(R.drawable.ic_subtitles_on, stringResource(R.string.subtitle_style), onSubtitleStyle)
         MoreRow(R.drawable.ic_info, stringResource(R.string.info), onInfo)
+        MoreRow(R.drawable.ic_download, stringResource(R.string.download), onDownload)
         MoreRow(R.drawable.ic_share, stringResource(R.string.share), onShare)
     }
 }

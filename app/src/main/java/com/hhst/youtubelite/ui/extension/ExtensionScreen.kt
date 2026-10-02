@@ -65,6 +65,7 @@ private val CollapseSpec = tween<IntSize>(
 @Composable
 fun ExtensionScreen(
     onClose: () -> Unit,
+    onNavigate: (String) -> Unit = {},
     viewModel: ExtensionViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -116,14 +117,23 @@ fun ExtensionScreen(
                 items = uiState.sections,
                 key = { it.id },
             ) { section ->
-                GroupBlock(
-                    node = section,
-                    depth = 0,
-                    expanded = uiState.expanded,
-                    toggles = uiState.toggles,
-                    onToggleExpand = viewModel::toggleExpanded,
-                    onToggle = viewModel::setEnabled,
-                )
+                if (section.isNav) {
+                    NavRow(
+                        node = section,
+                        depth = 0,
+                        onClick = { onNavigate(section.id) },
+                    )
+                } else {
+                    GroupBlock(
+                        node = section,
+                        depth = 0,
+                        expanded = uiState.expanded,
+                        toggles = uiState.toggles,
+                        onToggleExpand = viewModel::toggleExpanded,
+                        onToggle = viewModel::setEnabled,
+                        onNavigate = onNavigate,
+                    )
+                }
             }
         }
     }
@@ -170,6 +180,7 @@ private fun GroupBlock(
     toggles: Map<String, Boolean>,
     onToggleExpand: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit,
+    onNavigate: (String) -> Unit,
 ) {
     val open = node.id in expanded
     val startPad = 16.dp + (depth * 12).dp
@@ -225,6 +236,13 @@ private fun GroupBlock(
                         toggles = toggles,
                         onToggleExpand = onToggleExpand,
                         onToggle = onToggle,
+                        onNavigate = onNavigate,
+                    )
+                } else if (child.isNav) {
+                    NavRow(
+                        node = child,
+                        depth = depth + 1,
+                        onClick = { onNavigate(child.id) },
                     )
                 } else {
                     val key = child.key ?: continue
@@ -238,6 +256,48 @@ private fun GroupBlock(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NavRow(
+    node: Extension,
+    depth: Int,
+    onClick: () -> Unit,
+) {
+    val startPad = 16.dp + (depth * 12).dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(start = startPad, end = 16.dp, top = 14.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (node.icon != 0) {
+            Icon(
+                painter = painterResource(node.icon),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+        }
+        Text(
+            text = stringResource(node.title),
+            style = if (depth == 0) {
+                MaterialTheme.typography.titleMedium
+            } else {
+                MaterialTheme.typography.bodyLarge
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

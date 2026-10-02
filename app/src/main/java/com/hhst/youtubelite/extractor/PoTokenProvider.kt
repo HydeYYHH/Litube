@@ -2,12 +2,15 @@ package com.hhst.youtubelite.extractor
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.hhst.youtubelite.downloader.webview.AndroidWebViewMainGate
+import com.hhst.youtubelite.downloader.webview.WebViewMainGate
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
@@ -27,7 +30,6 @@ import org.schabi.newpipe.extractor.services.youtube.PoTokenProvider as NpPoToke
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -35,17 +37,19 @@ import kotlin.time.Duration.Companion.milliseconds
  * WEB [NpPoTokenProvider] via a hidden WebView (`assets/potoken/potoken.js`).
  *
  * [getWebClientPoToken] mints synchronously on miss (blocks the caller).
- * Do not call from the main thread. All results are cached in memory with
- * TTLs. Call [warmUp] off the main thread at app start to move that cost out
- * of the first video switch.
+ * Do not call from the main thread: WebView create / eval / loadUrl /
+ * timer occupancy are posted to the main looper and awaited. All results
+ * are cached in memory with TTLs. Call [warmUp] off the main thread at
+ * app start to move that cost out of the first video switch.
  */
 class PoTokenProvider(
     context: Context,
     private val http: OkHttpClient,
+    private val timers: WebViewTimerOccupancy = WebViewTimerOccupancy.NOOP,
+    private val main: WebViewMainGate = AndroidWebViewMainGate(),
 ) : NpPoTokenProvider {
 
     private val app = context.applicationContext
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val gson = Gson()
     private val mintLock = Any()
     private val ready = CountDownLatch(1)
@@ -72,8 +76,9 @@ class PoTokenProvider(
 
     override fun getWebClientPoToken(videoId: String): PoTokenResult? {
         freshToken(videoId)?.let { return it }
-        // NewPipe calls this on the extraction thread.
-        if (Looper.myLooper() == Looper.getMainLooper()) return null
+        // NewPipe calls this on the extraction thread (IO). Blocking the
+        // main looper waiting for JS would deadlock evaluateJavascript.
+        if (main.isOnMain) return null
         return synchronized(mintLock) {
             freshToken(videoId)?.let { return it }
             runCatching { mint(videoId) }
@@ -100,25 +105,37 @@ class PoTokenProvider(
 
     /** Warms the video-independent pipeline (integrity, visitor). */
     fun warmUp() {
-        if (Looper.myLooper() == Looper.getMainLooper()) return
+        if (main.isOnMain) return
         runCatching {
             synchronized(mintLock) {
-                if (!ensureReady() || !ensureIntegrity()) return@runCatching
-                ensureVisitor()
+                withPoTokenTimers {
+                    if (!ensureReady() || !ensureIntegrity()) return@withPoTokenTimers
+                    ensureVisitor()
+                }
             }
         }.onFailure { Log.w(TAG, "warm-up failed", it) }
     }
 
     /** Caller must hold [mintLock]. Only the player token is video-specific. */
     private fun mint(videoId: String): PoTokenResult? {
-        if (!ensureReady()) return null
-        if (!ensureIntegrity()) return null
-        val visitorData = ensureVisitor() ?: return null
-        val player = mintToken(videoId) ?: return null
-        // googlevideo 403s visitorData-bound GVS tokens (2026). Bind `pot` to the video id.
-        return PoTokenResult(visitorData, player, player)
-            .also { cache[videoId] = TtlValue(it) }
+        return withPoTokenTimers {
+            if (!ensureReady()) return@withPoTokenTimers null
+            if (!ensureIntegrity()) return@withPoTokenTimers null
+            val visitorData = ensureVisitor() ?: return@withPoTokenTimers null
+            val player = mintToken(videoId) ?: return@withPoTokenTimers null
+            // googlevideo 403s visitorData-bound GVS tokens (2026). Bind `pot` to the video id.
+            PoTokenResult(visitorData, player, player)
+                .also { cache[videoId] = TtlValue(it) }
+        }
     }
+
+    /**
+     * Hold process-global WebView timers for the whole mint, including async
+     * botguard JS after evaluateJavascript returns. Releasing between eval
+     * and the bridge callback pauses timers and kills mint.
+     */
+    private inline fun <T> withPoTokenTimers(block: () -> T): T =
+        timers.withOwner(WebViewTimerOwner.POTOKEN, block)
 
     private fun ensureReady(): Boolean {
         initialize()
@@ -151,12 +168,12 @@ class PoTokenProvider(
             val headers = YoutubeParsingHelper.getYouTubeHeaders().toMutableMap()
             // Same browser session the WebView page uses: the visitor must
             // match the session that mints and then fetches stream URLs.
-            runCatching {
-                android.webkit.CookieManager.getInstance()
-                    .getCookie("https://www.youtube.com")
-            }.getOrNull()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { cookie -> headers["Cookie"] = listOf(cookie) }
+            val cookie = main.run {
+                runCatching {
+                    CookieManager.getInstance().getCookie("https://www.youtube.com")
+                }.getOrNull()
+            }
+            cookie?.takeIf { it.isNotEmpty() }?.let { headers["Cookie"] = listOf(it) }
             YoutubeParsingHelper.getVisitorDataFromInnertube(
                 info,
                 Localization.DEFAULT,
@@ -171,13 +188,9 @@ class PoTokenProvider(
         return fetched
     }
 
-    /** Creates the host WebView early. Safe on any thread. */
+    /** Creates the host WebView on the main looper and waits. */
     fun initialize() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            createWebView()
-        } else {
-            mainHandler.post { createWebView() }
-        }
+        main.run { createWebView() }
     }
 
     private fun initIntegrity(): Boolean {
@@ -266,6 +279,7 @@ class PoTokenProvider(
             }
         }
         webView = view
+        timers.attach(view)
         val script = app.assets.open("potoken/potoken.js").use { it.readBytes().decodeToString() }
         view.loadDataWithBaseURL(
             "https://www.youtube.com",
@@ -277,41 +291,44 @@ class PoTokenProvider(
     }
 
     private fun eval(script: String, timeoutMs: Long): String? {
-        val deferred = CompletableDeferred<String?>()
-        val started = AtomicBoolean(false)
-        val start = Runnable {
-            if (!started.compareAndSet(false, true)) return@Runnable
-            val view = webView
-            if (view == null) {
-                deferred.complete(null)
-            } else {
-                view.evaluateJavascript(script) { raw ->
-                    if (raw == null || raw == "null") {
-                        deferred.complete(null)
-                        return@evaluateJavascript
+        // evaluateJavascript callbacks are delivered on main; blocking here
+        // on main would deadlock. Download/extract wait on IO instead.
+        if (main.isOnMain) {
+            Log.w(TAG, "eval refused on the main thread")
+            return null
+        }
+        return timers.withOwner(WebViewTimerOwner.POTOKEN) {
+            val deferred = CompletableDeferred<String?>()
+            val started = main.run {
+                val view = webView
+                if (view == null) {
+                    deferred.complete(null)
+                    false
+                } else {
+                    view.evaluateJavascript(script) { raw ->
+                        deferred.complete(parseJsResult(raw))
                     }
-                    deferred.complete(
-                        runCatching {
-                            val el = JsonParser.parseString(raw)
-                            when {
-                                el.isJsonNull -> null
-                                el.isJsonPrimitive && el.asJsonPrimitive.isString -> el.asString
-                                el.isJsonPrimitive -> el.asJsonPrimitive.toString()
-                                else -> el.toString()
-                            }
-                        }.getOrDefault(raw),
-                    )
+                    true
                 }
             }
+            if (!started) return@withOwner null
+            runBlocking {
+                withTimeoutOrNull(timeoutMs.milliseconds) { deferred.await() }
+            }
         }
-        // BotGuard JS shares the UI thread with the page. Run it during main-thread
-        // idle to avoid contending with interaction; the delayed post guarantees it
-        // still runs when the looper never goes idle.
-        Looper.getMainLooper().queue.addIdleHandler { start.run(); false }
-        mainHandler.postDelayed(start, IDLE_FALLBACK_MS)
-        return runBlocking {
-            withTimeoutOrNull(timeoutMs.milliseconds) { deferred.await() }
-        }
+    }
+
+    private fun parseJsResult(raw: String?): String? {
+        if (raw == null || raw == "null") return null
+        return runCatching {
+            val el = JsonParser.parseString(raw)
+            when {
+                el.isJsonNull -> null
+                el.isJsonPrimitive && el.asJsonPrimitive.isString -> el.asString
+                el.isJsonPrimitive -> el.asJsonPrimitive.toString()
+                else -> el.toString()
+            }
+        }.getOrDefault(raw)
     }
 
     private inner class PotokenJsBridge {
@@ -336,7 +353,6 @@ class PoTokenProvider(
                 "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         const val INIT_MS = 4_000L
         const val MINT_MS = 3_000L
-        const val IDLE_FALLBACK_MS = 1_000L
 
         // Integrity/visitor are session-scoped; the player token is minted per
         // video and remains valid for hours (2026 googlevideo). A rejected

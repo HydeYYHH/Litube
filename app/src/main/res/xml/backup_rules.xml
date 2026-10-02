@@ -1,13 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exclude in-progress download state so Auto Backup cannot clobber Room rows
+  or temp files. MMKV (legacy download_history) stays included so a restored
+  legacy backup can still run the importer once.
+  Paths: DownloadBackupExcludes
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="database" path="downloader.db" />
+    <exclude domain="database" path="downloader.db-wal" />
+    <exclude domain="database" path="downloader.db-shm" />
+    <exclude domain="cache" path="download" />
+    <exclude domain="file" path="download" />
+    <exclude domain="root" path="no_backup" />
+    <exclude domain="root" path="no_backup/player" />
 </full-backup-content>

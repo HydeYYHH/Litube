@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="740" viewBox="0 0 360 740">
+  <title>P0 scene 04  YouTube Android download quality settings</title>
+  <desc>Schematic from Google Help answer/11977233 and 6141269 Android, fetched 2026-09-16. Settings Background and downloads Download quality.</desc>
+  <rect width="360" height="740" fill="#0f0f0f"/>
+  <text x="16" y="48" fill="#fff" font-family="sans-serif" font-size="18" font-weight="700">Settings</text>
+  <text x="16" y="80" fill="#aaa" font-family="sans-serif" font-size="12">Background &amp; downloads</text>
+  <rect x="16" y="100" width="328" height="56" rx="8" fill="#272727"/>
+  <text x="32" y="134" fill="#fff" font-family="sans-serif" font-size="14">Download over Wi-Fi only</text>
+  <rect x="16" y="164" width="328" height="56" rx="8" fill="#272727" stroke="#fff" stroke-width="1"/>
+  <text x="32" y="188" fill="#fff" font-family="sans-serif" font-size="14">Download quality</text>
+  <text x="32" y="206" fill="#aaa" font-family="sans-serif" font-size="11">Higher quality uses more data and storage</text>
+  <rect x="16" y="232" width="328" height="56" rx="8" fill="#272727"/>
+  <text x="32" y="266" fill="#fff" font-family="sans-serif" font-size="14">Delete downloads</text>
+  <text x="12" y="320" fill="#888" font-family="sans-serif" font-size="10">Source: answer/11977233 + 6141269 Android · 2026-09-16</text>
+</svg>
