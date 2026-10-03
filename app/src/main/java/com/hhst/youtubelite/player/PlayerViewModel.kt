@@ -829,7 +829,7 @@ class PlayerViewModel(
     /** Runs the page's playlist nav; sentinel answers route to WebView back. */
     private fun navigatePlaylist(dir: Int, fallbackToBack: Boolean = false) {
         val page = watchPage ?: return
-        page.evaluate("window.__litePlaylistNav && window.__litePlaylistNav($dir);") { result ->
+        page.evaluate("window.__playlistNav && window.__playlistNav($dir);") { result ->
             when (result?.trim()) {
                 // Any no-op answer falls back to WebView back navigation.
                 null, "\"missing-playlist\"", "\"missing-current-video-id\"",
@@ -869,7 +869,7 @@ class PlayerViewModel(
     }
 
     override fun onShortsSwipe(up: Boolean) {
-        watchPage?.evaluate("window.__liteShortsNav && window.__liteShortsNav(${if (up) 1 else -1});") { }
+        watchPage?.evaluate("window.__shortsNav && window.__shortsNav(${if (up) 1 else -1});") { }
     }
 
     /**
@@ -1101,7 +1101,7 @@ class PlayerViewModel(
         if (!queueContext && pageHasPlaylist &&
             _uiState.value.loopMode == LoopMode.QUEUE_NEXT
         ) {
-            watchPage?.evaluate("window.__litePlaylistNav && window.__litePlaylistNav(1);") { }
+            watchPage?.evaluate("window.__playlistNav && window.__playlistNav(1);") { }
         }
     }
 

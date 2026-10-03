@@ -5,6 +5,7 @@ package com.hhst.youtubelite.ui.browser
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.database.ContentObserver
 import android.media.AudioManager
 import android.os.Handler
@@ -87,6 +88,7 @@ import com.hhst.youtubelite.player.surface.PlayerCallbackBridge
 import com.hhst.youtubelite.player.surface.PlayerSurface
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
+import com.hhst.youtubelite.ui.about.AboutActivity
 import com.hhst.youtubelite.ui.extension.ExtensionScreen
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -134,6 +136,18 @@ fun BrowserScreen(
     val tabs = uiState.tabs
     val onOpenExtension = remember { { showExtension = true } }
     val onOpenDownloads = remember(context) { { DownloadUi.openManager(context) } }
+    val onOpenWith = remember(context) {
+        { url: String ->
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, url)
+            }
+            context.startActivity(Intent.createChooser(send, context.getString(R.string.open_with)))
+        }
+    }
+    val onAbout = remember(context) {
+        { context.startActivity(Intent(context, AboutActivity::class.java)) }
+    }
 
     // Share / open-with intents: route to a tab; the watch hook starts
     // playback. Clearing after consumption lets the same URL re-share.
@@ -228,7 +242,7 @@ fun BrowserScreen(
     LaunchedEffect(liveTabIds) {
         createHosts(
             tabs, hosts, context, viewModel, extensionManager, onOpenExtension,
-            onOpenDownloads, extractor,
+            onOpenDownloads, onOpenWith, onAbout, extractor,
             playerCache, playerViewModel, onAddToQueue, onShowMediaItemMenu,
             onPlaylistPresence = onPlaylistPresence,
         )
@@ -263,7 +277,7 @@ fun BrowserScreen(
         val listener: (String) -> Unit = { key ->
             prefBroadcastHandler.post {
                 val quoted = JSONObject.quote(key)
-                val js = "window.dispatchEvent(new CustomEvent('litePreferencesChanged'," +
+                val js = "window.dispatchEvent(new CustomEvent('preferencesChanged'," +
                     "{detail:{key:$quoted}}));"
                 latestHosts.value.values.forEach { host ->
                     host.webView.evaluateJavascript(js, null)
@@ -702,6 +716,8 @@ private fun createHosts(
     extensionManager: ExtensionManager,
     onOpenExtension: () -> Unit,
     onOpenDownloads: () -> Unit,
+    onOpenWith: (String) -> Unit,
+    onAbout: () -> Unit,
     extractor: Extractor,
     playerCache: PlayerCache,
     playerHooks: PlayerHooks,
@@ -718,6 +734,8 @@ private fun createHosts(
             extensionManager = extensionManager,
             onOpenExtension = onOpenExtension,
             onOpenDownloads = onOpenDownloads,
+            onOpenWith = onOpenWith,
+            onAbout = onAbout,
             onRefresh = { webView ->
                 viewModel.onRefreshStarted(tabId)
                 webView.reload()

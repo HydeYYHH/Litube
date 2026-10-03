@@ -4,6 +4,8 @@
     <string name="back_again_to_exit">Press back again to exit</string>
     <string name="navigate_back">Back</string>
     <string name="extension">Extensions</string>
+    <string name="open_with">Open with</string>
+    <string name="about">About</string>
     <string name="display_dislikes">Show dislikes</string>
     <string name="display_dislikes_summary">Sends video IDs to returnyoutubedislikeapi.com</string>
     <string name="hide_shorts">Hide Shorts</string>

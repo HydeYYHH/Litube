@@ -6,9 +6,8 @@
   const BRIDGE = 'Bridge';
 
   function isYoutubeHost(hostname) {
-    // Strict suffix match mirroring Kotlin UrlPolicy/PageKind: a substring
-    // test would treat lookalike hosts as cross-tab routes here while the
-    // native side rejects them, silently dropping the navigation.
+    // Strict suffix match mirroring Kotlin UrlPolicy: a substring test
+    // would route lookalike hosts cross-tab while native rejects them.
     return hostname === 'youtube.com' ||
       hostname.endsWith('.youtube.com') ||
       hostname === 'youtu.be';
@@ -77,9 +76,9 @@
     }
   }
 
-  // One of four independent history.pushState/replaceState wrappers
-  // (watch-id.js, player-hook.js and display_dislikes.js stack their own);
-  // kept separate on purpose — merging would couple script injection order.
+  // One of three independent history.pushState/replaceState wrappers
+  // (watch-id.js and display_dislikes.js stack their own); kept separate
+  // on purpose — merging would couple script injection order.
   const originalPushState = history.pushState;
   const originalReplaceState = history.replaceState;
 
@@ -112,8 +111,8 @@
       const nav = target && target.closest && target.closest('ytm-pivot-bar-item-renderer');
 
       let href;
-      // Bottom-bar internals are Polymer data YouTube can reshuffle; the
-      // whole read is guarded so a changed shape never breaks clicks.
+      // Bottom-bar internals are Polymer data; guard the read so a
+      // reshaped object never breaks clicks.
       const endpoint = nav?.data?.navigationEndpoint;
       if (endpoint) {
         href = endpoint.commandMetadata?.webCommandMetadata?.url;

@@ -20,8 +20,8 @@
     const bridge = window.Bridge;
     if (!bridge) return;
     if (typeof bridge.onPlayerRequest === 'function') bridge.onPlayerRequest(videoId);
-    // onPlayerRequest(null) still clears the pending match; the change and
-    // prefetch notification only makes sense for a real id.
+    // onPlayerRequest(null) clears the pending match; the change
+    // notification only makes sense for a real id.
     if (videoId && typeof bridge.onVideoChanged === 'function') bridge.onVideoChanged(videoId);
   }
 
@@ -75,10 +75,9 @@
     return new Response(text, { status, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // 204/205/304 carry no body: rebuilding them with `new Response('')` throws
-  // TypeError per the fetch spec. remove_shorts_ads.js guards the same statuses
-  // one layer OUT, but this wrapper runs first, so it must pass the original
-  // response through untouched (and not cache it — there is no body to keep).
+  // 204/205/304 carry no body: `new Response('')` throws. Pass the original
+  // through untouched and do not cache it; remove_shorts_ads.js guards the
+  // same statuses one layer out.
   const NULL_BODY_STATUSES = [204, 205, 304];
 
   function evict() {
@@ -121,7 +120,7 @@
       pending = (async () => {
         try {
           const response = await _fetch(input, init);
-          if (NULL_BODY_STATUSES.indexOf(response.status) >= 0) {
+          if (NULL_BODY_STATUSES.includes(response.status)) {
             return { status: response.status, text: '', passthrough: response };
           }
           return { status: response.status, text: await response.text() };
@@ -140,10 +139,9 @@
     return jsonResponse(outcome.status, outcome.text);
   }
 
-  // Capture point is load-bearing: WebViewFactory.kt installs scripts in an
-  // order that leaves this wrapper between net-tracer.js (inner) and
+  // Load-bearing: this wrapper must sit between net-tracer.js (inner) and
   // remove_shorts_ads.js (outer); reordering the install calls silently
-  // changes which layer caches or filters a given request.
+  // changes which layer caches or filters.
   const _fetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     try {

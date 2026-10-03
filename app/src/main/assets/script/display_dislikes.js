@@ -47,16 +47,14 @@
     return location.pathname.startsWith("/shorts");
   }
 
-  // enable_show_likes and enable_display_dislikes are independent switches;
-  // likes and dislikes ride the same RYD request, so either one activates
-  // initialization and the fetch, each render path gates on its own flag.
+  // Independent switches, one RYD request: either flag initializes and
+  // fetches; each render path gates on its own flag.
   function anyEnabled() {
     return dislikesEnabled || showLikes;
   }
 
-  // Desktop (www.youtube.com / ytd-*) branches below are inherited from the
-  // Return YouTube Dislike extension. This app normally runs m.youtube.com;
-  // they are kept as a fallback for desktop-served pages, not dead code.
+  // Desktop ytd-* branches are inherited from the RYD extension and kept
+  // as a fallback for desktop-served pages, not dead code.
   function getButtons() {
     if (isShorts()) {
       const elements = document.querySelectorAll(
@@ -144,8 +142,8 @@
     dislikeOriginalText = null;
   }
 
-  // Partial mirror of player-hook.js watchIdOf() / watch-id.js videoId();
-  // copies are kept separate on purpose (see the history-hook note below).
+  // Own copy on purpose: /clip pages resolve through meta tags, which the
+  // shared Lite.id() does not handle (see the history-hook note below).
   function getVideoId() {
     const url = new URL(window.location.href);
     let id = null;
@@ -506,11 +504,9 @@
     fetchVotes(videoId, token);
   }
 
-  // A video whose action bar renders after the 25x120ms retry window would
-  // otherwise never bind: re-arm once via a late timer and a one-shot
-  // navigation event (both no-op when the buttons are already bound). The
-  // flag is cleared by the one-shot listener on the next navigation, so
-  // every new video gets exactly one late fallback.
+  // A video whose action bar renders after the retry window would never
+  // bind; re-arm once per navigation via a late timer and a one-shot
+  // navigation event (both no-op when the buttons are already bound).
   let lateRetryArmed = false;
   function armLateRetry(token) {
     if (lateRetryArmed || token !== initToken) return;
@@ -546,10 +542,9 @@
     setTimeout(() => tryInitialize(token, 25), 0);
   }
 
-  // One of four independent history.pushState/replaceState wrappers (nav.js
-  // routes cross-tab, watch-id.js reports id flips, player-hook.js syncs the
-  // native player); kept separate on purpose — merging would couple the
-  // scripts' injection order.
+  // One of three independent history.pushState/replaceState wrappers (nav.js
+  // routes cross-tab, watch-id.js reports id flips); kept separate on
+  // purpose — merging would couple the scripts' injection order.
   const originalPushState = history.pushState;
   history.pushState = function (...args) {
     const result = originalPushState.apply(this, args);
@@ -595,7 +590,7 @@
   // Only the two keys this script reads matter; every other toggle (gesture
   // prefs etc.) would otherwise trigger a sync getPreferences() round-trip.
   window.addEventListener(
-    "litePreferencesChanged",
+    "preferencesChanged",
     (e) => {
       const key = e && e.detail && e.detail.key;
       if (key === "*" || key === "enable_display_dislikes" || key === "enable_show_likes") {

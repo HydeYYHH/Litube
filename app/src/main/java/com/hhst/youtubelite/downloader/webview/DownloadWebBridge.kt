@@ -83,7 +83,7 @@ class DownloadWebBridge(
     }
 
     fun stamp(webView: WebView) {
-        val js = "window.__litubeDownloadPage={tabId:$tabId,pageGeneration:${pageGeneration.get()}};"
+        val js = "window.__downloadPage={tabId:$tabId,pageGeneration:${pageGeneration.get()}};"
         webView.evaluateJavascript(js, null)
     }
 
@@ -91,7 +91,7 @@ class DownloadWebBridge(
         val collect = """
             (function(){
               try {
-                var n = window.__litubeDownload;
+                var n = window.__download;
                 if (!n || !n.collect) return null;
                 var snap = n.collect();
                 snap.type = 'openBatch';
@@ -190,7 +190,7 @@ class DownloadWebBridge(
         }
         val webView = attached ?: return
         webView.evaluateJavascript(
-            "window.dispatchEvent(new CustomEvent('litubeDownloadStatus',{detail:$json}));",
+            "window.dispatchEvent(new CustomEvent('downloadStatus',{detail:$json}));",
             null,
         )
     }
@@ -208,9 +208,9 @@ class DownloadWebBridge(
 
     companion object {
         private const val TAG = "DownloadWebBridge"
-        const val OBJECT_NAME = "LitubeDownload"
-        const val FALLBACK_NAME = "LitubeDownloadFallback"
-        const val ASSET = "script/download-bridge.js"
+        const val OBJECT_NAME = "Download"
+        const val FALLBACK_NAME = "DownloadFallback"
+        const val ASSET = "script/download.js"
         val ALLOWED_ORIGINS: Set<String> = setOf(
             "https://youtube.com",
             "https://www.youtube.com",

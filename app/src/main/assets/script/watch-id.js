@@ -1,7 +1,9 @@
 (() => {
   'use strict';
-  if (window.__wid) return;
-  window.__wid = true;
+  // core.js always injects first; the shared id parser comes from there.
+  if (!window.Lite) return;
+  if (window.__watchId) return;
+  window.__watchId = true;
 
   const GAP_MS = 800;
   /** Suppress id flips within this window; the next tick re-emits if it sticks. */
@@ -10,43 +12,15 @@
   let lastId = null;
   let lastAt = 0;
 
-  // Mirrors player-hook.js watchIdOf() (display_dislikes.js getVideoId() is
-  // a partial copy too); kept separate on purpose — merging would couple
-  // the scripts' injection order.
-  function videoId(url) {
-    try {
-      const u = new URL(url || location.href, location.href);
-      const q = u.searchParams.get('v');
-      if (q && /^[a-zA-Z0-9_-]{11}$/.test(q)) return q;
-      const segs = u.pathname.split('/').filter(Boolean);
-      if (u.hostname.includes('youtu.be') && segs[0] && /^[a-zA-Z0-9_-]{11}$/.test(segs[0])) {
-        return segs[0];
-      }
-      const si = segs.indexOf('shorts');
-      if (si >= 0 && segs[si + 1] && /^[a-zA-Z0-9_-]{11}$/.test(segs[si + 1])) {
-        return segs[si + 1];
-      }
-      const ei = segs.indexOf('embed');
-      if (ei >= 0 && segs[ei + 1] && /^[a-zA-Z0-9_-]{11}$/.test(segs[ei + 1])) {
-        return segs[ei + 1];
-      }
-      const li = segs.indexOf('live');
-      if (li >= 0 && segs[li + 1] && /^[a-zA-Z0-9_-]{11}$/.test(segs[li + 1])) {
-        return segs[li + 1];
-      }
-    } catch {}
-    return null;
-  }
-
   function playerId() {
     try {
       const d = document.querySelector('#movie_player')?.getVideoData?.();
-      if (d && d.video_id && /^[a-zA-Z0-9_-]{11}$/.test(d.video_id)) return d.video_id;
+      if (d && Lite.isId(d.video_id)) return d.video_id;
     } catch {}
     try {
       const r = document.querySelector('#movie_player')?.getPlayerResponse?.();
       const id = r?.videoDetails?.videoId;
-      if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+      if (Lite.isId(id)) return id;
     } catch {}
     return null;
   }
@@ -56,13 +30,13 @@
       const m =
         document.querySelector("meta[itemprop='videoId']")?.content ||
         document.querySelector("meta[itemprop='identifier']")?.content;
-      if (m && /^[a-zA-Z0-9_-]{11}$/.test(m)) return m;
+      if (Lite.isId(m)) return m;
     } catch {}
     return null;
   }
 
   function readId() {
-    return playerId() || metaId() || videoId(location.href);
+    return playerId() || metaId() || Lite.id(location.href);
   }
 
   function emit(id) {
@@ -81,9 +55,10 @@
     emit(readId());
   }
 
-  // One of four independent history.pushState/replaceState wrappers (nav.js
-  // routes cross-tab, player-hook.js syncs the player, display_dislikes.js
-  // rebinds vote buttons); kept separate on purpose.
+  // Not on the Lite scheduler: rAF never fires in a hidden tab, and
+  // suspended tabs must keep reporting their video id. The pushState
+  // wrappers stack with nav.js and display_dislikes.js on purpose —
+  // merging would couple injection order.
   const _push = history.pushState;
   const _replace = history.replaceState;
   history.pushState = function () {

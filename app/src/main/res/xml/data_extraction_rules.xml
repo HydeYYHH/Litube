@@ -8,7 +8,6 @@
         <exclude domain="database" path="downloader.db" />
         <exclude domain="database" path="downloader.db-wal" />
         <exclude domain="database" path="downloader.db-shm" />
-        <exclude domain="cache" path="download" />
         <exclude domain="file" path="download" />
         <exclude domain="root" path="no_backup" />
         <exclude domain="root" path="no_backup/player" />
@@ -17,7 +16,6 @@
         <exclude domain="database" path="downloader.db" />
         <exclude domain="database" path="downloader.db-wal" />
         <exclude domain="database" path="downloader.db-shm" />
-        <exclude domain="cache" path="download" />
         <exclude domain="file" path="download" />
         <exclude domain="root" path="no_backup" />
         <exclude domain="root" path="no_backup/player" />

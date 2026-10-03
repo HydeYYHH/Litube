@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Contract checks for the settings-button inject script. */
+/** Contract checks for the settings-page inject script. */
 class ExtensionInjectScriptTest {
 
     private val script: String by lazy { readExtensionScript() }
@@ -13,62 +13,63 @@ class ExtensionInjectScriptTest {
     @Test
     fun assetExistsAndReturnsReport() {
         assertTrue(script.isNotBlank())
-        assertTrue(script.trimStart().startsWith("(function"))
-        assertTrue(script.contains("return result") || script.contains("return report"))
+        assertTrue(script.contains("return report"))
     }
 
     @Test
-    fun appliesMaterialIconViewBox() {
-        // Without this viewBox the path draws off-canvas on YouTube's svg.
-        assertTrue(script.contains(ExtensionInjector.ICON_VIEW_BOX))
-        assertTrue(script.contains("setAttribute('viewBox'"))
-        assertTrue(script.contains("setPath"))
+    fun assetIsTheExpressionTheInjectorParenthesizes() {
+        // ExtensionInjector evaluates `var report = (<asset>);` — a trailing
+        // semicolon would move the script out of expression position and the
+        // whole evaluation would fail to parse.
+        assertFalse(script.trimEnd().endsWith(";"))
     }
 
     @Test
-    fun iconPathAndButtonIdPresent() {
-        assertTrue(script.contains("pathSet"))
-        assertTrue(script.contains("M384-144"))
-        assertTrue(script.contains(ExtensionInjector.BUTTON_ID))
+    fun requiresCore() {
+        // The script builds nothing itself: icons and labels come from the
+        // shared runtime, so a missing runtime is a named failure, not a
+        // partial injection.
+        assertTrue(script.contains("window.Lite"))
+        assertTrue(script.contains("lite core not loaded"))
+    }
+
+    @Test
+    fun shipsThreeBridgeEntries() {
         assertTrue(script.contains("downloaderButton"))
+        assertTrue(script.contains("extensionButton"))
+        assertTrue(script.contains("aboutButton"))
+        assertTrue(script.contains("'download'"))
+        assertTrue(script.contains("'extension'"))
+        assertTrue(script.contains("'about'"))
+        // One dynamic dispatch covers all three entries.
+        assertTrue(script.contains("b[action]()"))
+    }
+
+    @Test
+    fun iconIsFailClosed() {
+        // A clone without a usable svg returns null and aborts the pass;
+        // the retry chain re-runs it, no forged markup.
+        assertTrue(script.contains("if (!Lite.icon(button, def.icon)) return null;"))
+        assertFalse(script.contains("createElementNS"))
+        assertFalse(script.contains("innerHTML"))
+    }
+
+    @Test
+    fun aboutRowSitsAtListTail() {
+        assertTrue(script.contains("children[children.length - 1]"))
     }
 
     @Test
     fun reportsNamedElementsWhenDomMissing() {
-        // Failure taxonomy: missing settings root vs template clone failure.
         val required = listOf(
             "ytm-settings",
             "template_button",
+            "missing_settings_root",
             "settings list root missing",
         )
         for (element in required) {
             assertTrue("missing failure element `$element`", script.contains(element))
         }
-    }
-
-    @Test
-    fun noOverlayFallbackWithoutYtmSettingsRoot() {
-        // List entries exist only as clones of the ytm-settings template row.
-        // Layouts without that root report missing_settings_root and retry —
-        // no fixed overlay, no foreign node in the app shell.
-        assertTrue(script.contains("missing_settings_root"))
-        assertFalse(script.contains("liteSettingsFab"))
-        assertFalse(script.contains("position:fixed"))
-        assertFalse(script.contains("floating_fallback"))
-        assertFalse(script.contains("removeFab"))
-        // No inserting before an arbitrary app-shell child.
-        assertFalse(script.contains("insertBefore(button, anchorRoot"))
-    }
-
-    @Test
-    fun noMutationObserverFreezeLoop() {
-        // Repair is event + retry-chain driven only; an observer-driven loop
-        // can re-run mid-navigation and freeze the page. Assert the mechanism
-        // rather than a comment word.
-        assertFalse(script.contains("new MutationObserver"))
-        assertFalse(script.contains("__liteExtObserver"))
-        assertTrue(script.contains("scheduleRetries"))
-        assertTrue(script.contains("RETRY_MS"))
     }
 
     @Test
@@ -79,26 +80,25 @@ class ExtensionInjectScriptTest {
     }
 
     @Test
-    fun retriesWhenSettingsDomLate() {
-        assertTrue(script.contains("scheduleRetries") || script.contains("RETRY_MS"))
-        // SPA navigations re-trigger the retry chain without an observer.
-        assertTrue(script.contains("yt-navigate-finish"))
-        assertTrue(script.contains("yt-page-data-updated"))
+    fun retriesBoundedWithoutObserver() {
+        // Late settings DOM gets a short retry chain that clears the report's
+        // earlier failure; SPA navigations re-run the script natively, so no
+        // observer-driven loop is needed.
+        assertTrue(script.contains("Lite.retry(() => {"))
+        assertFalse(script.contains("new MutationObserver"))
     }
 
     @Test
-    fun opensExtensionAndDownloadsViaBridge() {
-        // Sibling settings entries route through one dynamic bridge dispatch.
-        assertTrue(script.contains("bridge[action]()"))
-        assertTrue(script.contains("'extension'"))
-        assertTrue(script.contains("'download'"))
-        assertTrue(script.contains("window.lite") || script.contains("window.Bridge"))
+    fun reEvaluationIsIdempotent() {
+        // Existing rows short-circuit with reads only.
+        assertTrue(script.contains("getElementById(def.id)"))
     }
 
     @Test
     fun doesNotBareThrowOnMissingDom() {
         val throws = script.lines().filter {
-            it.contains("throw ") && !it.trimStart().startsWith("//")
+            it.contains("throw ") && !it.trimStart().startsWith("//") &&
+                !it.trimStart().startsWith("*")
         }
         assertTrue("unexpected throw: $throws", throws.isEmpty())
     }
@@ -109,15 +109,6 @@ class ExtensionInjectScriptTest {
             File("src/main/assets", ExtensionInjector.ASSET).exists() ||
                 File("app/src/main/assets", ExtensionInjector.ASSET).exists(),
         )
-    }
-
-    @Test
-    fun reEvaluationIsIdempotent() {
-        // Native re-injects on every SPA navigation: existing rows short-circuit
-        // with reads only, and the retry chain is single-flight guarded.
-        assertTrue(script.contains("getElementById(id)"))
-        assertTrue(script.contains("__liteExtRetrying"))
-        assertTrue(script.contains("__liteExtSpaBound"))
     }
 
     private fun readExtensionScript(): String {

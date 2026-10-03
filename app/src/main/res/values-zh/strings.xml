@@ -4,6 +4,8 @@
     <string name="back_again_to_exit">再按一次退出</string>
     <string name="navigate_back">返回</string>
     <string name="extension">扩展</string>
+    <string name="open_with">打开方式</string>
+    <string name="about">关于</string>
     <string name="display_dislikes">显示点踩数</string>
     <string name="display_dislikes_summary">会向 returnyoutubedislikeapi.com 发送视频 ID</string>
     <string name="hide_shorts">隐藏 Shorts</string>

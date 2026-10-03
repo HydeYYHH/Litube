@@ -1,6 +1,6 @@
 (function (global) {
-  // Document-start and the page-finished fallback both evaluate this file.
-  // The guard prevents stacking another fetch wrapper on each injection.
+  // Both injection paths evaluate this file; the guard keeps the fetch
+  // wrapper from stacking.
   if (global.__shortsAdsFetchPatched) return;
 
   const REEL_API_RE = /\/youtubei\/v1\/reel\/reel_watch_sequence/i;
@@ -106,8 +106,8 @@
   }
 
   if (global.document) {
-    // Flag only after a successful patch so an exotic environment can be
-    // retried by a later injection instead of being skipped forever.
+    // Flag only after a successful patch so a failed attempt can be
+    // retried by a later injection.
     if (patchFetch()) global.__shortsAdsFetchPatched = true;
   }
 })(typeof window !== 'undefined' ? window : globalThis);

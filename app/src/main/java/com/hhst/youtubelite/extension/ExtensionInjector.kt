@@ -65,7 +65,5 @@ class ExtensionInjector(private val context: Context) {
     companion object {
         private const val TAG = "ExtensionInjector"
         const val ASSET = "script/extension.js"
-        const val BUTTON_ID = "extensionButton"
-        const val ICON_VIEW_BOX = "0 -960 960 960"
     }
 }

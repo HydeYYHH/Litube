@@ -19,26 +19,33 @@ function page() {
     history: { pushState() {}, replaceState() {} },
     document: {
       readyState: 'loading', documentElement: { lang: 'en' },
+      visibilityState: 'visible',
       addEventListener: (name, handler) => events.set(name, handler),
       querySelector: (selector) => selector === '#movie_player' ? player : null,
+      querySelectorAll: () => [],
       getElementById: () => null,
     },
     lite: { play() { layout = null; }, setPlayerLayout(top, height) { layout = [top, height]; }, setPageHasPlaylist() {} },
-    setTimeout() {}, setInterval() { return 1; },
+    setTimeout() {}, clearTimeout() {}, setInterval() { return 1; },
+    requestAnimationFrame: (fn) => fn(),
     addEventListener() {},
     MutationObserver: class { observe() {} },
   };
   context.window = context;
   context.top = context;
   context.self = context;
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/assets/script/player-hook.js'), 'utf8'), context);
+  const assets = path.join(__dirname, '../../main/assets/script');
+  vm.runInNewContext([
+    fs.readFileSync(path.join(assets, 'core.js'), 'utf8'),
+    fs.readFileSync(path.join(assets, 'player-hook.js'), 'utf8'),
+  ].join('\n'), context);
   events.get('DOMContentLoaded')();
   return { context, layout: () => layout };
 }
 
 test('playlist sentinel is encoded only by evaluateJavascript, not by the script', () => {
   const { context } = page();
-  assert.equal(context.__litePlaylistNav(-1), 'missing-playlist');
+  assert.equal(context.__playlistNav(-1), 'missing-playlist');
 });
 
 test('first layout is reported after play resets native geometry', () => {
@@ -52,7 +59,7 @@ test('playlist next navigates to the target URL and returns a plain sentinel', (
       videoId, navigationEndpoint: { commandMetadata: { webCommandMetadata: { url: `/watch?v=${videoId}&list=PLtest` } } },
     } })),
   } } } } };
-  assert.equal(context.__litePlaylistNav(1), 'navigating');
+  assert.equal(context.__playlistNav(1), 'navigating');
   assert.equal(context.location.href, 'https://m.youtube.com/watch?v=bbbbbbbbbbb&list=PLtest');
 });
 
@@ -65,7 +72,7 @@ test('playlist next at the last item stops instead of wrapping', () => {
       videoId, navigationEndpoint: { commandMetadata: { webCommandMetadata: { url: `/watch?v=${videoId}&list=PLtest` } } },
     } })),
   } } } } };
-  assert.equal(context.__litePlaylistNav(1), 'playlist-end');
+  assert.equal(context.__playlistNav(1), 'playlist-end');
   assert.equal(context.location.href, 'https://m.youtube.com/watch?v=bbbbbbbbbbb&list=PLtest');
 });
 
@@ -78,9 +85,9 @@ test('shortsNav scrolls the reel container by one viewport', () => {
     }
     return null;
   };
-  assert.equal(context.__liteShortsNav(1), 'ok');
+  assert.equal(context.__shortsNav(1), 'ok');
   assert.deepEqual(moved, [[0, 800]]);
-  assert.equal(context.__liteShortsNav(-1), 'ok');
+  assert.equal(context.__shortsNav(-1), 'ok');
   assert.deepEqual(moved[1], [0, -800]);
 });
 
@@ -88,12 +95,12 @@ test('mediaHref copies hash t= onto the play URL query', () => {
   const { context } = page();
     context.location.href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa#t=1m30s';
   assert.equal(
-    context.__liteMediaHref(),
+    context.__mediaHref(),
     'https://m.youtube.com/watch?v=aaaaaaaaaaa&t=1m30s',
   );
   context.location.href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa?t=90#t=1';
   assert.equal(
-    context.__liteMediaHref(),
+    context.__mediaHref(),
     'https://m.youtube.com/watch?v=aaaaaaaaaaa?t=90',
   );
 });

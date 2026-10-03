@@ -61,6 +61,8 @@ class Bridge(
     private val onOpenTab: (url: String) -> Unit,
     private val onOpenExtension: () -> Unit,
     private val onOpenDownloads: () -> Unit = {},
+    private val onOpenWith: (String) -> Unit = {},
+    private val onAbout: () -> Unit = {},
     private val extensionManager: ExtensionManager,
     private val extractor: Extractor? = null,
     private val playerHooks: PlayerHooks? = null,
@@ -110,6 +112,17 @@ class Bridge(
     @JavascriptInterface
     fun download() {
         main.post(onOpenDownloads)
+    }
+
+    @JavascriptInterface
+    fun openWith(url: String?) {
+        if (url.isNullOrBlank()) return
+        main.post { onOpenWith(url) }
+    }
+
+    @JavascriptInterface
+    fun about() {
+        main.post(onAbout)
     }
 
     @JavascriptInterface

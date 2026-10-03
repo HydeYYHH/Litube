@@ -43,15 +43,17 @@ object WebViewFactory {
     private const val DISLIKES_JS = "script/display_dislikes.js"
     private const val HIDE_SHORTS_JS = "script/hide_shorts.js"
     private const val SHORTS_ADS_JS = "script/remove_shorts_ads.js"
+    private const val CORE_JS = "script/core.js"
     /** Injected page scripts address the bridge as `lite`. */
     internal const val LITE_ALIAS = "lite"
 
+    private val coreScript = PageScript(CORE_JS, "Core")
     private val navScript = PageScript(NAV_JS, "WebViewFactory")
     private val playerHookScript = PageScript(PLAYER_HOOK_JS, "PlayerHook")
     private val dislikesScript = PageScript(DISLIKES_JS, "Dislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
     private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "ShortsAds")
-    private val downloadScript = PageScript(DownloadWebBridge.ASSET, "DownloadBridge")
+    private val downloadScript = PageScript(DownloadWebBridge.ASSET, "Download")
 
     @SuppressLint("SetJavaScriptEnabled")
     fun create(
@@ -60,6 +62,8 @@ object WebViewFactory {
         extensionManager: ExtensionManager,
         onOpenExtension: () -> Unit,
         onOpenDownloads: () -> Unit,
+        onOpenWith: (String) -> Unit,
+        onAbout: () -> Unit,
         onRefresh: (WebView) -> Unit,
         extractor: Extractor,
         playerCache: PlayerCache,
@@ -75,6 +79,8 @@ object WebViewFactory {
             onOpenTab = callbacks::onOpenTab,
             onOpenExtension = onOpenExtension,
             onOpenDownloads = onOpenDownloads,
+            onOpenWith = onOpenWith,
+            onAbout = onAbout,
             extensionManager = extensionManager,
             extractor = extractor,
             playerHooks = playerHooks,
@@ -123,6 +129,7 @@ object WebViewFactory {
             }
             addJavascriptInterface(bridge, Bridge.NAME)
             addJavascriptInterface(bridge, LITE_ALIAS)
+            coreScript.install(appContext, this)
             navScript.install(appContext, this)
             netTracer.install(appContext, this)
             watchId.install(appContext, this)
@@ -137,6 +144,7 @@ object WebViewFactory {
                 appContext = appContext,
                 callbacks = callbacks,
                 injector = injector,
+                coreScript = coreScript,
                 netTracer = netTracer,
                 watchId = watchId,
                 innertube = innertube,
@@ -174,6 +182,7 @@ private class BrowserWebViewClient(
     private val appContext: Context,
     private val callbacks: WebViewCallbacks,
     private val injector: ExtensionInjector,
+    private val coreScript: PageScript,
     private val netTracer: NetTracer,
     private val watchId: PageScript,
     private val innertube: PageScript,
@@ -252,6 +261,7 @@ private class BrowserWebViewClient(
 
     /** Inject every page script in dependency order. */
     private fun injectAll(view: WebView) {
+        coreScript.inject(appContext, view)
         WebViewFactory.injectNavScript(appContext, view)
         netTracer.inject(appContext, view)
         watchId.inject(appContext, view)
@@ -316,8 +326,7 @@ private class BrowserWebViewClient(
     }
 
     private fun externalLinkUnavailable(context: Context) {
-        // A silent dead tap looks broken, so surface it. Still true: letting
-        // the WebView load the link would bypass the host allowlist.
+        // Surface the dead tap; loading in-page would bypass the allowlist.
         Toast.makeText(
             context,
             R.string.application_not_found,
@@ -333,13 +342,10 @@ private class BrowserWebViewClient(
     private companion object {
         const val PLAYER_PATH = "/youtubei/v1/player"
 
-        /**
-         * How long an intercepted page /player POST waits for the native
-         * prefetch before falling through to the network. Deliberately short
-         * (was 2000 ms): blocking the WebView request thread for seconds cost
-         * more latency than the occasional duplicate /player fetch it was
-         * meant to save — warm-cache hits still answer instantly above.
-         */
+        /** How long an intercepted /player POST waits for the native
+         *  prefetch before falling through to the network; blocking the
+         *  request thread longer cost more latency than the duplicate
+         *  fetch it saved. */
         const val PLAYER_WAIT_MS = 250L
         val hasDocumentStartScript =
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)

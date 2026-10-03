@@ -4,25 +4,20 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.annotations.SerializedName
 
-/** Result of the settings-button inject script. */
+/** Result of the settings-page inject script. */
 data class InjectReport(
     val ok: Boolean = false,
     val skipped: Boolean = false,
     val reason: String? = null,
-    val buttonId: String? = null,
     val failures: List<InjectFailure> = emptyList(),
-    val steps: List<String> = emptyList(),
-    val icon: InjectIconState? = null,
 ) {
     val hasFailures: Boolean get() = failures.isNotEmpty()
 
     fun summary(): String {
         if (skipped) return "skipped: ${reason ?: "n/a"}"
-        if (ok && !hasFailures) {
-            return "ok buttonId=$buttonId viewBox=${icon?.viewBox} pathSet=${icon?.pathSet}"
-        }
+        if (ok && !hasFailures) return "ok${reason?.let { " reason=$it" } ?: ""}"
         val failed = failures.joinToString("; ") { "${it.element}: ${it.reason}" }
-        return "ok=$ok buttonId=$buttonId failures=[$failed]"
+        return "ok=$ok failures=[$failed]"
     }
 
     companion object {
@@ -78,9 +73,4 @@ data class InjectReport(
 data class InjectFailure(
     @SerializedName("element") val element: String,
     @SerializedName("reason") val reason: String,
-)
-
-data class InjectIconState(
-    val viewBox: String? = null,
-    val pathSet: Boolean = false,
 )

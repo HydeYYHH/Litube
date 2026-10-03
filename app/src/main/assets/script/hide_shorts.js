@@ -105,10 +105,8 @@
     }
 
     function syncPreferences(event) {
-        // Any preference flip broadcasts; skip keys this feature does not
-        // read so unrelated toggles never trigger a full-page scan. The "*"
-        // wildcard (reset-to-defaults) must re-sync, matching
-        // display_dislikes.js.
+        // Skip keys this feature does not read; "*" (reset) must re-sync,
+        // matching display_dislikes.js.
         const key = event && event.detail && event.detail.key;
         if (key && key !== "*" && key !== "enable_hide_shorts") return;
         const next = readEnabled();
@@ -126,13 +124,12 @@
         restore();
     }
 
-    window.addEventListener("litePreferencesChanged", syncPreferences, true);
+    window.addEventListener("preferencesChanged", syncPreferences, true);
     window.hideShorts = { syncPreferences };
 
-    // The `lite` bridge can lag behind document-start injection (the same
-    // race player-hook.js init() retries for); this script has no
-    // navigation listener, so without a retry it would stay off until a
-    // preference changes.
+    // The `lite` bridge can lag behind document-start injection; this script
+    // has no navigation listener, so without a retry it would stay off until
+    // a preference changes.
     let bridgeAttempts = 0;
     function bridgeReady() {
         const bridge = window.lite || window.Bridge;

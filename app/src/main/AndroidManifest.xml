@@ -94,6 +94,10 @@
         </activity>
 
         <activity
+            android:name=".ui.about.AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App" />
+        <activity
             android:name=".downloader.ui.DownloadActionActivity"
             android:excludeFromRecents="true"
             android:exported="false"
