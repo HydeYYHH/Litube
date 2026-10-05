@@ -3,7 +3,14 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.content.Context
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSpec
+import android.os.SystemClock
+import java.io.IOException
+import java.security.MessageDigest
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
+import com.hhst.youtubelite.extractor.Format
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.FileDataSource
@@ -15,27 +22,33 @@ import androidx.media3.datasource.cache.SimpleCache
 import com.hhst.youtubelite.core.Constants
 import java.io.File
 import okhttp3.OkHttpClient
+import androidx.media3.common.C
+import androidx.media3.exoplayer.hls.HlsDataSourceFactory
+import androidx.media3.exoplayer.hls.DefaultHlsDataSourceFactory
+import com.hhst.youtubelite.extractor.hexString
 
-/**
- * DataSource factory menu for the player.
- *
- * - YouTube VOD streams go through [YoutubeHttpDataSource] (POST pulse, rn/range
- *   params, cookies) on the app's shared [OkHttpClient] — connection pooling and
- *   HTTP/2 multiplexing speed up chunked loads and seeks — wrapped in a 512 MB
- *   LRU [SimpleCache] with 2 MB write chunks.
- * - Live streams bypass the cache and use plain HTTP (30 s/45 s timeouts).
- */
+/** Shared plan execution with independent Media3 byte cache and live connections. */
 class PlayerDataSource private constructor(
-    /** Cookie/POST-aware YouTube DASH factory (range+rn params), cached. */
+    /** YouTube DASH factory, cached. */
     val ytDash: DataSource.Factory,
-    /** Cookie/POST-aware YouTube progressive factory (rn param), cached. */
+    /** YouTube progressive factory, cached. */
     val ytProgressive: DataSource.Factory,
-    /** Cookie/POST-aware YouTube progressive factory, UNCACHED: live streams
+    /** YouTube progressive factory, UNCACHED: live streams
      *  must not write into (or replay from) the VOD LRU under the same cache key. */
     val ytLiveProgressive: DataSource.Factory,
-    /** Plain HTTP factory for live manifests/chunks; never cached. */
+    /** Planned HTTP factory for live manifests/chunks; never cached. */
     val live: DataSource.Factory,
+    private val manifestFactory: ((RequestPlan) -> DataSource.Factory)? = null,
+    private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
+    private val hlsFactory: ((RequestPlan) -> HlsDataSourceFactory)? = null,
 ) {
+    fun manifest(plan: RequestPlan?): DataSource.Factory =
+        if (plan != null) manifestFactory?.invoke(plan) ?: live else live
+    fun formats(formats: List<Format>, dash: Boolean = true, cached: Boolean = true): DataSource.Factory =
+        formatFactory?.invoke(formats, dash, cached) ?: if (dash) ytDash else if (cached) ytProgressive else ytLiveProgressive
+    fun vodHls(plan: RequestPlan?): HlsDataSourceFactory =
+        if (plan != null) hlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
+        else DefaultHlsDataSourceFactory(live)
     companion object {
         private const val CACHE_DIR = "player"
         private const val CACHE_BYTES = 512L * 1024 * 1024
@@ -60,21 +73,48 @@ class PlayerDataSource private constructor(
             getCache(context)
         }
 
-        fun create(context: Context, http: OkHttpClient): PlayerDataSource {
-            val ytDashUpstream = youtubeFactory(http, range = true, rn = true)
-            val ytProgressiveUpstream = youtubeFactory(http, range = false, rn = true)
-            val liveUpstream = DefaultHttpDataSource.Factory()
-                .setUserAgent(Constants.userAgent())
+        fun create(context: Context, http: OkHttpClient, plans: YoutubeMediaRequests? = null): PlayerDataSource {
+            val ytDashUpstream = youtubeFactory(http, range = true, rn = true).setMediaRequests(plans)
+            val ytProgressiveUpstream = youtubeFactory(http, range = false, rn = true).setMediaRequests(plans)
+            val liveUpstream = youtubeFactory(http, range = false, rn = false).setMediaRequests(plans)
                 .setConnectTimeoutMs(30_000)
                 .setReadTimeoutMs(45_000)
 
             val ytDash = maybeCache(context, ytDashUpstream)
             val ytProgressive = maybeCache(context, ytProgressiveUpstream)
+            val manifests = VodManifestCache()
             return PlayerDataSource(
                 ytDash = ytDash,
                 ytProgressive = ytProgressive,
-                ytLiveProgressive = youtubeFactory(http, range = false, rn = true),
+                ytLiveProgressive = youtubeFactory(http, range = false, rn = true).setMediaRequests(plans),
                 live = liveUpstream,
+                manifestFactory = { plan -> youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan) },
+                formatFactory = { formats, dash, cached ->
+                    val byUrl = formats.associateBy { it.url }
+                    val upstream = youtubeFactory(http, range = dash, rn = false).setMediaRequests(plans)
+                        .setPlanResolver { url -> byUrl[url]?.requestPlan }
+                    if (!cached) upstream else maybeCache(context, upstream, CacheKeyFactory { spec ->
+                        byUrl[spec.uri.toString()]?.let(YoutubePlaybackCacheKey::of)
+                            ?: VIDEO_PLAYBACK_CACHE_KEY.buildCacheKey(spec)
+                    })
+                },
+                hlsFactory = { plan ->
+                    val upstream = youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan)
+                    val current = { plans?.isCurrent(plan) != false }
+                    val playlist = manifests.factory(plan.session.key, plan.expiresAtMillis, current, upstream)
+                    // Exact signed URL and session identity prove only this segment.
+                    // Hash cache keys so media credentials never enter the disk index.
+                    val media = maybeCache(context, upstream, CacheKeyFactory { spec ->
+                        "hls:v1:" + MessageDigest.getInstance("SHA-256")
+                            .digest("${plan.session.key}:${spec.uri}".toByteArray()).hexString()
+                    })
+                    HlsDataSourceFactory { type ->
+                        if (type == C.DATA_TYPE_MANIFEST) playlist.createDataSource()
+                        else if (type == C.DATA_TYPE_MEDIA || type == C.DATA_TYPE_MEDIA_INITIALIZATION) {
+                            SessionCheckedDataSource(media.createDataSource(), plan, current)
+                        } else upstream.createDataSource()
+                    }
+                },
             )
         }
 
@@ -89,7 +129,7 @@ class PlayerDataSource private constructor(
                 .setRangeParameterEnabled(range)
                 .setRnParameterEnabled(rn)
 
-        private fun maybeCache(context: Context, upstream: DataSource.Factory): DataSource.Factory =
+        private fun maybeCache(context: Context, upstream: DataSource.Factory, keys: CacheKeyFactory = VIDEO_PLAYBACK_CACHE_KEY): DataSource.Factory =
             CacheDataSource.Factory()
                 .setCache(getCache(context))
                 .setUpstreamDataSourceFactory(upstream)
@@ -99,7 +139,7 @@ class PlayerDataSource private constructor(
                         .setFragmentSize(CACHE_SINK_FRAGMENT_BYTES),
                 )
                 .setCacheReadDataSourceFactory(FileDataSource.Factory())
-                .setCacheKeyFactory(VIDEO_PLAYBACK_CACHE_KEY)
+                .setCacheKeyFactory(keys)
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
         /**
@@ -125,6 +165,32 @@ class PlayerDataSource private constructor(
                         b.build().toString()
                     }
             }
+        }
+    }
+}
+
+/** Cached bytes still obey the session fence, including during an open read. */
+private class SessionCheckedDataSource(
+    private val inner: DataSource,
+    private val plan: RequestPlan,
+    private val current: () -> Boolean,
+) : DataSource by inner {
+    private var nextCheck = 0L
+    override fun open(dataSpec: DataSpec): Long {
+        if (plan.expiresAtMillis <= System.currentTimeMillis()) throw java.io.IOException("MEDIA_URL_EXPIRED")
+        nextCheck = 0L
+        checkSession()
+        return inner.open(dataSpec)
+    }
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        checkSession()
+        return inner.read(buffer, offset, length)
+    }
+    private fun checkSession() {
+        val now = SystemClock.elapsedRealtime()
+        if (now >= nextCheck) {
+            if (!current()) throw java.io.IOException("MEDIA_SESSION_CHANGED")
+            nextCheck = now + 100
         }
     }
 }

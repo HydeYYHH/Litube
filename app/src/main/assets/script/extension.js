@@ -1,6 +1,6 @@
 /**
  * Settings-page entries — about, downloads, extension — cloned from the
- * ytm-settings template row; the return value is the report the native
+ * native settings action row; the return value is the report the native
  * side logs.
  */
 (() => {
@@ -50,29 +50,90 @@
     { id: 'aboutButton', icon: ICONS.about, label: 'about', action: 'about' },
   ];
 
+  const LABEL = '.ytAttributedStringHost, .yt-core-attributed-string';
+
+  function findTemplate(settings) {
+    const rows = [];
+    for (const anchor of settings.children) {
+      if (BUTTONS.some((def) => anchor.id === def.id)) continue;
+      const row = anchor.matches('button, [role="button"]') ? anchor :
+        anchor.querySelector('button, [role="button"]') || anchor;
+      if (row.querySelector(LABEL) && row.querySelector('svg, c3-icon')) {
+        rows.push({ row, anchor });
+      }
+    }
+    // Prefer a leaf action (e.g. Switch account). Signed-out settings may
+    // only have category headers; clone their clickable title, not the
+    // collection renderer and its expandable contents.
+    return rows.find(({ row }) => row.matches('button')) || rows[0];
+  }
+
   function build(template, def) {
-    const button = template.cloneNode(true);
+    const categoryBlock = template.matches('.setting-generic-category-title') &&
+      template.querySelector('.setting-generic-category-block');
+    const button = categoryBlock ? document.createElement('button') : template.cloneNode(true);
+    if (categoryBlock) {
+      button.className = 'setting-generic-category';
+      if (template.closest('.cairo-settings')) button.classList.add('cairo-settings');
+      button.appendChild(categoryBlock.cloneNode(true));
+    }
+    // Cloned ID references would label our action with the original title.
+    for (const node of [button, ...button.querySelectorAll('[id], [aria-labelledby], [aria-describedby], [aria-expanded]')]) {
+      node.removeAttribute('id');
+      node.removeAttribute('aria-labelledby');
+      node.removeAttribute('aria-describedby');
+      node.removeAttribute('aria-expanded');
+    }
     button.id = def.id;
     Lite.strip(button);
-    const text = button.querySelector('.ytAttributedStringHost, .yt-core-attributed-string');
+    const text = button.querySelector(LABEL);
     const label = Lite.text(def.label);
     if (text) text.textContent = label;
     button.setAttribute('aria-label', label);
+    // A category header's trailing chevron must not suggest expansion.
+    const block = button.querySelector('.setting-generic-category-block');
+    if (block) {
+      for (const icon of button.querySelectorAll('c3-icon, svg')) {
+        if (!block.contains(icon)) icon.remove();
+      }
+    }
     if (!Lite.icon(button, def.icon)) return null;
-    Lite.fit(button);
+    // Lite.icon owns the glyph by replacing c3-icon with a span. Settings
+    // applies padding to c3-icon itself, so preserve its live layout on the
+    // replacement rather than applying the action-bar sizing in Lite.fit.
+    const nativeIcon = template.querySelector('c3-icon');
+    const icon = button.querySelector('.yt-icon-shape');
+    if (nativeIcon && icon) {
+      const style = getComputedStyle(nativeIcon);
+      for (const property of ['display', 'width', 'height', 'padding', 'margin',
+        'box-sizing', 'flex', 'align-items', 'justify-content', 'vertical-align']) {
+        icon.style.setProperty(property, style.getPropertyValue(property));
+      }
+    }
     button.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopImmediatePropagation();
       bridgeAction(def.action);
     }, true);
+    if (!button.matches('button, a[href]')) {
+      button.setAttribute('role', 'button');
+      button.setAttribute('tabindex', '0');
+      button.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        bridgeAction(def.action);
+      }, true);
+    }
     return button;
   }
 
   /** Idempotent: existing rows short-circuit; downloads/extension go
    *  before the template row, about at the tail. */
-  function ensure(settings, template) {
+  function ensure(settings, template, anchor) {
     for (const def of BUTTONS) {
-      if (document.getElementById(def.id)) continue;
+      const existing = document.getElementById(def.id);
+      if (existing && settings.contains(existing)) continue;
       const button = build(template, def);
       if (!button) {
         report.failures.push({ element: 'template_button', reason: 'clone or insert failed' });
@@ -82,7 +143,8 @@
         const children = settings.children;
         settings.insertBefore(button, children[children.length - 1]);
       } else {
-        settings.insertBefore(button, template);
+        const next = def.id === 'downloaderButton' && settings.querySelector('#extensionButton');
+        settings.insertBefore(button, next || anchor);
       }
     }
     return true;
@@ -90,15 +152,14 @@
 
   function injectOnce() {
     const settings = document.querySelector('ytm-settings');
-    const template = settings && settings.firstElementChild;
-    if (!(settings instanceof Element) || !(template instanceof Element) ||
-        !template.querySelector('svg, c3-icon')) {
+    const template = settings && findTemplate(settings);
+    if (!(settings instanceof Element) || !template) {
       report.reason = 'missing_settings_root';
       report.failures.push({ element: 'ytm-settings', reason: 'settings list root missing' });
       return false;
     }
     report.reason = 'injected';
-    return ensure(settings, template);
+    return ensure(settings, template.row, template.anchor);
   }
 
   // Bounded retry for late settings DOM; later navigations re-inject.

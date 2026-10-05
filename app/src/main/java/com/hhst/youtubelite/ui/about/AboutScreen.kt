@@ -29,6 +29,7 @@ fun AboutScreen(
     label: String,
     version: String,
     onClose: () -> Unit,
+    onCopyDiagnostics: () -> Unit = {},
 ) {
     BackHandler { onClose() }
 
@@ -75,6 +76,9 @@ fun AboutScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            androidx.compose.material3.TextButton(onClick = onCopyDiagnostics) {
+                Text(stringResource(R.string.copy_extraction_diagnostics))
             }
         }
     }

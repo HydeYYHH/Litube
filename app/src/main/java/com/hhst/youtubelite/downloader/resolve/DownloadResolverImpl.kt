@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.resolve
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadPhase
@@ -11,6 +12,9 @@ import com.hhst.youtubelite.downloader.core.DownloadTask
 import com.hhst.youtubelite.downloader.core.InputComponentKind
 import com.hhst.youtubelite.downloader.core.ResolvedComponentUpdate
 import com.hhst.youtubelite.downloader.data.DownloadRepository
+import com.hhst.youtubelite.downloader.net.DownloadRangeMode
+import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import com.hhst.youtubelite.downloader.net.RecoveredSource
 import com.hhst.youtubelite.downloader.net.YoutubeDownloadRequestAdapter
 import kotlinx.coroutines.CancellationException
@@ -32,6 +36,9 @@ class DownloadResolverImpl(
     private var lastReadyPlan: DownloadPlan? = null
     private var lastIdentities: List<String> = emptyList()
     private val sources = ConcurrentHashMap<String, List<DownloadComponentSource>>()
+    private data class FallbackCatalog(val catalog: DownloadCatalog, val scope: String, val expires: Long)
+    private val fallbackCatalogs = LinkedHashMap<String, FallbackCatalog>(16, .75f, true)
+    private val gson = Gson()
 
     override fun sourcesOf(taskId: String): List<DownloadComponentSource> = sources[taskId].orEmpty()
 
@@ -54,7 +61,7 @@ class DownloadResolverImpl(
                 task,
                 generation,
                 DownloadSelection.Failed(
-                    DownloadUnavailableReason.NO_FILE_STREAMS,
+                    DownloadUnavailableReason.EXTRACTION_FAILED,
                     t.message ?: "resolve failed",
                 ),
             )
@@ -85,14 +92,21 @@ class DownloadResolverImpl(
     override suspend fun recoverForbidden(taskId: String): Boolean {
         val result = refreshAfter403(taskId) ?: return false
         if (result.exhausted) return false
-        return resolve(taskId) is DownloadResolveOutcome.Ready
+        val task = repository.transact { getTask(taskId) } ?: return false
+        val catalog = result.catalog ?: return false
+        return when (val selected = DownloadSelector.select(catalog, task.config)) {
+            is DownloadSelection.Ready -> ready(task, task.executionGeneration, catalog, selected.plan) is DownloadResolveOutcome.Ready
+            is DownloadSelection.Failed -> false
+        }
     }
 
     suspend fun recoverSource(taskId: String, identity: String?): RecoveredSource? {
+        val previous = sourcesOf(taskId).firstOrNull { it.resourceIdentity == identity }
         val ok = recoverForbidden(taskId)
         // Strict identity match only: falling back to the first source could
         // hand an audio refresh a video URL and splice foreign bytes.
         val next = sourcesOf(taskId).firstOrNull { identity == null || it.resourceIdentity == identity }
+            ?: previous?.let { old -> sourcesOf(taskId).firstOrNull { it.assetKind == old.assetKind && it.componentKind == old.componentKind } }
             ?: return RecoveredSource(
                 source = DownloadComponentSource(
                     assetKind = AssetKind.VIDEO,
@@ -110,6 +124,20 @@ class DownloadResolverImpl(
         return RecoveredSource(source = next, needsRedownload = needs, exhausted = !ok)
     }
 
+    /** Uses only the existing catalog; there is no session recapture or token mint in this step. */
+    suspend fun backupSource(taskId: String, identity: String?): RecoveredSource? {
+        val previous = sourcesOf(taskId).firstOrNull { it.resourceIdentity == identity } ?: return null
+        val profile = previous.requestPlan?.profile ?: return null
+        val cached = synchronized(fallbackCatalogs) { fallbackCatalogs[taskId] }
+            ?.takeIf { it.scope == catalogs.scope() && it.expires > System.currentTimeMillis() } ?: return null
+        val catalog = cached.catalog.copy(formats = cached.catalog.formats.filter { it.requestPlan?.profile != profile })
+        val task = repository.transact { getTask(taskId) } ?: return null
+        val selection = DownloadSelector.select(catalog, task.config) as? DownloadSelection.Ready ?: return null
+        if (ready(task, task.executionGeneration, catalog, selection.plan) !is DownloadResolveOutcome.Ready) return null
+        val next = sourcesOf(taskId).firstOrNull { it.assetKind == previous.assetKind && it.componentKind == previous.componentKind } ?: return null
+        return RecoveredSource(next, identity == null || !DownloadResourceIdentity.proven(identity, next.resourceIdentity.orEmpty()), false)
+    }
+
     private suspend fun ready(
         task: DownloadTask,
         generation: Long,
@@ -117,8 +145,28 @@ class DownloadResolverImpl(
         plan: DownloadPlan,
     ): DownloadResolveOutcome {
         lastReadyPlan = plan
+        synchronized(fallbackCatalogs) {
+            val now = System.currentTimeMillis()
+            val expiry = catalog.formats.mapNotNull { it.expiresAtMillis }.minOrNull() ?: now + 120_000
+            fallbackCatalogs[task.id] = FallbackCatalog(catalog, catalogs.scope(), minOf(now + 120_000, expiry - 30_000))
+            fallbackCatalogs.entries.removeAll { it.value.expires <= now }
+            var size = fallbackCatalogs.values.sumOf { gson.toJson(it.catalog).toByteArray().size }
+            while ((size > 8 * 1024 * 1024 || fallbackCatalogs.size > 128) && fallbackCatalogs.isNotEmpty()) {
+                size -= gson.toJson(fallbackCatalogs.remove(fallbackCatalogs.keys.first())!!.catalog).toByteArray().size
+            }
+        }
         sources[task.id] = buildSources(task, plan)
         val updates = buildUpdates(task, catalog, plan)
+        val previous = repository.transact { snapshot(task.id) }
+        previous?.assets?.forEach { asset -> asset.components.forEach { saved ->
+            val update = updates.firstOrNull { it.assetKind == asset.asset.kind && it.componentKind == saved.component.kind }
+            val old = saved.component.resourceIdentity
+            val next = update?.resourceIdentity
+            if (old != null && next != null && saved.chunks.any { it.verified && it.receivedBytes > 0 } &&
+                !DownloadResourceIdentity.proven(old, next)) {
+                coordinator.reportComponentNeedsRedownload(task.id, generation, old)
+            }
+        } }
         lastIdentities = updates.mapNotNull { it.resourceIdentity }
         if (!coordinator.reportResolved(task.id, generation, updates)) {
             return if (task.userCancelled) DownloadResolveOutcome.Cancelled else DownloadResolveOutcome.Stale
@@ -148,7 +196,9 @@ class DownloadResolverImpl(
             generation,
             DownloadStatus.FAILED,
             DownloadPhase.RESOLVE,
-            errorMessage = failed.reason.name,
+            errorMessage = if (failed.reason == DownloadUnavailableReason.EXTRACTION_FAILED) {
+                failed.message
+            } else failed.reason.name,
         )
         return DownloadResolveOutcome.Failed(failed.reason.name, failed.message)
     }
@@ -168,8 +218,7 @@ class DownloadResolverImpl(
                 assetKind = AssetKind.VIDEO,
                 componentKind = InputComponentKind.VIDEO,
                 mimeType = format.mimeType.ifBlank { "video/mp4" },
-                expectedBytes = videoChoice.expectedBytes
-                    ?: DownloadBitrate.expectedBytes(format, catalog.durationSec),
+                expectedBytes = videoChoice.expectedBytes,
                 container = format.container,
                 codec = format.codec,
                 resourceIdentity = videoChoice.resourceIdentity,
@@ -189,8 +238,7 @@ class DownloadResolverImpl(
                 assetKind = audioAsset,
                 componentKind = componentKind,
                 mimeType = format.mimeType.ifBlank { "audio/mp4" },
-                expectedBytes = audioChoice.expectedBytes
-                    ?: DownloadBitrate.expectedBytes(format, catalog.durationSec),
+                expectedBytes = audioChoice.expectedBytes,
                 container = format.container,
                 codec = format.codec,
                 audioTrackKey = audioChoice.audioTrackKey,
@@ -242,7 +290,7 @@ class DownloadResolverImpl(
             add(mediaSource(task.videoId, asset, InputComponentKind.AUDIO, audio))
         }
         plan.subtitle?.let { sub ->
-            add(sidecarSource(task.videoId, AssetKind.SUBTITLE, sub.url, sub.mimeType))
+            add(sidecarSource(task.videoId, AssetKind.SUBTITLE, sub.url, sub.mimeType, sub.requestPlan))
         }
         plan.cover?.let { cover ->
             add(sidecarSource(task.videoId, AssetKind.COVER, cover.url, cover.mimeType))
@@ -269,6 +317,7 @@ class DownloadResolverImpl(
             client = plan.client,
             headers = plan.headers,
             postPulse = plan.postPulse,
+            requestPlan = choice.format.requestPlan,
         )
     }
 
@@ -277,6 +326,7 @@ class DownloadResolverImpl(
         kind: AssetKind,
         url: String,
         mime: String,
+        requestPlan: RequestPlan? = null,
     ): DownloadComponentSource {
         val plan = YoutubeDownloadRequestAdapter.adaptUrl(videoId, url)
         return DownloadComponentSource(
@@ -285,12 +335,14 @@ class DownloadResolverImpl(
             url = url,
             mimeType = mime,
             sidecar = true,
-            rangeModeName = plan.rangeMode.name,
+            // Timed-text and covers are whole responses, not media byte ranges.
+            rangeModeName = DownloadRangeMode.NONE.name,
             methodName = plan.method.name,
             cookiePolicyName = plan.cookiePolicy.name,
             client = plan.client,
             headers = plan.headers,
             postPulse = false,
+            requestPlan = requestPlan,
         )
     }
 }

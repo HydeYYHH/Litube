@@ -3,7 +3,7 @@ package com.hhst.youtubelite.player.surface
 import com.hhst.youtubelite.player.queue.QueueItem
 
 /**
- * Playback intents handled by [com.hhst.youtubelite.player.PlayerViewModel].
+ * Playback intents handled by [player.PlayerViewModel].
  * Window/activity side effects live on [PlayerWindowActions].
  */
 interface PlayerPlaybackActions {

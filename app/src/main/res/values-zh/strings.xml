@@ -156,6 +156,10 @@
     <string name="download_complete">下载完成</string>
     <string name="download_paused">已暂停</string>
     <string name="download_failed">下载失败</string>
+    <string name="download_reason_storage">存储空间不足</string>
+    <string name="download_reason_memory">内存不足</string>
+    <string name="download_reason_forbidden">服务器拒绝下载（403）</string>
+    <string name="download_reason_rate_limit">请求过于频繁（429）</string>
     <string name="downloads">下载</string>
     <string name="download">下载</string>
     <string name="download_video">视频</string>
@@ -174,6 +178,7 @@
     <string name="download_delete">删除</string>
     <string name="download_delete_confirm">要移除此下载吗？</string>
     <string name="download_delete_record">仅从列表移除</string>
+    <string name="download_delete_local_file">删除本地文件</string>
     <string name="download_delete_files">同时删除文件</string>
     <string name="download_delete_downloads">删除下载内容</string>
     <string name="download_more_actions">更多操作</string>
@@ -221,4 +226,15 @@
     <string name="download_resume_all">全部恢复</string>
     <string name="download_delete_batch">删除整批</string>
     <string name="download_history_cleared">历史已清除</string>
+    <string name="copy_extraction_diagnostics">&#22797;&#21046;&#25552;&#21462;&#35786;&#26029;</string>
+    <string name="download_catalog_loading">正在加载下载选项…</string>
+    <string name="download_selection_missing">已保存的选择不可用</string>
+    <string name="download_sub_off">关闭</string>
+    <string name="download_sub_auto">自动生成</string>
+    <string name="download_sub_manual">人工字幕</string>
+    <string name="download_reason_network">连接失败，请检查网络后重试。</string>
+    <string name="download_reason_session">会话已变化，请重试以刷新下载选项。</string>
+    <string name="download_reason_extraction">提取下载选项失败，请重试。</string>
+    <string name="download_audio_original">原声</string>
+    <string name="download_audio_dubbed">配音</string>
 </resources>

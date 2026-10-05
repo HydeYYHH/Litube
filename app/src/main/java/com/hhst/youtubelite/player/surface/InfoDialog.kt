@@ -179,7 +179,9 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
         state.author?.let { add(stringResource(R.string.player_info_author) to it) }
         add(
             stringResource(R.string.player_info_quality) to
-                (state.qualityLabel ?: state.activeQuality ?: autoLabel),
+                (state.qualityLabel
+                    ?: PlayerUi.playingQuality(state.activeQuality, state.videoHeight)
+                    ?: autoLabel),
         )
         add(stringResource(R.string.player_info_duration) to PlayerUi.formatTime(state.durationMs))
         if (state.isLive) add(stringResource(R.string.player_info_type) to stringResource(R.string.player_live))

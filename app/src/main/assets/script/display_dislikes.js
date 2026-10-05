@@ -1,6 +1,6 @@
 (function () {
-  if (window.returnDislike?.syncPreferences) {
-    window.returnDislike.syncPreferences();
+  if (window.__displayDislikes?.syncPreferences) {
+    window.__displayDislikes.syncPreferences();
     return;
   }
 
@@ -29,7 +29,7 @@
 
   function readPrefs() {
     try {
-      return JSON.parse((window.lite || window.Bridge).getPreferences() || "{}");
+      return JSON.parse(window.Bridge.getPreferences() || "{}");
     } catch {
       return {};
     }
@@ -542,9 +542,9 @@
     setTimeout(() => tryInitialize(token, 25), 0);
   }
 
-  // One of three independent history.pushState/replaceState wrappers (nav.js
-  // routes cross-tab, watch-id.js reports id flips); kept separate on
-  // purpose — merging would couple the scripts' injection order.
+  // One of two independent history.pushState/replaceState wrappers (nav.js
+  // routes cross-tab); kept separate on purpose — merging would couple
+  // the scripts' injection order.
   const originalPushState = history.pushState;
   history.pushState = function (...args) {
     const result = originalPushState.apply(this, args);
@@ -600,14 +600,14 @@
     true,
   );
 
-  window.returnDislike = { syncPreferences };
+  window.__displayDislikes = { syncPreferences };
 
-  // The `lite` bridge can lag behind document-start injection (the same
-  // race player-hook.js init() retries for); without this the feature
+  // The bridge can lag behind document-start injection (the same race
+  // player-hook.js init() retries for); without this the feature
   // would stay off until the user next flips any preference.
   let bridgeAttempts = 0;
   function bridgeReady() {
-    const b = window.lite || window.Bridge;
+    const b = window.Bridge;
     return !!(b && typeof b.getPreferences === "function");
   }
   function startWhenBridgeReady() {
@@ -619,7 +619,7 @@
       setTimeout(startWhenBridgeReady, 300);
       return;
     }
-    console.warn("[dislikes] bridge unavailable; re-reading prefs on next navigation");
+    console.warn("[display-dislikes] bridge unavailable; re-reading prefs on next navigation");
     window.addEventListener(
       "yt-navigate-finish",
       () => setTimeout(syncPreferences, 300),

@@ -6,6 +6,7 @@ import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Subtitle
 import com.hhst.youtubelite.player.datasource.StreamSelection
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Extractor snapshot the download layer selects from. Playback models are unchanged. */
 data class DownloadCatalog(
@@ -41,6 +42,9 @@ enum class DownloadUnavailableReason {
     AUDIO_LANGUAGE_UNAVAILABLE,
     SUBTITLE_LANGUAGE_UNAVAILABLE,
     CODEC_NOT_ENABLED,
+    NETWORK_ERROR,
+    SESSION_CHANGED,
+    EXTRACTION_FAILED,
 }
 
 sealed class DownloadSelection {
@@ -79,12 +83,14 @@ data class DownloadSidecarChoice(
     val mimeType: String,
     val extension: String,
     val language: String? = null,
+    @Transient val requestPlan: RequestPlan? = null,
 )
 
 /** Shared parse vs independent URL-refresh. Cancel only the wait, never the parse. */
 interface DownloadCatalogSource {
     suspend fun catalog(videoId: String): DownloadCatalog
     suspend fun refresh(videoId: String): DownloadCatalog
+    fun scope(): String = ""
 }
 
 fun interface PoTokenEvictor {

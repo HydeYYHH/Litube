@@ -1,6 +1,17 @@
 package com.hhst.youtubelite.downloader.android
 
 import android.Manifest
+import com.hhst.youtubelite.downloader.core.PublishResult
+import com.hhst.youtubelite.downloader.core.PublishRequest
+import com.hhst.youtubelite.downloader.core.NoOpScheduler
+import com.hhst.youtubelite.downloader.core.NoOpFinalizer
+import com.hhst.youtubelite.downloader.core.FileAvailability
+import com.hhst.youtubelite.downloader.core.DownloadTarget
+import com.hhst.youtubelite.downloader.core.DownloadRequest
+import com.hhst.youtubelite.downloader.core.DownloadPublisher
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+import com.hhst.youtubelite.downloader.core.DownloadCoordinator
+import com.hhst.youtubelite.downloader.android.DeviceEvidence
 import android.app.Instrumentation
 import android.content.Context
 import android.net.Uri
@@ -14,24 +25,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.core.AssetKind
-import com.hhst.youtubelite.downloader.core.DownloadCoordinator
-import com.hhst.youtubelite.downloader.core.DownloadPhase
-import com.hhst.youtubelite.downloader.core.DownloadPublisher
-import com.hhst.youtubelite.downloader.core.DownloadRequest
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.core.DownloadTarget
-import com.hhst.youtubelite.downloader.core.FileAvailability
-import com.hhst.youtubelite.downloader.core.NoOpFinalizer
-import com.hhst.youtubelite.downloader.core.NoOpScheduler
-import com.hhst.youtubelite.downloader.core.PublishRequest
-import com.hhst.youtubelite.downloader.core.PublishResult
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
 import com.hhst.youtubelite.downloader.engine.DownloadEngine
 import com.hhst.youtubelite.downloader.io.AndroidNetworkMonitor
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
 import com.hhst.youtubelite.downloader.io.NetworkKind
-import com.hhst.youtubelite.downloader.migrate.DownloadReady
 import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
@@ -154,7 +154,7 @@ class DownloadFaultAndroidTest {
             nm.notify(
                 0x51ADE,
                 androidx.core.app.NotificationCompat.Builder(targetContext, "device-shade")
-                    .setSmallIcon(com.hhst.youtubelite.R.drawable.ic_stat_play)
+                    .setSmallIcon(R.drawable.ic_stat_play)
                     .setContentTitle("Download shade")
                     .setContentText(viewLabel)
                     .setContentIntent(viewIntent)
@@ -333,6 +333,7 @@ class DownloadFaultAndroidTest {
         val coordinator = koin.get<DownloadCoordinator>()
         val publisher = koin.get<DownloadPublisher>()
         val reconciler = koin.get<DownloadStartupReconciler>()
+        val clipTitle = "MediaStore clip ${System.nanoTime()}"
         val source = File(targetContext.cacheDir, "device-mediastore.bin").also {
             it.writeBytes(ByteArray(2048) { 9 })
         }
@@ -348,7 +349,7 @@ class DownloadFaultAndroidTest {
         assertTrue("MediaStore publish must succeed: $published", published is PublishResult.Published)
         val uri = (published as PublishResult.Published).uri
         val enqueued = coordinator.enqueue(
-            request("mstorexx", "MediaStore clip"),
+            request("mstorexx-${System.nanoTime()}", clipTitle),
             "s-ms-${System.currentTimeMillis()}",
         )
         val taskId = enqueued.created.single().taskId
@@ -365,7 +366,7 @@ class DownloadFaultAndroidTest {
         val redownload = targetContext.getString(R.string.download_redownload)
         val more = targetContext.getString(R.string.download_more_actions)
         ActivityScenario.launch<DownloadActivity>(
-            DownloadActivity.intent(targetContext).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            DownloadActivity.intent(targetContext, batchId = enqueued.batchId).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
         ).use { scenario ->
             scenario.onActivity { }
             instrumentation.waitForIdleSync()
@@ -373,17 +374,16 @@ class DownloadFaultAndroidTest {
                 DeviceEvidence.shell("input swipe 540 1600 540 400")
                 Thread.sleep(300)
             }
-            val xml = waitDumpContaining("file-missing copy", missingCopy, "MediaStore clip")
+            val xml = waitDumpContaining("file-missing copy", missingCopy, clipTitle)
             assertTrue(
                 "manager must mention the missing clip",
-                xml.contains("MediaStore clip") || treeHasText("MediaStore clip"),
+                xml.contains(clipTitle) || treeHasText(clipTitle),
             )
             assertTrue(
                 "manager must show file-missing copy",
                 xml.contains(missingCopy) || treeHasText(missingCopy),
             )
-            tapDumpText(xml, more)
-            clickTextInAnyWindow(more)
+            assertTrue("missing item's menu must open", clickMoreForTitle(clipTitle, more))
             val offered = waitUntil("redownload action", timeoutMs = 8_000L) {
                 val moreXml = DeviceEvidence.dumpWindowsXml()
                 moreXml.contains(redownload) || treeHasText(redownload)
@@ -404,7 +404,7 @@ class DownloadFaultAndroidTest {
         val coordinator = koin.get<DownloadCoordinator>()
         val scheduler = koin.get<BackgroundDownloadScheduler>()
         val enqueued = coordinator.enqueue(
-            request("fontxxxx", "Font clip"),
+            request("fontxxxx-${System.nanoTime()}", "Font clip"),
             "s-font-${System.currentTimeMillis()}",
         )
         val taskId = enqueued.created.single().taskId
@@ -515,7 +515,7 @@ class DownloadFaultAndroidTest {
             return@runBlocking
         }
         val runningEnq = coordinator.enqueue(
-            request("deadrnxx", "death running"),
+            request("deadrnxx-${System.nanoTime()}", "death running"),
             "s-death-run-${System.currentTimeMillis()}",
         )
         val runningId = runningEnq.created.single().taskId
@@ -523,7 +523,7 @@ class DownloadFaultAndroidTest {
         scheduler.cancel(runningId)
         coordinator.reportExecution(runningId, gen, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)
         val pausedEnq = coordinator.enqueue(
-            request("deadpsxx", "death paused"),
+            request("deadpsxx-${System.nanoTime()}", "death paused"),
             "s-death-pause-${System.currentTimeMillis()}",
         )
         val pausedId = pausedEnq.created.single().taskId
@@ -581,9 +581,11 @@ class DownloadFaultAndroidTest {
     }
 
     private fun waitDownloadReady() {
-        val ready = GlobalContext.get().get<DownloadReady>()
-        val ok = waitUntil("DownloadReady", timeoutMs = 30_000L) { ready.isReady() }
-        assertTrue("download migration must finish before fault rows", ok)
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeout(30_000) {
+                GlobalContext.get().get<DownloadStartupReconciler>().awaitInitialization()
+            }
+        }
     }
 
     private fun waitDumpContaining(label: String, vararg needles: String): String {
@@ -633,6 +635,24 @@ class DownloadFaultAndroidTest {
         for (i in 0 until node.childCount) {
             node.getChild(i)?.let { collect(it, out) }
         }
+    }
+
+    private fun clickMoreForTitle(title: String, description: String): Boolean {
+        // The batch heading and its item can have the same title. Visit the
+        // item last in the accessibility tree first, then find its nearest menu.
+        val titles = accessibilityNodes().filter { it.text?.toString()?.contains(title) == true }.asReversed()
+        for (node in titles) {
+            var parent: AccessibilityNodeInfo? = node
+            while (parent != null) {
+                val children = mutableListOf<AccessibilityNodeInfo>()
+                collect(parent, children)
+                val menus = children.filter { it.contentDescription?.toString() == description && it.isClickable }
+                if (menus.size == 1 && menus.single().performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (menus.size > 1) break
+                parent = parent.parent
+            }
+        }
+        return false
     }
 
     private fun tapDumpText(xml: String, text: String): Boolean {

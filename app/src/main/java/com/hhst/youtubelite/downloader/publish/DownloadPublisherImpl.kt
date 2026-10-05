@@ -2,6 +2,7 @@ package com.hhst.youtubelite.downloader.publish
 
 import android.content.ContentValues
 import android.content.Context
+import java.util.concurrent.ConcurrentHashMap
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -55,7 +56,7 @@ class DownloadPublisherImpl(
 ) : DownloadPublisher {
 
     /** publishId → created target; lets a same-process retry reconcile instead of duplicating. */
-    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val inFlight = ConcurrentHashMap<String, String>()
 
     override fun delete(uri: String): DeleteResult = backend.delete(uri)
 

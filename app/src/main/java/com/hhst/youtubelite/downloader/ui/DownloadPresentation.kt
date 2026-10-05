@@ -11,6 +11,9 @@ import com.hhst.youtubelite.downloader.resolve.DownloadBitrate
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadPlan
 import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
+import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
+import com.hhst.youtubelite.downloader.resolve.DownloadSelector
+import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import java.util.Locale
 
@@ -143,14 +146,21 @@ object DownloadPresentation {
         }
     }
 
-    fun qualityOptions(catalog: DownloadCatalog): List<String> =
+    fun downloadableVideos(catalog: DownloadCatalog): List<Format> =
         catalog.formats
-            .filter { it.videoOnly || StreamSelection.isMuxed(it) }
-            .map { it.height }
-            .filter { it > 0 }
-            .distinct()
-            .sortedDescending()
-            .map { "${it}p" }
+            .filter { (it.videoOnly || StreamSelection.isMuxed(it)) && it.height > 0 &&
+                DownloadSelector.isFileStream(it) && DownloadCodecs.videoEnabled(it) &&
+                (if (it.videoOnly) catalog.formats.any { audio -> audio.audioOnly &&
+                    DownloadSelector.isFileStream(audio) && DownloadCodecs.comboEnabled(it, audio, false) }
+                 else DownloadCodecs.comboEnabled(it, null, false)) }
+            .sortedWith(compareByDescending<Format> { it.height }.thenByDescending { it.fps }.thenByDescending { it.videoOnly })
+
+    fun qualityLabel(format: Format): String = "${format.height}p" + if (format.fps > 30) format.fps.toString() else ""
+
+    fun qualityOptions(catalog: DownloadCatalog): List<String> = downloadableVideos(catalog).map(::qualityLabel).distinct()
+
+    fun qualityItag(catalog: DownloadCatalog, label: String): Int? =
+        downloadableVideos(catalog).firstOrNull { qualityLabel(it) == label }?.itag
 
     /** Phases where bytes are actively moving or about to move. */
     fun isActivePhase(phase: DownloadPhase): Boolean = when (phase) {
@@ -164,19 +174,29 @@ object DownloadPresentation {
         else -> false
     }
 
-    /** "3.4 MB / 12.0 MB" while transferring, "3.4 MB" when the total is unknown. */
+    /** Keep received bytes visible during pauses; percentages require a known total. */
     fun progressText(status: DownloadStatus, progressBytes: Long, expectedBytes: Long?): String? {
-        if (status != DownloadStatus.RUNNING || progressBytes <= 0L) return null
+        if (status == DownloadStatus.FAILED || status == DownloadStatus.CANCELLED) return null
+        if (status != DownloadStatus.RUNNING && progressBytes <= 0L) return null
+        val received = progressBytes.coerceAtLeast(0L)
         return if (expectedBytes != null && expectedBytes > 0L) {
-            "${formatBytes(progressBytes)} / ${formatBytes(expectedBytes)}"
+            val percent = (received.toDouble() / expectedBytes * 100).toInt().coerceIn(0, 100)
+            "$percent% · ${formatBytes(received)} / ${formatBytes(expectedBytes)}"
         } else {
-            formatBytes(progressBytes)
+            received.takeIf { it > 0L }?.let(::formatBytes)
         }
     }
 
     fun progressFraction(progressBytes: Long, expectedBytes: Long?): Float? {
-        if (expectedBytes == null || expectedBytes <= 0L || progressBytes <= 0L) return null
-        return (progressBytes.toFloat() / expectedBytes.toFloat()).coerceIn(0f, 1f)
+        if (expectedBytes == null || expectedBytes <= 0L) return null
+        return (progressBytes.toDouble() / expectedBytes).toFloat().coerceIn(0f, 1f)
+    }
+
+    fun failureReason(item: DownloadItemUiState): String? {
+        if (item.status != DownloadStatus.FAILED && item.failedKinds.isEmpty()) return null
+        val message = item.errorMessage?.lineSequence()?.firstOrNull { it.isNotBlank() }
+            ?.trim()?.replace(Regex("\\s+"), " ") ?: return null
+        return if (message.length > 120) message.take(119) + "…" else message
     }
 
     fun actionsFor(item: DownloadItemUiState): List<DownloadRowAction> =

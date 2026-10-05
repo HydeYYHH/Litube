@@ -11,6 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okhttp3.Call
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 import okhttp3.Request
 
 private const val TAG = "SponsorBlockManager"
@@ -60,10 +63,10 @@ class SponsorBlockManager(
     val currentSegments: List<Segment> get() = segments
 
     /** Request id: a slow reply for video A must not clobber video B's. */
-    private val requestSeq = java.util.concurrent.atomic.AtomicLong()
+    private val requestSeq = AtomicLong()
 
     /** In-flight call; a newer [load] cancels the superseded one outright. */
-    private val currentCall = java.util.concurrent.atomic.AtomicReference<okhttp3.Call?>()
+    private val currentCall = AtomicReference<Call?>()
 
     /** Fetches segments for [videoId]; no-op when every category is disabled. */
     fun load(videoId: String) {

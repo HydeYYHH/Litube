@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.cast
 
 import android.content.Context
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
+import androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
 import android.net.ConnectivityManager
 import android.os.SystemClock
 import android.util.Log
@@ -13,6 +15,7 @@ import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.LENGTH_UNSET
 import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.resolveBindHost
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.core.Markup
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.player.datasource.YoutubeHttpDataSource
 import fi.iki.elonen.NanoHTTPD
 import okhttp3.OkHttpClient
@@ -35,10 +38,12 @@ class LocalStreamProxy(
     port: Int = 0,
     /** LAN IPv4 to bind; resolved by the caller via [resolveBindHost]. */
     private val advertisedHost: String,
+    private val mediaRequests: YoutubeMediaRequests? = null,
 ) : NanoHTTPD(advertisedHost, port) {
 
     fun interface UrlRefresher {
         fun refreshUrl(token: String, videoId: String?, itag: Int?): String?
+        fun backupUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? = null
     }
 
     private data class StreamInfo(
@@ -52,8 +57,10 @@ class LocalStreamProxy(
         val configId: Long,
         val publishedVideoId: String? = null,
         val itag: Int? = null,
+        val requestPlan: RequestPlan? = null,
     )
 
+    private val httpClient = http
     private val appContext = context.applicationContext
     private val dataSourceFactory = YoutubeHttpDataSource.Factory(
         http,
@@ -63,6 +70,7 @@ class LocalStreamProxy(
         .setReadTimeoutMs(10_000)
         .setRangeParameterEnabled(true)
         .setRnParameterEnabled(true)
+        .setMediaRequests(mediaRequests)
 
     /** Token → stream info. Published by atomic reference swap; readers snapshot it once. */
     @Volatile private var streamInfo: Map<String, StreamInfo> = emptyMap()
@@ -103,6 +111,8 @@ class LocalStreamProxy(
         videoItag: Int? = null,
         audioItag: Int? = null,
         generation: Long? = null,
+        videoRequestPlan: RequestPlan? = null,
+        audioRequestPlan: RequestPlan? = null,
     ) {
         val configId = generation ?: configGen.incrementAndGet()
         val tokens = mutableMapOf<String, StreamInfo>()
@@ -116,6 +126,7 @@ class LocalStreamProxy(
                 configId = configId,
                 publishedVideoId = videoId,
                 itag = videoItag,
+                requestPlan = videoRequestPlan,
             )
         }
         if (!audioUrl.isNullOrBlank() && audio != null) {
@@ -128,6 +139,7 @@ class LocalStreamProxy(
                 configId = configId,
                 publishedVideoId = videoId,
                 itag = audioItag,
+                requestPlan = audioRequestPlan,
             )
         }
         this.videoTitle = videoTitle
@@ -176,7 +188,11 @@ class LocalStreamProxy(
     }
 
     private fun fetchSidx(info: StreamInfo, start: Long, length: Long): ChunkIndex? {
-        val source = dataSourceFactory.createDataSource()
+        val source = (info.requestPlan?.let { plan ->
+            YoutubeHttpDataSource.Factory(httpClient, plan.userAgent)
+                .setMediaRequests(mediaRequests, mediaRequests?.plan(info.youtubeUrl) ?: plan)
+                .setRangeParameterEnabled(true)
+        } ?: dataSourceFactory).createDataSource()
         return try {
             val spec = DataSpec.Builder()
                 .setUri(info.youtubeUrl.toUri())
@@ -375,7 +391,7 @@ class LocalStreamProxy(
         val totalSize = if (info.contentLength > 0) info.contentLength else LENGTH_UNSET
         return try {
             streamUpstream(token, info, chunkStart, servedLength, hasRange, fromSeg, totalSize, ua, openEnded)
-        } catch (e: androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+        } catch (e: InvalidResponseCodeException) {
             if (e.responseCode == 403) {
                 val now = SystemClock.elapsedRealtime()
                 val last = lastRefreshMs[token] ?: 0L
@@ -405,6 +421,19 @@ class LocalStreamProxy(
                         return try {
                             streamUpstream(token, refreshed, chunkStart, servedLength, hasRange, fromSeg, totalSize, ua, openEnded)
                         } catch (t: Throwable) {
+                            if (recoverable(t)) {
+                                val failedPlan = mediaRequests?.plan(refreshed.youtubeUrl) ?: refreshed.requestPlan
+                                val backup = urlRefresher?.backupUrl(token, info.publishedVideoId, info.itag, failedPlan?.profile?.name)
+                                if (backup != null) {
+                                    val alternate = synchronized(streamInfoLock) {
+                                        val latest = streamInfo[token]?.takeIf { it.configId == info.configId }
+                                            ?: return text(Response.Status.FORBIDDEN, "Stale token")
+                                        latest.copy(youtubeUrl = backup, requestPlan = mediaRequests?.plan(backup) ?: latest.requestPlan).also { streamInfo = streamInfo + (token to it) }
+                                    }
+                                    return try { streamUpstream(token, alternate, chunkStart, servedLength, hasRange, fromSeg, totalSize, ua, openEnded) }
+                                    catch (_: Throwable) { text(Response.Status.FORBIDDEN, "Recovery exhausted") }
+                                }
+                            }
                             Log.w(TAG, "stream retry failed", t)
                             text(Response.Status.INTERNAL_ERROR, "Proxy error")
                         }
@@ -414,6 +443,15 @@ class LocalStreamProxy(
             // Only a real upstream 403 answers 403; other codes map to the
             // closest HTTP semantic so the receiver can calibrate (416) or
             // retry (5xx) instead of treating every failure as forbidden.
+            if (e.responseCode == 429) {
+                val limited = newFixedLengthResponse(object : Response.IStatus {
+                    override fun getRequestStatus() = 429
+                    override fun getDescription() = "429 Too Many Requests"
+                }, MIME_PLAINTEXT, "Upstream rate limit")
+                e.headerFields.entries.firstOrNull { it.key.equals("Retry-After", true) }?.value?.firstOrNull()
+                    ?.let { limited.addHeader("Retry-After", it) }
+                return limited
+            }
             val status = when (e.responseCode) {
                 416 -> Response.Status.RANGE_NOT_SATISFIABLE
                 in 500..599 -> Response.Status.SERVICE_UNAVAILABLE
@@ -421,9 +459,26 @@ class LocalStreamProxy(
             }
             text(status, "Upstream ${e.responseCode}")
         } catch (t: Throwable) {
+            if (recoverable(t)) {
+                val fresh = urlRefresher?.refreshUrl(token, info.publishedVideoId, info.itag)
+                if (fresh != null) {
+                    val updated = synchronized(streamInfoLock) {
+                        val latest = streamInfo[token]?.takeIf { it.configId == info.configId }
+                            ?: return text(Response.Status.FORBIDDEN, "Stale token")
+                        latest.copy(youtubeUrl = fresh, requestPlan = mediaRequests?.plan(fresh) ?: latest.requestPlan).also { streamInfo = streamInfo + (token to it) }
+                    }
+                    return try { streamUpstream(token, updated, chunkStart, servedLength, hasRange, fromSeg, totalSize, ua, openEnded) }
+                    catch (_: Throwable) { text(Response.Status.FORBIDDEN, "Recovery exhausted") }
+                }
+            }
             Log.w(TAG, "stream fetch failed", t)
             text(Response.Status.INTERNAL_ERROR, "Proxy error")
         }
+    }
+
+    private fun recoverable(failure: Throwable): Boolean = generateSequence(failure as Throwable?) { it.cause }.any {
+        it is InvalidResponseCodeException && it.responseCode == 403
+            || it.message in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")
     }
 
     private fun streamUpstream(
@@ -447,7 +502,11 @@ class LocalStreamProxy(
             .setUri(info.youtubeUrl.toUri())
             .setPosition(chunkStart)
         if (!upstreamUnbounded) specBuilder.setLength(servedLength)
-        val source = dataSourceFactory.createDataSource()
+        val source = (info.requestPlan?.let { plan ->
+            YoutubeHttpDataSource.Factory(httpClient, plan.userAgent)
+                .setMediaRequests(mediaRequests, mediaRequests?.plan(info.youtubeUrl) ?: plan)
+                .setRangeParameterEnabled(true)
+        } ?: dataSourceFactory).createDataSource()
         val resolved = source.open(specBuilder.build())
         if (upstreamUnbounded) {
             if (resolved == 0L) {
@@ -610,7 +669,7 @@ class LocalStreamProxy(
     }
 
     companion object {
-        private const val TAG = "YTLCastProxy"
+        private const val TAG = "LocalStreamProxy"
         private const val LOOPBACK = "127.0.0.1"
         /** media3's C.LENGTH_UNSET is the int -1; this is the long form used by DataSpec lengths. */
         private const val LENGTH_UNSET: Long = C.LENGTH_UNSET.toLong()

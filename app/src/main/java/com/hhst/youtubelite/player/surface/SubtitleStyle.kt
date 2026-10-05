@@ -3,7 +3,7 @@ package com.hhst.youtubelite.player.surface
 /**
  * User-adjustable subtitle appearance.
  *
- * Encoded as a compact string for [com.hhst.youtubelite.core.JsonCache]
+ * Encoded as a compact string for [core.JsonCache]
  * persistence. [decode] accepts both the current `v2;` payload and the
  * older 5-field enum format so a stored style survives this upgrade.
  */

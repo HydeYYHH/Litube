@@ -23,6 +23,10 @@ import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.muxedFormat
 import com.hhst.youtubelite.downloader.resolve.subtitle
+import com.grack.nanojson.JsonObject
+import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
+import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -174,12 +178,15 @@ class DownloadEngineE2ETest {
     @Test
     fun attachmentFailure_isPartialAndRetryFailedOnly() = runBlocking {
         val media = load("downloader/media/avc_aac.mp4")
+        val session = YoutubeSession("subtitle-test", YoutubeSession.Account.ANONYMOUS,
+            0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(), { "" })
+        val subtitlePlan = RequestPlan(session, ClientProfile.WEB, RequestPlan.Protocol.HTTPS, RequestPlan.Range.NONE, false)
         server.dispatcher = mediaDispatcher(media) { request ->
             if ("timedtext" in request.path.orEmpty()) MockResponse().setResponseCode(404) else null
         }
         val env = env(
             catalog = muxedCatalog(mediaUrl("/v.mp4", media.size.toLong(), 18), media.size.toLong()).copy(
-                subtitles = listOf(subtitle("en").copy(url = server.url("/timedtext").toString())),
+                subtitles = listOf(subtitle("en").copy(url = server.url("/timedtext").toString(), requestPlan = subtitlePlan)),
             ),
         )
         val taskId = env.coordinator.enqueue(
@@ -198,6 +205,14 @@ class DownloadEngineE2ETest {
         val sub = snap.assets.first { it.asset.kind == AssetKind.SUBTITLE }.asset
         assertTrue(video.published)
         assertTrue(sub.failed)
+        // A system job restored after failure must leave the terminal state intact.
+        val requestsBeforeRestore = server.requestCount
+        env.engine.run(taskId)
+        val restored = env.repo.transact { snapshot(taskId) }!!
+        assertEquals(DownloadStatus.FAILED, restored.task.status)
+        assertEquals(DownloadPhase.COMPLETE, restored.task.phase)
+        assertEquals(video.publishedUri, restored.assets.first { it.asset.kind == AssetKind.VIDEO }.asset.publishedUri)
+        assertEquals(requestsBeforeRestore, server.requestCount)
         server.dispatcher = mediaDispatcher(media) { request ->
             if ("timedtext" in request.path.orEmpty()) {
                 MockResponse().setResponseCode(200).setBody("WEBVTT\n")

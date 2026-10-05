@@ -55,15 +55,19 @@ data class VideoDownloadUiState(
 object DownloadUiMapper {
     fun item(snapshot: TaskSnapshot, item: ItemSnapshot? = null): DownloadItemUiState {
         val assets = snapshot.assets.map { it.asset }
-        val progress = snapshot.assets
-            .flatMap { it.components }
-            .flatMap { it.chunks }
-            .sumOf { it.receivedBytes }
-        val expected = snapshot.assets
-            .flatMap { it.components }
-            .mapNotNull { it.component.expectedBytes }
-            .takeIf { it.isNotEmpty() && it.size == snapshot.assets.sumOf { a -> a.components.size } }
-            ?.sum()
+        // Sidecars do not have a size until fetched. They must not turn known
+        // video/audio progress into an indeterminate bar. Muxed streams also
+        // leave an unused audio component placeholder behind.
+        val mediaAssets = snapshot.assets.filter {
+            it.asset.kind == AssetKind.VIDEO || it.asset.kind == AssetKind.AUDIO
+        }
+        val components = mediaAssets.ifEmpty { snapshot.assets }.flatMap { it.components }
+            .filter { it.component.mimeType != null || it.component.resourceIdentity != null ||
+                it.component.expectedBytes != null || it.chunks.isNotEmpty() }
+        val progress = components.sumOf { component -> component.chunks.sumOf { it.receivedBytes } }
+        val lengths = components.map { it.component.expectedBytes?.takeIf { bytes -> bytes > 0L } }
+        val expected = lengths.takeIf { it.isNotEmpty() && it.all { bytes -> bytes != null } }
+            ?.filterNotNull()?.sum()
         val allPublished = DownloadStateMachine.fullyDownloaded(assets)
         val media = assets.filter { it.kind == AssetKind.VIDEO || it.kind == AssetKind.AUDIO }
         val fileMissing = DownloadPresentation.fileMissing(
@@ -94,7 +98,10 @@ object DownloadUiMapper {
             qualityLabel = snapshot.task.config.videoQuality,
             audioOnly = snapshot.task.config.audioOnly,
             attachmentsOnly = snapshot.task.config.attachmentsOnly,
-            errorMessage = snapshot.task.errorMessage,
+            errorMessage = snapshot.task.errorMessage?.takeIf {
+                snapshot.task.status == DownloadStatus.FAILED && it.isNotBlank()
+            } ?: assets.firstOrNull { it.failed && !it.errorMessage.isNullOrBlank() }?.errorMessage
+                ?: snapshot.task.errorMessage,
             publishedUris = assets.mapNotNull { it.publishedUri },
             failedKinds = assets.filter { it.failed }.map { it.kind },
         )

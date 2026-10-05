@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.work
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import kotlinx.coroutines.CompletableDeferred
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
@@ -29,12 +30,21 @@ class DownloadStartupReconciler(
     private val publisher: DownloadPublisher,
     private val directories: DownloadDirectories,
 ) {
+    private val initialized = CompletableDeferred<Unit>()
+    suspend fun awaitInitialization() = initialized.await()
+
     suspend fun reconcile() {
+        try {
         coordinator.onProcessRestore()
         reconcilePublish()
         reconcilePublishedFiles()
         reconcileTemp()
         reconcileSchedules()
+        initialized.complete(Unit)
+        } catch (failure: Throwable) {
+            initialized.completeExceptionally(failure)
+            throw failure
+        }
     }
 
     private suspend fun reconcilePublish() {
@@ -128,6 +138,7 @@ class DownloadStartupReconciler(
                 scheduler.cancel(task.id)
                 continue
             }
+            if (task.status == DownloadStatus.FAILED || task.phase == DownloadPhase.COMPLETE) continue
             if (task.status == DownloadStatus.WAITING_SYSTEM || sched.reason == ScheduleReasons.SYSTEM) {
                 continue
             }

@@ -3,6 +3,7 @@
 package com.hhst.youtubelite.player
 
 import android.content.ContextWrapper
+import com.hhst.youtubelite.extractor.VideoId
 import android.view.SurfaceView
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
@@ -228,6 +229,36 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun compactLayout_preservesPlaybackAndOnlyCollapsesTheOwningWatchPage() {
+        bindViewModel()
+        val owner = PageOrigin(tabId = 1L, documentGeneration = 2L)
+        viewModel.playVideo(watchUrl, owner)
+        engine.settle(watchId, positionMs = 42_000L)
+        viewModel.setCompactPlayer(true)
+        assertTrue(viewModel.isPlayerCompact(owner))
+        assertFalse(viewModel.isPlayerCompact(PageOrigin(2L, 2L)))
+        assertFalse(viewModel.isPlayerCompact(PageOrigin(1L, 1L)))
+        assertFalse(viewModel.uiState.value.mini)
+        assertEquals(42_000L, engine.snapshot.value.positionMs)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertTrue(engine.snapshot.value.isPlaying)
+
+        viewModel.setFullscreen(true)
+        assertFalse(viewModel.isPlayerCompact(owner))
+        viewModel.setFullscreen(false)
+        assertTrue(viewModel.isPlayerCompact(owner))
+        viewModel.setCompactPlayer(false)
+        assertFalse(viewModel.isPlayerCompact(owner))
+        assertTrue(engine.snapshot.value.isPlaying)
+
+        viewModel.setCompactPlayer(true)
+        viewModel.enterMiniPlayer()
+        assertFalse(viewModel.isPlayerCompact(owner))
+        viewModel.onMiniClose()
+        assertFalse(viewModel.isPlayerCompact(owner))
+    }
+
+    @Test
     fun playVideo_shortsReplacesWatchWithoutRestoringOnClose() {
         bindViewModel()
         viewModel.playVideo(watchUrl)
@@ -348,7 +379,7 @@ class PlayerViewModelTest {
         override fun play(urlOrId: String) {
             playCalls += urlOrId
             _snapshot.value = _snapshot.value.copy(
-                videoId = com.hhst.youtubelite.extractor.VideoId.parse(urlOrId),
+                videoId = VideoId.parse(urlOrId),
                 url = urlOrId,
                 prepared = false,
                 isPlaying = false,

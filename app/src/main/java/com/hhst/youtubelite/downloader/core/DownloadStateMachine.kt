@@ -6,6 +6,7 @@ enum class BackgroundDecision {
     USER_PAUSE,
     USER_CANCEL,
     COMPLETED_HOLDS,
+    FAILED_HOLDS,
 }
 
 /** Phase/status/generation rules. Encoded here so tests can pin the matrix. */
@@ -32,6 +33,9 @@ object DownloadStateMachine {
             task.status == DownloadStatus.PAUSED ||
             task.status == DownloadStatus.PAUSING
         if (paused && incoming in activeStatuses) return BackgroundDecision.USER_PAUSE
+        if (task.status == DownloadStatus.FAILED && incoming in activeStatuses) {
+            return BackgroundDecision.FAILED_HOLDS
+        }
         if (task.phase == DownloadPhase.COMPLETE &&
             task.completion == CompletionKind.FULL &&
             incoming in activeStatuses

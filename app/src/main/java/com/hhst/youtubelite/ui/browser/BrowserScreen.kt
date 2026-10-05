@@ -25,6 +25,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -44,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -76,7 +77,6 @@ import com.hhst.youtubelite.extension.Extension
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.PlayerCache
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.net.NetTracer
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -86,6 +86,7 @@ import com.hhst.youtubelite.player.surface.MiniPlayerStore
 import com.hhst.youtubelite.player.surface.MiniPlayerWindow
 import com.hhst.youtubelite.player.surface.PlayerCallbackBridge
 import com.hhst.youtubelite.player.surface.PlayerSurface
+import com.hhst.youtubelite.player.surface.PlayerSurfaceCallbacks
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import com.hhst.youtubelite.ui.about.AboutActivity
@@ -105,7 +106,6 @@ fun BrowserScreen(
     playerViewModel: PlayerViewModel = koinInject(),
     extensionManager: ExtensionManager = koinInject(),
     extractor: Extractor = koinInject(),
-    playerCache: PlayerCache = koinInject(),
     miniPlayerStore: MiniPlayerStore = koinInject(),
     webViewTimers: WebViewTimerOccupancy = koinInject(),
     sharedUrl: StateFlow<String?>? = null,
@@ -243,7 +243,7 @@ fun BrowserScreen(
         createHosts(
             tabs, hosts, context, viewModel, extensionManager, onOpenExtension,
             onOpenDownloads, onOpenWith, onAbout, extractor,
-            playerCache, playerViewModel, onAddToQueue, onShowMediaItemMenu,
+            playerViewModel, onAddToQueue, onShowMediaItemMenu,
             onPlaylistPresence = onPlaylistPresence,
         )
         delay(TAB_DESTROY_DELAY_MS)
@@ -562,7 +562,33 @@ fun BrowserScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val layoutDir = LocalLayoutDirection.current
+        val leftInsetDp = with(density) {
+            WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
+        }
+        val rightInsetDp = with(density) {
+            WindowInsets.safeDrawing.getRight(this, layoutDir).toDp().value.toInt()
+        }
+        val topInsetDp = with(density) { WindowInsets.safeDrawing.getTop(this).toDp().value.toInt() }
+        val bottomInsetDp = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp().value.toInt() }
+        val availableWidthDp = (maxWidth.value.toInt() - leftInsetDp - rightInsetDp).coerceAtLeast(1)
+        val availableHeightDp = (maxHeight.value.toInt() - topInsetDp - bottomInsetDp).coerceAtLeast(1)
+        val layoutMini = playerState.visible && !playerState.mini &&
+            !playerState.fullscreen && !inPip && !PageKind.isShorts(playerState.url) &&
+            PlayerUi.useLandscapeMiniPlayer(availableWidthDp, availableHeightDp, playerState.pageHeightDp)
+        SideEffect { playerViewModel.setCompactPlayer(layoutMini) }
+        val layoutMiniState = rememberUpdatedState(layoutMini)
+        val surfaceCallbacks = remember(playerCallbacks, playerViewModel) {
+            object : PlayerSurfaceCallbacks by playerCallbacks {
+                override fun onMiniRestore() {
+                    // The embedded slot cannot fit here; expand into fullscreen.
+                    if (layoutMiniState.value) playerViewModel.onFullscreenToggle()
+                    else playerCallbacks.onMiniRestore()
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -620,26 +646,16 @@ fun BrowserScreen(
 
         // Native player overlays the page player. Mini-player docks bottom-end.
         if (playerState.visible) {
-            val density = LocalDensity.current
-            val layoutDir = LocalLayoutDirection.current
-            val screenWidthDp = LocalConfiguration.current.screenWidthDp
-            val leftInsetDp = with(density) {
-                WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
-            }
-            val rightInsetDp = with(density) {
-                WindowInsets.safeDrawing.getRight(this, layoutDir).toDp().value.toInt()
-            }
-            val availableWidthDp = (screenWidthDp - leftInsetDp - rightInsetDp).coerceAtLeast(1)
-            val bottomInsetDp = with(density) {
+            val navigationBottomDp = with(density) {
                 WindowInsets.navigationBars.getBottom(this).toDp().value.toInt()
             }
-            val isMini = playerState.mini && !inPip && !playerState.fullscreen
+            val isMini = (playerState.mini || layoutMini) && !inPip && !playerState.fullscreen
             // One shared surface invocation: mini/embedded differ only in the
             // modifier and the docking window around it.
             val playerSurface: @Composable (Modifier) -> Unit = { surfaceModifier ->
                 PlayerSurface(
-                    state = playerState,
-                    callbacks = playerCallbacks,
+                    state = if (layoutMini) playerState.copy(mini = true, locked = false) else playerState,
+                    callbacks = surfaceCallbacks,
                     onAttachSurface = playerViewModel::attachSurface,
                     onDetachSurface = playerViewModel::detachSurface,
                     zoneEnabled = playerViewModel::gestureEnabled,
@@ -651,28 +667,25 @@ fun BrowserScreen(
                     hintState = playerViewModel.hintState,
                     subtitleCuesState = playerViewModel.subtitleCuesState,
                     modifier = surfaceModifier,
+                    managedByHost = true,
                 )
             }
-            if (isMini) {
-                MiniPlayerWindow(
+            MiniPlayerWindow(
                     screenWidthDp = availableWidthDp,
-                    bottomInsetDp = bottomInsetDp,
+                    bottomInsetDp = navigationBottomDp,
                     store = miniPlayerStore,
                     showStroke = playerState.controlsVisible,
                     onBackgroundTap = playerViewModel::onToggleControls,
                     onDismiss = playerViewModel::onMiniClose,
+                    mini = isMini,
+                    fillsWindow = inPip || playerState.fullscreen,
+                    embeddedTopDp = PlayerUi.playerTopOffsetDp(false, playerState.pageTopDp, topInsetDp),
+                    embeddedHeightDp = PlayerUi.embeddedHeightDp(playerState.pageHeightDp, availableWidthDp),
+                    topInsetDp = topInsetDp,
+                    modifier = if (inPip || playerState.fullscreen) Modifier else Modifier.padding(start = leftInsetDp.dp, end = rightInsetDp.dp),
                 ) {
                     playerSurface(Modifier.fillMaxSize())
                 }
-            } else {
-                playerSurface(
-                    if (inPip || playerState.fullscreen) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier.align(Alignment.TopCenter)
-                    },
-                )
-            }
         }
 
         // The PiP window must show the video: the extension screen is an
@@ -719,7 +732,6 @@ private fun createHosts(
     onOpenWith: (String) -> Unit,
     onAbout: () -> Unit,
     extractor: Extractor,
-    playerCache: PlayerCache,
     playerHooks: PlayerHooks,
     onAddToQueue: ((Bridge.QueueItemJson?) -> Unit)? = null,
     onShowMediaItemMenu: ((Bridge.QueueItemJson) -> Unit)? = null,
@@ -741,7 +753,6 @@ private fun createHosts(
                 webView.reload()
             },
             extractor = extractor,
-            playerCache = playerCache,
             playerHooks = playerHooks,
             tabId = tabId,
             onAddToQueue = onAddToQueue,
@@ -759,7 +770,6 @@ private fun destroyHost(host: BrowserHost) {
     host.downloadBridge?.detach(webView)
     webView.stopLoading()
     webView.removeJavascriptInterface(Bridge.NAME)
-    webView.removeJavascriptInterface(WebViewFactory.LITE_ALIAS)
     webView.removeJavascriptInterface(NetTracer.JS_NAME)
     webView.removeJavascriptInterface(DownloadWebBridge.FALLBACK_NAME)
     webView.loadUrl("about:blank")

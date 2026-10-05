@@ -69,9 +69,11 @@ object StreamSelection {
     }
 
     internal fun isBetter(a: Format, b: Format): Boolean {
-        val potA = hasPoToken(a)
-        val potB = hasPoToken(b)
-        if (potA != potB) return potA
+        if (a.requestPlan == null && b.requestPlan == null) {
+            val potA = hasPoToken(a)
+            val potB = hasPoToken(b)
+            if (potA != potB) return potA
+        }
         val pa = codecPriority(a.codec)
         val pb = codecPriority(b.codec)
         if (pa != pb) return pa > pb
@@ -89,6 +91,7 @@ object StreamSelection {
      */
     fun preferPlayable(formats: List<Format>, allowAndroidVr: Boolean = false): List<Format> {
         val decodable = formats.filter(CodecCapabilities::isDecodable)
+        if (decodable.any { it.requestPlan != null }) return decodable.filter { it.requestPlan != null }
         val withPot = decodable.filter(::hasPoToken)
         if (withPot.isNotEmpty()) return withPot
         val stable = decodable.filter { !isAndroidVr(it) }

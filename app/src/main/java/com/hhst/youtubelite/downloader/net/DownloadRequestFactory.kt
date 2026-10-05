@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.downloader.net
 
+import android.webkit.CookieManager
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -16,7 +18,7 @@ object NoCookies : DownloadCookieSource {
 
 object WebViewCookies : DownloadCookieSource {
     override fun cookie(url: String): String? =
-        runCatching { android.webkit.CookieManager.getInstance().getCookie(url) }.getOrNull()
+        runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
 }
 
 /**
@@ -41,6 +43,7 @@ object DownloadRequestFactory {
             headers = source.headers,
             resourceIdentity = source.resourceIdentity.orEmpty(),
             postPulse = source.postPulse,
+            requestPlan = source.requestPlan,
         )
 
     fun build(
@@ -48,7 +51,12 @@ object DownloadRequestFactory {
         start: Long? = null,
         endInclusive: Long? = null,
         cookies: DownloadCookieSource = NoCookies,
+        mediaRequests: YoutubeMediaRequests? = null,
     ): Request {
+        if (plan.requestPlan != null && mediaRequests != null) {
+            val length = if (start != null && endInclusive != null) endInclusive - start + 1 else -1
+            return mediaRequests.build(plan.url, plan.requestPlan, start ?: 0, length)
+        }
         var url = plan.url
         val builder = Request.Builder()
         val ranged = start != null && endInclusive != null
@@ -98,11 +106,14 @@ object DownloadRangeParser {
 
     fun parse(header: String?): ContentRange? {
         val raw = header?.trim().orEmpty()
-        val match = HEADER.find(raw) ?: return null
+        val match = HEADER.matchEntire(raw) ?: return null
         val total = match.groupValues[3].toLongOrNull()
+        val start = match.groupValues[1].toLongOrNull() ?: return null
+        val end = match.groupValues[2].toLongOrNull() ?: return null
+        if (end < start || total != null && (total <= 0 || end >= total)) return null
         return ContentRange(
-            start = match.groupValues[1].toLong(),
-            end = match.groupValues[2].toLong(),
+            start = start,
+            end = end,
             total = total,
         )
     }
@@ -125,6 +136,7 @@ object DownloadRangeParser {
             if (contentRange == null) return Decision.INVALID
             if (contentRange.start != requestedStart) return Decision.INVALID
             if (contentRange.end < requestedStart) return Decision.INVALID
+            if (contentRange.end > requestedEnd) return Decision.INVALID
             return Decision.MATCH
         }
         if (code != 200) return Decision.INVALID
@@ -133,7 +145,7 @@ object DownloadRangeParser {
         }
         val wanted = requestedEnd - requestedStart + 1L
         if (rangeMode == DownloadRangeMode.QUERY_PARAM) {
-            if (contentLength == null || contentLength == wanted) return Decision.MATCH
+            if (contentLength == null || contentLength in 0..wanted) return Decision.MATCH
             return Decision.FULL_FALLBACK
         }
         if (requestedStart == 0L && contentLength != null && contentLength == wanted) {

@@ -233,6 +233,7 @@ class DownloadEngine(
                 source = source,
                 dest = dest,
                 verified = componentSnap.chunks,
+                onProgress = { chunk, total -> coordinator.reportChunk(taskId, generation, chunk, total) },
                 onChunk = { chunk -> coordinator.reportChunk(taskId, generation, chunk) },
             )
             if (result != TransferResult.Completed) return result
@@ -287,7 +288,8 @@ class DownloadEngine(
         val task = snap.task
         return !task.removed && !task.userPaused && !task.userCancelled &&
             task.status != DownloadStatus.CANCELLED &&
-            task.status != DownloadStatus.PAUSED
+            task.status != DownloadStatus.PAUSED &&
+            task.status != DownloadStatus.FAILED && task.phase != DownloadPhase.COMPLETE
     }
 
     private fun mimeFor(kind: AssetKind, file: File): String = when (kind) {

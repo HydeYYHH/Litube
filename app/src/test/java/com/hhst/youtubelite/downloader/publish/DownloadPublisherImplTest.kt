@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-class DownloadPublisherTest {
+class DownloadPublisherImplTest {
 
     @Test
     fun publishWriteVerifyComplete_thenOpenableUri() = runBlocking {

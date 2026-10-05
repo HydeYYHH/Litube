@@ -12,15 +12,15 @@ import org.junit.Test
 class YoutubeDownloadRequestAdapterTest {
 
     @Test
-    fun webAdaptive_postPulseRangeQueryAndWebCookies() {
+    fun webAdaptive_startsWithGet() {
         val url = playbackUrl(137, client = "WEB")
         val plan = YoutubeDownloadRequestAdapter.adaptUrl(TEST_VIDEO_ID, url, 137)
-        assertEquals(DownloadHttpMethod.POST, plan.method)
-        assertTrue(plan.postPulse)
-        assertEquals(DownloadRangeMode.QUERY_PARAM, plan.rangeMode)
-        assertEquals(DownloadCookiePolicy.WEB_SESSION, plan.cookiePolicy)
-        assertEquals("WEB", plan.client)
-        assertEquals("https://www.youtube.com", plan.headers["Origin"])
+        assertEquals(DownloadHttpMethod.GET, plan.method)
+        assertFalse(plan.postPulse)
+        assertEquals(DownloadRangeMode.HTTP_HEADER, plan.rangeMode)
+        assertEquals(DownloadCookiePolicy.NONE, plan.cookiePolicy)
+        assertEquals(null, plan.client)
+        assertEquals(null, plan.headers["Origin"])
         assertEquals(DownloadHttpClients.WORK_DIR, plan.workingDirectory)
         assertNotEquals("player", plan.workingDirectory)
     }
@@ -29,10 +29,10 @@ class YoutubeDownloadRequestAdapterTest {
     fun androidMuxed18_usesRangeHeaderNotQuery() {
         val url = playbackUrl(18, client = "ANDROID")
         val plan = YoutubeDownloadRequestAdapter.adaptUrl(TEST_VIDEO_ID, url, 18)
-        assertEquals(DownloadHttpMethod.POST, plan.method)
+        assertEquals(DownloadHttpMethod.GET, plan.method)
         assertEquals(DownloadRangeMode.HTTP_HEADER, plan.rangeMode)
         assertEquals(DownloadCookiePolicy.NONE, plan.cookiePolicy)
-        assertEquals("ANDROID", plan.client)
+        assertEquals(null, plan.client)
     }
 
     @Test

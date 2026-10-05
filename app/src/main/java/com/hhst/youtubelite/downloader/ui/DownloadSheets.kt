@@ -12,11 +12,23 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
+import java.util.Locale
+import com.hhst.youtubelite.player.datasource.StreamSelection
+import com.hhst.youtubelite.downloader.resolve.DownloadSelector
+import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
+import kotlinx.coroutines.currentCoroutineContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,219 +100,201 @@ fun SingleVideoConfirmSheet(
     embedded: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
-    val last = viewModel.prefs.lastConfig()
-    var audioOnly by rememberSaveable { mutableStateOf(last.audioOnly) }
-    var quality by rememberSaveable { mutableStateOf(last.videoQuality ?: viewModel.prefs.defaultQuality()) }
-    var more by rememberSaveable { mutableStateOf(false) }
-    var audioTrack by rememberSaveable { mutableStateOf(last.audioTrack.orEmpty()) }
-    var includeSubtitle by rememberSaveable { mutableStateOf(last.includeSubtitle) }
-    var subtitleLanguage by rememberSaveable { mutableStateOf(last.subtitleLanguage.orEmpty()) }
-    var includeCover by rememberSaveable { mutableStateOf(last.includeCover) }
-    var fileName by rememberSaveable { mutableStateOf(last.fileNameTemplate.orEmpty()) }
-    var attachmentsOnly by rememberSaveable { mutableStateOf(last.attachmentsOnly) }
-    var reason by rememberSaveable { mutableStateOf<String?>(null) }
-    var reasonKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var sizeKind by rememberSaveable { mutableStateOf(SizeKind.UNKNOWN.name) }
-    var sizeBytes by rememberSaveable { mutableStateOf(-1L) }
-    var catalogTitle by rememberSaveable { mutableStateOf(title) }
-    var catalogAuthor by rememberSaveable { mutableStateOf(author.orEmpty()) }
-    var qualities by rememberSaveable { mutableStateOf(listOf(quality)) }
-    var audioLabels by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var audioKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var subLabels by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var subKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
-
+    val last = remember(videoId) { viewModel.prefs.lastConfig() }
+    var audioOnly by rememberSaveable(videoId) { mutableStateOf(last.audioOnly) }
+    var quality by rememberSaveable(videoId) { mutableStateOf(last.videoQuality ?: viewModel.prefs.defaultQuality()) }
+    var videoItag by rememberSaveable(videoId) { mutableStateOf<Int?>(null) }
+    var more by rememberSaveable(videoId) { mutableStateOf(false) }
+    var audioTrack by rememberSaveable(videoId) { mutableStateOf(last.audioTrack.orEmpty()) }
+    var includeSubtitle by rememberSaveable(videoId) { mutableStateOf(last.includeSubtitle) }
+    var subtitleLanguage by rememberSaveable(videoId) { mutableStateOf(last.subtitleLanguage.orEmpty()) }
+    var includeCover by rememberSaveable(videoId) { mutableStateOf(last.includeCover) }
+    var fileName by rememberSaveable(videoId) { mutableStateOf(last.fileNameTemplate.orEmpty()) }
+    var attachmentsOnly by rememberSaveable(videoId) { mutableStateOf(last.attachmentsOnly) }
+    var catalogState by remember(videoId) { mutableStateOf<DownloadViewModel.CatalogState?>(null) }
+    var retry by remember(videoId) { mutableStateOf(0) }
+    var picker by remember(videoId) { mutableStateOf<String?>(null) }
+    var submitting by remember(videoId) { mutableStateOf(false) }
+    LaunchedEffect(videoId, retry) {
+        catalogState = null
+        val loaded = viewModel.loadCatalog(videoId, fresh = retry > 0)
+        currentCoroutineContext().ensureActive()
+        if (loaded is DownloadViewModel.CatalogState.Ready && videoItag == null) {
+            val options = DownloadPresentation.qualityOptions(loaded.catalog)
+            // Last quality is a cap across videos; a new explicit choice is exact.
+            if (quality !in options) quality = options.firstOrNull {
+                StreamSelection.parseHeight(it) <=
+                    StreamSelection.parseHeight(quality)
+            } ?: options.lastOrNull().orEmpty()
+            videoItag = DownloadPresentation.qualityItag(loaded.catalog, quality)
+        }
+        catalogState = loaded
+    }
+    val catalog = (catalogState as? DownloadViewModel.CatalogState.Ready)?.catalog
+    val qualities = remember(catalog) { catalog?.let { DownloadPresentation.qualityOptions(it) }.orEmpty() }
     val config = DownloadConfig(
-        videoQuality = quality,
-        audioOnly = audioOnly && !attachmentsOnly,
-        audioTrack = audioTrack.takeIf { it.isNotBlank() },
-        includeSubtitle = includeSubtitle,
-        subtitleLanguage = subtitleLanguage.takeIf { it.isNotBlank() },
-        includeCover = includeCover,
-        fileNameTemplate = fileName.takeIf { it.isNotBlank() },
+        videoQuality = quality.takeIf { it.isNotBlank() }, videoItagHint = videoItag,
+        audioOnly = audioOnly && !attachmentsOnly, audioTrack = audioTrack.takeIf { it.isNotBlank() },
+        includeSubtitle = includeSubtitle, subtitleLanguage = subtitleLanguage.takeIf { it.isNotBlank() },
+        includeCover = includeCover, fileNameTemplate = fileName.takeIf { it.isNotBlank() },
         attachmentsOnly = attachmentsOnly,
     )
-
-    // Candidate display must not depend on selection success: a first preview
-    // that fails (ambiguous/missing audio track) still has a catalog with the
-    // tracks the user can pick to unblock the download.
-    fun applyCatalog(catalog: DownloadCatalog) {
-        catalogTitle = catalog.title.ifBlank { catalogTitle }
-        catalogAuthor = catalog.author ?: catalogAuthor
-        val choices = AudioTrackIdentity.choices(catalog.formats)
-        audioKeys = choices.map { it.key }
-        audioLabels = choices.map { it.label }
-        subKeys = catalog.subtitles.map { SubtitleSelection.key(it.languageCode, it.autoGenerated) }
-        subLabels = catalog.subtitles.map {
-            val tag = it.languageCode
-            if (it.autoGenerated) "$tag (auto)" else tag
+    val preview = remember(catalog, config) { catalog?.let { viewModel.preview(it, config) } }
+    val ready = preview as? DownloadViewModel.PreviewState.Ready
+    val reason = (catalogState as? DownloadViewModel.CatalogState.Failed)?.reason
+        ?: (preview as? DownloadViewModel.PreviewState.Unavailable)?.reason
+    val catalogTitle = catalog?.title?.ifBlank { title } ?: title
+    val catalogAuthor = catalog?.author ?: author.orEmpty()
+    val audioChoices = remember(catalog) { AudioTrackIdentity.choices(catalog?.formats.orEmpty().filter {
+        it.audioOnly && DownloadCodecs.audioEnabled(it) &&
+            DownloadSelector.isFileStream(it)
+    }) }
+    val defaultLabel = stringResource(R.string.player_audio_default)
+    val audioOptions = listOf("" to defaultLabel) + audioChoices.map { choice ->
+        val format = catalog?.formats?.firstOrNull { AudioTrackIdentity.key(it) == choice.key }
+        val language = format?.audioLocale?.let(AudioTrackIdentity::displayLanguage) ?: choice.label
+        val type = when {
+            format?.audioTrackOriginal == true || format?.audioTrackType == "original" -> stringResource(R.string.download_audio_original)
+            format?.audioTrackType == "dubbed" -> stringResource(R.string.download_audio_dubbed)
+            else -> format?.audioTrackType.orEmpty()
         }
+        choice.key to (language + if (type.isNotBlank()) " · $type" else "")
     }
-
-    LaunchedEffect(videoId, config) {
-        when (val state = viewModel.preview(videoId, config)) {
-            is DownloadViewModel.PreviewState.Ready -> {
-                reason = null
-                reasonKey = null
-                qualities = state.qualities.ifEmpty { qualities }
-                sizeKind = state.size.kind.name
-                sizeBytes = state.size.bytes ?: -1L
-                applyCatalog(state.catalog)
-            }
-            is DownloadViewModel.PreviewState.Unavailable -> {
-                reason = state.message
-                reasonKey = state.reason.name
-                state.catalog?.let { catalog ->
-                    qualities = DownloadPresentation.qualityOptions(catalog).ifEmpty { qualities }
-                    applyCatalog(catalog)
-                }
-            }
-        }
-    }
-    LaunchedEffect(reasonKey) {
-        // Audio failures are only recoverable from the advanced options; open
-        // them so the track chips are visible without hunting.
-        if (reasonKey == DownloadUnavailableReason.AUDIO_TRACK_AMBIGUOUS.name ||
-            reasonKey == DownloadUnavailableReason.AUDIO_LANGUAGE_UNAVAILABLE.name
-        ) {
-            more = true
-        }
-    }
-
-    val existing = remember { mutableStateOf<DownloadItemUiState?>(null) }
-    LaunchedEffect(videoId) {
-        viewModel.observeVideo(videoId).collect { video ->
-            existing.value = video.tasks.firstOrNull()
-        }
-    }
-
+    val selectedAudioKey = if (audioTrack.isBlank()) "" else catalog?.formats?.firstOrNull {
+        it.audioOnly && AudioTrackIdentity.matches(it, audioTrack)
+    }?.let(AudioTrackIdentity::key) ?: audioTrack
+    val offLabel = stringResource(R.string.download_sub_off)
+    val subOptions = listOf("" to offLabel) + catalog?.subtitles.orEmpty().map {
+        SubtitleSelection.key(it.languageCode, it.autoGenerated) to
+            (Locale.forLanguageTag(it.languageCode).getDisplayName(Locale.getDefault()) +
+                " · " + stringResource(if (it.autoGenerated) R.string.download_sub_auto else R.string.download_sub_manual))
+    }.distinctBy { it.first }
+    val selectedAudio = audioOptions.firstOrNull { it.first == selectedAudioKey }?.second ?: stringResource(R.string.download_selection_missing)
+    val selectedSub = if (!includeSubtitle) offLabel else subOptions.firstOrNull {
+        it.first == subtitleLanguage || (!subtitleLanguage.contains('|') &&
+            SubtitleSelection.languageOf(it.first) == subtitleLanguage)
+    }?.second ?: stringResource(R.string.download_selection_missing)
+    val selectedSubKey = if (!includeSubtitle) "" else subOptions.firstOrNull {
+        it.first == subtitleLanguage || (!subtitleLanguage.contains('|') && it.first.isNotBlank() &&
+            SubtitleSelection.languageOf(it.first) == subtitleLanguage)
+    }?.first ?: subtitleLanguage
+    val existing = remember(videoId) { mutableStateOf<DownloadItemUiState?>(null) }
+    LaunchedEffect(videoId) { viewModel.observeVideo(videoId).collect { existing.value = it.tasks.firstOrNull() } }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val canDownload = reason == null
-    val downloadLabel = stringResource(R.string.download)
-    // Embedded hosts (tests) already wrap the body in their own scroll; only
-    // the ModalBottomSheet path needs internal scrolling to keep the submit
-    // button reachable on small screens.
-    val bodyScroll = if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState())
-    val sheetBody: @Composable () -> Unit = {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .then(bodyScroll)
-                .navigationBarsPadding()
-                .padding(horizontal = DownloadTokens.PageInset),
-        ) {
-            if (landscape) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    DownloadThumbnail(thumbnailUrl, Modifier.weight(1f).padding(end = 12.dp))
-                    Column(Modifier.weight(1.4f)) {
-                        SheetIdentity(catalogTitle, catalogAuthor)
-                        Spacer(Modifier.height(12.dp))
-                        MediaToggle(audioOnly = audioOnly, onChange = { audioOnly = it; attachmentsOnly = false })
+    val body: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = DownloadTokens.PageInset)) {
+            val scroll = if (embedded) Modifier else Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
+            Column(Modifier.fillMaxWidth().then(scroll)) {
+                if (landscape) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        DownloadThumbnail(thumbnailUrl, Modifier.weight(1f).padding(end = 12.dp))
+                        Column(Modifier.weight(1.4f)) { SheetIdentity(catalogTitle, catalogAuthor) }
+                    }
+                } else {
+                    DownloadThumbnail(thumbnailUrl, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(14.dp))
+                    SheetIdentity(catalogTitle, catalogAuthor)
+                }
+                Spacer(Modifier.height(14.dp))
+                MediaToggle(audioOnly) { audioOnly = it; attachmentsOnly = false }
+                if (catalogState == null) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        Text(stringResource(R.string.download_catalog_loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-            } else {
-                DownloadThumbnail(thumbnailUrl, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(14.dp))
-                SheetIdentity(catalogTitle, catalogAuthor)
-                Spacer(Modifier.height(14.dp))
-                MediaToggle(audioOnly = audioOnly, onChange = { audioOnly = it; attachmentsOnly = false })
-            }
-            Spacer(Modifier.height(4.dp))
-            SectionLabel(stringResource(R.string.download_quality))
-            QualityChipRow(quality, qualities) { quality = it }
-            SizeRow(SizeKind.valueOf(sizeKind), sizeBytes.takeIf { it >= 0L })
-            reason?.let {
-                Text(
-                    text = unavailableCopy(reasonKey),
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
-            existing.value?.let { item ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(phaseString(DownloadPresentation.phaseCopy(item))),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { viewModel.redownload(DownloadTarget.Task(item.taskId)) }) {
-                        Text(stringResource(R.string.download_redownload))
+                SelectionRow(stringResource(R.string.download_quality), if (catalog == null) "—" else quality.ifBlank { "—" },
+                    catalog != null && qualities.isNotEmpty() && !audioOnly && !attachmentsOnly) { picker = "quality" }
+                SelectionRow(stringResource(R.string.audio_track), selectedAudio, catalog != null && !attachmentsOnly) { picker = "audio" }
+                SelectionRow(stringResource(R.string.subtitles), selectedSub, catalog != null) { picker = "subtitle" }
+                SizeRow(ready?.size?.kind ?: SizeKind.UNKNOWN, ready?.size?.bytes)
+                val subtitleMissing = ready?.plan?.subtitleFailure == DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE
+                if (reason != null || subtitleMissing) {
+                    Text(unavailableCopy((reason ?: DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE).name),
+                        color = MaterialTheme.colorScheme.error, fontSize = 13.sp, lineHeight = 18.sp,
+                        modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (catalogState is DownloadViewModel.CatalogState.Failed || reason == DownloadUnavailableReason.NO_FILE_STREAMS) {
+                    TextButton(onClick = { retry++ }) { Text(stringResource(R.string.retry)) }
+                }
+                existing.value?.let { item ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(phaseString(DownloadPresentation.phaseCopy(item))), Modifier.weight(1f), fontSize = 13.sp)
+                        TextButton(onClick = { viewModel.redownload(DownloadTarget.Task(item.taskId)) }) { Text(stringResource(R.string.download_redownload)) }
                     }
                 }
+                MoreOptionsHandle(more) { more = !more }
+                if (more) MoreOptions(includeCover, { includeCover = it }, fileName, { fileName = it },
+                    attachmentsOnly, { attachmentsOnly = it; if (it) audioOnly = false })
+                Spacer(Modifier.height(12.dp))
             }
-            MoreOptionsHandle(open = more, onToggle = { more = !more })
-            if (more) {
-                MoreOptions(
-                    audioKeys = audioKeys,
-                    audioLabels = audioLabels,
-                    audioTrack = audioTrack,
-                    onAudioTrack = { audioTrack = it },
-                    subKeys = subKeys,
-                    subLabels = subLabels,
-                    includeSubtitle = includeSubtitle,
-                    subtitleLanguage = subtitleLanguage,
-                    onSubtitle = { include, lang ->
-                        includeSubtitle = include
-                        subtitleLanguage = lang
-                    },
-                    includeCover = includeCover,
-                    onCover = { includeCover = it },
-                    fileName = fileName,
-                    onFileName = { fileName = it },
-                    attachmentsOnly = attachmentsOnly,
-                    onAttachments = {
-                        attachmentsOnly = it
-                        if (it) audioOnly = false
-                    },
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            DownloadCapsuleButton(
-                text = downloadLabel,
-                iconRes = R.drawable.ic_download,
+            DownloadCapsuleButton(text = stringResource(R.string.download), iconRes = R.drawable.ic_download,
                 onClick = {
                     scope.launch {
-                        val result = viewModel.confirmSingle(
-                            DownloadRequest(
-                                videoId = videoId,
-                                title = catalogTitle.ifBlank { title }.ifBlank { videoId },
-                                author = catalogAuthor.ifBlank { author },
-                                thumbnailUrl = thumbnailUrl,
-                                config = config,
-                            ),
-                        )
-                        onSubmitted(result)
+                        submitting = true
+                        try {
+                            onSubmitted(viewModel.confirmSingle(DownloadRequest(videoId, catalogTitle.ifBlank { videoId },
+                                catalogAuthor.ifBlank { author }, thumbnailUrl, config.copy(
+                                    videoItagHint = ready?.plan?.video?.format?.itag ?: ready?.plan?.muxed?.format?.itag,
+                                    audioItagHint = ready?.plan?.audio?.format?.itag))))
+                        } finally { submitting = false }
                     }
-                },
-                enabled = canDownload,
-                modifier = Modifier.fillMaxWidth(),
-                contentDescription = downloadLabel,
-            )
+                }, enabled = ready != null && !submitting, modifier = Modifier.fillMaxWidth(),
+                contentDescription = stringResource(R.string.download))
             Spacer(Modifier.height(16.dp))
         }
     }
-    if (embedded) {
-        sheetBody()
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 0.dp,
-            shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner),
-        ) {
-            sheetBody()
+    if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
+    picker?.let { kind ->
+        val options = when (kind) { "quality" -> qualities.map { it to it }; "audio" -> audioOptions; else -> subOptions }
+        val selected = when (kind) { "quality" -> quality; "audio" -> selectedAudioKey; else -> selectedSubKey }
+        ChoiceDialog(stringResource(when (kind) { "quality" -> R.string.download_quality; "audio" -> R.string.audio_track; else -> R.string.subtitles }),
+            options, selected, { picker = null }) { key ->
+            when (kind) {
+                "quality" -> {
+                    quality = key
+                    videoItag = catalog?.let { DownloadPresentation.qualityItag(it, key) }
+                }
+                "audio" -> audioTrack = key
+                else -> { includeSubtitle = key.isNotBlank(); subtitleLanguage = key }
+            }
+            picker = null
         }
     }
+}
+
+@Composable
+private fun SelectionRow(name: String, selected: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
+        .heightIn(min = 56.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+        Text(selected, Modifier.weight(1.2f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
+        Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.padding(start = 8.dp).size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .4f))
+    }
+}
+
+@Composable
+private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, selected: String,
+    onDismiss: () -> Unit, onSelect: (String) -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
+        containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp,
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                options.forEach { (key, label) ->
+                    Row(Modifier.fillMaxWidth().selectable(selected = selected == key,
+                        role = Role.RadioButton, onClick = { onSelect(key) })
+                        .heightIn(min = 52.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected == key, onClick = null)
+                        Text(label, Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 /** Small caps-style section header used across the download surfaces. */
@@ -394,6 +389,7 @@ private fun MoreOptionsHandle(open: Boolean, onToggle: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = DownloadTokens.MinTouch)
+            .clickable(onClick = onToggle)
             .semantics { contentDescription = moreLabel },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -419,15 +415,6 @@ private fun MoreOptionsHandle(open: Boolean, onToggle: () -> Unit) {
 
 @Composable
 private fun MoreOptions(
-    audioKeys: List<String>,
-    audioLabels: List<String>,
-    audioTrack: String,
-    onAudioTrack: (String) -> Unit,
-    subKeys: List<String>,
-    subLabels: List<String>,
-    includeSubtitle: Boolean,
-    subtitleLanguage: String,
-    onSubtitle: (Boolean, String) -> Unit,
     includeCover: Boolean,
     onCover: (Boolean) -> Unit,
     fileName: String,
@@ -436,30 +423,6 @@ private fun MoreOptions(
     onAttachments: (Boolean) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        if (audioKeys.isNotEmpty()) {
-            SectionLabel(stringResource(R.string.audio_track))
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                audioKeys.zip(audioLabels).forEach { (key, label) ->
-                    DownloadFilterChip(audioTrack == key, label) { onAudioTrack(key) }
-                }
-            }
-        }
-        OptionSwitch(stringResource(R.string.subtitles), includeSubtitle) {
-            onSubtitle(it, subtitleLanguage.ifBlank { subKeys.firstOrNull().orEmpty() })
-        }
-        if (includeSubtitle && subKeys.isNotEmpty()) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                subKeys.zip(subLabels).forEach { (key, label) ->
-                    DownloadFilterChip(subtitleLanguage == key, label) { onSubtitle(true, key) }
-                }
-            }
-        }
         OptionSwitch(stringResource(R.string.download_cover), includeCover, onCover)
         OutlinedTextField(
             value = fileName,
@@ -488,7 +451,7 @@ private fun OptionSwitch(label: String, checked: Boolean, onChange: (Boolean) ->
 }
 
 @Composable
-private fun unavailableCopy(reasonKey: String?): String {
+internal fun unavailableCopy(reasonKey: String?): String {
     val reason = reasonKey?.let { runCatching { DownloadUnavailableReason.valueOf(it) }.getOrNull() }
     return when (reason) {
         DownloadUnavailableReason.LIVE -> stringResource(R.string.download_reason_live)
@@ -499,7 +462,10 @@ private fun unavailableCopy(reasonKey: String?): String {
         DownloadUnavailableReason.AUDIO_LANGUAGE_UNAVAILABLE -> stringResource(R.string.download_reason_audio_missing)
         DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE -> stringResource(R.string.download_reason_subtitle_missing)
         DownloadUnavailableReason.CODEC_NOT_ENABLED -> stringResource(R.string.download_reason_codec)
-        null -> stringResource(R.string.download_reason_no_streams)
+        DownloadUnavailableReason.NETWORK_ERROR -> stringResource(R.string.download_reason_network)
+        DownloadUnavailableReason.SESSION_CHANGED -> stringResource(R.string.download_reason_session)
+        DownloadUnavailableReason.EXTRACTION_FAILED -> stringResource(R.string.download_reason_extraction)
+        null -> stringResource(R.string.download_reason_extraction)
     }
 }
 

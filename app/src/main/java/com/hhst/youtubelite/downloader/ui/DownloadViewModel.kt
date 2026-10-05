@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
 
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
@@ -18,6 +19,8 @@ import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.downloader.core.RemoveMode
 import com.hhst.youtubelite.downloader.core.SnapshotReject
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
+import com.hhst.youtubelite.downloader.resolve.DownloadPlan
+import java.io.IOException
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.resolve.DownloadSelection
 import com.hhst.youtubelite.downloader.resolve.DownloadSelector
@@ -78,25 +81,42 @@ class DownloadViewModel(
     fun validateSnapshot(snapshot: BatchSnapshot, payloadBytes: Int? = null): SnapshotReject? =
         DownloadSnapshotGuard.validate(snapshot, payloadBytes)
 
-    suspend fun preview(videoId: String, config: DownloadConfig): PreviewState {
-        val source = catalogs ?: return PreviewState.Unavailable(
-            DownloadUnavailableReason.NO_FILE_STREAMS,
-            "catalog source is not available",
-        )
-        val catalog = try {
-            source.catalog(videoId)
-        } catch (t: Throwable) {
-            return PreviewState.Unavailable(
-                DownloadUnavailableReason.NO_FILE_STREAMS,
-                t.message ?: "catalog failed",
-            )
+    sealed interface CatalogState {
+        data class Ready(val catalog: DownloadCatalog) : CatalogState
+        data class Failed(val reason: DownloadUnavailableReason) : CatalogState
+    }
+
+    suspend fun loadCatalog(videoId: String, fresh: Boolean = false): CatalogState {
+        val source = catalogs ?: return CatalogState.Failed(DownloadUnavailableReason.EXTRACTION_FAILED)
+        return try {
+            CatalogState.Ready(if (fresh) source.refresh(videoId) else source.catalog(videoId))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            val causes = generateSequence(failure as Throwable?) { it.cause }.toList()
+            val reason = when {
+                causes.any { it.message.orEmpty().contains("SESSION_") } -> DownloadUnavailableReason.SESSION_CHANGED
+                causes.any { it is IOException } -> DownloadUnavailableReason.NETWORK_ERROR
+                else -> DownloadUnavailableReason.EXTRACTION_FAILED
+            }
+            CatalogState.Failed(reason)
         }
+    }
+
+    suspend fun preview(videoId: String, config: DownloadConfig): PreviewState =
+        when (val result = loadCatalog(videoId)) {
+            is CatalogState.Ready -> preview(result.catalog, config)
+            is CatalogState.Failed -> PreviewState.Unavailable(result.reason, result.reason.name)
+        }
+
+    fun preview(catalog: DownloadCatalog, config: DownloadConfig): PreviewState {
         return when (val selection = DownloadSelector.select(catalog, config)) {
             is DownloadSelection.Ready -> PreviewState.Ready(
                 catalog = catalog,
                 config = config,
                 size = DownloadPresentation.sizeCopy(selection.plan),
                 qualities = DownloadPresentation.qualityOptions(catalog),
+                plan = selection.plan,
             )
             is DownloadSelection.Failed -> PreviewState.Unavailable(selection.reason, selection.message, catalog)
         }
@@ -169,6 +189,7 @@ class DownloadViewModel(
             val config: DownloadConfig,
             val size: SizeCopy,
             val qualities: List<String>,
+            val plan: DownloadPlan = DownloadPlan(),
         ) : PreviewState()
 
         data class Unavailable(

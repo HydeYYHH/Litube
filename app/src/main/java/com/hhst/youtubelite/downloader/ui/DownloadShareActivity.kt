@@ -15,7 +15,7 @@ import com.hhst.youtubelite.downloader.share.DownloadShareTarget
 
 /**
  * Independent share-sheet "Download" entry. Cold start is supported because
- * [com.hhst.youtubelite.App] starts Koin before any activity.
+ * [App] starts Koin before any activity.
  */
 class DownloadShareActivity : Activity() {
 

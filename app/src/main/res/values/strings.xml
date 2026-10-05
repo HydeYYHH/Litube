@@ -156,6 +156,10 @@
     <string name="download_complete">Download complete</string>
     <string name="download_paused">Paused</string>
     <string name="download_failed">Download failed</string>
+    <string name="download_reason_storage">Not enough storage</string>
+    <string name="download_reason_memory">Out of memory</string>
+    <string name="download_reason_forbidden">Server denied download (403)</string>
+    <string name="download_reason_rate_limit">Too many requests (429)</string>
     <string name="downloads">Downloads</string>
     <string name="download">Download</string>
     <string name="download_video">Video</string>
@@ -174,6 +178,7 @@
     <string name="download_delete">Delete</string>
     <string name="download_delete_confirm">Remove this download?</string>
     <string name="download_delete_record">Remove from list</string>
+    <string name="download_delete_local_file">Delete local file</string>
     <string name="download_delete_files">Delete files</string>
     <string name="download_delete_downloads">Delete downloads</string>
     <string name="download_more_actions">More actions</string>
@@ -221,4 +226,15 @@
     <string name="download_resume_all">Resume all</string>
     <string name="download_delete_batch">Delete batch</string>
     <string name="download_history_cleared">History cleared</string>
+    <string name="copy_extraction_diagnostics">Copy extraction diagnostics</string>
+    <string name="download_catalog_loading">Loading download options…</string>
+    <string name="download_selection_missing">This saved selection is unavailable</string>
+    <string name="download_sub_off">Off</string>
+    <string name="download_sub_auto">Auto-generated</string>
+    <string name="download_sub_manual">Human captions</string>
+    <string name="download_reason_network">Could not connect. Check your network and retry.</string>
+    <string name="download_reason_session">Your session changed. Retry to refresh download options.</string>
+    <string name="download_reason_extraction">Could not extract download options. Please retry.</string>
+    <string name="download_audio_original">Original</string>
+    <string name="download_audio_dubbed">Dubbed</string>
 </resources>

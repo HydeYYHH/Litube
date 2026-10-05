@@ -13,6 +13,7 @@ import com.hhst.youtubelite.extractor.Extractor
 class SharedExtractorCatalogSource(
     private val extractor: Extractor,
 ) : DownloadCatalogSource {
+    override fun scope(): String = extractor.recoveryScope()
     override suspend fun catalog(videoId: String): DownloadCatalog {
         val (metadata, stream) = extractor.awaitMedia(videoId)
         return DownloadCatalog.from(metadata, stream)

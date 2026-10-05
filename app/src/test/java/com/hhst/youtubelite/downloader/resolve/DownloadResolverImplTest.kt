@@ -7,6 +7,8 @@ import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
 import com.hhst.youtubelite.downloader.resolve.PoTokenEvictor
+import com.hhst.youtubelite.downloader.ui.DownloadPresentation
+import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
 import com.hhst.youtubelite.downloader.resolve.TEST_VIDEO_ID
 import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.catalog
@@ -26,7 +28,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DownloadResolverTest {
+class DownloadResolverImplTest {
 
     private val baseFormats = listOf(
         videoFormat(720),
@@ -148,7 +150,7 @@ class DownloadResolverTest {
     }
 
     @Test
-    fun poTokenRefresh_serialMaxTwoRounds() = runTest {
+    fun poTokenRefresh_concurrentComponentsShareOneRefresh() = runTest {
         val catalogs = ImmediateCatalog(catalog(baseFormats))
         val lifecycle = DownloadPoTokenLifecycle(catalogs, PoTokenEvictor { })
         val identity = DownloadResourceIdentity.of(TEST_VIDEO_ID, videoFormat(1080))
@@ -156,9 +158,10 @@ class DownloadResolverTest {
         val second = lifecycle.refreshAfter403(TEST_VIDEO_ID, listOf(identity))
         val third = lifecycle.refreshAfter403(TEST_VIDEO_ID, listOf(identity))
         assertEquals(1, first.round)
-        assertEquals(2, second.round)
-        assertTrue(third.exhausted)
-        assertEquals(3, third.round)
+        assertEquals(1, second.round)
+        assertFalse(third.exhausted)
+        assertEquals(1, third.round)
+        assertTrue(first.catalog === second.catalog && second.catalog === third.catalog)
     }
 
     @Test
@@ -175,6 +178,57 @@ class DownloadResolverTest {
         val snap = h.repo.transact { snapshot(taskId) }!!
         assertEquals(DownloadStatus.FAILED, snap.task.status)
         assertEquals(DownloadUnavailableReason.LIVE.name, snap.task.errorMessage)
+    }
+
+    @Test
+    fun extractionFailure_exposesActualCauseInDownloadRow() = runTest {
+        val h = DownloadHarness()
+        val taskId = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
+        val catalogs = object : DownloadCatalogSource {
+            override suspend fun catalog(videoId: String): DownloadCatalog =
+                throw java.io.IOException("Connection timed out\n  at extractor")
+            override suspend fun refresh(videoId: String) = catalog(videoId)
+        }
+        val resolver = DownloadResolverImpl(h.coordinator, h.repo, catalogs)
+        val outcome = resolver.resolve(taskId) as DownloadResolveOutcome.Failed
+        assertEquals(DownloadUnavailableReason.EXTRACTION_FAILED.name, outcome.reason)
+        val snapshot = h.repo.transact { snapshot(taskId) }!!
+        val row = DownloadUiMapper.item(snapshot)
+        assertEquals("Connection timed out", DownloadPresentation.failureReason(row))
+    }
+
+    @Test
+    fun unknownMediaLength_doesNotUseBitrateEstimateOrPreviousLength() = runTest {
+        val h = DownloadHarness()
+        val taskId = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
+        h.coordinator.reportResolved(taskId, 0, listOf(ResolvedComponentUpdate(
+            AssetKind.VIDEO, InputComponentKind.VIDEO, expectedBytes = 999)))
+        val unknown = videoFormat(1080, clen = 0).copy(bitrate = 4_000_000, approxDurationMs = 60_000)
+        val resolver = DownloadResolverImpl(h.coordinator, h.repo, ImmediateCatalog(catalog(listOf(unknown, audioFormat()))))
+        assertTrue(resolver.resolve(taskId) is DownloadResolveOutcome.Ready)
+        val snapshot = h.repo.transact { snapshot(taskId) }!!
+        val video = snapshot.assets.first { it.asset.kind == AssetKind.VIDEO }
+            .components.first { it.component.kind == InputComponentKind.VIDEO }
+        assertEquals(null, video.component.expectedBytes)
+        assertEquals(null, DownloadUiMapper.item(snapshot).expectedBytes)
+    }
+
+    @Test
+    fun changingSessionDoesNotReuseThePreviousRecoveryCatalog() = runTest {
+        var account = "first"
+        var refreshes = 0
+        val catalogs = object : DownloadCatalogSource {
+            override fun scope(): String = account
+            override suspend fun catalog(videoId: String): DownloadCatalog = catalog(baseFormats)
+            override suspend fun refresh(videoId: String): DownloadCatalog { refreshes++; return catalog(videoId) }
+        }
+        val lifecycle = DownloadPoTokenLifecycle(catalogs)
+        val first = lifecycle.refreshAfter403(TEST_VIDEO_ID, emptyList())
+        val shared = lifecycle.refreshAfter403(TEST_VIDEO_ID, emptyList())
+        assertTrue(first.catalog === shared.catalog)
+        account = "second"
+        lifecycle.refreshAfter403(TEST_VIDEO_ID, emptyList())
+        assertEquals(2, refreshes)
     }
 }
 

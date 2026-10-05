@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.downloader.core
 
 import java.io.File
+import java.util.UUID
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Metadata, selection, and PoToken-aware resolve. */
 interface DownloadResolver {
@@ -34,6 +36,7 @@ data class DownloadComponentSource(
     val client: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val postPulse: Boolean = false,
+    @Transient val requestPlan: RequestPlan? = null,
 )
 
 /**
@@ -48,6 +51,8 @@ interface DownloadTransport {
         source: DownloadComponentSource,
         dest: File,
         verified: List<DownloadChunk>,
+        // Live bytes are unverified; only onChunk supplies resumable checkpoints.
+        onProgress: suspend (DownloadChunk, Long?) -> Boolean = { _, _ -> true },
         onChunk: suspend (DownloadChunk) -> Boolean,
     ): TransferResult = TransferResult.Failed("transport not configured")
 }
@@ -129,7 +134,7 @@ fun interface IdFactory {
 }
 
 object UuidIdFactory : IdFactory {
-    override fun next(kind: String): String = "$kind-${java.util.UUID.randomUUID()}"
+    override fun next(kind: String): String = "$kind-${UUID.randomUUID()}"
 }
 
 object NoOpTransport : DownloadTransport {

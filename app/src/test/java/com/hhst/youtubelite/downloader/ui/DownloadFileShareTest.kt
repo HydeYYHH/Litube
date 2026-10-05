@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
 
 import android.content.Intent
+import com.hhst.youtubelite.downloader.io.DownloadPublishedUris
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -25,12 +26,12 @@ class DownloadFileShareTest {
         assertNull(DownloadFileShare.parseOpenable("http://example.com/clip.mp4"))
         assertNull(DownloadFileShare.parseOpenable("content://"))
         assertTrue(
-            com.hhst.youtubelite.downloader.io.DownloadPublishedUris.isOpenable(
+            DownloadPublishedUris.isOpenable(
                 "content://com.hhst.youtubelite.download.fileprovider/downloads/clip.mp4",
             ),
         )
         assertTrue(
-            com.hhst.youtubelite.downloader.io.DownloadPublishedUris.isOpenable("file:///storage/emulated/0/Download/a.mp4"),
+            DownloadPublishedUris.isOpenable("file:///storage/emulated/0/Download/a.mp4"),
         )
     }
 }

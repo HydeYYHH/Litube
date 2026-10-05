@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__nt) return;
-  window.__nt = true;
+  if (window.__netTracer) return;
+  window.__netTracer = true;
 
   const SLOW = 500;
   const MAX_URL = 512;
@@ -34,8 +34,8 @@
         window.NetTrace.onRequestLogged(JSON.stringify(record));
       }
     } catch {}
-    const tag = record.ms >= SLOW ? 'SLOW' : 'ok';
-    const line = `[NetTracer:${tag}] ${record.method} ${record.ms}ms #${record.status} ${record.src} ${clip(record.url)}`;
+    const tag = record.ms >= SLOW ? 'slow' : 'ok';
+    const line = `[net-tracer:${tag}] ${record.method} ${record.ms}ms #${record.status} ${record.src} ${clip(record.url)}`;
     if (record.ms >= SLOW) console.warn(line);
     else console.debug(line);
   }
@@ -84,7 +84,7 @@
   const _send = XO.send;
 
   XO.open = function (method, url) {
-    this.__nt = {
+    this.__netTracer = {
       method: String(method || 'GET').toUpperCase(),
       url: clip(url),
       t0: 0,
@@ -93,7 +93,7 @@
   };
 
   XO.send = function () {
-    const meta = this.__nt || { method: 'GET', url: '', t0: 0 };
+    const meta = this.__netTracer || { method: 'GET', url: '', t0: 0 };
     meta.t0 = now();
     let once = false;
     const done = () => {

@@ -2,25 +2,74 @@
 
 package com.hhst.youtubelite.di
 
+import android.os.Build
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.room.Room
 import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.core.MmkvJsonCache
-import com.hhst.youtubelite.extension.ExtensionManager
-import com.hhst.youtubelite.extension.MmkvPrefStore
-import com.hhst.youtubelite.extension.PrefStore
+import com.hhst.youtubelite.downloader.core.DownloadCoordinator
+import com.hhst.youtubelite.downloader.core.DownloadFinalizer
+import com.hhst.youtubelite.downloader.core.DownloadInteraction
+import com.hhst.youtubelite.downloader.core.DownloadPrefs
+import com.hhst.youtubelite.downloader.core.DownloadPublisher
+import com.hhst.youtubelite.downloader.core.DownloadResolver
+import com.hhst.youtubelite.downloader.core.DownloadTransport
+import com.hhst.youtubelite.downloader.core.MmkvDownloadPrefs
+import com.hhst.youtubelite.downloader.data.DownloadRepository
+import com.hhst.youtubelite.downloader.data.DownloaderDatabase
+import com.hhst.youtubelite.downloader.data.RoomDownloadRepository
+import com.hhst.youtubelite.downloader.engine.DownloadEngine
+import com.hhst.youtubelite.downloader.io.AndroidNetworkMonitor
+import com.hhst.youtubelite.downloader.io.DownloadDirectories
+import com.hhst.youtubelite.downloader.io.NetworkMonitor
+import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.net.DownloadHttpClients
+import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
+import com.hhst.youtubelite.downloader.net.ForbiddenRecovery
+import com.hhst.youtubelite.downloader.net.WebViewCookies
+import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
+import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
+import com.hhst.youtubelite.downloader.notify.DownloadNotificationPort
+import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
+import com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl
+import com.hhst.youtubelite.downloader.publish.createPublishBackend
+import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
+import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
+import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
+import com.hhst.youtubelite.downloader.resolve.SharedExtractorCatalogSource
+import com.hhst.youtubelite.downloader.ui.DownloadViewModel
+import com.hhst.youtubelite.downloader.webview.AndroidWebViewTimerClock
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
+import com.hhst.youtubelite.downloader.work.AndroidUidtJobPort
+import com.hhst.youtubelite.downloader.work.AndroidWorkEnqueuePort
+import com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler
+import com.hhst.youtubelite.downloader.work.DownloadBatchExecutor
+import com.hhst.youtubelite.downloader.work.DownloadStartupReconciler
+import com.hhst.youtubelite.downloader.work.UidtJobPort
+import com.hhst.youtubelite.downloader.work.WorkEnqueuePort
+import com.hhst.youtubelite.extractor.AndroidChallengeSolver
+import com.hhst.youtubelite.extractor.BrowserPlayerResponses
 import com.hhst.youtubelite.extractor.Cache
-import com.hhst.youtubelite.extractor.ClientOrderStore
 import com.hhst.youtubelite.extractor.DiskCache
+import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.Extractor
+import com.hhst.youtubelite.extractor.HeavyJsGate
 import com.hhst.youtubelite.extractor.HttpDownloader
 import com.hhst.youtubelite.extractor.LayeredCache
 import com.hhst.youtubelite.extractor.MemCache
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
-import com.hhst.youtubelite.extractor.PlayerCache
 import com.hhst.youtubelite.extractor.PoTokenProvider
+import com.hhst.youtubelite.extractor.YoutubeExtractionHost
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
+import com.hhst.youtubelite.extractor.YoutubeSessionProvider
+import com.hhst.youtubelite.extension.ExtensionManager
+import com.hhst.youtubelite.extension.MmkvPrefStore
+import com.hhst.youtubelite.extension.PrefStore
 import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
+import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.engine.PlaybackEngine
@@ -29,22 +78,6 @@ import com.hhst.youtubelite.player.queue.QueueRepository
 import com.hhst.youtubelite.player.service.ServiceNotificationController
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.MiniPlayerStore
-import androidx.room.Room
-import com.hhst.youtubelite.downloader.core.DownloadCoordinator
-import com.hhst.youtubelite.downloader.core.DownloadInteraction
-import com.hhst.youtubelite.downloader.core.DownloadPrefs
-import com.hhst.youtubelite.downloader.core.DownloadResolver
-import com.hhst.youtubelite.downloader.core.MmkvDownloadPrefs
-import com.hhst.youtubelite.downloader.data.DownloadRepository
-import com.hhst.youtubelite.downloader.data.DownloaderDatabase
-import com.hhst.youtubelite.downloader.data.RoomDownloadRepository
-import com.hhst.youtubelite.downloader.net.DownloadHttpClients
-import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
-import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
-import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
-import com.hhst.youtubelite.downloader.resolve.PoTokenEvictor
-import com.hhst.youtubelite.downloader.resolve.SharedExtractorCatalogSource
-import com.hhst.youtubelite.downloader.ui.DownloadViewModel
 import com.hhst.youtubelite.ui.browser.BrowserViewModel
 import com.hhst.youtubelite.ui.extension.ExtensionViewModel
 import com.tencent.mmkv.MMKV
@@ -69,31 +102,32 @@ val appModule = module {
     single { MMKV.defaultMMKV() }
     single<JsonCache> { MmkvJsonCache(kv = get(), gson = get()) }
     single { MemCache() }
-    single { PlayerCache() }
     single<Cache> {
         LayeredCache(
             mem = get<MemCache>(),
             disk = DiskCache(store = get()),
         )
     }
-    single { ClientOrderStore(kv = get()) }
     single<PrefStore> { MmkvPrefStore(get()) }
     single<DownloadPrefs> { MmkvDownloadPrefs(get(), get()) }
     single { ExtensionManager(get()) }
 
-    single { HttpDownloader(get(), get<PlayerCache>()) }
-    single { com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy(
-        com.hhst.youtubelite.downloader.webview.AndroidWebViewTimerClock(),
-    ) }
-    single { PoTokenProvider(androidContext(), get(), get()) }
+    single { HttpDownloader(get()) }
+    single { WebViewTimerOccupancy(AndroidWebViewTimerClock()) }
+    single { HeavyJsGate() }
+    single { ExtractionDiagnostics() }
+    single { YoutubeSessionProvider(androidContext(), get(), get()) }
+    single { BrowserPlayerResponses(get()) }
+    single { YoutubeMediaRequests(get<YoutubeSessionProvider>(), get()) }
+    single { AndroidChallengeSolver(androidContext(), get(), get()) }
+    single { PoTokenProvider(androidContext(), get(), get(), get()) }
+    single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get()) }
     single { OEmbedTitleFetcher(get()) }
     single {
         Extractor(
             downloader = get(),
             cache = get(),
-            poToken = get<PoTokenProvider>(),
-            clientOrder = get(),
-            playerCache = get(),
+            host = get(),
         )
     }
 
@@ -101,75 +135,77 @@ val appModule = module {
         val prefs = get<DownloadPrefs>()
         DownloadHttpClients.create(maxRequests = prefs.maxConnections())
     }
-    single { com.hhst.youtubelite.downloader.io.DownloadDirectories.underCache(androidContext().cacheDir) }
-    single<com.hhst.youtubelite.downloader.io.NetworkMonitor> {
-        com.hhst.youtubelite.downloader.io.AndroidNetworkMonitor(androidContext())
-    }
+    single { DownloadDirectories.underCache(androidContext().cacheDir) }
+    single<NetworkMonitor> { AndroidNetworkMonitor(androidContext()) }
     single {
         val prefs = get<DownloadPrefs>()
-        com.hhst.youtubelite.downloader.net.DownloadTransportImpl(
-            client = get(named("downloadHttp")),
-            cookies = com.hhst.youtubelite.downloader.net.WebViewCookies,
+        DownloadTransportImpl(
+            client = get<OkHttpClient>(named("downloadHttp")).newBuilder()
+                .followRedirects(false).followSslRedirects(false)
+                .addInterceptor(get<YoutubeMediaRequests>().interceptor()).build(),
+            cookies = WebViewCookies,
             network = get(),
             wifiOnlyProvider = { prefs.wifiOnly() },
-            forbidden = com.hhst.youtubelite.downloader.net.ForbiddenRecovery { taskId, identity ->
+            forbidden = ForbiddenRecovery { taskId, identity ->
                 get<DownloadResolverImpl>().recoverSource(taskId, identity)
+            },
+            mediaRequests = get(),
+            fallback = ForbiddenRecovery { taskId, identity ->
+                get<DownloadResolverImpl>().backupSource(taskId, identity)
             },
         )
     }
-    single<com.hhst.youtubelite.downloader.core.DownloadTransport> {
-        get<com.hhst.youtubelite.downloader.net.DownloadTransportImpl>()
-    }
-    single<com.hhst.youtubelite.downloader.core.DownloadFinalizer> {
-        com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl()
-    }
-    single<com.hhst.youtubelite.downloader.core.DownloadPublisher> {
-        com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl(
-            backend = com.hhst.youtubelite.downloader.publish.createPublishBackend(androidContext()),
-            workDir = get<com.hhst.youtubelite.downloader.io.DownloadDirectories>().workRoot(),
+    single<DownloadTransport> { get<DownloadTransportImpl>() }
+    single<DownloadFinalizer> { DownloadFinalizerImpl() }
+    single<DownloadPublisher> {
+        DownloadPublisherImpl(
+            backend = createPublishBackend(androidContext()),
+            workDir = get<DownloadDirectories>().workRoot(),
         )
     }
     single {
-        com.hhst.youtubelite.downloader.work.AndroidWorkEnqueuePort(androidContext())
+        AndroidWorkEnqueuePort(androidContext())
     }
-    single<com.hhst.youtubelite.downloader.work.WorkEnqueuePort> { get<com.hhst.youtubelite.downloader.work.AndroidWorkEnqueuePort>() }
+    single<WorkEnqueuePort> { get<AndroidWorkEnqueuePort>() }
     single {
-        com.hhst.youtubelite.downloader.work.AndroidUidtJobPort(androidContext())
+        AndroidUidtJobPort(androidContext())
     }
-    single<com.hhst.youtubelite.downloader.work.UidtJobPort> { get<com.hhst.youtubelite.downloader.work.AndroidUidtJobPort>() }
+    single<UidtJobPort> { get<AndroidUidtJobPort>() }
     single {
-        com.hhst.youtubelite.downloader.notify.AndroidNotificationPort(androidContext())
+        AndroidNotificationPort(androidContext())
     }
-    single<com.hhst.youtubelite.downloader.notify.DownloadNotificationPort> {
-        get<com.hhst.youtubelite.downloader.notify.AndroidNotificationPort>()
-    }
-    single {
-        com.hhst.youtubelite.downloader.notify.DownloadNotificationController(get())
+    single<DownloadNotificationPort> {
+        get<AndroidNotificationPort>()
     }
     single {
-        com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler(
+        DownloadNotificationController(get())
+    }
+    single {
+        BackgroundDownloadScheduler(
             repository = get(),
             coordinator = { get() },
             work = get(),
             uidt = get(),
             notifications = get(),
-            sdk = { android.os.Build.VERSION.SDK_INT },
+            sdk = { Build.VERSION.SDK_INT },
             prefs = get(),
         )
     }
-    single<DownloadInteraction> { get<com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler>() }
+    single<DownloadInteraction> { get<BackgroundDownloadScheduler>() }
     single<DownloadCatalogSource> { SharedExtractorCatalogSource(get()) }
     single {
-        val provider = get<PoTokenProvider>()
         DownloadPoTokenLifecycle(
             catalogs = get(),
-            poToken = PoTokenEvictor { provider.evict(it) },
         )
     }
 
     // Player
-    single { PlayerDataSource.create(androidContext(), get<OkHttpClient>()) }
-    single { MediaSourceResolver(get<PlayerDataSource>()) }
+    single { PlayerDataSource.create(androidContext(), get<OkHttpClient>(), get()) }
+    single {
+        val meter = DefaultBandwidthMeter.getSingletonInstance(androidContext())
+        MediaSourceResolver(get<PlayerDataSource>(), startupBandwidth = { meter.bitrateEstimate },
+            startupVideoSupport = PlaybackStartup.videoSupport(androidContext()))
+    }
     single { SponsorBlockManager(get(), get()) }
     single { QueueRepository(get()) }
     single<PlaybackApi> {
@@ -180,15 +216,13 @@ val appModule = module {
             cache = get(),
             prefs = get(),
             sponsorBlock = get(),
-            clientOrder = get(),
-            poTokenProvider = get(),
             titleFetcher = get(),
         ).also { engine ->
             engine.notificationController = get()
         }
     }
     single { MiniPlayerStore(get()) }
-    single { CastController(androidContext(), get()) }
+    single { CastController(androidContext(), get(), get()) }
     single<PlaybackNotificationController> {
         ServiceNotificationController(
             androidContext(),
@@ -221,8 +255,8 @@ val appModule = module {
     single {
         DownloadCoordinator(
             repository = get(),
-            transport = get<com.hhst.youtubelite.downloader.net.DownloadTransportImpl>(),
-            scheduler = get<com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler>(),
+            transport = get<DownloadTransportImpl>(),
+            scheduler = get<BackgroundDownloadScheduler>(),
             publisher = get(),
         )
     }
@@ -236,7 +270,7 @@ val appModule = module {
     }
     single<DownloadResolver> { get<DownloadResolverImpl>() }
     single {
-        com.hhst.youtubelite.downloader.engine.DownloadEngine(
+        DownloadEngine(
             coordinator = get(),
             repository = get(),
             resolver = get(),
@@ -247,7 +281,7 @@ val appModule = module {
         )
     }
     single {
-        com.hhst.youtubelite.downloader.work.DownloadBatchExecutor(
+        DownloadBatchExecutor(
             engine = get(),
             repository = get(),
             coordinator = get(),
@@ -255,7 +289,7 @@ val appModule = module {
         )
     }
     single {
-        com.hhst.youtubelite.downloader.work.DownloadStartupReconciler(
+        DownloadStartupReconciler(
             repository = get(),
             coordinator = get(),
             scheduler = get(),
@@ -264,7 +298,7 @@ val appModule = module {
         )
     }
     single {
-        com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher(
+        DownloadNotificationWatcher(
             coordinator = get(),
             repository = get(),
             controller = get(),

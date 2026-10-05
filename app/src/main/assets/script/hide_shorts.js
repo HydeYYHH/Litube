@@ -1,11 +1,11 @@
 (function () {
-    if (window.hideShorts?.syncPreferences) {
-        window.hideShorts.syncPreferences();
+    if (window.__hideShorts?.syncPreferences) {
+        window.__hideShorts.syncPreferences();
         return;
     }
 
-    const HIDDEN_ATTR = "data-lite-hide-shorts";
-    const DISPLAY_ATTR = "data-lite-hide-shorts-display";
+    const HIDDEN_ATTR = "data-hide-shorts";
+    const DISPLAY_ATTR = "data-hide-shorts-display";
     const closestSelectors = [
         "ytm-reel-shelf-renderer",
         "ytm-pivot-bar-item-renderer",
@@ -22,7 +22,7 @@
 
     function readEnabled() {
         try {
-            const bridge = window.lite || window.Bridge;
+            const bridge = window.Bridge;
             return !!JSON.parse(bridge.getPreferences() || "{}").enable_hide_shorts;
         } catch {
             return false;
@@ -125,14 +125,14 @@
     }
 
     window.addEventListener("preferencesChanged", syncPreferences, true);
-    window.hideShorts = { syncPreferences };
+    window.__hideShorts = { syncPreferences };
 
-    // The `lite` bridge can lag behind document-start injection; this script
+    // The bridge can lag behind document-start injection; this script
     // has no navigation listener, so without a retry it would stay off until
     // a preference changes.
     let bridgeAttempts = 0;
     function bridgeReady() {
-        const bridge = window.lite || window.Bridge;
+        const bridge = window.Bridge;
         return !!bridge && typeof bridge.getPreferences === "function";
     }
     function startWhenBridgeReady() {

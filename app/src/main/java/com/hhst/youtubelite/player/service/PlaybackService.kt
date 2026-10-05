@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.service
 
 import android.app.Notification
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -57,7 +59,7 @@ class PlaybackService : Service() {
     /** URL whose art fetch is queued but not finished; dedupes repeated show()s. */
     private var pendingArtUrl: String? = null
     /** Monotonic token; only the newest art fetch may apply its bitmap. */
-    private val artSeq = java.util.concurrent.atomic.AtomicLong()
+    private val artSeq = AtomicLong()
     @Volatile
     private var destroyed = false
 
@@ -75,7 +77,7 @@ class PlaybackService : Service() {
     private var queueHasNext = false
     private var queueHasPrevious = false
     private var lastShowAsPlaying = false
-    private val commandListeners = java.util.concurrent.CopyOnWriteArrayList<Player.Listener>()
+    private val commandListeners = CopyOnWriteArrayList<Player.Listener>()
 
     override fun onBind(intent: Intent?): IBinder? = LocalBinder()
 

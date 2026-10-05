@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
 
 import android.content.Context
+import androidx.compose.material3.ExperimentalMaterial3Api
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -30,7 +31,7 @@ import com.hhst.youtubelite.downloader.pip.PipAutoEnter
 import com.hhst.youtubelite.ui.theme.AppTheme
 import org.koin.androidx.compose.koinViewModel
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 class DownloadSheetActivity : ComponentActivity() {
 
     private var pipHandle: PipAutoEnter.Handle? = null

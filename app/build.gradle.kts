@@ -93,6 +93,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
+    implementation("androidx.javascriptengine:javascriptengine:1.1.1")
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.koin.android)

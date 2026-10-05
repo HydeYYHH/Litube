@@ -22,6 +22,7 @@ import com.hhst.youtubelite.downloader.resolve.videoFormat
 import com.hhst.youtubelite.extractor.Format
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -169,6 +170,36 @@ class DownloadPresentationTest {
             catalog(listOf(videoFormat(720), videoFormat(1080), audioFormat())),
         )
         assertEquals(listOf("1080p", "720p"), options)
+    }
+
+    @Test fun qualityOptions_includeFpsButExcludeGatedCodecsAndUnpairedVideo() {
+        val formats = listOf(videoFormat(720), videoFormat(1080).copy(fps = 60),
+            videoFormat(2160).copy(codec = "vp09.00.51.08", container = "WEBM"), audioFormat())
+        assertEquals(listOf("1080p60", "720p"), DownloadPresentation.qualityOptions(catalog(formats)))
+        assertTrue(DownloadPresentation.qualityOptions(catalog(formats.filterNot { it.audioOnly })).isEmpty())
+    }
+
+    @Test
+    fun progress_zeroIsDeterminate_unknownTotalIsNot() {
+        assertEquals(0f, DownloadPresentation.progressFraction(0, 100)!!, 0f)
+        assertEquals(0.25f, DownloadPresentation.progressFraction(25, 100)!!, 0f)
+        assertEquals(1f, DownloadPresentation.progressFraction(150, 100)!!, 0f)
+        assertNull(DownloadPresentation.progressFraction(25, null))
+        assertNull(DownloadPresentation.progressFraction(25, 0))
+        assertEquals("25% · 25 B / 100 B", DownloadPresentation.progressText(DownloadStatus.RUNNING, 25, 100))
+        assertEquals("25% · 25 B / 100 B", DownloadPresentation.progressText(DownloadStatus.PAUSED, 25, 100))
+        assertEquals("25 B", DownloadPresentation.progressText(DownloadStatus.RUNNING, 25, null))
+    }
+
+    @Test
+    fun failureReason_isBrief_andOnlyShownForCurrentFailures() {
+        val failed = item(DownloadPhase.TRANSFER, DownloadStatus.FAILED)
+            .copy(errorMessage = "  Connection timed out  \nstack trace")
+        assertEquals("Connection timed out", DownloadPresentation.failureReason(failed))
+        assertEquals(120, DownloadPresentation.failureReason(failed.copy(errorMessage = "x".repeat(200)))!!.length)
+        assertNull(DownloadPresentation.failureReason(failed.copy(status = DownloadStatus.QUEUED)))
+        assertEquals("Connection timed out", DownloadPresentation.failureReason(failed.copy(
+            phase = DownloadPhase.COMPLETE, status = DownloadStatus.QUEUED, failedKinds = listOf(AssetKind.SUBTITLE))))
     }
 
     private fun item(

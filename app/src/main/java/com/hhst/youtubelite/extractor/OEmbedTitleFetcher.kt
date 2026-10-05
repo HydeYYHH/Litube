@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.extractor
 
 import com.google.gson.Gson
+import java.net.URLEncoder
 import com.google.gson.JsonObject
 import com.hhst.youtubelite.core.Constants
 import java.util.concurrent.ConcurrentHashMap
@@ -49,7 +50,7 @@ class OEmbedTitleFetcher(
                 val request = Request.Builder()
                     .url(
                         "https://www.youtube.com/oembed?url=" +
-                            java.net.URLEncoder.encode(watch, Charsets.UTF_8.name()),
+                            URLEncoder.encode(watch, Charsets.UTF_8.name()),
                     )
                     .header("User-Agent", Constants.userAgent())
                     .get()

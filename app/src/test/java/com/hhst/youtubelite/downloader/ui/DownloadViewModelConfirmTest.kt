@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import kotlinx.coroutines.CancellationException
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.BatchSource
@@ -26,7 +27,28 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DownloadConfirmViewModelTest {
+class DownloadViewModelConfirmTest {
+
+    @Test fun localPreviewsDoNotReloadCatalogAndCancellationPropagates() = runTest {
+        val h = DownloadHarness()
+        var loads = 0
+        val source = object : DownloadCatalogSource {
+            override suspend fun catalog(videoId: String): DownloadCatalog {
+                loads++
+                return catalog(listOf(videoFormat(720), videoFormat(1080), audioFormat()))
+            }
+            override suspend fun refresh(videoId: String): DownloadCatalog = throw CancellationException()
+        }
+        val vm = DownloadViewModel(h.coordinator, source)
+        val loaded = (vm.loadCatalog(vid("a")) as DownloadViewModel.CatalogState.Ready).catalog
+        val small = vm.preview(loaded, DownloadConfig(videoQuality = "720p")) as DownloadViewModel.PreviewState.Ready
+        val large = vm.preview(loaded, DownloadConfig(videoQuality = "1080p")) as DownloadViewModel.PreviewState.Ready
+        assertEquals(720, small.plan.video!!.format.height)
+        assertEquals(1080, large.plan.video!!.format.height)
+        assertEquals(1, loads)
+        try { vm.loadCatalog(vid("a"), fresh = true); throw AssertionError("cancel must propagate") }
+        catch (_: CancellationException) { }
+    }
 
     @Test
     fun preview_doesNotEnqueue() = runTest {
@@ -132,7 +154,7 @@ class DownloadConfirmViewModelTest {
         val live = vm.enqueue(request("a"), "s1").created.single().taskId
         val done = vm.enqueue(request("b"), "s2").created.single().taskId
         h.coordinator.reportAssetPublished(done, 0, AssetKind.VIDEO, "file://b.mp4")
-        vm.remove(DownloadTarget.Task(done), RemoveMode.RECORD_ONLY)
+        vm.remove(DownloadTarget.Task(done), RemoveMode.RECORD_ONLY).join()
         // live task remains
         assertEquals(1, vm.observeDownloads().first().size)
         assertEquals(live, vm.observeDownloads().first().single().taskId)

@@ -18,6 +18,8 @@
 -keep class com.hhst.youtubelite.player.engine.ResumePoint { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.player.surface.SubtitleStyle { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Format { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extractor.PoIntegrity { <init>(...); <fields>; }
+-keep class org.schabi.newpipe.extractor.services.youtube.streams.FormatKey { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Metadata { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Subtitle { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Chapter { <init>(...); <fields>; }

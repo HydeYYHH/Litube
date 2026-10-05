@@ -226,8 +226,20 @@ class DownloadCoordinator(
         taskId: String,
         generation: Long,
         chunk: DownloadChunk,
+        expectedBytes: Long? = null,
     ): Boolean = repository.transact {
         if (!acceptProgress(taskId, generation)) return@transact false
+        // A transfer restarting at byte zero replaces the old object's progress.
+        if (!chunk.verified && chunk.startByte == 0L && chunk.receivedBytes == 0L) {
+            deleteChunks(chunk.componentId)
+        }
+        if (expectedBytes != null && expectedBytes > 0L) {
+            val component = assetsForTask(taskId).flatMap { componentsForAsset(it.id) }
+                .firstOrNull { it.id == chunk.componentId } ?: return@transact false
+            if (component.expectedBytes != expectedBytes) {
+                updateComponent(component.copy(expectedBytes = expectedBytes))
+            }
+        }
         insertChunk(chunk)
         true
     }
@@ -271,7 +283,7 @@ class DownloadCoordinator(
             updateComponent(
                 component.copy(
                     mimeType = update.mimeType ?: component.mimeType,
-                    expectedBytes = update.expectedBytes ?: component.expectedBytes,
+                    expectedBytes = update.expectedBytes,
                     container = update.container ?: component.container,
                     codec = update.codec ?: component.codec,
                     audioTrackKey = update.audioTrackKey ?: component.audioTrackKey,
@@ -343,6 +355,12 @@ class DownloadCoordinator(
         repository.transact {
             allTasks().forEach { task ->
                 if (task.userPaused || task.userCancelled || task.removed) return@forEach
+                val assets = assetsForTask(task.id)
+                if (assets.isNotEmpty() && assets.all { it.published || it.failed }) {
+                    // Repair terminal rows overwritten by a stale system job.
+                    rollup(task.id)
+                    return@forEach
+                }
                 if (task.status == DownloadStatus.RUNNING) {
                     updateTask(
                         task.copy(

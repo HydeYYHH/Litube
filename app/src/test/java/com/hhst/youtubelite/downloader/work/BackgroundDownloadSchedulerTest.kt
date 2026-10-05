@@ -1,9 +1,12 @@
 package com.hhst.youtubelite.downloader.work
 
-import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.SeqIdFactory
+import com.hhst.youtubelite.downloader.core.DownloadTarget
+import com.hhst.youtubelite.downloader.core.BatchSnapshot
+import com.hhst.youtubelite.downloader.core.BatchSource
+import com.hhst.youtubelite.downloader.core.BatchSelection
+import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
 import com.hhst.youtubelite.downloader.notify.RecordingNotificationPort
@@ -109,12 +112,12 @@ class BackgroundDownloadSchedulerTest {
     fun api34_confirm_registersOneUidtJobPerBatch() = runTest {
         val h = SchedulerHarness(sdk = 34)
         val result = h.wired.enqueueBatch(
-            snapshot = com.hhst.youtubelite.downloader.core.BatchSnapshot(
-                source = com.hhst.youtubelite.downloader.core.BatchSource.VIDEO,
+            snapshot = BatchSnapshot(
+                source = BatchSource.VIDEO,
                 name = "B",
                 items = listOf(request("a"), request("b")),
             ),
-            selection = com.hhst.youtubelite.downloader.core.BatchSelection(indexes = setOf(0, 1)),
+            selection = BatchSelection(indexes = setOf(0, 1)),
             submissionId = "s1",
         )
         assertEquals(1, h.uidt.registered.size)

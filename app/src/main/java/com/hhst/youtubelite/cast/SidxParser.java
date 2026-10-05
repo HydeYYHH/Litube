@@ -30,7 +30,7 @@ import androidx.media3.extractor.ChunkIndex;
 @UnstableApi
 public final class SidxParser {
 
-    private static final String TAG = "YTLCastSidx";
+    private static final String TAG = "SidxParser";
     private static final int HEADER_SIZE = 8;
     private static final int TYPE_SIDX = 0x73696478;
 

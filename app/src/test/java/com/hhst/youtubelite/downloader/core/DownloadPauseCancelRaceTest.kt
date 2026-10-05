@@ -88,4 +88,39 @@ class DownloadPauseCancelRaceTest {
         assertEquals(DownloadStatus.WAITING_SYSTEM, h.repo.transact { getTask(running) }!!.status)
         assertEquals(DownloadStatus.PAUSED, h.repo.transact { getTask(paused) }!!.status)
     }
+
+    @Test
+    fun failedTaskRejectsLateSystemProgressUntilExplicitRetry() = runTest {
+        val h = DownloadHarness()
+        val id = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
+        h.coordinator.reportAssetFailed(id, 0, AssetKind.VIDEO, "ENOMEM")
+        assertFalse(h.coordinator.reportExecution(id, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER))
+        assertFalse(h.coordinator.reportExecution(id, 0, DownloadStatus.WAITING_SYSTEM))
+        h.coordinator.onProcessRestore()
+        val failed = h.repo.transact { snapshot(id) }!!
+        assertEquals(DownloadStatus.FAILED, failed.task.status)
+        assertEquals(DownloadPhase.COMPLETE, failed.task.phase)
+        assertEquals("ENOMEM", failed.assets.single().asset.errorMessage)
+
+        h.coordinator.retryFailed(DownloadTarget.Task(id))
+        val retry = h.repo.transact { getTask(id) }!!
+        assertEquals(DownloadStatus.QUEUED, retry.status)
+        assertFalse(h.coordinator.reportExecution(id, 0, DownloadStatus.RUNNING))
+        assertTrue(h.coordinator.reportExecution(id, retry.executionGeneration, DownloadStatus.RUNNING))
+    }
+
+    @Test
+    fun processRestoreRepairsFailedAssetsShownAsDownloadingByOldJobs() = runTest {
+        val h = DownloadHarness()
+        val id = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
+        h.coordinator.reportAssetFailed(id, 0, AssetKind.VIDEO, "ENOMEM")
+        h.repo.transact {
+            updateTask(getTask(id)!!.copy(status = DownloadStatus.WAITING_SYSTEM, phase = DownloadPhase.TRANSFER))
+        }
+        h.coordinator.onProcessRestore()
+        val restored = h.repo.transact { snapshot(id) }!!
+        assertEquals(DownloadStatus.FAILED, restored.task.status)
+        assertEquals(DownloadPhase.COMPLETE, restored.task.phase)
+        assertEquals("ENOMEM", restored.assets.single().asset.errorMessage)
+    }
 }

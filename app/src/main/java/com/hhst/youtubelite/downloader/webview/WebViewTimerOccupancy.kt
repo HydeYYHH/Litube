@@ -16,6 +16,7 @@ interface WebViewTimerClock {
 enum class WebViewTimerOwner {
     BROWSER,
     POTOKEN,
+    EJS,
 }
 
 class WebViewTimerHandle internal constructor(

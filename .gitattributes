@@ -1,0 +1,4 @@
+# Fixed upstream assets and reviewed patches must retain their exact pinned bytes.
+app/src/main/assets/ejs/* -text
+app/src/main/assets/potoken/bgutils.js -text
+app/src/main/assets/potoken/BGUTILS-LICENSE -text

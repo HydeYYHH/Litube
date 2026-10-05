@@ -52,6 +52,31 @@ object AudioTrackIdentity {
         }.filter { it.key.isNotBlank() }
     }
 
+    /** Stable key for one HLS rendition. Blank when the playlist gave it no identity. */
+    fun renditionKey(language: String?, label: String?): String {
+        val lang = language?.trim().orEmpty()
+        val name = label?.trim().orEmpty()
+        if (lang.isEmpty() && name.isEmpty()) return ""
+        return "hls:$lang:$name"
+    }
+
+    /**
+     * Menu rows for playlist audio renditions. A single rendition stays off the
+     * list: the Default row already means that track.
+     */
+    fun renditionChoices(entries: List<Pair<String?, String?>>): List<AudioTrackChoice> {
+        val unique = LinkedHashMap<String, AudioTrackChoice>()
+        for ((language, label) in entries) {
+            val key = renditionKey(language, label)
+            if (key.isBlank() || unique.containsKey(key)) continue
+            val text = label?.trim()?.takeIf { it.isNotEmpty() }
+                ?: language?.trim()?.takeIf { it.isNotEmpty() }?.let(::displayLanguage)
+                ?: continue
+            unique[key] = AudioTrackChoice(key, text)
+        }
+        return if (unique.size < 2) emptyList() else unique.values.toList()
+    }
+
     fun label(format: Format, showType: Boolean): String {
         val lang = format.audioLocale?.let(::displayLanguage)
             ?: format.audioTrackName

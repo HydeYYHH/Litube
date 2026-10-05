@@ -1,8 +1,9 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
+import java.net.NoRouteToHostException
+import java.util.concurrent.TimeUnit
 import android.util.Log
-import android.webkit.CookieManager
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
@@ -17,36 +18,14 @@ import java.io.InterruptedIOException
 import java.util.zip.GZIPInputStream
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import androidx.core.net.toUri
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
-/**
- * YouTube /videoplayback DataSource on the app's shared [OkHttpClient].
- *
- * OkHttp (vs HttpURLConnection) gives connection pooling and HTTP/2
- * multiplexing across concurrent chunk loads — seek responsiveness on
- * googlevideo depends on it. YouTube-specific behavior is unchanged:
- * - `/videoplayback` requests are sent as POST with a fixed `{0x78, 0}` body
- *   (YouTube player protocol), not GET.
- * - DASH chunk requests carry `&range=pos-end` + `&rn=N` query params instead of
- *   the Range header (gated by [rangeParameterEnabled]/[rnParameterEnabled]).
- * - WebView cookies are omitted on `/videoplayback` except for WEB-minted URLs
- *   (session cookies 403 ANDROID_VR / TVHTML5 URLs). Other hosts still get them.
- *   Web streaming URLs get Origin/Referer/Sec-Fetch; Android/iOS/VR/TV
- *   streaming URLs get their client-specific User-Agent.
- * - Manual redirect following (max 20). Non-videoplayback POST follows
- *   300–303 and retries as GET; 307/308 on POST are not followed. For
- *   `/videoplayback` every hop is POST with the same fixed body (YouTube
- *   player protocol, see POST_BODY) regardless of the `method` argument —
- *   the method only matters for other hosts (HEAD/GET/POST).
- * - HTTP 416 with position == document size is treated as a successful empty tail.
- * - gzip responses are unwrapped when the data spec allows it.
- */
+/** Media3 and cast consume the extractor's session, client, method and bounded range plan. */
 @UnstableApi
 class YoutubeHttpDataSource private constructor(
     private val callFactory: Call.Factory,
@@ -54,6 +33,9 @@ class YoutubeHttpDataSource private constructor(
     private val rnParameterEnabled: Boolean,
     private val defaultRequestProperties: HttpDataSource.RequestProperties?,
     private val userAgent: String,
+    private val mediaRequests: YoutubeMediaRequests?,
+    private val inheritedPlan: RequestPlan?,
+    private val planResolver: ((String) -> RequestPlan?)?,
 ) : BaseDataSource(true), HttpDataSource {
 
     private val requestProperties = HttpDataSource.RequestProperties()
@@ -65,6 +47,12 @@ class YoutubeHttpDataSource private constructor(
     private var bytesToRead = 0L
     private var bytesRead = 0L
     private var requestNumber = 0L
+    private var activePlan: RequestPlan? = null
+    private var windowRead = 0L
+    private var windowLimit = 0L
+    private var expectedWindow = -1L
+    @Volatile private var activeCall: Call? = null
+    private var effectiveRange = RequestPlan.Range.NONE
     /** True when this [open] put `&range=` on the request that produced [response]. */
     private var rangeQueryApplied = false
 
@@ -95,8 +83,22 @@ class YoutubeHttpDataSource private constructor(
         this.dataSpec = dataSpec
         bytesRead = 0
         bytesToRead = 0
+        windowRead = 0
+        activePlan = planResolver?.invoke(dataSpec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(dataSpec.uri.toString())
         rangeQueryApplied = false
         transferInitializing(dataSpec)
+
+        activePlan?.resourceLength?.takeIf { it > 0 }?.let { total ->
+            if (dataSpec.position > total) throw HttpDataSource.HttpDataSourceException(
+                DataSourceException(PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE), dataSpec,
+                PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE, HttpDataSource.HttpDataSourceException.TYPE_OPEN)
+            if (dataSpec.position == total) {
+                opened = true
+                responseCode = 200
+                transferStarted(dataSpec)
+                return 0
+            }
+        }
 
         val resp = try {
             makeConnection(dataSpec).also { response = it }
@@ -118,14 +120,14 @@ class YoutubeHttpDataSource private constructor(
                     opened = true
                     transferStarted(dataSpec)
                     resp.close()
-                    return if (dataSpec.length != LENGTH_UNSET) dataSpec.length else 0L
+                    return 0L
                 }
             }
             resp.close()
             closeQuietly()
             if (responseCode == 403) {
                 Log.w(
-                    "YoutubeHttp",
+                    TAG,
                     "HTTP 403 host=${resp.request.url.host} path=${resp.request.url.encodedPath} " +
                         "c=${resp.request.url.queryParameter("c")} " +
                         "rangeParam=$rangeParameterEnabled rnParam=$rnParameterEnabled " +
@@ -138,6 +140,13 @@ class YoutubeHttpDataSource private constructor(
             throw HttpDataSource.InvalidResponseCodeException(
                 responseCode, responseMessage, cause, headers, dataSpec, ByteArray(0),
             )
+        }
+
+        activePlan?.let { plan ->
+            val window = requireNotNull(mediaRequests).window(resp, plan)
+            expectedWindow = window.expectedBytes
+            windowLimit = if (effectiveRange == RequestPlan.Range.NONE) Long.MAX_VALUE
+                else window.expectedBytes.takeIf { it >= 0 } ?: plan.chunkLimit
         }
 
         // A 200 to a Range-header request is the full representation, so the
@@ -163,6 +172,13 @@ class YoutubeHttpDataSource private constructor(
             }
         } else dataSpec.length
 
+        activePlan?.let { plan ->
+            mediaRequests?.window(resp, plan)?.total?.let { total ->
+                val available = (total - dataSpec.position).coerceAtLeast(0)
+                if (dataSpec.length != LENGTH_UNSET) bytesToRead = minOf(dataSpec.length, available)
+            }
+        }
+
         inputStream = try {
             resp.body?.byteStream()?.let { if (compressed) GZIPInputStream(it) else it }
                 ?: throw IOException("Empty response body")
@@ -172,6 +188,13 @@ class YoutubeHttpDataSource private constructor(
                 e, dataSpec, PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
                 HttpDataSource.HttpDataSourceException.TYPE_OPEN,
             )
+        }
+        if (activePlan != null && effectiveRange != RequestPlan.Range.NONE && dataSpec.length == LENGTH_UNSET) {
+            val total = activePlan?.resourceLength?.takeIf { it > 0 }
+                ?: mediaRequests?.window(resp, requireNotNull(activePlan))?.total
+            if (total != null) bytesToRead = total - dataSpec.position
+            else if (resp.code == 200 && !rangeQueryApplied) bytesToRead = (resp.body?.contentLength() ?: LENGTH_UNSET).let { if (it < 0) it else it - dataSpec.position }
+            else bytesToRead = LENGTH_UNSET
         }
 
         opened = true
@@ -201,6 +224,7 @@ class YoutubeHttpDataSource private constructor(
     }
 
     override fun close() {
+        activeCall?.cancel()
         try {
             inputStream?.close()
         } catch (_: IOException) {
@@ -217,6 +241,9 @@ class YoutubeHttpDataSource private constructor(
     // -- connection --
 
     private fun makeConnection(spec: DataSpec): Response {
+        val boundPlan = planResolver?.invoke(spec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(spec.uri.toString())
+        if (boundPlan != null) return execute(spec.uri.toString(), spec.httpMethod, spec.position, spec.length,
+            spec.isFlagSet(DataSpec.FLAG_ALLOW_GZIP), spec.httpRequestHeaders)
         var url = spec.uri.toString()
         var method = spec.httpMethod
         val allowGzip = spec.isFlagSet(DataSpec.FLAG_ALLOW_GZIP)
@@ -250,7 +277,7 @@ class YoutubeHttpDataSource private constructor(
             )
         }
         throw HttpDataSource.HttpDataSourceException(
-            java.net.NoRouteToHostException("Too many redirects: $redirectCount"), spec,
+            NoRouteToHostException("Too many redirects: $redirectCount"), spec,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             HttpDataSource.HttpDataSourceException.TYPE_OPEN,
         )
@@ -272,98 +299,32 @@ class YoutubeHttpDataSource private constructor(
         allowGzip: Boolean,
         requestParameters: Map<String, String>,
     ): Response {
-        var requestUrl = url
-        val parsed = requestUrl.toUri()
-        val isVideoPlayback = parsed.path?.startsWith("/videoplayback") == true
-        // The `c` param carries the minting client; ANDROID (reel) URLs are the
-        // window-exempt family, everything else adaptive is window-bound.
-        val urlClient = parsed.getQueryParameter("c")
-        val isExemptMuxed = urlClient == "ANDROID" &&
-            parsed.getQueryParameter("itag")?.let { it == "18" } == true
-
-        // Query separators chosen from the URL's own shape: googlevideo URLs
-        // normally carry a query, but appending "&rn=..." to a query-less URL
-        // would corrupt the path. `[?&]rn=` also catches a "?rn=" form that
-        // the old `contains("&rn=")` guard missed.
-        if (isVideoPlayback && rnParameterEnabled && !RN_PARAM.containsMatchIn(requestUrl)) {
-            requestUrl += (if ('?' in requestUrl) "&" else "?") + "rn=${requestNumber++}"
-        }
-        // `&range=` clips googlevideo's view of the file to exactly that byte
-        // window (verified: content-range total becomes range-end+1, and the
-        // full-length view breaks), which is what sidx DASH chunking needs.
-        // Range-header playback (exempt muxed itag 18) must NOT use it: the
-        // MP4 parser reads across arbitrary ranges of the true file.
-        val rangeParamOk = isVideoPlayback && rangeParameterEnabled && !isExemptMuxed
-        val appliedRangeQuery = rangeParamOk && (position != 0L || length != LENGTH_UNSET)
-        if (appliedRangeQuery) {
-            requestUrl += (if ('?' in requestUrl) "&" else "?") + "range=$position" +
-                if (length != LENGTH_UNSET) "-${position + length - 1}" else "-"
-        }
-        rangeQueryApplied = appliedRangeQuery
-
-        val builder = Request.Builder().url(requestUrl)
-
-        defaultRequestProperties?.snapshot?.forEach { (k, v) -> builder.header(k, v) }
-        requestProperties.snapshot.forEach { (k, v) -> builder.header(k, v) }
-        requestParameters.forEach { (k, v) -> builder.header(k, v) }
-
-        // Cookie policy mirrors the minting session: googlevideo 403s URLs
-        // whose requesting session differs from the minting one. WEB URLs are
-        // minted inside the WebView browser session (see HttpDownloader), so
-        // they must be fetched with that session's cookies; IOS/ANDROID/VR/TV
-        // URLs are minted by client-scoped sessions and get none. Timedtext
-        // and other hosts always get WebView cookies.
-        if (!isVideoPlayback || urlClient == "WEB") {
-            runCatching { CookieManager.getInstance().getCookie(requestUrl) }
-                .getOrNull()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { builder.header("Cookie", it) }
-        }
-
-        if (!rangeParamOk) {
-            HttpUtil.buildRangeRequestHeader(position, length)?.let {
-                builder.header("Range", it)
+        if (mediaRequests != null) {
+            val plan = planResolver?.invoke(url) ?: inheritedPlan ?: mediaRequests.plan(url)
+            if (plan != null) {
+                activePlan = plan
+                val range = when {
+                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
+                    plan.range != RequestPlan.Range.NONE -> plan.range
+                    position > 0 || length >= 0 -> RequestPlan.Range.HEADER
+                    else -> plan.range
+                }
+                effectiveRange = range
+                rangeQueryApplied = range == RequestPlan.Range.QUERY
+                return executeCall(mediaRequests.build(url, plan, position, length, requestParameters, range))
             }
+            val builder = Request.Builder().url(url).header("User-Agent", userAgent)
+            requestParameters.filterKeys { it.lowercase() !in setOf("cookie", "authorization") }.forEach { (k, v) -> builder.header(k, v) }
+            HttpUtil.buildRangeRequestHeader(position, length)?.let { builder.header("Range", it) }
+            return executeCall(builder.get().build())
         }
-
-        if (YoutubeParsingHelper.isWebStreamingUrl(requestUrl) ||
-            YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl(requestUrl)
-        ) {
-            builder.header("Origin", "https://www.youtube.com")
-            builder.header("Referer", "https://www.youtube.com")
-            builder.header("Sec-Fetch-Dest", "empty")
-            builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", "cross-site")
-        }
-
-        builder.header("TE", "trailers")
-        builder.header("Accept", "*/*")
-
-        val ua = when {
-            YoutubeParsingHelper.isAndroidVrStreamingUrl(requestUrl) ->
-                YoutubeParsingHelper.getAndroidVrUserAgent()
-            YoutubeParsingHelper.isVisionOsStreamingUrl(requestUrl) ->
-                YoutubeParsingHelper.getVisionOsUserAgent(null)
-            YoutubeParsingHelper.isAndroidStreamingUrl(requestUrl) ->
-                YoutubeParsingHelper.getAndroidUserAgent(null)
-            YoutubeParsingHelper.isIosStreamingUrl(requestUrl) ->
-                YoutubeParsingHelper.getIosUserAgent(null)
-            YoutubeParsingHelper.isTvHtml5StreamingUrl(requestUrl) ->
-                YoutubeParsingHelper.getTvHtml5UserAgent()
-            else -> userAgent
-        }
-        builder.header("User-Agent", ua)
-        builder.header("Accept-Encoding", if (allowGzip) "gzip" else "identity")
-
-        if (isVideoPlayback) {
-            builder.post(POST_BODY.toRequestBody(OCTET_STREAM))
-        } else if (method == DataSpec.HTTP_METHOD_HEAD) {
-            builder.head()
-        }
-        // GET is OkHttp's default.
-
-        val client = callFactory
-        return client.newCall(builder.build()).execute()
+        val builder = Request.Builder().url(url).header("User-Agent", userAgent)
+            .header("Accept-Encoding", if (allowGzip) "gzip" else "identity")
+        requestParameters.filterKeys { it.lowercase() !in setOf("authorization", "cookie") }
+            .forEach { (k, v) -> builder.header(k, v) }
+        HttpUtil.buildRangeRequestHeader(position, length)?.let { builder.header("Range", it) }
+        if (method == DataSpec.HTTP_METHOD_HEAD) builder.head()
+        return executeCall(builder.build())
     }
 
     private fun skipFully(bytesToSkip: Long, spec: DataSpec) {
@@ -385,17 +346,46 @@ class YoutubeHttpDataSource private constructor(
         }
     }
 
+    private fun executeCall(request: Request): Response {
+        val call = callFactory.newCall(request)
+        activeCall = call
+        return call.execute()
+    }
+
     private fun readInternal(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
+        if (bytesToRead != LENGTH_UNSET && bytesRead >= bytesToRead) return C.RESULT_END_OF_INPUT
+        val plan = activePlan
+        if (plan != null && effectiveRange != RequestPlan.Range.NONE && windowRead >= windowLimit) {
+            // A short window with no proven total is the final query-cropped view.
+            if (bytesToRead == LENGTH_UNSET && windowLimit < plan.chunkLimit) return C.RESULT_END_OF_INPUT
+            inputStream?.close(); response?.close()
+            val original = requireNotNull(dataSpec)
+            val position = original.position + bytesRead
+            val remaining = if (bytesToRead == LENGTH_UNSET) LENGTH_UNSET else bytesToRead - bytesRead
+            val next = makeConnection(original.buildUpon().setPosition(position).setLength(remaining).build())
+            response = next
+            responseCode = next.code
+            if (next.code == 416 && HttpUtil.getDocumentSize(next.header("Content-Range")) == position) return C.RESULT_END_OF_INPUT
+            if (!next.isSuccessful) throw HttpDataSource.InvalidResponseCodeException(next.code, next.message, null, next.headers.toMultimap(), original, ByteArray(0))
+            val window = requireNotNull(mediaRequests).window(next, plan)
+            expectedWindow = window.expectedBytes
+            windowLimit = window.expectedBytes.takeIf { it >= 0 } ?: minOf(plan.chunkLimit, if (remaining < 0) plan.chunkLimit else remaining)
+            window.total?.let { if (bytesToRead == LENGTH_UNSET) bytesToRead = it - original.position }
+            inputStream = next.body?.byteStream() ?: throw IOException("MEDIA_EMPTY_BODY")
+            windowRead = 0
+        }
         val stream = inputStream ?: return C.RESULT_END_OF_INPUT
-        val toRead = if (bytesToRead != LENGTH_UNSET) {
-            val remaining = bytesToRead - bytesRead
-            if (remaining == 0L) return C.RESULT_END_OF_INPUT
-            minOf(length.toLong(), remaining).toInt()
-        } else length
-        val read = stream.read(buffer, offset, toRead)
-        if (read == -1) return C.RESULT_END_OF_INPUT
+        var count = if (bytesToRead == LENGTH_UNSET) length else minOf(length.toLong(), bytesToRead - bytesRead).toInt()
+        if (plan != null && effectiveRange != RequestPlan.Range.NONE) count = minOf(count.toLong(), windowLimit - windowRead).toInt()
+        if (count <= 0) return C.RESULT_END_OF_INPUT
+        val read = stream.read(buffer, offset, count)
+        if (read == -1) {
+            if (expectedWindow >= 0 && windowRead < expectedWindow || bytesToRead != LENGTH_UNSET && bytesRead < bytesToRead) throw IOException("MEDIA_EARLY_EOF")
+            return C.RESULT_END_OF_INPUT
+        }
         bytesRead += read
+        windowRead += read
         bytesTransferred(read)
         return read
     }
@@ -403,6 +393,7 @@ class YoutubeHttpDataSource private constructor(
     private fun closeQuietly() {
         runCatching { response?.close() }
         response = null
+        activeCall = null
     }
 
     class Factory(
@@ -430,10 +421,17 @@ class YoutubeHttpDataSource private constructor(
         }
         fun setRangeParameterEnabled(value: Boolean) = apply { rangeParameterEnabled = value }
         fun setRnParameterEnabled(value: Boolean) = apply { rnParameterEnabled = value }
+        private var mediaRequests: YoutubeMediaRequests? = null
+        private var inheritedPlan: RequestPlan? = null
+        private var planResolver: ((String) -> RequestPlan?)? = null
+        fun setPlanResolver(value: (String) -> RequestPlan?) = apply { planResolver = value }
+        fun setMediaRequests(value: YoutubeMediaRequests?, plan: RequestPlan? = null) = apply {
+            mediaRequests = value; inheritedPlan = plan; timedCallFactory = null
+        }
 
         override fun createDataSource(): YoutubeHttpDataSource = YoutubeHttpDataSource(
             sharedCallFactory(), rangeParameterEnabled,
-            rnParameterEnabled, defaultRequestProperties, userAgent,
+            rnParameterEnabled, defaultRequestProperties, userAgent, mediaRequests, inheritedPlan, planResolver,
         )
 
         @Volatile
@@ -446,9 +444,10 @@ class YoutubeHttpDataSource private constructor(
                 timedCallFactory?.let { return it }
                 val base = callFactory as? OkHttpClient ?: return callFactory
                 return base.newBuilder()
-                    .connectTimeout(connectTimeoutMs.toLong(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                    .readTimeout(readTimeoutMs.toLong(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                    .callTimeout(0L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .connectTimeout(connectTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+                    .readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+                    .callTimeout(0L, TimeUnit.MILLISECONDS)
+                    .apply { mediaRequests?.let { followRedirects(false); followSslRedirects(false); addInterceptor(it.interceptor()) } }
                     .build()
                     .also { timedCallFactory = it }
             }
@@ -456,11 +455,10 @@ class YoutubeHttpDataSource private constructor(
     }
 
     companion object {
+        private const val TAG = "YoutubeHttpDataSource"
         private const val MAX_REDIRECTS = 20
-        private val POST_BODY = byteArrayOf(0x78, 0)
         private val REDIRECT_CODES = setOf(300, 301, 302, 303, 307, 308)
         private val REDIRECT_CODES_GET_FALLBACK = setOf(300, 301, 302, 303)
-        private val OCTET_STREAM = "application/octet-stream".toMediaType()
         private val RN_PARAM = Regex("[?&]rn=")
         /** media3's C.LENGTH_UNSET is the int -1; this is the long form used by DataSpec lengths. */
         private const val LENGTH_UNSET: Long = C.LENGTH_UNSET.toLong()

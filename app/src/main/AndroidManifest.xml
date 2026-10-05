@@ -34,6 +34,9 @@
         android:theme="@style/Theme.App"
         android:usesCleartextTraffic="false">
 
+        <service android:name=".extractor.EjsRuntimeService"
+            android:exported="false" android:process=":youtube_ejs" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"

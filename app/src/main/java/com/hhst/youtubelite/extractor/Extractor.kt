@@ -2,6 +2,13 @@ package com.hhst.youtubelite.extractor
 
 import kotlinx.coroutines.CoroutineScope
 import org.schabi.newpipe.extractor.NewPipe
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.TimeUnit
+import java.io.IOException
+import android.webkit.WebView
+import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
+import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 import org.schabi.newpipe.extractor.services.youtube.PoTokenProvider as NpPoTokenProvider
 import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
 import java.util.concurrent.ConcurrentHashMap
@@ -19,19 +26,26 @@ class Extractor(
     private val clientOrder: ClientOrderStore? = null,
     private val scope: CoroutineScope = Promise.DEFAULT_SCOPE,
     private val playerCache: PlayerCache? = null,
+    private val host: YoutubeExtractionHost? = null,
 ) {
     private val inFlight = ConcurrentHashMap<String, Inflight>()
     private val streamEpochs = StreamEpochGuard()
+    private val recoveries = ConcurrentHashMap<String, Pair<Inflight, Long>>()
+    private val selectionLock = Any()
+    private var selectedPreparation: Inflight? = null
+    fun installBrowserCapture(view: WebView, generation: () -> Long) { host?.installBrowserCapture(view, generation) }
+    /** Blocking; compiles the solver and opens connections for an already configured session. */
+    fun initialize(): Boolean = host?.initialize() ?: false
+    fun sessionStamp(): String = host?.scopeHint().orEmpty()
+    fun recoveryScope(): String = host?.recoveryScope().orEmpty()
+    fun extractionDiagnostics(): String = host?.diagnostics?.export() ?: "Legacy Java extraction adapter"
 
     init {
         NewPipe.init(downloader)
-        if (poToken != null) {
+        if (host == null && poToken != null) {
             YoutubeStreamExtractor.setPoTokenProvider(poToken)
         }
-        // iOS HLS still has googlevideo URLs when WEB/Android return SABR-only
-        // adaptive formats. HLS is not subject to the streaming poToken 403.
-        YoutubeStreamExtractor.setFetchIosClient(true)
-        clientOrder?.load()
+        if (host == null) clientOrder?.load()
     }
 
     /**
@@ -39,32 +53,52 @@ class Extractor(
      *
      * @throws IllegalArgumentException if [urlOrId] is not a valid id or URL
      */
-    fun extract(urlOrId: String): Extraction {
+    fun extract(urlOrId: String, catalog: Boolean = false, demand: StreamDemand? = null): Extraction {
+        return synchronized(selectionLock) { startExtraction(urlOrId, catalog, demand, false).extraction }
+    }
+
+    /** Only the selected card, using the exact playback demand and shared task key. */
+    fun preparePlayback(urlOrId: String, demand: StreamDemand) {
+        synchronized(selectionLock) {
+            val slot = startExtraction(urlOrId, false, demand, true)
+            if (selectedPreparation !== slot) selectedPreparation?.cancelPreparation()
+            selectedPreparation = slot
+        }
+    }
+
+    private fun startExtraction(urlOrId: String, catalog: Boolean,
+                                demand: StreamDemand?,
+                                preparation: Boolean): Inflight {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val (slot, created) = streamEpochs.withLock(id) {
-            val existing = inFlight[id]
-            if (existing != null) {
+            val key = id + ":" + host?.scopeHint().orEmpty() + ":" + catalog + ":" + demand?.cacheKey().orEmpty()
+            val existing = inFlight[key] ?: selectedPreparation?.takeIf {
+                it.matches(id, catalog, demand?.cacheKey().orEmpty())
+            }
+            if (existing != null && existing.active.get()) {
+                if (!preparation) existing.claim()
                 existing to false
             } else {
-                val createdSlot = Inflight.create(id, cache, scope, clientOrder, streamEpochs)
-                inFlight[id] = createdSlot
+                val createdSlot = Inflight.create(id, cache, scope, clientOrder, streamEpochs, host,
+                    catalog = catalog, demand = demand, preparation = preparation)
+                inFlight[key] = createdSlot
                 createdSlot to true
             }
         }
-        if (!created) return slot.extraction
+        if (!created) return slot
 
-        val remaining = AtomicInteger(3)
+        val remaining = AtomicInteger(if (host == null) 3 else 2)
         val onSettled = {
             if (remaining.decrementAndGet() == 0) {
-                inFlight.remove(id, slot)
+                inFlight.entries.removeIf { it.value === slot }
             }
         }
         slot.extraction.metadata.whenDone(onSettled)
         slot.extraction.stream.whenDone(onSettled)
-        slot.extraction.chapters.whenDone(onSettled)
+        if (host == null) slot.extraction.chapters.whenDone(onSettled)
         slot.start()
-        return slot.extraction
+        return slot
     }
 
     /**
@@ -73,34 +107,45 @@ class Extractor(
      * for other waiters (playback).
      */
     suspend fun awaitMedia(urlOrId: String): Pair<Metadata, Stream> {
-        val extraction = extract(urlOrId)
+        val extraction = extract(urlOrId, catalog = true)
         val metadata = extraction.metadata.await()
         val stream = extraction.stream.await()
         return metadata to stream
     }
 
     /**
-     * Independent `/player` fetch that does not join or replace the shared
-     * in-flight table and does not write stream URLs into the playback cache
-     * or [playerCache]. Used for download 403 URL refresh.
+     * One coordinated fresh extraction per video/session; playback and download join it.
+     * Captures configuration again and clears the complete token/minter context.
      */
-    fun extractFresh(urlOrId: String): Extraction {
+    fun extractFresh(urlOrId: String, playbackPriority: Boolean = true): Extraction {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
+        val recoveryKey = id + ":" + recoveryScope()
+        return synchronized(recoveries) {
+        recoveries.entries.removeIf { it.value.first.extraction.stream.done && System.currentTimeMillis() - it.value.second >= 10_000 }
+        recoveries[recoveryKey]?.let { return@synchronized it.first.extraction }
+        if (recoveries.size >= 128) throw IOException("RECOVERY_CAPACITY")
+        invalidateStream(id)
         val slot = Inflight.create(
             id,
             StreamWriteDisabledCache(cache),
             scope,
             clientOrder,
             streamEpochs,
+            host,
+            true,
+            playbackPriority = playbackPriority,
         )
+        recoveries[recoveryKey] = slot to System.currentTimeMillis()
+        slot.extraction.stream.whenDone { synchronized(recoveries) { recoveries[recoveryKey] = slot to System.currentTimeMillis() } }
         slot.start()
-        return slot.extraction
+        slot.extraction
+        }
     }
 
     /** Like [awaitMedia] but on [extractFresh]. Cancel cancels only this wait. */
     suspend fun awaitFreshMedia(urlOrId: String): Pair<Metadata, Stream> {
-        val extraction = extractFresh(urlOrId)
+        val extraction = extractFresh(urlOrId, playbackPriority = false)
         val metadata = extraction.metadata.await()
         val stream = extraction.stream.await()
         return metadata to stream
@@ -112,13 +157,11 @@ class Extractor(
         streamEpochs.withLock(id) {
             streamEpochs.bumpUnlocked(id)
             cache.invalidateStream(id)
+            host?.invalidateStream(id)
             // The WebView-side raw /player response is stale too: page retries and
             // replays must not replay the evicted URLs.
             playerCache?.invalidate(id)
-            val slot = inFlight[id]
-            if (slot != null && slot.epoch < streamEpochs.epochFor(id)) {
-                inFlight.remove(id, slot)
-            }
+            inFlight.entries.removeIf { it.value.id == id && it.value.epoch < streamEpochs.epochFor(id) }
         }
     }
 }
@@ -132,11 +175,22 @@ private class Inflight(
     val id: String,
     val epoch: Long,
     val extraction: Extraction,
+    private val eagerChapters: Boolean,
+    val active: AtomicBoolean,
+    private var preparation: Boolean,
+    private val catalog: Boolean,
+    private val demandKey: String,
+    private val sessionCurrent: () -> Boolean,
 ) {
+    fun claim() { preparation = false }
+    fun cancelPreparation() { if (preparation) active.set(false) }
+    fun matches(id: String, catalog: Boolean, demandKey: String): Boolean =
+        this.id == id && this.catalog == catalog && this.demandKey == demandKey &&
+            active.get() && !extraction.stream.done && sessionCurrent()
     fun start() {
         extraction.metadata.start()
         extraction.stream.start()
-        extraction.chapters.start()
+        if (eagerChapters) extraction.chapters.start()
     }
 
     companion object {
@@ -146,23 +200,46 @@ private class Inflight(
             scope: CoroutineScope,
             clientOrder: ClientOrderStore?,
             streamEpochs: StreamEpochGuard,
+            host: YoutubeExtractionHost? = null,
+            fresh: Boolean = false,
+            catalog: Boolean = false,
+            demand: StreamDemand? = null,
+            playbackPriority: Boolean = !catalog,
+            preparation: Boolean = false,
         ): Inflight {
-            val player = PlayerPage.shared(id, scope, clientOrder)
             val epoch = streamEpochs.epochFor(id)
-            val streamCache = EpochGuardedCache(cache, id, epoch, streamEpochs)
+            val active = AtomicBoolean(true)
+            val initialScope = host?.recoveryScope()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45)
+            val contextRef = AtomicReference<ExtractionContext>()
+            fun createContext(forceFresh: Boolean) = requireNotNull(host).context(id, forceFresh, catalog || forceFresh,
+                demand, { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, playbackPriority).also(contextRef::set)
+            val context = lazy { contextRef.get() ?: createContext(fresh) }
+            fun activeContext() = contextRef.get() ?: context.value
+            val contextFactory: (() -> ExtractionContext)? =
+                if (host != null) ({ activeContext() }) else null
+            val scopedCache = if (host != null) host.cache(cache) { activeContext() } else cache
+            val resolvedCache = if (fresh) StreamWriteDisabledCache(scopedCache) else scopedCache
+            val player = PlayerPage.shared(id, scope, clientOrder, contextFactory, host?.plans,
+                if (host != null && !fresh) ({ createContext(true) }) else null)
+            val streamCache = EpochGuardedCache(resolvedCache, id, epoch, streamEpochs)
             val extraction = Extraction(
                 videoId = id,
                 metadata = Promise(Metadata(), scope, autostart = false) {
-                    it.resolveMetadata(id, cache, player)
+                    it.resolveMetadata(id, resolvedCache, player)
                 },
                 stream = Promise(Stream(), scope, autostart = false) {
                     it.resolveStream(id, streamCache, player)
                 },
                 chapters = Promise(ChapterList(), scope, autostart = false) {
-                    it.resolveChapters(id, cache, player)
+                    it.resolveChapters(id, resolvedCache, player)
                 },
             )
-            return Inflight(id, epoch, extraction)
+            return Inflight(id, epoch, extraction, host == null, active, preparation, catalog,
+                demand?.cacheKey().orEmpty(), {
+                    contextRef.get()?.let { runCatching { it.check() }.isSuccess }
+                        ?: (host?.recoveryScope() == initialScope)
+                })
         }
     }
 }

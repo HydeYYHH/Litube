@@ -1,7 +1,7 @@
 (function (global) {
   // Both injection paths evaluate this file; the guard keeps the fetch
   // wrapper from stacking.
-  if (global.__shortsAdsFetchPatched) return;
+  if (global.__removeShortsAds) return;
 
   const REEL_API_RE = /\/youtubei\/v1\/reel\/reel_watch_sequence/i;
 
@@ -108,6 +108,6 @@
   if (global.document) {
     // Flag only after a successful patch so a failed attempt can be
     // retried by a later injection.
-    if (patchFetch()) global.__shortsAdsFetchPatched = true;
+    if (patchFetch()) global.__removeShortsAds = true;
   }
 })(typeof window !== 'undefined' ? window : globalThis);

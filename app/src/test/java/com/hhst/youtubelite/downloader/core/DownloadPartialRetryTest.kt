@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.core
 
 import kotlinx.coroutines.flow.first
+import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,7 +26,7 @@ class DownloadPartialRetryTest {
         assertEquals(DownloadPhase.COMPLETE, snap.task.phase)
         assertEquals(DownloadStatus.FAILED, snap.task.status)
         assertFalse(DownloadStateMachine.fullyDownloaded(snap.assets.map { it.asset }))
-        val ui = com.hhst.youtubelite.downloader.ui.DownloadUiMapper.video(
+        val ui = DownloadUiMapper.video(
             snap.task.videoId,
             listOf(snap),
         )

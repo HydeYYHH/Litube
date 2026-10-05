@@ -131,7 +131,7 @@
     const payload = currentVideo();
     const b = Lite.bridge();
     if (payload && b && typeof b.addToQueue === 'function') {
-      b.addToQueue(JSON.stringify(payload));
+      b.addToQueue(JSON.stringify({ ...payload, url: location.href }));
     } else if (b && typeof b.reportQueueAddFailed === 'function') {
       b.reportQueueAddFailed();
     }
@@ -156,7 +156,7 @@
   function build(chip, def) {
     const button = chip.cloneNode(true);
     button.id = def.id;
-    button.setAttribute('data-lite', 'entry');
+    button.setAttribute('data-injected', 'entry');
     Lite.strip(button);
     blankText(button);
     const label = def.label();

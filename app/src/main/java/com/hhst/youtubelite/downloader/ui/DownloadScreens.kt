@@ -1,12 +1,16 @@
 package com.hhst.youtubelite.downloader.ui
 
 import android.content.ClipData
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.saveable.Saver
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -81,7 +86,7 @@ fun DownloadManagerScreen(
     initialDest: String?,
     onClose: () -> Unit,
 ) {
-    var dest by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver(
+    var dest by rememberSaveable(stateSaver = Saver(
         save = { d ->
             when (d) {
                 DownloadDest.List -> "list"
@@ -112,7 +117,6 @@ fun DownloadManagerScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var pendingDelete by remember { mutableStateOf<DownloadItemUiState?>(null) }
-    var pendingMore by remember { mutableStateOf<DownloadItemUiState?>(null) }
 
     fun handle(item: DownloadItemUiState, action: DownloadRowAction) {
         // Rows reference tasks through items: address them by itemId so the
@@ -198,14 +202,12 @@ fun DownloadManagerScreen(
                 padding = padding,
                 onOpenBatch = { dest = DownloadDest.Batch(it) },
                 onAction = ::handle,
-                onMore = { pendingMore = it },
             )
             is DownloadDest.Batch -> DownloadBatchPane(
                 batchId = current.batchId,
                 viewModel = viewModel,
                 padding = padding,
                 onAction = ::handle,
-                onMore = { pendingMore = it },
             )
             DownloadDest.Settings -> DownloadSettingsPane(
                 viewModel = viewModel,
@@ -216,7 +218,6 @@ fun DownloadManagerScreen(
                 viewModel = viewModel,
                 padding = padding,
                 onAction = ::handle,
-                onMore = { pendingMore = it },
                 snackbar = snackbar,
             )
         }
@@ -235,16 +236,6 @@ fun DownloadManagerScreen(
             },
         )
     }
-    pendingMore?.let { item ->
-        MoreActionsDialog(
-            item = item,
-            onDismiss = { pendingMore = null },
-            onAction = { action ->
-                pendingMore = null
-                if (action == DownloadRowAction.DELETE) pendingDelete = item else handle(item, action)
-            },
-        )
-    }
 }
 
 @Composable
@@ -254,7 +245,6 @@ private fun DownloadListPane(
     padding: PaddingValues,
     onOpenBatch: (String) -> Unit,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
-    onMore: (DownloadItemUiState) -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(ManagerFilter.ALL) }
     val items by viewModel.observeDownloads(filter).collectAsStateWithLifecycle(emptyList())
@@ -266,16 +256,17 @@ private fun DownloadListPane(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = DownloadTokens.PageInset, vertical = 8.dp),
+                .horizontalScroll(rememberScrollState())
+                .padding(start = DownloadTokens.PageInset, end = DownloadTokens.PageInset, top = 4.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            DownloadFilterChip(filter == ManagerFilter.ALL, stringResource(R.string.download_filter_all)) {
+            DownloadFilterChip(filter == ManagerFilter.ALL, stringResource(R.string.download_filter_all), compact = true) {
                 filter = ManagerFilter.ALL
             }
-            DownloadFilterChip(filter == ManagerFilter.IN_PROGRESS, stringResource(R.string.download_filter_in_progress)) {
+            DownloadFilterChip(filter == ManagerFilter.IN_PROGRESS, stringResource(R.string.download_filter_in_progress), compact = true) {
                 filter = ManagerFilter.IN_PROGRESS
             }
-            DownloadFilterChip(filter == ManagerFilter.COMPLETED, stringResource(R.string.download_filter_completed)) {
+            DownloadFilterChip(filter == ManagerFilter.COMPLETED, stringResource(R.string.download_filter_completed), compact = true) {
                 filter = ManagerFilter.COMPLETED
             }
         }
@@ -289,7 +280,6 @@ private fun DownloadListPane(
                         item = item,
                         onOpen = { item.batchId?.let(onOpenBatch) },
                         onAction = { action -> onAction(item, action) },
-                        onMore = { onMore(item) },
                     )
                     DownloadHairline()
                 }
@@ -327,7 +317,6 @@ private fun DownloadBatchPane(
     viewModel: DownloadViewModel,
     padding: PaddingValues,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
-    onMore: (DownloadItemUiState) -> Unit,
 ) {
     val batch by viewModel.observeBatch(batchId).collectAsStateWithLifecycle(null)
     val items = batch?.items.orEmpty()
@@ -412,7 +401,6 @@ private fun DownloadBatchPane(
                         item = item,
                         onOpen = { onAction(item, DownloadRowAction.OPEN) },
                         onAction = { action -> onAction(item, action) },
-                        onMore = { onMore(item) },
                     )
                     DownloadHairline()
                 }
@@ -519,7 +507,6 @@ private fun DownloadHistoryPane(
     viewModel: DownloadViewModel,
     padding: PaddingValues,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
-    onMore: (DownloadItemUiState) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     val items by viewModel.observeDownloads(DownloadFilterAll).collectAsStateWithLifecycle(emptyList())
@@ -548,7 +535,6 @@ private fun DownloadHistoryPane(
                         item = item,
                         onOpen = { onAction(item, DownloadRowAction.OPEN) },
                         onAction = { onAction(item, it) },
-                        onMore = { onMore(item) },
                     )
                     DownloadHairline()
                 }
@@ -558,6 +544,8 @@ private fun DownloadHistoryPane(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
             title = { Text(stringResource(R.string.download_clear_history)) },
             text = {
                 Column {
@@ -620,67 +608,25 @@ private fun DeleteDialog(
     var files by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
         title = { Text(stringResource(R.string.download_delete)) },
         text = {
-            Column {
-                Text(stringResource(R.string.download_delete_confirm))
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = DownloadTokens.MinTouch)
-                        .clickable { files = false },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = !files, onClick = { files = false })
-                    Text(stringResource(R.string.download_delete_record))
-                }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = DownloadTokens.MinTouch)
-                        .clickable { files = true },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = files, onClick = { files = true })
-                    Text(stringResource(R.string.download_delete_files))
-                }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = DownloadTokens.MinTouch)
+                    .toggleable(value = files, role = Role.Checkbox,
+                        onValueChange = { files = it }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = files, onCheckedChange = null)
+                Text(stringResource(R.string.download_delete_local_file), Modifier.padding(start = 8.dp))
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 onConfirm(if (files) RemoveMode.RECORD_AND_FILES else RemoveMode.RECORD_ONLY)
-            }) { Text(stringResource(R.string.confirm)) }
+            }) { Text(stringResource(R.string.download_delete)) }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
-}
-
-@Composable
-private fun MoreActionsDialog(
-    item: DownloadItemUiState,
-    onDismiss: () -> Unit,
-    onAction: (DownloadRowAction) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(item.title, maxLines = 2) },
-        text = {
-            Column {
-                DownloadPresentation.actionsFor(item).forEach { action ->
-                    val label = actionLabel(action)
-                    TextButton(
-                        onClick = { onAction(action) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = DownloadTokens.MinTouch)
-                            .semantics { contentDescription = label },
-                    ) { Text(label) }
-                }
-            }
-        },
-        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },

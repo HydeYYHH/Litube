@@ -161,6 +161,22 @@ class PlayerViewModel(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    // Layout fallback keeps the watch tab active; it must not suspend the tab
+    // or persist the user's mini-player mode when the window grows again.
+    @Volatile private var compactPlayer = false
+
+    fun setCompactPlayer(compact: Boolean) {
+        if (compactPlayer == compact) return
+        compactPlayer = compact
+        watchPage?.evaluate("window.__syncPlayerCompact && window.__syncPlayerCompact();") { }
+    }
+
+    override fun isPlayerCompact(origin: PageOrigin): Boolean {
+        val state = _uiState.value
+        return compactPlayer && state.visible && !state.fullscreen && !state.mini &&
+            acceptsPageCallback(playbackOrigin, origin)
+    }
+
     // Position lives outside [PlayerUiState]: the ~4 Hz snapshot tick must
     // not recompose the whole surface tree, only the time readouts that
     // observe these States. (PlayerSurface receives them as parameters.)
@@ -332,8 +348,9 @@ class PlayerViewModel(
         engine.onCastError = {
             if (!userCastStop) teardownCast()
         }
-        cast.urlRefresher = LocalStreamProxy.UrlRefresher { token, videoId, itag ->
-            engine.refreshCastUrl(token, videoId, itag)
+        cast.urlRefresher = object : LocalStreamProxy.UrlRefresher {
+            override fun refreshUrl(token: String, videoId: String?, itag: Int?) = engine.refreshCastUrl(token, videoId, itag)
+            override fun backupUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?) = engine.backupCastUrl(token, videoId, itag, failedProfile)
         }
         PlaybackCommandRouter.handler = commandHandler
         // Link banner: poll receiver/browser liveness only while a link is live.
@@ -448,6 +465,8 @@ class PlayerViewModel(
         if (!origin.isHost) playbackOrigin = origin
         startPlayback(url, keepMini = _uiState.value.mini)
     }
+
+    override fun prepareVideo(url: String) = engine.preparePlayback(url)
 
     /**
      * Shorts tab left (Back / bottom-nav): dock the current media as mini.
@@ -596,7 +615,8 @@ class PlayerViewModel(
                     teardownCast()
                     onHint(hintCastFailed)
                 }
-                val source = engine.currentCastSource()
+                val source = engine.prepareCastSource()
+                if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
                 if (source == null) {
                     handoffFailed()
                     return@launch
@@ -620,7 +640,7 @@ class PlayerViewModel(
         return true
     }
 
-    /** JS `lite.setPageHasPlaylist(bool)` lands here via Bridge. */
+    /** JS `Bridge.setPageHasPlaylist(bool)` lands here via Bridge. */
     fun onPageHasPlaylist(has: Boolean) {
         if (pageHasPlaylist == has) return
         pageHasPlaylist = has
@@ -642,7 +662,7 @@ class PlayerViewModel(
     /** Double-tap seek with accumulation (±10 s per tap, 600 ms window). */
     override fun onDoubleTapSeek(offsetMs: Long) {
         val now = SystemClock.uptimeMillis()
-        if (now - lastSeekTapAt > SEEK_ACCUM_WINDOW_MS) seekAccumMs = 0L
+        if (now - lastSeekTapAt > SEEK_ACCUM_WINDOW_MS || (seekAccumMs > 0) != (offsetMs > 0)) seekAccumMs = 0L
         lastSeekTapAt = now
         seekAccumMs += offsetMs
         engine.seekRelative(offsetMs)
@@ -969,13 +989,12 @@ class PlayerViewModel(
     override fun onCastDiscovery(enabled: Boolean) = cast.setDiscoveryEnabled(enabled)
 
     override fun onShareCastLink() {
-        val source = engine.currentCastSource() ?: run {
-            onHint(hintCastFailed)
-            return
+        val token = playbackRequestSeq
+        viewModelScope.launch {
+            val source = engine.prepareCastSource()
+            if (token != playbackRequestSeq) return@launch
+            if (source == null || cast.ensureProxy(source) == null) onHint(hintCastFailed)
         }
-        // ensureProxy nulls out on failure; the follow-up share callback
-        // then no-ops silently, so surface the failure here instead.
-        if (cast.ensureProxy(source) == null) onHint(hintCastFailed)
     }
 
     override fun onCloseCastLink() = cast.stopLink()
@@ -1051,18 +1070,18 @@ class PlayerViewModel(
         // A fresh session re-arms the session-end echo: the user is casting
         // again, so a later TV-side disconnect must hand playback back.
         userCastStop = false
-        val source = engine.currentCastSource()
-        if (source == null) {
-            // No castable stream: end the half-opened session.
-            teardownCast()
-            return
-        }
-        engine.pause()
-        if (cast.startCasting(source, _positionState.longValue)) {
-            engine.attachCastPlayer(cast.remotePlayer())
-        } else {
-            teardownCast()
-            engine.play()
+        val token = playbackRequestSeq
+        viewModelScope.launch {
+            val source = engine.prepareCastSource()
+            if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
+            if (source == null) { teardownCast(); return@launch }
+            engine.pause()
+            if (cast.startCasting(source, _positionState.longValue)) {
+                engine.attachCastPlayer(cast.remotePlayer())
+            } else {
+                teardownCast()
+                engine.play()
+            }
         }
     }
 

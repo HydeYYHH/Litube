@@ -1,77 +1,50 @@
 package com.hhst.youtubelite.downloader.resolve
 
 import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
-import com.hhst.youtubelite.extractor.Extractor
 import kotlinx.coroutines.sync.Mutex
+import java.io.IOException
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.ConcurrentHashMap
 
-/**
- * 403 URL refresh for downloads: serial per video, at most two rounds, and
- * the related PoToken is cleared before the independent re-extract.
- *
- * [Extractor.awaitMedia] / [Extractor.awaitFreshMedia] waits are independently
- * cancellable. Playback's in-flight `/player` slot is not cancelled here.
- *
- * PoToken mint uses a dedicated WebView. Process-global timer occupancy is
- * owned by [com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy].
- */
+/** Concurrent components share the host's one refresh; each transfer bounds its own retries. */
 class DownloadPoTokenLifecycle(
     private val catalogs: DownloadCatalogSource,
     private val poToken: PoTokenEvictor? = null,
 ) {
-    private val locks = ConcurrentHashMap<String, Mutex>()
-    private val rounds = ConcurrentHashMap<String, Int>()
+    private class Recovery {
+        val mutex = Mutex()
+        var users = 0
+        var at = 0L
+        var catalog: DownloadCatalog? = null
+    }
+    private val recoveries = LinkedHashMap<String, Recovery>(16, .75f, true)
 
-    suspend fun refreshAfter403(
-        videoId: String,
-        previousIdentities: List<String>,
-    ): IdentityRefreshResult {
-        val mutex = locks.getOrPut(videoId) { Mutex() }
-        return mutex.withLock {
-            val next = (rounds[videoId] ?: 0) + 1
-            if (next > MAX_ROUNDS) {
-                return@withLock IdentityRefreshResult(
-                    videoId = videoId,
-                    round = next,
-                    exhausted = true,
-                    evictedPoToken = false,
-                    catalog = null,
-                    decisions = previousIdentities.map {
-                        ComponentRefreshDecision(it, refreshedIdentity = null, needsRedownload = true)
-                    },
-                )
-            }
-            rounds[videoId] = next
-            poToken?.evict(videoId)
-            val catalog = catalogs.refresh(videoId)
-            val byItag = catalog.formats.associateBy { it.itag }
-            val decisions = previousIdentities.map { previous ->
-                val parts = previous.removePrefix(DownloadResourceIdentity.PREFIX).split(':')
-                val itag = parts.getOrNull(1)?.toIntOrNull()
-                val refreshedFormat = itag?.let { byItag[it] }
-                val refreshed = refreshedFormat?.let { DownloadResourceIdentity.of(videoId, it) }
-                val proven = refreshed != null && DownloadResourceIdentity.proven(previous, refreshed)
-                ComponentRefreshDecision(
-                    previousIdentity = previous,
-                    refreshedIdentity = refreshed,
-                    needsRedownload = !proven,
-                )
-            }
-            IdentityRefreshResult(
-                videoId = videoId,
-                round = next,
-                exhausted = false,
-                evictedPoToken = poToken != null,
-                catalog = catalog,
-                decisions = decisions,
-            )
+    suspend fun refreshAfter403(videoId: String, previousIdentities: List<String>): IdentityRefreshResult {
+        val scope = videoId + ":" + catalogs.scope()
+        val recovery = synchronized(recoveries) {
+            recoveries.entries.removeAll { it.value.users == 0 && System.currentTimeMillis() - it.value.at > 120_000 }
+            if (scope !in recoveries && recoveries.size >= 256) throw IOException("RECOVERY_CAPACITY")
+            recoveries.getOrPut(scope) { Recovery() }.also { it.users++ }
         }
+        try {
+            return recovery.mutex.withLock {
+                if (recovery.catalog == null || System.currentTimeMillis() - recovery.at >= 10_000) {
+                    poToken?.evict(videoId)
+                    recovery.catalog = catalogs.refresh(videoId)
+                    recovery.at = System.currentTimeMillis()
+                }
+                val catalog = requireNotNull(recovery.catalog)
+                val decisions = previousIdentities.map { previous ->
+                    val format = DownloadResourceIdentity.matching(videoId, previous, catalog.formats)
+                    val identity = format?.let { DownloadResourceIdentity.of(videoId, it) }
+                    ComponentRefreshDecision(previous, identity,
+                        identity == null || !DownloadResourceIdentity.proven(previous, identity))
+                }
+                IdentityRefreshResult(videoId, 1, false, poToken != null, catalog, decisions)
+            }
+        } finally { synchronized(recoveries) { recovery.users-- } }
     }
 
-    companion object {
-        const val MAX_ROUNDS = 2
-    }
+    companion object { const val MAX_ROUNDS = 1 }
 }
 
 data class IdentityRefreshResult(

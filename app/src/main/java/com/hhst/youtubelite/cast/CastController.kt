@@ -8,6 +8,7 @@ import android.os.Looper
 import android.util.Log
 import androidx.media3.cast.CastPlayer
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -26,7 +27,9 @@ import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.hhst.youtubelite.extractor.Format
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.player.engine.CastSource
+import okhttp3.OkHttpClient
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
@@ -70,11 +73,12 @@ data class CastUiState(
 @UnstableApi
 class CastController(
     private val appContext: Context,
-    private val http: okhttp3.OkHttpClient,
+    private val http: OkHttpClient,
+    private val mediaRequests: YoutubeMediaRequests? = null,
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val io: ExecutorService = Executors.newCachedThreadPool { r ->
-        Thread(r, "YTL-CastSidx").apply { isDaemon = true }
+        Thread(r, "CastSidx").apply { isDaemon = true }
     }
 
     private val _state = MutableStateFlow(CastUiState())
@@ -123,7 +127,7 @@ class CastController(
             val ctx = CastContext.getSharedInstance(activity)
             val player = CastPlayer.Builder(appContext).build()
             player.addListener(object : Player.Listener {
-                override fun onPlayerErrorChanged(error: androidx.media3.common.PlaybackException?) {
+                override fun onPlayerErrorChanged(error: PlaybackException?) {
                     if (error != null) {
                         Log.w(TAG, "cast player error: ${error.errorCodeName}", error)
                     }
@@ -272,7 +276,7 @@ class CastController(
     private fun createProxy(): LocalStreamProxy? {
         val host = LocalStreamProxy.resolveBindHost(appContext) ?: return null
         return runCatching {
-            LocalStreamProxy(appContext, http, advertisedHost = host).also {
+            LocalStreamProxy(appContext, http, advertisedHost = host, mediaRequests = mediaRequests).also {
                 it.urlRefresher = urlRefresher
                 it.start()
                 proxy = it
@@ -356,6 +360,8 @@ class CastController(
             videoItag = source.video?.itag,
             audioItag = source.audio?.itag,
             generation = generation,
+            videoRequestPlan = source.video?.requestPlan,
+            audioRequestPlan = source.audio?.requestPlan,
         )
         proxyConfiguredVideoId = source.videoId
     }
@@ -495,7 +501,7 @@ class CastController(
                     if (state == Player.STATE_READY) player.removeListener(this)
                 }
 
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                override fun onPlayerError(error: PlaybackException) {
                     player.removeListener(this)
                     main.post {
                         if (chromecastActive && gen == configureGen.get()) endSession()
@@ -619,7 +625,7 @@ class CastController(
     }
 
     companion object {
-        private const val TAG = "YTLCast"
+        private const val TAG = "CastController"
         private const val SIDX_FETCH_TIMEOUT_MS = 15_000L
         private const val SIDX_RELOAD_TIMEOUT_MS = 15_000L
     }

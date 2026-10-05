@@ -89,19 +89,20 @@ fun PlayerSurface(
     pip: Boolean = false,
     modifier: Modifier = Modifier,
     onRefreshCastState: () -> Unit = {},
+    managedByHost: Boolean = false,
 ) {
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var dialog by remember { mutableStateOf<PlayerDialog?>(null) }
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
     val zoom = remember { VideoZoom() }
-    val fillsHostWindow = state.fullscreen || pip || state.mini
-    // Each surface geometry gets its own view: re-parenting one AndroidView
-    // detaches the SurfaceView's Surface from ExoPlayer (black video).
+    val miniHandle = LocalMiniPlayerHandle.current
+    val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
+    // The stable local host resizes the same view between embedded and mini.
+    // Fullscreen and system PiP keep their separate window geometries.
     val surfaceId = when {
-        state.mini -> "mini"
         pip -> "pip"
         state.fullscreen -> "fullscreen"
-        else -> "embedded"
+        else -> "local"
     }
     val density = LocalDensity.current
     val layoutDir = LocalLayoutDirection.current
@@ -296,7 +297,7 @@ fun PlayerSurface(
                 onPlayPause = callbacks::onPlayPause,
                 onPrevious = callbacks::onPrevious,
                 onNext = callbacks::onNext,
-                onClose = callbacks::onMiniClose,
+                onClose = { miniHandle?.dismiss?.invoke() ?: callbacks.onMiniClose() },
                 onRestore = callbacks::onMiniRestore,
                 onQueue = { sheet = PlayerSheet.Queue },
             )

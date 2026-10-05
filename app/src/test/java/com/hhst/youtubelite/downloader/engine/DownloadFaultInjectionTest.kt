@@ -1,28 +1,33 @@
 package com.hhst.youtubelite.downloader.engine
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import android.content.Intent
+import com.hhst.youtubelite.downloader.core.SeqIdFactory
+import com.hhst.youtubelite.downloader.core.InputComponent
+import com.hhst.youtubelite.downloader.core.InputComponentKind
+import com.hhst.youtubelite.downloader.core.DownloadTransport
+import com.hhst.youtubelite.downloader.core.DownloadTarget
+import com.hhst.youtubelite.downloader.core.FileAvailability
+import com.hhst.youtubelite.downloader.core.PublishRequest
+import com.hhst.youtubelite.downloader.core.MuxResult
+import com.hhst.youtubelite.downloader.core.DownloadResolver
+import com.hhst.youtubelite.downloader.core.DownloadResolveOutcome
+import com.hhst.youtubelite.downloader.core.DownloadRequest
+import com.hhst.youtubelite.downloader.core.DownloadPublisher
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+import com.hhst.youtubelite.downloader.core.DownloadCoordinator
+import com.hhst.youtubelite.downloader.core.DownloadComponentSource
+import com.hhst.youtubelite.downloader.core.DownloadChunk
+import com.hhst.youtubelite.downloader.core.CompletionKind
+import com.hhst.youtubelite.downloader.core.PublishResult
+import com.hhst.youtubelite.downloader.core.NoOpPublisher
+import com.hhst.youtubelite.downloader.core.DownloadHarness
+import com.hhst.youtubelite.downloader.core.TransferResult
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.BatchSource
-import com.hhst.youtubelite.downloader.core.CompletionKind
-import com.hhst.youtubelite.downloader.core.DownloadChunk
-import com.hhst.youtubelite.downloader.core.DownloadComponentSource
-import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadFinalizer
-import com.hhst.youtubelite.downloader.core.DownloadPhase
-import com.hhst.youtubelite.downloader.core.DownloadPublisher
-import com.hhst.youtubelite.downloader.core.DownloadRequest
-import com.hhst.youtubelite.downloader.core.DownloadResolveOutcome
-import com.hhst.youtubelite.downloader.core.DownloadResolver
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.core.DownloadTarget
-import com.hhst.youtubelite.downloader.core.DownloadTransport
-import com.hhst.youtubelite.downloader.core.FileAvailability
-import com.hhst.youtubelite.downloader.core.InputComponent
-import com.hhst.youtubelite.downloader.core.InputComponentKind
-import com.hhst.youtubelite.downloader.core.MuxResult
-import com.hhst.youtubelite.downloader.core.PublishRequest
-import com.hhst.youtubelite.downloader.core.SeqIdFactory
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.core.vid
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
@@ -124,7 +129,7 @@ class DownloadFaultInjectionTest {
         val source = File(dir, "src.bin").also { it.writeBytes(ByteArray(8) { 2 }) }
         val published = publisher.publish(
             PublishRequest("p1", "a1", "clip.mp4", "video/mp4", source),
-        ) as com.hhst.youtubelite.downloader.core.PublishResult.Published
+        ) as PublishResult.Published
         h.wired.reportAssetPublished(id, 0, AssetKind.VIDEO, published.uri)
         val file = backend.fileFor(published.uri)!!
         assertTrue(file.isFile)
@@ -151,7 +156,7 @@ class DownloadFaultInjectionTest {
             repository = h.repo,
             coordinator = h.wired,
             scheduler = h.scheduler,
-            publisher = com.hhst.youtubelite.downloader.core.NoOpPublisher,
+            publisher = NoOpPublisher,
             directories = DownloadDirectories(
                 File(System.getProperty("java.io.tmpdir"), "dl-inv-${System.nanoTime()}"),
             ),
@@ -204,9 +209,9 @@ class DownloadFaultInjectionTest {
 
     @Test
     fun shareQueueAndWeb_useTheSameCoordinatorFingerprint() = runTest {
-        val h = com.hhst.youtubelite.downloader.core.DownloadHarness()
+        val h = DownloadHarness()
         val parsed = DownloadShareParser.parse(
-            android.content.Intent.ACTION_SEND,
+            Intent.ACTION_SEND,
             "Watch https://youtu.be/dQw4w9wgGcQ",
             null,
         )
@@ -241,7 +246,7 @@ class DownloadFaultInjectionTest {
 
     @Test
     fun processRestore_pausedStaysPaused_runningWaitsForSystem() = runTest {
-        val h = com.hhst.youtubelite.downloader.core.DownloadHarness()
+        val h = DownloadHarness()
         val running = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
         val paused = h.coordinator.enqueue(request("b"), "s2").created.single().taskId
         h.coordinator.reportExecution(running, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)
@@ -321,8 +326,9 @@ class DownloadFaultInjectionTest {
             source: DownloadComponentSource,
             dest: File,
             verified: List<DownloadChunk>,
+            onProgress: suspend (DownloadChunk, Long?) -> Boolean,
             onChunk: suspend (DownloadChunk) -> Boolean,
-        ) = com.hhst.youtubelite.downloader.core.TransferResult.Failed(reason)
+        ) = TransferResult.Failed(reason)
     }
 
     private class CompletingTransport : DownloadTransport {
@@ -333,8 +339,9 @@ class DownloadFaultInjectionTest {
             source: DownloadComponentSource,
             dest: File,
             verified: List<DownloadChunk>,
+            onProgress: suspend (DownloadChunk, Long?) -> Boolean,
             onChunk: suspend (DownloadChunk) -> Boolean,
-        ): com.hhst.youtubelite.downloader.core.TransferResult {
+        ): TransferResult {
             dest.parentFile?.mkdirs()
             dest.writeBytes(ByteArray(16) { 4 })
             onChunk(
@@ -348,7 +355,7 @@ class DownloadFaultInjectionTest {
                     tempPath = dest.path,
                 ),
             )
-            return com.hhst.youtubelite.downloader.core.TransferResult.Completed
+            return TransferResult.Completed
         }
     }
 

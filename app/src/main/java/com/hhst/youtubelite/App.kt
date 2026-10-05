@@ -1,6 +1,7 @@
 package com.hhst.youtubelite
 
 import android.app.Application
+import android.webkit.WebSettings
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.hhst.youtubelite.core.Constants
@@ -9,7 +10,7 @@ import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.downloader.work.DownloadStartupReconciler
 import com.hhst.youtubelite.downloader.work.KoinDownloadWorkerFactory
-import com.hhst.youtubelite.extractor.PoTokenProvider
+import com.hhst.youtubelite.extractor.EjsRuntimeProcess
 import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.tencent.mmkv.MMKV
@@ -20,13 +21,22 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 
-/** Process entry: MMKV, Koin, WorkManager, and poToken WebView setup. */
+/** Process entry: MMKV, Koin and background download scheduling. */
 class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Constants.genuineUserAgent = android.webkit.WebSettings.getDefaultUserAgent(this)
+        if (EjsRuntimeProcess.initialize(this)) return
+        Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         MMKV.initialize(this)
+        // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
+        MMKV.defaultMMKV().let { kv ->
+            if (!kv.decodeBool("youtube-engine-v1-migrated", false)) {
+                kv.allKeys()?.filter { it.startsWith("extractor:stream:") || it == "extractor:client_order" }
+                    ?.forEach(kv::removeValueForKey)
+                kv.encode("youtube-engine-v1-migrated", true)
+            }
+        }
         startKoin {
             androidLogger(Level.ERROR)
             androidContext(this@App)
@@ -38,9 +48,6 @@ class App : Application() {
                 .setWorkerFactory(KoinDownloadWorkerFactory())
                 .build(),
         )
-        val poToken = get<PoTokenProvider>()
-        poToken.initialize()
-        Promise.DEFAULT_SCOPE.launch { poToken.precache() }
         Promise.DEFAULT_SCOPE.launch {
             PlayerDataSource.precache(this@App)
         }

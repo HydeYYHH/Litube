@@ -1,27 +1,29 @@
 package com.hhst.youtubelite.downloader.regression
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import com.hhst.youtubelite.downloader.core.DownloadHarness
+import com.hhst.youtubelite.downloader.core.TransferResult
+import com.hhst.youtubelite.downloader.core.PublishRequest
+import com.hhst.youtubelite.downloader.core.MuxResult
+import com.hhst.youtubelite.downloader.core.InputComponentKind
+import com.hhst.youtubelite.downloader.core.InputComponent
+import com.hhst.youtubelite.downloader.core.DownloadTarget
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+import com.hhst.youtubelite.downloader.core.DownloadConfig
+import com.hhst.youtubelite.downloader.core.DownloadComponentSource
+import com.hhst.youtubelite.downloader.core.DownloadChunk
+import com.hhst.youtubelite.downloader.core.DeleteResult
+import com.hhst.youtubelite.downloader.core.DownloadFinalizer
+import com.hhst.youtubelite.downloader.resolve.DownloadSelector
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.BatchSource
-import com.hhst.youtubelite.downloader.core.DeleteResult
-import com.hhst.youtubelite.downloader.core.DownloadChunk
-import com.hhst.youtubelite.downloader.core.DownloadComponentSource
-import com.hhst.youtubelite.downloader.core.DownloadConfig
-import com.hhst.youtubelite.downloader.core.DownloadHarness
-import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.core.DownloadTarget
-import com.hhst.youtubelite.downloader.core.InputComponent
-import com.hhst.youtubelite.downloader.core.InputComponentKind
-import com.hhst.youtubelite.downloader.core.MuxResult
 import com.hhst.youtubelite.downloader.core.NoOpPublisher
 import com.hhst.youtubelite.downloader.core.NoOpResolver
 import com.hhst.youtubelite.downloader.core.NoOpTransport
-import com.hhst.youtubelite.downloader.core.PublishRequest
 import com.hhst.youtubelite.downloader.core.PublishResult
 import com.hhst.youtubelite.downloader.core.RemoveMode
-import com.hhst.youtubelite.downloader.core.TransferResult
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.engine.DownloadEngine
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
@@ -112,7 +114,7 @@ class DownloaderRegressionTest {
         h.wired.reportExecution(second, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)
         val root = temp()
         try {
-            val finalizer = object : com.hhst.youtubelite.downloader.core.DownloadFinalizer {
+            val finalizer = object : DownloadFinalizer {
                 override suspend fun muxAndVerify(
                     inputs: List<File>,
                     output: File,
@@ -129,7 +131,7 @@ class DownloaderRegressionTest {
 
     @Test
     fun explicitQuality_doesNotSilentlyFallBack() {
-        val result = com.hhst.youtubelite.downloader.resolve.DownloadSelector.select(
+        val result = DownloadSelector.select(
             catalog(listOf(videoFormat(720), audioFormat())),
             DownloadConfig(videoQuality = "1080p", videoItagHint = 137),
         )
@@ -239,7 +241,7 @@ class DownloaderRegressionTest {
     @Test
     fun estimateWithoutClen_isNotTreatedAsTrustedLength() {
         val format = videoFormat(720).copy(url = "https://rr.googlevideo.com/videoplayback?id=x&itag=136")
-        val selected = com.hhst.youtubelite.downloader.resolve.DownloadSelector.select(
+        val selected = DownloadSelector.select(
             catalog(listOf(format, audioFormat())),
             DownloadConfig(),
         ) as DownloadSelection.Ready

@@ -40,7 +40,7 @@ internal class FakeCatalogs(
     override suspend fun refresh(videoId: String) = catalog(videoId)
 }
 
-internal class DownloadAndroidHarness {
+internal class DownloadAndroidHarness(catalogs: DownloadCatalogSource = FakeCatalogs()) {
     val repo = InMemoryDownloadRepository()
     val coordinator = DownloadCoordinator(
         repository = repo,
@@ -50,7 +50,7 @@ internal class DownloadAndroidHarness {
         ids = SeqIdFactory(),
         clock = { 1_000L },
     )
-    val viewModel = DownloadViewModel(coordinator, FakeCatalogs())
+    val viewModel = DownloadViewModel(coordinator, catalogs)
 }
 
 internal fun vid(raw: String): String = raw.padEnd(11, 'x').take(11)

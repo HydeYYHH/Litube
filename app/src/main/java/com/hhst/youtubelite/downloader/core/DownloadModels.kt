@@ -313,7 +313,7 @@ data class BatchView(
 object DownloadLimits {
     const val MAX_SNAPSHOT_ITEMS = 500
     const val MAX_SNAPSHOT_BYTES = 1 * 1024 * 1024
-    /** Native queue cap; [com.hhst.youtubelite.player.queue.QueueRepository] stays at 50. */
+    /** Native queue cap; [player.queue.QueueRepository] stays at 50. */
     const val NATIVE_QUEUE_CAP = 50
 }
 

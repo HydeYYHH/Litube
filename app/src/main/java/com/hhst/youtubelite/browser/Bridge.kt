@@ -2,19 +2,17 @@ package com.hhst.youtubelite.browser
 
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.JavascriptInterface
 import com.google.gson.Gson
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.extractor.VideoId
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.launch
 
 /** Player operations callable from injected page scripts. */
 interface PlayerHooks {
+    /** Selected card preparation; no queue, history, surface or playback changes. */
+    fun prepareVideo(url: String) { }
     // The three hooks below are invoked on the MAIN thread (Bridge posts them).
     fun playVideo(url: String, origin: PageOrigin = PageOrigin.HOST)
     fun hidePlayer(origin: PageOrigin = PageOrigin.HOST)
@@ -32,6 +30,8 @@ interface PlayerHooks {
      * In-page player box (CSS px ≈ dp) so the native overlay can match it.
      */
     fun setPlayerLayout(topDp: Int, heightDp: Int, origin: PageOrigin = PageOrigin.HOST)
+    /** Synchronous, thread-safe query for the native layout's compact watch slot. */
+    fun isPlayerCompact(origin: PageOrigin = PageOrigin.HOST): Boolean = false
 }
 
 /**
@@ -56,7 +56,7 @@ interface WatchPage {
     fun goBack()
 }
 
-/** WebView JS bridge (`Bridge` / `lite`). */
+/** WebView JS bridge (`Bridge`). */
 class Bridge(
     private val onOpenTab: (url: String) -> Unit,
     private val onOpenExtension: () -> Unit,
@@ -85,8 +85,6 @@ class Bridge(
         val thumbnailUrl: String? = null,
     )
     private val main = Handler(Looper.getMainLooper())
-    private val lastVideo = AtomicReference<String?>(null)
-    private val pendingVideo = AtomicReference<String?>(null)
     private val documentGeneration = AtomicLong(0L)
 
     /** Full document load (onPageStarted): stale callbacks from the previous document drop. */
@@ -95,6 +93,8 @@ class Bridge(
     }
 
     fun pageOrigin(): PageOrigin = PageOrigin(tabId, documentGeneration.get())
+    @JavascriptInterface fun currentDocumentGeneration(): Long = documentGeneration.get()
+    @JavascriptInterface fun currentExtractionSession(): String = extractor?.sessionStamp().orEmpty()
 
     @JavascriptInterface
     fun openTab(url: String?) {
@@ -184,6 +184,13 @@ class Bridge(
     }
 
     @JavascriptInterface
+    fun prepare(url: String?) {
+        if (url == null || mediaIdOf(url) == null) return
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin()) playerHooks?.prepareVideo(url) }
+    }
+
+    @JavascriptInterface
     fun play(url: String?) {
         if (url == null || mediaIdOf(url) == null) return
         val origin = pageOrigin()
@@ -202,6 +209,9 @@ class Bridge(
         main.post { playerHooks?.setPlayerLayout(topDp, heightDp, origin) }
     }
 
+    @JavascriptInterface
+    fun isPlayerCompact(): Boolean = playerHooks?.isPlayerCompact(pageOrigin()) == true
+
     /**
      * Runs on the JavaBridge thread (the JS side needs the synchronous
      * return); see [PlayerHooks.seekLoadedVideo] for the threading contract.
@@ -218,41 +228,7 @@ class Bridge(
         main.post { onPlaylistPresence?.invoke(has) }
     }
 
-    /**
-     * Video id switch from watch-id.js.
-     * Starts Innertube extract to warm the cache for the player.
-     */
-    @JavascriptInterface
-    fun onVideoChanged(id: String?) {
-        val videoId = VideoId.parse(id) ?: return
-        val prev = lastVideo.getAndSet(videoId)
-        if (prev == videoId) return
-        val ex = extractor ?: return
-        // Stay off the WebView binder path for heavy startup work.
-        Promise.DEFAULT_SCOPE.launch {
-            try {
-                ex.extract(videoId)
-            } catch (e: Exception) {
-                Log.w(TAG, "prefetch fail $videoId", e)
-            }
-        }
-    }
-
-    /**
-     * Reports the video id of a /player POST the page is about to send, so the
-     * request interceptor can serve the shared response. Null clears the match.
-     */
-    @JavascriptInterface
-    fun onPlayerRequest(id: String?) {
-        pendingVideo.set(VideoId.parse(id))
-    }
-
-    /** Video id of the pending page /player request, if known. */
-    val pendingVideoId: String?
-        get() = pendingVideo.get()
-
     companion object {
         const val NAME = "Bridge"
-        private const val TAG = "JsBridge"
     }
 }

@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 import android.os.SystemClock
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -87,7 +88,7 @@ fun Modifier.playerGestures(
         }
 }
 
-private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.trackDrag(
+private suspend fun AwaitPointerEventScope.trackDrag(
     callbacks: GestureCallbacks,
     zoneEnabled: (GestureMath.GestureZone) -> Boolean,
     tapGuard: TapGuard,

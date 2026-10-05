@@ -77,7 +77,7 @@
   }
 
   function bridge() {
-    return window.lite || window.Bridge || null;
+    return window.Bridge || null;
   }
 
   function id(url) {
@@ -113,14 +113,14 @@
     'ytm-slim-video-metadata-section-renderer';
 
   /** Clone source for an action-bar entry: the first free native chip
-   *  (share, more, …); our own data-lite entries never qualify. When the
+   *  (share, more, …); our own data-injected entries never qualify. When the
    *  bar has no free chip yet, the last nested host — the dislike entry,
    *  after which the entries belong — is the template of last resort. */
   function chip(row) {
     if (!(row instanceof Element)) return null;
     let nested = null;
     for (const host of row.querySelectorAll(HOSTS)) {
-      if (host.closest('[data-lite]')) continue;
+      if (host.closest('[data-injected]')) continue;
       if (host.closest(NESTED)) {
         nested = host;
         continue;

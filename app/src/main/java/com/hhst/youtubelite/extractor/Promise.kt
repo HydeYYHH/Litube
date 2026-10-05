@@ -60,10 +60,8 @@ class Promise<T>(
         scope.launch {
             try {
                 work(this@Promise)
-                deferred.complete(value)
             } catch (t: Throwable) {
                 failure.compareAndSet(null, t)
-                deferred.completeExceptionally(t)
             } finally {
                 elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
                 val listeners: List<() -> Unit>
@@ -72,6 +70,8 @@ class Promise<T>(
                     listeners = doneListeners.toList()
                     doneListeners.clear()
                 }
+                // Awaiters observe settled flags before receiving the completion signal.
+                failure.get()?.let(deferred::completeExceptionally) ?: deferred.complete(value)
                 listeners.forEach { listener -> runCatching { listener() } }
             }
         }
@@ -79,14 +79,16 @@ class Promise<T>(
 
     /** Blocks until complete; rethrows if [work] failed. */
     fun get(): T = runBlocking {
+        start()
         deferred.await()
     }
 
     /** Suspends until complete; rethrows if [work] failed. */
-    suspend fun await(): T = deferred.await()
+    suspend fun await(): T { start(); return deferred.await() }
 
     /** Like [get], with timeout. */
     fun get(timeout: Long, unit: TimeUnit): T = runBlocking {
+        start()
         withTimeout(unit.toMillis(timeout).milliseconds) {
             deferred.await()
         }

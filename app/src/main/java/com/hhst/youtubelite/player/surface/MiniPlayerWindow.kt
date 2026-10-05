@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -63,6 +64,11 @@ fun MiniPlayerWindow(
     onBackgroundTap: () -> Unit,
     modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
+    mini: Boolean = true,
+    fillsWindow: Boolean = false,
+    embeddedTopDp: Int = 0,
+    embeddedHeightDp: Int = 0,
+    topInsetDp: Int = 0,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -77,7 +83,11 @@ fun MiniPlayerWindow(
         )
     }
     val spec = MiniPlayerLayout.computeSpec(screenWidthDp, bottomInsetDp, widthOverrideDp)
-    var parentSize by remember { mutableStateOf(IntSize.Zero) }
+    var measuredParentSize by remember { mutableStateOf(IntSize.Zero) }
+    // Effects must use the same bounds as restX/restY from this composition.
+    // A size callback can otherwise update the state before an effect starts,
+    // while its captured dock coordinates still belong to the zero-size frame.
+    val parentSize = measuredParentSize
     var dragX by remember { mutableFloatStateOf(with(density) { loaded.translationXDp.dp.toPx() }) }
     var dragY by remember { mutableFloatStateOf(with(density) { loaded.translationYDp.dp.toPx() }) }
     var originX by remember { mutableFloatStateOf(0f) }
@@ -93,6 +103,10 @@ fun MiniPlayerWindow(
     // drag/pinch/persist may run in between).
     var dismissing by remember { mutableStateOf(false) }
     var dismissAlpha by remember { mutableFloatStateOf(1f) }
+    var viewport by remember { mutableStateOf(Rect.Zero) }
+    var previousMini by remember { mutableStateOf(mini) }
+    var transitionRunning by remember { mutableStateOf(false) }
+    var placementRestored by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(MiniPlayerLayout.CORNER_DP.dp)
 
     val widthPx = with(density) { spec.widthDp.dp.toPx() }
@@ -108,19 +122,53 @@ fun MiniPlayerWindow(
         store.save(spec.widthDp, x / density.density, y / density.density)
     }
 
-    LaunchedEffect(spec.widthDp, parentSize.width, parentSize.height) {
-        if (parentSize.width <= 0 || dismissing) return@LaunchedEffect
+    LaunchedEffect(spec, parentSize, topInsetDp, density.density) {
+        if (parentSize.width <= 0 || parentSize.height <= 0 || dismissing) return@LaunchedEffect
+        // A layout change invalidates the snap's captured width and dock.
+        // In particular a pinch ending in the same frame must not let its
+        // older snap completion overwrite the new stored width.
+        snapJob?.cancel()
+        snapJob = null
+        if (!placementRestored) {
+            val saved = store.load()
+            dragX = saved.translationXDp * density.density
+            dragY = saved.translationYDp * density.density
+            placementRestored = true
+        }
         val x = MiniPlayerLayout.snapX(dragX, restX.toInt(), widthPx.toInt(), parentSize.width)
-        val y = MiniPlayerLayout.clampTranslation(
+        val y = maxOf(with(density) { topInsetDp.dp.toPx() } - restY, MiniPlayerLayout.clampTranslation(
             dragY, restY.toInt(), heightPx.toInt(), parentSize.height,
-        )
+        ))
         dragX = x
         dragY = y
         // A pinch drives a width change per frame: keep re-docking/clamping
         // continuously, but persist only when no gesture holds the window —
         // the drag/pinch end handler persists the final placement, so the
         // store is not written on every pointer event.
-        if (pinchStartWidthDp == 0) persist(x, y)
+        if (mini && pinchStartWidthDp == 0) persist(x, y)
+    }
+
+    val target = if (mini) Rect(restX + dragX, restY + dragY, restX + dragX + widthPx, restY + dragY + heightPx)
+        else if (fillsWindow) Rect(0f, 0f, parentSize.width.toFloat(), parentSize.height.toFloat())
+        else with(density) { Rect(0f, embeddedTopDp.dp.toPx(), parentSize.width.toFloat(),
+            embeddedTopDp.dp.toPx() + embeddedHeightDp.dp.toPx()) }
+    LaunchedEffect(mini, fillsWindow, target, parentSize) {
+        if (parentSize.width <= 0 || parentSize.height <= 0) return@LaunchedEffect
+        val changed = previousMini != mini
+        previousMini = mini
+        if (changed && !mini) {
+            snapJob?.cancel()
+            snapJob = null
+            persist(dragX, dragY)
+        }
+        val from = viewport
+        if ((changed || transitionRunning) && from.width > 0 && from.height > 0) {
+            transitionRunning = true
+            Animatable(0f).animateTo(1f, tween(MiniPlayerLayout.TRANSITION_MS, easing = SnapEasing)) {
+                viewport = androidx.compose.ui.geometry.lerp(from, target, value)
+            }
+        } else viewport = target
+        transitionRunning = false
     }
 
     val handle = remember { MiniPlayerHandle() }
@@ -130,14 +178,14 @@ fun MiniPlayerWindow(
         // it). The snap is cancelled on the first real DRAG move instead —
         // see dragFromStart.
         handle.begin = {
-            if (!dismissing) {
+            if (mini && !dismissing && !transitionRunning) {
                 originX = dragX
                 originY = dragY
                 pinchStartWidthDp = spec.widthDp
             }
         }
         handle.dragFromStart = fun(dx, dy) {
-            if (parentSize.width <= 0 || dismissing) return
+            if (!mini || parentSize.width <= 0 || dismissing || transitionRunning) return
             // First drag move: cancel the in-flight snap and re-anchor the
             // origin to the CURRENT (mid-animation) position, so the drag
             // does not jump from a stale pre-cancel origin.
@@ -150,12 +198,12 @@ fun MiniPlayerWindow(
             dragX = MiniPlayerLayout.clampTranslation(
                 originX + dx, restX.toInt(), widthPx.toInt(), parentSize.width,
             )
-            dragY = MiniPlayerLayout.clampTranslation(
+            dragY = maxOf(with(density) { topInsetDp.dp.toPx() } - restY, MiniPlayerLayout.clampTranslation(
                 originY + dy, restY.toInt(), heightPx.toInt(), parentSize.height,
-            )
+            ))
         }
         handle.pinchScale = { scale ->
-            if (!dismissing) {
+            if (mini && !dismissing && !transitionRunning) {
                 snapJob?.cancel()
                 snapJob = null
                 val start = pinchStartWidthDp.takeIf { it > 0 } ?: spec.widthDp
@@ -166,7 +214,7 @@ fun MiniPlayerWindow(
             }
         }
         handle.end = fun(moved) {
-            if (dismissing) return
+            if (!mini || dismissing || transitionRunning) return
             pinchStartWidthDp = 0
             if (!moved || parentSize.width <= 0) return
             val x = MiniPlayerLayout.snapX(dragX, restX.toInt(), widthPx.toInt(), parentSize.width)
@@ -188,7 +236,8 @@ fun MiniPlayerWindow(
         }
         handle.tap = onBackgroundTap
         handle.dismiss = {
-            if (!dismissing && parentSize.width > 0) {
+            if (mini && !dismissing && parentSize.width > 0 && parentSize.height > 0) {
+                persist(dragX, dragY)
                 dismissing = true
                 snapJob?.cancel()
                 snapJob = null
@@ -215,26 +264,26 @@ fun MiniPlayerWindow(
         }
     }
 
-    CompositionLocalProvider(LocalMiniPlayerHandle provides handle) {
+    CompositionLocalProvider(LocalMiniPlayerHandle provides if (mini) handle else null) {
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .onSizeChanged { parentSize = it },
+                .onSizeChanged { if (it.width > 0 && it.height > 0) measuredParentSize = it },
         ) {
             // Skip the first frame(s) until the parent reports its size: with
             // restX/restY still 0 the window would flash at the parent's
             // top-left corner before snapping to its dock.
-            if (parentSize.width > 0) {
+            if (parentSize.width > 0 && parentSize.height > 0 && viewport.width > 0 && viewport.height > 0) {
                 Box(
                     modifier = Modifier
                         .graphicsLayer { alpha = dismissAlpha }
                         .offset {
-                            IntOffset((restX + dragX).roundToInt(), (restY + dragY).roundToInt())
+                            IntOffset(viewport.left.roundToInt(), viewport.top.roundToInt())
                         }
-                        .size(spec.widthDp.dp, spec.heightDp.dp)
-                        .clip(shape)
+                        .size(with(density) { viewport.width.coerceAtLeast(1f).toDp() }, with(density) { viewport.height.coerceAtLeast(1f).toDp() })
+                        .clip(if (mini || transitionRunning) shape else RoundedCornerShape(0.dp))
                         .then(
-                            if (showStroke) {
+                            if (mini && showStroke) {
                                 Modifier.border(1.dp, Color(MiniPlayerLayout.STROKE_COLOR), shape)
                             } else {
                                 Modifier

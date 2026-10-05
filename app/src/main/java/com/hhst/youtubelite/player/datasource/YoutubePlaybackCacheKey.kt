@@ -1,5 +1,9 @@
 package com.hhst.youtubelite.player.datasource
 
+import com.hhst.youtubelite.extractor.Format
+import java.security.MessageDigest
+import java.util.Base64
+
 /**
  * Byte-cache identity for googlevideo `/videoplayback` URLs.
  *
@@ -9,6 +13,11 @@ package com.hhst.youtubelite.player.datasource
  * previously cached bytes.
  */
 object YoutubePlaybackCacheKey {
+    fun of(format: Format): String {
+        val identity = format.resourceIdentity
+        return if (identity.isNullOrBlank() || format.formatKey == null) "yt:unproven:" + MessageDigest.getInstance("SHA-256").digest(format.url.toByteArray()).joinToString("") { "%02x".format(it) }
+        else "yt:v3:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
+    }
     const val VERSION = 2
 
     fun ofQuery(query: String): String? {

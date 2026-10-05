@@ -156,6 +156,10 @@
     <string name="download_complete">下載完成</string>
     <string name="download_paused">已暫停</string>
     <string name="download_failed">下載失敗</string>
+    <string name="download_reason_storage">儲存空間不足</string>
+    <string name="download_reason_memory">記憶體不足</string>
+    <string name="download_reason_forbidden">伺服器拒絕下載（403）</string>
+    <string name="download_reason_rate_limit">請求過於頻繁（429）</string>
     <string name="downloads">下載</string>
     <string name="download">下載</string>
     <string name="download_video">影片</string>
@@ -174,6 +178,7 @@
     <string name="download_delete">刪除</string>
     <string name="download_delete_confirm">要移除此下載嗎？</string>
     <string name="download_delete_record">僅從列表移除</string>
+    <string name="download_delete_local_file">刪除本機檔案</string>
     <string name="download_delete_files">同時刪除檔案</string>
     <string name="download_delete_downloads">刪除下載內容</string>
     <string name="download_more_actions">更多操作</string>
@@ -221,4 +226,15 @@
     <string name="download_resume_all">全部恢復</string>
     <string name="download_delete_batch">刪除整批</string>
     <string name="download_history_cleared">歷史已清除</string>
+    <string name="copy_extraction_diagnostics">複製擷取診斷</string>
+    <string name="download_catalog_loading">正在載入下載選項…</string>
+    <string name="download_selection_missing">已儲存的選擇無法使用</string>
+    <string name="download_sub_off">關閉</string>
+    <string name="download_sub_auto">自動產生</string>
+    <string name="download_sub_manual">人工字幕</string>
+    <string name="download_reason_network">連線失敗，請檢查網路後重試。</string>
+    <string name="download_reason_session">工作階段已變更，請重試以更新下載選項。</string>
+    <string name="download_reason_extraction">擷取下載選項失敗，請重試。</string>
+    <string name="download_audio_original">原聲</string>
+    <string name="download_audio_dubbed">配音</string>
 </resources>

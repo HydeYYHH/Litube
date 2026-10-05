@@ -1,22 +1,37 @@
 package com.hhst.youtubelite.downloader.android
 
 import android.content.pm.ActivityInfo
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+import com.hhst.youtubelite.downloader.core.DownloadStatus
+import com.hhst.youtubelite.downloader.android.DeviceEvidence
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.ui.DownloadManagerScreen
+import com.hhst.youtubelite.downloader.ui.DownloadItemRow
 import com.hhst.youtubelite.downloader.ui.DownloadTokens
 import com.hhst.youtubelite.ui.theme.AppTheme
 import kotlinx.coroutines.flow.first
@@ -105,12 +120,68 @@ class DownloadManagerAndroidTest {
             .assertHeightIsAtLeast(48.dp)
             .performClick()
         composeRule.waitForIdle()
+        composeRule.onNode(isPopup()).assertExists()
+        composeRule.onNode(isDialog()).assertDoesNotExist()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_redownload))
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
 
         assertTrue(seeded.runningBatchId.isNotBlank())
         DeviceEvidence.captureScene("03-download-manager")
+        // Send Back to the focused popup window, including on API 35 gesture navigation.
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        composeRule.waitUntil(3_000) { composeRule.onAllNodes(isPopup()).fetchSemanticsNodes().isEmpty() }
+        composeRule.onNode(isPopup()).assertDoesNotExist()
+        composeRule.onAllNodesWithContentDescription(more)[0].performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_delete)).performClick()
+        composeRule.onNode(isDialog()).assertExists()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_delete_local_file))
+            .assertIsDisplayed()
+        DeviceEvidence.captureScene("neutral-delete-checkbox")
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.cancel)).performClick()
+        composeRule.onAllNodesWithContentDescription(more)[0].performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_copy_id)).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(isPopup()).assertDoesNotExist()
+    }
+
+    @Test
+    fun rapidStatusChangesKeepRowHeightAndNeighborPosition() {
+        val harness = DownloadAndroidHarness()
+        runBlocking { harness.seedList() }
+        val base = runBlocking { harness.viewModel.observeDownloads().first().first { it.title == "Running clip" } }
+        val row = androidx.compose.runtime.mutableStateOf(base)
+        composeRule.setContent {
+            AppTheme(darkTheme = true) {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.foundation.layout.Box(Modifier.testTag("stable-row")) {
+                        DownloadItemRow(row.value, {}, {})
+                    }
+                    androidx.compose.material3.Text("Neighbor", modifier = Modifier.testTag("neighbor"))
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val height = composeRule.onNodeWithTag("stable-row").fetchSemanticsNode().boundsInRoot.height
+        val top = composeRule.onNodeWithTag("neighbor").fetchSemanticsNode().boundsInRoot.top
+        val states = listOf(
+            base.copy(status = DownloadStatus.QUEUED,
+                phase = DownloadPhase.RESOLVE, progressBytes = 0,
+                expectedBytes = null, qualityLabel = null, title = "Short", author = null),
+            base.copy(progressBytes = 4_096, expectedBytes = 8_000_000, qualityLabel = "1080p"),
+            base.copy(status = DownloadStatus.PAUSING),
+            base.copy(status = DownloadStatus.PAUSED),
+            base.copy(status = DownloadStatus.WAITING_NETWORK),
+            base.copy(phase = DownloadPhase.MERGE_VERIFY),
+            base.copy(phase = DownloadPhase.COMPLETE),
+        )
+        repeat(3) { states.forEach { next ->
+            composeRule.runOnIdle { row.value = next }
+            composeRule.waitForIdle()
+            assertEquals(height, composeRule.onNodeWithTag("stable-row").fetchSemanticsNode().boundsInRoot.height, .5f)
+            assertEquals(top, composeRule.onNodeWithTag("neighbor").fetchSemanticsNode().boundsInRoot.top, .5f)
+        } }
     }
 
     @Test
@@ -135,6 +206,49 @@ class DownloadManagerAndroidTest {
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.downloads)).assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_filter_all)).assertIsDisplayed()
         DeviceEvidence.captureScene("light-200pct-font")
+    }
+
+    @Test
+    fun narrowLargeFontShowsCompleteStatusAndScrollableFilterLabels() {
+        val harness = DownloadAndroidHarness()
+        runBlocking { harness.seedList() }
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                AppTheme(darkTheme = false, dynamicColor = false) {
+                    androidx.compose.foundation.layout.Box(Modifier.width(320.dp)) {
+                        DownloadManagerScreen(harness.viewModel, null, null, null, {})
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        fun assertUnclipped(text: String) {
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            composeRule.onAllNodesWithText(text, useUnmergedTree = true)[0]
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue("No layout for $text", layouts.isNotEmpty())
+            val layout = layouts.single()
+            assertFalse("Clipped height: $text", layout.didOverflowHeight)
+            assertEquals("Missing characters: $text", text.length,
+                layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
+            for (line in 0 until layout.lineCount) {
+                assertFalse("Ellipsized text: $text", layout.isLineEllipsized(line))
+                // Text's intrinsic width is rounded to pixels; tolerate only that rounding.
+                assertTrue("Clipped width: $text", layout.getLineRight(line) <= layout.size.width + 1f)
+            }
+        }
+        val waiting = composeRule.activity.getString(R.string.download_waiting_network)
+        val complete = composeRule.activity.getString(R.string.download_complete)
+        for (status in listOf(waiting, complete)) {
+            composeRule.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(status))
+            DeviceEvidence.captureScene("fixed-status-${if (status == waiting) "waiting" else "complete"}")
+            assertUnclipped(status)
+        }
+        val completed = composeRule.activity.getString(R.string.download_filter_completed)
+        composeRule.onNodeWithText(completed).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        assertUnclipped(completed)
+        DeviceEvidence.captureScene("fixed-manager-narrow-large-font")
     }
 
     @Test

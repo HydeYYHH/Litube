@@ -26,33 +26,28 @@ import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
 import com.hhst.youtubelite.extension.ExtensionInjector
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.PlayerCache
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.net.NetTracer
 import com.hhst.youtubelite.net.PageScript
 import com.hhst.youtubelite.ui.theme.YtRed
-import java.io.ByteArrayInputStream
 
 /** Builds a swipe-refresh + mobile YouTube WebView host. */
 object WebViewFactory {
 
     private const val NAV_JS = "script/nav.js"
-    private const val WATCH_ID_JS = "script/watch-id.js"
     private const val INNERTUBE_JS = "script/innertube.js"
     private const val PLAYER_HOOK_JS = "script/player-hook.js"
     private const val DISLIKES_JS = "script/display_dislikes.js"
     private const val HIDE_SHORTS_JS = "script/hide_shorts.js"
     private const val SHORTS_ADS_JS = "script/remove_shorts_ads.js"
     private const val CORE_JS = "script/core.js"
-    /** Injected page scripts address the bridge as `lite`. */
-    internal const val LITE_ALIAS = "lite"
 
     private val coreScript = PageScript(CORE_JS, "Core")
-    private val navScript = PageScript(NAV_JS, "WebViewFactory")
+    private val navScript = PageScript(NAV_JS, "Nav")
     private val playerHookScript = PageScript(PLAYER_HOOK_JS, "PlayerHook")
-    private val dislikesScript = PageScript(DISLIKES_JS, "Dislikes")
+    private val dislikesScript = PageScript(DISLIKES_JS, "DisplayDislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
-    private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "ShortsAds")
+    private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "RemoveShortsAds")
     private val downloadScript = PageScript(DownloadWebBridge.ASSET, "Download")
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -66,7 +61,6 @@ object WebViewFactory {
         onAbout: () -> Unit,
         onRefresh: (WebView) -> Unit,
         extractor: Extractor,
-        playerCache: PlayerCache,
         playerHooks: PlayerHooks,
         onAddToQueue: ((Bridge.QueueItemJson?) -> Unit)? = null,
         onShowMediaItemMenu: ((Bridge.QueueItemJson) -> Unit)? = null,
@@ -90,7 +84,6 @@ object WebViewFactory {
             tabId = tabId,
         )
         val netTracer = NetTracer()
-        val watchId = PageScript(WATCH_ID_JS, "WatchId")
         val innertube = PageScript(INNERTUBE_JS, "Innertube")
         val swipeRefresh = SwipeRefreshLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -128,11 +121,10 @@ object WebViewFactory {
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             }
             addJavascriptInterface(bridge, Bridge.NAME)
-            addJavascriptInterface(bridge, LITE_ALIAS)
+            extractor.installBrowserCapture(this) { bridge.pageOrigin().documentGeneration }
             coreScript.install(appContext, this)
             navScript.install(appContext, this)
             netTracer.install(appContext, this)
-            watchId.install(appContext, this)
             innertube.install(appContext, this)
             playerHookScript.install(appContext, this)
             dislikesScript.install(appContext, this)
@@ -146,7 +138,6 @@ object WebViewFactory {
                 injector = injector,
                 coreScript = coreScript,
                 netTracer = netTracer,
-                watchId = watchId,
                 innertube = innertube,
                 playerHook = playerHookScript,
                 dislikes = dislikesScript,
@@ -155,7 +146,6 @@ object WebViewFactory {
                 downloadScript = downloadScript,
                 downloadBridge = downloadBridge,
                 bridge = bridge,
-                playerCache = playerCache,
                 swipeRefresh = swipeRefresh,
             )
             webChromeClient = BrowserChromeClient(callbacks)
@@ -184,7 +174,6 @@ private class BrowserWebViewClient(
     private val injector: ExtensionInjector,
     private val coreScript: PageScript,
     private val netTracer: NetTracer,
-    private val watchId: PageScript,
     private val innertube: PageScript,
     private val playerHook: PageScript,
     private val dislikes: PageScript,
@@ -193,51 +182,8 @@ private class BrowserWebViewClient(
     private val downloadScript: PageScript,
     private val downloadBridge: DownloadWebBridge,
     private val bridge: Bridge,
-    private val playerCache: PlayerCache,
     private val swipeRefresh: SwipeRefreshLayout,
 ) : WebViewClient() {
-
-    override fun shouldInterceptRequest(
-        view: WebView,
-        request: WebResourceRequest,
-    ): WebResourceResponse? {
-        if (isPlayerPost(request)) {
-            // Prefer the id parsed from the POST body; fall back to the referer,
-            // which Chromium stamps after pushState on SPA navigations.
-            val videoId = bridge.pendingVideoId
-                ?: videoIdFromReferer(request.requestHeaders)
-            if (videoId != null) {
-                respondPlayer(videoId)?.let { return it }
-                if (playerCache.await(videoId, PLAYER_WAIT_MS)) {
-                    respondPlayer(videoId)?.let { return it }
-                }
-            }
-        }
-        return super.shouldInterceptRequest(view, request)
-    }
-
-    private fun videoIdFromReferer(headers: Map<String, String>?): String? {
-        val referer = headers?.entries
-            ?.firstOrNull { it.key.equals("Referer", ignoreCase = true) }
-            ?.value
-        return VideoId.parse(referer)
-    }
-
-    private fun isPlayerPost(request: WebResourceRequest): Boolean =
-        request.method.equals("POST", ignoreCase = true) &&
-            request.url.toString().contains(PLAYER_PATH, ignoreCase = true)
-
-    private fun respondPlayer(videoId: String): WebResourceResponse? {
-        val bytes = playerCache.get(videoId) ?: return null
-        return WebResourceResponse(
-            "application/json",
-            Charsets.UTF_8.name(),
-            200,
-            "OK",
-            emptyMap(),
-            ByteArrayInputStream(bytes),
-        )
-    }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val uri = request.url
@@ -264,7 +210,6 @@ private class BrowserWebViewClient(
         coreScript.inject(appContext, view)
         WebViewFactory.injectNavScript(appContext, view)
         netTracer.inject(appContext, view)
-        watchId.inject(appContext, view)
         innertube.inject(appContext, view)
         playerHook.inject(appContext, view)
         dislikes.inject(appContext, view)
@@ -340,13 +285,6 @@ private class BrowserWebViewClient(
     }
 
     private companion object {
-        const val PLAYER_PATH = "/youtubei/v1/player"
-
-        /** How long an intercepted /player POST waits for the native
-         *  prefetch before falling through to the network; blocking the
-         *  request thread longer cost more latency than the duplicate
-         *  fetch it saved. */
-        const val PLAYER_WAIT_MS = 250L
         val hasDocumentStartScript =
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         val REFRESH_KINDS = setOf(

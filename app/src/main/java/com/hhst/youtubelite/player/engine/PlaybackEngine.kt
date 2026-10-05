@@ -18,7 +18,6 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.browser.PageKind
@@ -26,7 +25,6 @@ import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Chapter
-import com.hhst.youtubelite.extractor.ClientOrderStore
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Metadata
@@ -36,9 +34,15 @@ import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PREF_TTL_MS
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
+import com.hhst.youtubelite.player.datasource.CodecCapabilities
+import java.net.NoRouteToHostException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import android.view.SurfaceView
 import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
 import com.hhst.youtubelite.player.datasource.CastAudioSelection
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
+import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.SubtitleSelection
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
@@ -47,6 +51,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -138,6 +143,7 @@ data class PlaybackSnapshot(
 
 /** Public player contract. */
 interface PlaybackApi {
+    fun preparePlayback(urlOrId: String) { }
     /**
      * Loads and plays [urlOrId]. Watch and Shorts share this path: while a
      * Cast session is attached the local player stays paused and the
@@ -147,7 +153,7 @@ interface PlaybackApi {
     /** Re-extract and reload the current video after a failure. */
     fun retry()
     fun stop()
-    fun setVideoSurface(surface: android.view.SurfaceView?)
+    fun setVideoSurface(surface: SurfaceView?)
     fun playOrPause()
     fun play()
     fun pause()
@@ -167,8 +173,11 @@ interface PlaybackApi {
     fun setAudioTrack(trackKey: String?)
     /** Adaptive video/audio pair currently loaded, for Cast / link projection. */
     fun currentCastSource(): CastSource?
+    /** Materialize file formats only when a receiver actually needs them. */
+    suspend fun prepareCastSource(): CastSource? = currentCastSource()
     /** Re-extracts and returns a fresh URL for a published cast track. */
     fun refreshCastUrl(token: String, videoId: String? = null, itag: Int? = null): String?
+    fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? = null
     /**
      * While [delegate] is non-null, commands and snapshot follow it.
      * Passing null detaches. Returns true when local media has already
@@ -232,7 +241,8 @@ data class CastSource(
  * - DASH-first assembly via [MediaSourceResolver]; muxed fallback on adaptive
  *   failure with a 30-minute per-video quarantine; 403 recovery by
  *   re-extraction (two rounds) and client demotion/exclusion.
- * - `AdaptiveTrackSelection` (no tunnelling); audio focus, wake mode,
+ * - `AdaptiveTrackSelection`, capped at the start height for each new video's
+ *   first chunks (no tunnelling); audio focus, wake mode,
  *   noisy-pause.
  * - 250 ms Handler ticker: position publish, SponsorBlock skip, progress
  *   persist (~1 Hz) — only while playing.
@@ -247,13 +257,12 @@ class PlaybackEngine(
     private val cache: JsonCache,
     private val prefs: ExtensionManager,
     private val sponsorBlock: SponsorBlockManager,
-    private val clientOrder: ClientOrderStore? = null,
     private val poTokenProvider: PoTokenProvider? = null,
     private val titleFetcher: OEmbedTitleFetcher? = null,
 ) : PlaybackApi {
 
     private val appContext = context.applicationContext
-    private val trackSelector = DefaultTrackSelector(context, AdaptiveTrackSelection.Factory())
+    private val trackSelector = DefaultTrackSelector(context, StartCappedSelectionFactory())
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setTrackSelector(trackSelector)
@@ -275,6 +284,7 @@ class PlaybackEngine(
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var playJob: Job? = null
+    private var firstMediaReady: CompletableDeferred<Unit>? = null
     private var rebuildJob: Job? = null
     /**
      * Last explicit play/pause from the user (or a play() load). Not inferred
@@ -292,12 +302,12 @@ class PlaybackEngine(
     @Volatile private var currentStream: Stream? = null
     @Volatile private var currentMetadata: Metadata? = null
     private var reExtractAttempts = 0
+    /** Cheap re-extraction (same session and tokens) for stale or superseded URLs; one per video. */
+    private var lightRefreshAttempts = 0
+    private var backupAttempted = false
 
     @Volatile private var muxedFallbackActive = false
     /** Client excluded by the 403 last resort (e.g. "IOS"); one round per video. */
-    @Volatile private var excludedClient: String? = null
-    /** True once [excludedClient] was demoted — a repeat 403 must not re-demote. */
-    private var clientDemoted = false
     private var lastAudioFormat: Format? = null
     /** Video formats of the current adaptive manifest; empty when non-adaptive. */
     private var adaptiveVideoPool: List<Format> = emptyList()
@@ -325,6 +335,7 @@ class PlaybackEngine(
     var notificationController: PlaybackNotificationController? = null
 
     init {
+        resolver.configureStartupTrackSelection { trackSelector.parameters }
         // No tunneling: it is a decoder-pair constraint that
         // can silently veto track-selection changes on some devices.
         player.addListener(object : Player.Listener {
@@ -334,11 +345,16 @@ class PlaybackEngine(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying && attachedGeneration == playbackGeneration.get()) firstMediaReady?.complete(Unit)
                 handler.removeCallbacks(ticker)
                 if (isPlaying) handler.post(ticker)
                 else persistPosition()
                 publish()
                 notifyTransport(isPlaying)
+            }
+
+            override fun onRenderedFirstFrame() {
+                if (attachedGeneration == playbackGeneration.get()) firstMediaReady?.complete(Unit)
             }
 
             override fun onCues(cueGroup: CueGroup) {
@@ -353,7 +369,10 @@ class PlaybackEngine(
                 // Track truth drives the quality menu/badge (and re-applies
                 // a pin the source swap dropped). Skipped while casting: the
                 // cast player owns the visible stream then.
-                if (castPlayer == null) updateQualityFromTracks()
+                if (castPlayer == null) {
+                    updateQualityFromTracks()
+                    publishRenditionAudio()
+                }
                 publish()
             }
 
@@ -453,8 +472,8 @@ class PlaybackEngine(
         playJob?.cancel()
         rebuildJob?.cancel()
         reExtractAttempts = 0
-        excludedClient = null
-        clientDemoted = false
+        lightRefreshAttempts = 0
+        backupAttempted = false
         playJob = scope.launch {
             loadInternal(
                 videoId,
@@ -472,9 +491,9 @@ class PlaybackEngine(
         playJob?.cancel()
         rebuildJob?.cancel()
         reExtractAttempts = 0
+        lightRefreshAttempts = 0
+        backupAttempted = false
         muxedFallbackActive = false
-        excludedClient = null
-        clientDemoted = false
         cache.invalidate(fallbackKey(videoId))
         playJob = scope.launch {
             loadInternal(videoId, reExtract = true, requestUrl = _snapshot.value.url)
@@ -497,6 +516,9 @@ class PlaybackEngine(
         skipSeekInProgress = false
         sponsorSkip.reset()
         pinnedQuality = null
+        trackSelector.parameters = trackSelector.parameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .build()
         _snapshot.value = PlaybackSnapshot(
             videoId = videoId,
             url = requestUrl?.let { playbackUrl(it, videoId) } ?: VideoId.watchUrl(videoId),
@@ -507,8 +529,8 @@ class PlaybackEngine(
         player.repeatMode = loop.repeatMode
         castPlayer?.repeatMode = loop.repeatMode
         try {
-            if (reExtract) extractor.invalidateStream(videoId)
-            val extraction = extractor.extract(videoId)
+            val extraction = if (reExtract) extractor.extractFresh(videoId)
+                else extractor.extract(videoId, demand = playbackDemand())
             val stream = withContext(Dispatchers.IO) { extraction.stream.await() }
             val metadata = withContext(Dispatchers.IO) { extraction.metadata.await() }
             coroutineContext.ensureActive()
@@ -534,6 +556,8 @@ class PlaybackEngine(
                 rememberedPosition(videoId, metadata.duration),
                 durationMs,
             )
+            val mediaReady = CompletableDeferred<Unit>()
+            firstMediaReady = mediaReady
             player.setMediaSource(source.mediaSource, startMs)
             player.setPlaybackSpeed(speed)
             player.prepare()
@@ -556,12 +580,6 @@ class PlaybackEngine(
                 applySubtitle(subKey)
             }
 
-            val chapters = runCatching {
-                withContext(Dispatchers.IO) { extraction.chapters.await().chapters }
-            }.getOrDefault(emptyList())
-            coroutineContext.ensureActive()
-            if (!stillCurrent(generation)) return
-
             val audioChoices = AudioTrackIdentity.choices(stream.formats)
             _snapshot.value = _snapshot.value.copy(
                 title = metadata.title,
@@ -577,10 +595,11 @@ class PlaybackEngine(
                     ?: rememberedAudioTrackKey(),
                 prepared = true,
                 error = null,
-                chapters = chapters,
+                chapters = emptyList(),
                 videoFormat = source.videoFormat,
                 audioFormat = source.audioFormat,
             )
+            publishRenditionAudio()
 
             // Recast path: local is paused and the TV still holds the previous
             // video until startCasting succeeds — binding the notification now
@@ -595,6 +614,16 @@ class PlaybackEngine(
                 )
             }
             maybeFetchOriginalTitle(videoId, metadata.title)
+            // Publish the prepared source immediately. Optional /next must not compete
+            // with initial media reads, or hold the title/controls behind chapter parsing.
+            if (castPlayer != null) mediaReady.complete(Unit)
+            if (withTimeoutOrNull(15_000) { mediaReady.await(); true } == true) {
+                val chapters = runCatching {
+                    withContext(Dispatchers.IO) { extraction.chapters.await().chapters }
+                }.getOrDefault(emptyList())
+                coroutineContext.ensureActive()
+                if (stillCurrent(generation)) _snapshot.value = _snapshot.value.copy(chapters = chapters)
+            }
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             // The previous media is still attached on failure; pausing keeps
@@ -628,7 +657,7 @@ class PlaybackEngine(
 
     // -- surface --
 
-    override fun setVideoSurface(surface: android.view.SurfaceView?) {
+    override fun setVideoSurface(surface: SurfaceView?) {
         player.setVideoSurfaceView(surface)
     }
 
@@ -905,6 +934,85 @@ class PlaybackEngine(
         }
     }
 
+    /**
+     * When HLS exposes several audio renditions, those rows are the menu and a
+     * pick is a track override. One player audio track leaves the extractor
+     * list in place.
+     */
+    private fun publishRenditionAudio() {
+        val choices = AudioTrackIdentity.renditionChoices(playerAudioEntries())
+        // A DASH source has a single audio track, so this stays empty and the
+        // extractor menu is left alone. HLS exposes one row per rendition.
+        if (choices.isEmpty()) return
+        val key = _snapshot.value.audioTrackKey
+        val renditionKey = key?.takeIf { candidate ->
+            candidate.startsWith("hls:") && choices.any { it.key == candidate }
+        }
+        if (choices != _snapshot.value.audioTracks || renditionKey != key) {
+            _snapshot.value = _snapshot.value.copy(
+                audioTracks = choices,
+                audioTrackKey = renditionKey,
+            )
+        }
+        if (renditionKey != null && selectedRenditionKey() != renditionKey) {
+            applyRenditionAudio(renditionKey)
+        }
+    }
+
+    private fun playerAudioEntries(): List<Pair<String?, String?>> {
+        val entries = mutableListOf<Pair<String?, String?>>()
+        for (group in player.currentTracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSupported(i)) continue
+                val format = group.getTrackFormat(i)
+                entries += format.language to format.label
+            }
+        }
+        return entries
+    }
+
+    private fun selectedRenditionKey(): String? {
+        for (group in player.currentTracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSelected(i)) continue
+                val format = group.getTrackFormat(i)
+                return AudioTrackIdentity.renditionKey(format.language, format.label)
+            }
+        }
+        return null
+    }
+
+    private fun applyRenditionAudio(trackKey: String?) {
+        val builder = trackSelector.parameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .setPreferredAudioLanguage(null)
+        if (!trackKey.isNullOrBlank()) {
+            val match = findRendition(trackKey) ?: return
+            val language = trackKey.removePrefix("hls:").substringBefore(':')
+            if (language.isNotEmpty()) builder.setPreferredAudioLanguage(language)
+            builder.setOverrideForType(
+                TrackSelectionOverride(match.group.mediaTrackGroup, match.index),
+            )
+        }
+        trackSelector.parameters = builder.build()
+    }
+
+    private fun findRendition(trackKey: String): VideoTrackRef? {
+        for (group in player.currentTracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSupported(i)) continue
+                val format = group.getTrackFormat(i)
+                if (AudioTrackIdentity.renditionKey(format.language, format.label) == trackKey) {
+                    return VideoTrackRef(group, i, format)
+                }
+            }
+        }
+        return null
+    }
+
     /** Format of the currently selected video track, if any. */
     private fun selectedVideoTrackFormat(): androidx.media3.common.Format? {
         for (group in player.currentTracks.groups) {
@@ -943,10 +1051,16 @@ class PlaybackEngine(
 
     /** Audio track change: re-resolve with the chosen identity key. */
     override fun setAudioTrack(trackKey: String?) {
-        val stream = currentStream ?: return
-        val metadata = currentMetadata ?: return
         if (trackKey != null) cache.put(KEY_AUDIO_TRACK, trackKey, PREF_TTL_MS)
         else cache.invalidate(KEY_AUDIO_TRACK)
+        val renditionMenu = _snapshot.value.audioTracks.any { it.key.startsWith("hls:") }
+        if (trackKey?.startsWith("hls:") == true || (trackKey == null && renditionMenu)) {
+            _snapshot.value = _snapshot.value.copy(audioTrackKey = trackKey)
+            applyRenditionAudio(trackKey)
+            return
+        }
+        val stream = currentStream ?: return
+        val metadata = currentMetadata ?: return
         rebuildAtCurrentPosition(
             stream, metadata, audioTrackKey = trackKey, reloadCast = true,
         )
@@ -1043,6 +1157,18 @@ class PlaybackEngine(
         )
     }
 
+    override suspend fun prepareCastSource(): CastSource? {
+        currentCastSource()?.let { return it }
+        val id = _snapshot.value.videoId ?: return null
+        val generation = playbackGeneration.get()
+        val media = try { withContext(Dispatchers.IO) { extractor.awaitMedia(id) } }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { return null }
+        if (!stillCurrent(generation) || _snapshot.value.videoId != id || media.first.id != id) return null
+        currentStream = media.second
+        return currentCastSource()
+    }
+
     /**
      * Video pool for casting: the manifest pool when present, else muxed. All
      * entries carry sidx ranges — without them the receiver cannot address
@@ -1050,7 +1176,9 @@ class PlaybackEngine(
      */
     private fun castCandidates(): List<Format> =
         (adaptiveVideoPool.ifEmpty {
-            currentStream?.formats?.filter(StreamSelection::isMuxed) ?: emptyList()
+            currentStream?.formats?.filter { it.videoOnly }
+                ?.ifEmpty { currentStream?.formats?.filter(StreamSelection::isMuxed).orEmpty() }
+                ?: emptyList()
         }).filter { it.hasDashRanges }
 
     /**
@@ -1141,10 +1269,9 @@ class PlaybackEngine(
         return runCatching {
             runBlocking {
                 refreshCastMutex.withLock {
-                    val fresh = withTimeoutOrNull(8_000) {
+                    val fresh = withTimeoutOrNull(45_000) {
                         withContext(Dispatchers.IO) {
-                            extractor.invalidateStream(id)
-                            val extracted = extractor.extract(id).stream.await()
+                            val extracted = extractor.extractFresh(id).stream.await()
                             val url = pickPublishedUrl(extracted, token, itag)
                             val localMeta = currentMetadata
                             val source = if (localMeta != null && localMeta.id == id) {
@@ -1164,20 +1291,27 @@ class PlaybackEngine(
                             url
                         }
                     }
-                    if (fresh == null) {
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { extractor.extract(id).stream.await() }
-                        }
-                    }
                     fresh
                 }
             }
         }.getOrNull()
     }
 
+    override fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? {
+        if (currentMetadata?.id != videoId) return null
+        val profile = org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.values().firstOrNull { it.name == failedProfile } ?: return null
+        val stream = currentStream ?: return null
+        return pickPublishedUrl(stream.excluding(profile), token, itag)
+    }
+
     private fun pickPublishedUrl(stream: Stream, token: String, itag: Int?): String? {
+        val previous = if (token == "a") lastAudioFormat else _snapshot.value.videoFormat?.takeIf { itag == null || it.itag == itag }
+        if (previous?.formatKey != null) {
+            if (previous.resourceIdentity.isNullOrBlank()) return null
+            return stream.formats.firstOrNull { it.formatKey == previous.formatKey && it.resourceIdentity == previous.resourceIdentity }?.url
+        }
         if (itag != null) {
-            stream.formats.firstOrNull { it.itag == itag }?.url?.let { return it }
+            stream.formats.filter { it.itag == itag }.distinctBy { it.audioTrackId to it.codec }.singleOrNull()?.url?.let { return it }
         }
         return stream.formats.firstOrNull {
             if (token == "a") it.audioOnly else !it.audioOnly
@@ -1193,8 +1327,13 @@ class PlaybackEngine(
     private fun applyPreferredQualityConstraint() {
         val label = rememberedQuality() ?: return
         val height = StreamSelection.parseHeight(label)
-        if (height <= 0 || adaptiveVideoPool.isEmpty()) return
-        if (adaptiveVideoPool.none { it.height == height }) return
+        if (height <= 0) return
+        // HLS now supplies rendition tracks without materializing file formats.
+        // Pin before prepare as well, so the automatic startup cap cannot replace
+        // the remembered manual height on its first frame.
+        val hls = !muxedFallbackActive && !currentStream?.hlsUrl.isNullOrBlank()
+        if (adaptiveVideoPool.isEmpty() && !hls) return
+        if (adaptiveVideoPool.isNotEmpty() && adaptiveVideoPool.none { it.height == height }) return
         pinnedQuality = label
         pinVideoHeight(height)
         // The selector is hard-pinned; the badge must not claim "Auto".
@@ -1211,7 +1350,6 @@ class PlaybackEngine(
         audioTrackKey = rememberedAudioTrackKey(),
         forceMuxed = muxedFallbackActive,
         subtitleKey = rememberedSubtitleKey(),
-        excludeClient = excludedClient,
     )
 
     // -- end-of-playback --
@@ -1255,31 +1393,49 @@ class PlaybackEngine(
             recoverFromTextError()
             return
         }
-        val reason = recoveryReason(error)
+        var reason = recoveryReason(error)
         val stream = currentStream
 
-        if (reason == RecoveryReason.HTTP_403) {
-            // Demote only after a retry that already excluded that client
-            // failed — a 403 from URL expiry must not walk the client order —
-            // and only once per video: a repeat 403 would otherwise keep
-            // pushing the same client further down the order.
-            val excluded = excludedClient
-            if (excluded != null && !clientDemoted) {
-                clientOrder?.demote(excluded)
-                clientDemoted = true
-            }
-            if (excluded == null && stream != null && metadata != null) {
-                val failed = failingClient(error)
-                if (failed != null) {
-                    excludedClient = failed
-                    val position = player.currentPosition
-                    rebuildAtCurrentPosition(
-                        stream, metadata,
-                        excludeClient = failed, startMs = position,
-                        reloadCast = true,
+        // Expired or superseded URLs (not a server refusal) first get a cheap re-extraction with the
+        // current session and tokens: no page request, no minter reset. It does not use up the
+        // full-refresh budget; if it was already spent the failure is handled as a 403.
+        if (reason == RecoveryReason.URL_STALE) {
+            if (lightRefreshAttempts < MAX_LIGHT_REFRESH_ATTEMPTS && videoId != null) {
+                lightRefreshAttempts++
+                val position = player.currentPosition
+                playbackGeneration.incrementAndGet()
+                playJob?.cancel()
+                rebuildJob?.cancel()
+                playJob = scope.launch {
+                    _snapshot.value = _snapshot.value.copy(isBuffering = true, error = null)
+                    skipSeekInProgress = true
+                    withContext(Dispatchers.IO) { extractor.invalidateStream(videoId) }
+                    loadInternal(
+                        videoId, reExtract = false,
+                        requestUrl = _snapshot.value.url,
+                        startPositionMs = position,
                     )
-                    return
                 }
+                return
+            }
+            reason = RecoveryReason.HTTP_403
+        }
+
+        if (reason == RecoveryReason.HTTP_403 && reExtractAttempts >= 1 && !backupAttempted && stream != null && metadata != null) {
+            backupAttempted = true
+            val failedUri = failingUri(error)
+            val failedItag = failedUri?.getQueryParameter("itag")?.toIntOrNull()
+            val failedFormat = listOfNotNull(_snapshot.value.videoFormat, lastAudioFormat).firstOrNull {
+                failedItag == null || it.itag == failedItag
+            } ?: stream.formats.firstOrNull { it.url == failedUri?.toString() }
+            val profile = failedFormat?.requestPlan?.profile ?: if (metadata.isLive)
+                (stream.dashRequestPlan ?: stream.hlsRequestPlan)?.profile
+                else (stream.hlsRequestPlan ?: stream.dashRequestPlan)?.profile
+            val backup = profile?.let(stream::excluding)
+            if (backup != null && runCatching { resolveSource(backup, metadata) }.isSuccess) {
+                currentStream = backup
+                rebuildAtCurrentPosition(backup, metadata, startMs = player.currentPosition, reloadCast = true)
+                return
             }
         }
 
@@ -1287,10 +1443,10 @@ class PlaybackEngine(
         // actually select can play (sidx ranges or a poToken). VR formats are
         // excluded by preferPlayable; counting them viable makes the forceMuxed
         // rebuild throw instead of reaching the re-extract recovery below.
-        if (reason != null && !muxedFallbackActive && stream != null && metadata != null) {
+        if (reason == RecoveryReason.CONNECTION_OPEN_FAILED && !muxedFallbackActive && stream != null && metadata != null) {
             val muxedViable = stream.formats.any {
                 StreamSelection.isMuxed(it) && !StreamSelection.isAndroidVr(it) &&
-                    (it.hasDashRanges || it.url.contains("&pot="))
+                    (it.requestPlan != null || it.hasDashRanges || it.url.contains("&pot="))
             }
             if (muxedViable) {
                 val position = player.currentPosition
@@ -1303,17 +1459,13 @@ class PlaybackEngine(
             }
         }
 
-        // Muxed failure (or no fallback): 403 → re-extract with a demoted client.
+        // One full session/token refresh, followed by one existing compatible backup.
         if (reason == RecoveryReason.HTTP_403 &&
             reExtractAttempts < MAX_REEXTRACT_ATTEMPTS &&
             videoId != null
         ) {
             reExtractAttempts++
             muxedFallbackActive = false
-            // A rejected pot pairing would survive the re-extract: the cached
-            // per-video token gets re-embedded into the fresh URLs. Drop it so
-            // the extractor mints a new one.
-            poTokenProvider?.evict(videoId)
             val position = player.currentPosition
             playbackGeneration.incrementAndGet()
             playJob?.cancel()
@@ -1342,24 +1494,21 @@ class PlaybackEngine(
     private fun recoveryReason(error: PlaybackException): RecoveryReason? {
         var cause: Throwable? = error
         while (cause != null) {
+            if (cause is java.io.IOException && cause.message in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return RecoveryReason.URL_STALE
             when (cause) {
                 is HttpDataSource.InvalidResponseCodeException ->
                     if (cause.responseCode == 403) return RecoveryReason.HTTP_403
                 is HttpDataSource.HttpDataSourceException ->
                     if (cause.type == HttpDataSource.HttpDataSourceException.TYPE_OPEN &&
-                        (cause.cause is java.net.SocketTimeoutException ||
-                            cause.cause is java.net.ConnectException ||
-                            cause.cause is java.net.NoRouteToHostException)
+                        (cause.cause is SocketTimeoutException ||
+                            cause.cause is ConnectException ||
+                            cause.cause is NoRouteToHostException)
                     ) return RecoveryReason.CONNECTION_OPEN_FAILED
             }
             cause = cause.cause
         }
         return null
     }
-
-    /** The `c` query param of the 403'd googlevideo URL, or null. */
-    private fun failingClient(error: PlaybackException): String? =
-        failingUri(error)?.getQueryParameter("c")?.takeIf { it.isNotBlank() }
 
     /** The 403'd googlevideo URI, or null. */
     private fun failingUri(error: PlaybackException): Uri? {
@@ -1415,7 +1564,7 @@ class PlaybackEngine(
         }
     }
 
-    private enum class RecoveryReason { HTTP_403, CONNECTION_OPEN_FAILED }
+    private enum class RecoveryReason { HTTP_403, URL_STALE, CONNECTION_OPEN_FAILED }
 
     // -- rebuild (quality/audio/fallback) --
 
@@ -1427,7 +1576,6 @@ class PlaybackEngine(
         forceMuxed: Boolean = muxedFallbackActive,
         startMs: Long = player.currentPosition,
         subtitleKey: String? = _snapshot.value.subtitleKey,
-        excludeClient: String? = excludedClient,
         reloadCast: Boolean = false,
     ) {
         val speed = activePlayer().playbackParameters.speed
@@ -1440,7 +1588,7 @@ class PlaybackEngine(
                 val source = withContext(Dispatchers.IO) {
                     resolver.resolve(
                         stream, metadata, preferredQuality, audioTrackKey, forceMuxed,
-                        subtitleKey, excludeClient,
+                        subtitleKey,
                     )
                 }
                 coroutineContext.ensureActive()
@@ -1484,6 +1632,7 @@ class PlaybackEngine(
                     videoFormat = source.videoFormat,
                     audioFormat = source.audioFormat,
                 )
+                publishRenditionAudio()
                 if (reloadCast && castPlayer != null) {
                     handler.post { onCastManifestReload?.invoke() }
                 }
@@ -1555,6 +1704,17 @@ class PlaybackEngine(
         if (prefs.isEnabled(PreferenceKeys.REMEMBER_QUALITY)) {
             cache.get(KEY_QUALITY, String::class.java)
         } else null
+
+    private fun playbackDemand() = org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand(
+        rememberedQuality()?.let(StreamSelection::parseHeight) ?: 0,
+        rememberedAudioTrackKey()?.takeIf { it.startsWith("id:") }?.removePrefix("id:"), false,
+        setOf("avc", "vp9", "vp09", "hvc", "hev") +
+            if (CodecCapabilities.isDecodable(
+                    Format(codec = "av01", height = 1080))) setOf("av01") else emptySet())
+
+    override fun preparePlayback(urlOrId: String) {
+        extractor.preparePlayback(urlOrId, playbackDemand())
+    }
 
     private fun rememberedSubtitleKey(): String? {
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
@@ -1660,7 +1820,8 @@ class PlaybackEngine(
         private const val CAST_MAX_HEIGHT = 1080
         private val PROGRESS_TTL_MS = TimeUnit.DAYS.toMillis(3)
         private const val FALLBACK_QUARANTINE_MS = 30L * 60 * 1000
-        private const val MAX_REEXTRACT_ATTEMPTS = 2
+        private const val MAX_REEXTRACT_ATTEMPTS = 1
+        private const val MAX_LIGHT_REFRESH_ATTEMPTS = 1
         private const val KEY_SPEED = "player:speed"
         private const val KEY_QUALITY = "player:quality"
         private const val KEY_LOOP_MODE = "player:loop_mode"
@@ -1672,9 +1833,14 @@ class PlaybackEngine(
     }
 }
 
-/** Buffer policy: 50 s min / 60 s max / 1.5 s + 4 s startup. */
+/** Bound compressed samples too: a 50 s high-bitrate buffer can exhaust a 256 MB heap. */
+internal fun mediaBufferBudgetBytes(maxHeapBytes: Long): Int =
+    (maxHeapBytes / 8).coerceIn(16L * 1024 * 1024, 64L * 1024 * 1024).toInt()
+
+/** Keep the time windows, but let the byte budget stop high-bitrate read-ahead. */
 @UnstableApi
 internal fun defaultLoadControl(): DefaultLoadControl = DefaultLoadControl.Builder()
-    .setBufferDurationsMs(50_000, 60_000, 1_500, 4_000)
-    .setPrioritizeTimeOverSizeThresholds(true)
+    .setBufferDurationsMs(50_000, 60_000, 500, 4_000)
+    .setTargetBufferBytes(mediaBufferBudgetBytes(Runtime.getRuntime().maxMemory()))
+    .setPrioritizeTimeOverSizeThresholds(false)
     .build()

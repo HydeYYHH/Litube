@@ -1,11 +1,16 @@
 package com.hhst.youtubelite.downloader.net
 
 import com.hhst.youtubelite.downloader.core.AssetKind
-import com.hhst.youtubelite.downloader.core.DownloadChunk
-import com.hhst.youtubelite.downloader.core.DownloadComponentSource
-import com.hhst.youtubelite.downloader.core.InputComponent
-import com.hhst.youtubelite.downloader.core.InputComponentKind
+import kotlinx.coroutines.Dispatchers
 import com.hhst.youtubelite.downloader.core.TransferResult
+import com.hhst.youtubelite.downloader.core.InputComponentKind
+import com.hhst.youtubelite.downloader.core.InputComponent
+import com.hhst.youtubelite.downloader.core.DownloadComponentSource
+import com.hhst.youtubelite.downloader.core.DownloadChunk
+import com.hhst.youtubelite.extractor.ExtractionDiagnostics
+import com.hhst.youtubelite.extractor.YoutubeMediaRequests
+import com.hhst.youtubelite.downloader.io.FileIntegrity
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
@@ -16,13 +21,14 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class DownloadTransportTest {
+class DownloadTransportImplTest {
     private lateinit var server: MockWebServer
     private lateinit var dir: File
 
@@ -327,9 +333,9 @@ class DownloadTransportTest {
             receivedBytes = 8,
             verified = true,
             tempPath = dest.path,
-            checksum = com.hhst.youtubelite.downloader.io.FileIntegrity.sha256(dest, 0, 8),
+            checksum = FileIntegrity.sha256(dest, 0, 8),
         )
-        com.hhst.youtubelite.downloader.io.FileIntegrity.writeChecksum(dest, 0, first.checksum!!)
+        FileIntegrity.writeChecksum(dest, 0, first.checksum!!)
         server.enqueue(
             MockResponse()
                 .setResponseCode(206)
@@ -349,6 +355,123 @@ class DownloadTransportTest {
         assertEquals(1, chunks.size)
         assertEquals(8L, chunks.single().startByte)
         assertEquals("bytes=8-15", server.takeRequest().getHeader("Range"))
+    }
+
+    @Test
+    fun recoveryStopsAfterOneRefreshAndOneExistingBackup() = runBlocking {
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(403)) }
+        var refreshed = 0
+        var backups = 0
+        val transfer = DownloadTransportImpl(client = DownloadHttpClients.create(), chunkBytes = 4,
+            forbidden = ForbiddenRecovery { _, _ -> refreshed++; RecoveredSource(source(4), false, false) },
+            fallback = ForbiddenRecovery { _, _ -> backups++; RecoveredSource(source(4), false, false) })
+        val result = transfer.downloadComponent("t1", component(4), source(4), File(dir, "bounded.part"), emptyList()) { true }
+        assertEquals(TransferResult.Failed("403"), result)
+        assertEquals(1, refreshed)
+        assertEquals(1, backups)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun parentCancellationClosesAnAlreadyOpenResponse() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/4")
+            .setBody("data").setBodyDelay(2, TimeUnit.SECONDS))
+        val transfer = transport(chunkBytes = 4)
+        val job = async(Dispatchers.IO) {
+            transfer.downloadComponent("t1", component(4), source(4), File(dir, "cancel.part"), emptyList()) { true }
+        }
+        server.takeRequest(3, TimeUnit.SECONDS)
+        delay(100)
+        val start = System.nanoTime()
+        job.cancel()
+        job.join()
+        assertTrue(job.isCancelled)
+        assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(1))
+    }
+
+    @Test
+    fun liveProgress_arrivesBeforeCheckpoint_withTrustedTotal() = runBlocking {
+        val length = 512L * 1024L
+        server.enqueue(MockResponse().setResponseCode(206)
+            .addHeader("Content-Range", "bytes 0-${length - 1}/$length")
+            .setBody(okio.Buffer().write(ByteArray(length.toInt())))
+            .throttleBody(64 * 1024, 60, TimeUnit.MILLISECONDS))
+        val checkpoints = mutableListOf<DownloadChunk>()
+        val progress = mutableListOf<DownloadChunk>()
+        val result = transport(chunkBytes = length).downloadComponent(
+            "live", component(length), source(length), File(dir, "live.part"), emptyList(),
+            onProgress = { chunk, total ->
+                assertEquals(length, total)
+                assertFalse(chunk.verified)
+                assertTrue(checkpoints.isEmpty())
+                progress += chunk
+                true
+            },
+            onChunk = { checkpoints += it; true },
+        )
+        assertEquals(TransferResult.Completed, result)
+        assertTrue(progress.any { it.receivedBytes in 1 until length })
+        assertEquals(length, checkpoints.single().receivedBytes)
+        assertTrue(checkpoints.single().verified)
+    }
+
+    @Test
+    fun unknownLength_fullResponseReportsContentLength() = runBlocking {
+        server.enqueue(MockResponse().setBody("media"))
+        val totals = mutableListOf<Long?>()
+        val result = transport().downloadComponent(
+            "headers", component(null), source(null, DownloadRangeMode.NONE), File(dir, "headers.part"), emptyList(),
+            onProgress = { _, total -> totals += total; true },
+            onChunk = { true },
+        )
+        assertEquals(TransferResult.Completed, result)
+        assertEquals(listOf(5L), totals)
+    }
+
+    @Test
+    fun rejectedLiveProgress_doesNotCreateVerifiedCheckpoint() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(206)
+            .addHeader("Content-Range", "bytes 0-3/4").setBody("data"))
+        val checkpoints = mutableListOf<DownloadChunk>()
+        val result = transport(chunkBytes = 4).downloadComponent(
+            "stale", component(4), source(4), File(dir, "stale.part"), emptyList(),
+            onProgress = { _, _ -> false },
+            onChunk = { checkpoints += it; true },
+        )
+        assertEquals(TransferResult.Paused, result)
+        assertTrue(checkpoints.isEmpty())
+    }
+
+    @Test
+    fun unknownLengthResumeReusesVerifiedPrefixAndDropsUnverifiedTail() = runBlocking {
+        fun cropped(body: String) = MockResponse().setResponseCode(206)
+            .setHeader("Content-Range", "bytes 0-${body.length - 1}/${body.length}").setBody(body)
+        server.enqueue(cropped("ABCD"))
+        server.enqueue(cropped("EFGH"))
+        server.enqueue(cropped("IJKL"))
+        server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
+        val session = org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession(
+            "test", org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession.Account.ANONYMOUS,
+            0, null, null, null, null, "UA", 0, null, "test", com.grack.nanojson.JsonObject(), { "" })
+        val plan = RequestPlan(session,
+            org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS,
+            RequestPlan.Protocol.HTTPS,
+            RequestPlan.Range.QUERY, false)
+        val requests = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
+        val transfer = DownloadTransportImpl(client = DownloadHttpClients.create(), chunkBytes = 4,
+            sleeper = DownloadSleeper { }, mediaRequests = requests)
+        val input = source(null, DownloadRangeMode.QUERY_PARAM).copy(requestPlan = plan)
+        val dest = File(dir, "unknown.part")
+        val chunks = mutableListOf<DownloadChunk>()
+        assertEquals(TransferResult.Paused, transfer.downloadComponent("t1", component(null), input,
+            dest, emptyList(), onChunk = { chunks += it; false }))
+        dest.appendText("unverified-tail")
+        assertEquals(TransferResult.Completed, transfer.downloadComponent("t1", component(null), input,
+            dest, chunks, onChunk = { true }))
+        assertEquals("ABCDEFGHIJKL", dest.readText())
+        assertEquals(listOf("0-3", "4-7", "8-11", "12-15"), (1..4).map {
+            server.takeRequest().requestUrl!!.queryParameter("range")
+        })
     }
 
     private fun transport(

@@ -1,8 +1,13 @@
 package com.hhst.youtubelite.downloader.work
 
+import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
+import com.hhst.youtubelite.downloader.core.DownloadTarget
+import com.hhst.youtubelite.downloader.core.NoOpResolver
+import com.hhst.youtubelite.downloader.core.NoOpTransport
+import com.hhst.youtubelite.downloader.core.NoOpFinalizer
+import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.NoOpPublisher
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.engine.DownloadEngine
@@ -16,7 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-class DownloadReconciliationTest {
+class DownloadStartupReconcilerTest {
 
     private fun env(sdk: Int): Triple<SchedulerHarness, DownloadStartupReconciler, DownloadDirectories> {
         val h = SchedulerHarness(sdk)
@@ -76,10 +81,10 @@ class DownloadReconciliationTest {
             engine = DownloadEngine(
                 coordinator = h.wired,
                 repository = h.repo,
-                resolver = com.hhst.youtubelite.downloader.core.NoOpResolver,
-                transport = com.hhst.youtubelite.downloader.core.NoOpTransport,
-                finalizer = com.hhst.youtubelite.downloader.core.NoOpFinalizer,
-                publisher = com.hhst.youtubelite.downloader.core.NoOpPublisher,
+                resolver = NoOpResolver,
+                transport = NoOpTransport,
+                finalizer = NoOpFinalizer,
+                publisher = NoOpPublisher,
                 directories = DownloadDirectories(
                     File(System.getProperty("java.io.tmpdir"), "dl-e-${System.nanoTime()}"),
                 ),
@@ -134,10 +139,10 @@ class DownloadReconciliationTest {
 class DownloadNotificationControllerTest {
 
     @Test
-    fun progressThrottled_criticalFlushes() {
+    fun unchangedPayloadIsNotReposted_butPauseFlushesImmediately() {
         val port = RecordingNotificationPort()
         var now = 0L
-        val c = com.hhst.youtubelite.downloader.notify.DownloadNotificationController(port) { now }
+        val c = DownloadNotificationController(port) { now }
         val h = SchedulerHarness(33)
         kotlinx.coroutines.runBlocking {
             val batchId = h.wired.enqueue(request("a"), "s1").batchId
@@ -147,20 +152,43 @@ class DownloadNotificationControllerTest {
             assertEquals(1, port.posted.size)
             now = 1_200L
             c.publish(view)
+            assertEquals(1, port.posted.size)
+            h.wired.pause(DownloadTarget.Batch(batchId))
+            c.publish(h.repo.transact { batchView(batchId) }!!)
             assertEquals(2, port.posted.size)
+            assertTrue(port.posted.last().second.showResume)
         }
     }
 
     @Test
     fun permissionDenied_skipsNotify() {
         val port = RecordingNotificationPort(enabled = false)
-        val c = com.hhst.youtubelite.downloader.notify.DownloadNotificationController(port)
+        val c = DownloadNotificationController(port)
         val h = SchedulerHarness(33)
         kotlinx.coroutines.runBlocking {
             val batchId = h.wired.enqueue(request("a"), "s1").batchId
             val view = h.repo.transact { batchView(batchId) }!!
             c.publish(view)
             assertTrue(port.posted.isEmpty())
+            port.enabled = true
+            c.publish(view)
+            assertEquals(1, port.posted.size)
         }
+    }
+
+    @Test
+    fun completedBatchIsNotRepostedWhenOtherDownloadsEmit() = kotlinx.coroutines.runBlocking {
+        val port = RecordingNotificationPort()
+        var now = 0L
+        val controller = DownloadNotificationController(port) { now }
+        val h = SchedulerHarness(33)
+        val result = h.wired.enqueue(request("a"), "s1")
+        h.wired.reportAssetPublished(result.created.single().taskId, 0,
+            AssetKind.VIDEO, "content://test/complete.mp4")
+        val view = h.repo.transact { batchView(result.batchId) }!!
+        controller.publish(view)
+        repeat(10) { now += 1_200L; controller.publish(view) }
+        assertEquals(1, port.posted.size)
+        assertTrue(port.posted.single().second.complete)
     }
 }

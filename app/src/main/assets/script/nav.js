@@ -1,9 +1,7 @@
 (() => {
   'use strict';
-  if (window.__navTabs) return;
-  window.__navTabs = true;
-
-  const BRIDGE = 'Bridge';
+  if (window.__nav) return;
+  window.__nav = true;
 
   function isYoutubeHost(hostname) {
     // Strict suffix match mirroring Kotlin UrlPolicy: a substring test
@@ -57,7 +55,7 @@
   }
 
   function openTab(url) {
-    const bridge = window[BRIDGE];
+    const bridge = window.Bridge;
     if (!bridge || typeof bridge.openTab !== 'function') return;
     // YouTube may push a transient hash (e.g. #searching) on the source page
     // before cross-tab navigation; strip it so back lands on a clean page.
@@ -76,9 +74,9 @@
     }
   }
 
-  // One of three independent history.pushState/replaceState wrappers
-  // (watch-id.js and display_dislikes.js stack their own); kept separate
-  // on purpose — merging would couple script injection order.
+  // One of two independent history.pushState/replaceState wrappers
+  // (display_dislikes.js stacks its own); kept separate on purpose —
+  // merging would couple script injection order.
   const originalPushState = history.pushState;
   const originalReplaceState = history.replaceState;
 

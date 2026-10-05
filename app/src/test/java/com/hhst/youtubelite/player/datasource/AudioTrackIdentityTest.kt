@@ -27,6 +27,27 @@ class AudioTrackIdentityTest {
     }
 
     @Test
+    fun renditionChoicesKeepDistinctPlaylistTracks() {
+        val rows = AudioTrackIdentity.renditionChoices(
+            listOf(
+                "en-US" to "English (US) original",
+                "en-US" to "English (US) original",
+                "ja" to "Japanese",
+                null to null,
+            ),
+        )
+        assertEquals(listOf("hls:en-US:English (US) original", "hls:ja:Japanese"), rows.map { it.key })
+        assertEquals(listOf("English (US) original", "Japanese"), rows.map { it.label })
+    }
+
+    @Test
+    fun oneRenditionStaysOnTheDefaultRow() {
+        assertTrue(
+            AudioTrackIdentity.renditionChoices(listOf("en-US" to "English")).isEmpty(),
+        )
+    }
+
+    @Test
     fun choicesDisambiguateSameLanguageDifferentType() {
         val original = audio(locale = "en", type = "original", trackId = "en.0")
         val desc = audio(locale = "en", type = "descriptive", trackId = "en.d")

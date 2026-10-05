@@ -399,10 +399,10 @@ test('a c3-icon is replaced in its slot without leaving a blank icon beside the 
     // The native source keeps its own lifecycle; a late render there must
     // not replace or move any of the entries' SVGs.
     const nativeShape = chip.querySelector('.yt-icon-shape');
-    const glyphs = row.querySelectorAll('[data-lite]').map((entry) => entry.querySelector('svg'));
+    const glyphs = row.querySelectorAll('[data-injected]').map((entry) => entry.querySelector('svg'));
     nativeShape.appendChild(new El('svg'));
     context.Lite.wake();
-    assert.deepEqual(row.querySelectorAll('[data-lite]').map((entry) => entry.querySelector('svg')), glyphs);
+    assert.deepEqual(row.querySelectorAll('[data-injected]').map((entry) => entry.querySelector('svg')), glyphs);
     assert.ok(chip.querySelector('c3-icon'));
   }
 });
@@ -447,7 +447,7 @@ test('entry clicks route through the bridge', () => {
   const { context, row, posted } = page();
   const queued = [];
   const opened = [];
-  context.lite = {
+  context.Bridge = {
     addToQueue: (json) => queued.push(JSON.parse(json)),
     openWith: (url) => opened.push(url),
   };
@@ -461,6 +461,7 @@ test('entry clicks route through the bridge', () => {
   click('openWithButton');
   assert.equal(queued.length, 1);
   assert.equal(queued[0].videoId, 'aaaaaaaaaaa');
+  assert.equal(queued[0].url, context.location.href);
   assert.deepEqual(opened, [context.location.href]);
 });
 

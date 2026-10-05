@@ -15,7 +15,7 @@ import com.hhst.youtubelite.downloader.core.TaskSnapshot
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Transactional task store. UI never talks to this directly; [com.hhst.youtubelite.downloader.core.DownloadCoordinator]
+ * Transactional task store. UI never talks to this directly; [downloader.core.DownloadCoordinator]
  * is the command surface.
  */
 interface DownloadRepository {

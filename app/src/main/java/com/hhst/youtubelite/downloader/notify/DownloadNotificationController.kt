@@ -18,30 +18,32 @@ class DownloadNotificationController(
 ) {
     private val lastProgressAt = HashMap<String, Long>()
     private val lastSignature = HashMap<String, String>()
+    private val lastPayload = HashMap<String, DownloadNotificationPayload>()
 
     fun publish(view: BatchView) {
         val batchId = view.batch.id
         val payload = payload(view)
         val signature = signature(view)
         val critical = signature != lastSignature[batchId]
+        // Room emits for every chunk and every batch. Unchanged notifications,
+        // especially completed batches, need no reinflation in the system shade.
+        if (lastPayload[batchId] == payload) {
+            lastSignature[batchId] = signature
+            return
+        }
+        val shouldNotify = payload.complete || view.stats.total > 0
+        if (shouldNotify && !port.areNotificationsEnabled()) return
         val now = clock()
         val last = lastProgressAt[batchId] ?: 0L
         if (!critical && now - last < 1_000L) return
         lastProgressAt[batchId] = now
         lastSignature[batchId] = signature
-        if (payload.complete || view.stats.total == 0) {
-            if (payload.complete) {
-                if (port.areNotificationsEnabled()) {
-                    port.notify(DownloadWorkNames.notificationId(batchId), payload)
-                }
-            } else {
-                port.cancel(DownloadWorkNames.notificationId(batchId))
-            }
-            return
-        }
-        if (port.areNotificationsEnabled()) {
+        if (shouldNotify) {
             port.notify(DownloadWorkNames.notificationId(batchId), payload)
+        } else {
+            port.cancel(DownloadWorkNames.notificationId(batchId))
         }
+        lastPayload[batchId] = payload
     }
 
     fun payload(view: BatchView): DownloadNotificationPayload {

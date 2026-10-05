@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * In-process runner kept for hermetic JVM tests. Production uses
- * [com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler].
+ * [downloader.work.BackgroundDownloadScheduler].
  */
 class InProcessDownloadScheduler(
     private val scope: CoroutineScope,

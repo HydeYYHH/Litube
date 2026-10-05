@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 import androidx.compose.ui.graphics.Color
+import java.util.Locale
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -128,6 +129,22 @@ object PlayerUi {
         return (widthDp * 9 / 16).coerceAtLeast(1)
     }
 
+    /** Leave room for the watch actions and a useful portion of the content. */
+    const val MIN_WATCH_CONTENT_HEIGHT_DP = 192
+
+    fun useLandscapeMiniPlayer(
+        viewportWidthDp: Int,
+        viewportHeightDp: Int,
+        pageHeightDp: Int?,
+    ): Boolean {
+        if (viewportHeightDp <= 0 || viewportWidthDp <= viewportHeightDp) return false
+        // Use the uncollapsed slot and masthead, independent of page scrolling.
+        // Measuring the collapsed slot would immediately expand it again.
+        val remaining = viewportHeightDp - EMBEDDED_TOP_MARGIN_DP -
+            embeddedHeightDp(pageHeightDp, viewportWidthDp)
+        return remaining < MIN_WATCH_CONTENT_HEIGHT_DP
+    }
+
     fun formatTime(ms: Long): String {
         if (ms <= 0) return "0:00"
         val totalSec = ms / 1000
@@ -152,9 +169,20 @@ object PlayerUi {
     }
 
     /**
-     * Quality chip: the pin when set, else `Auto · <active>` from the track
-     * actually rendering (falls back to the reported video height).
+     * Quality actually on screen. A pinned choice stays as labeled. In auto, a
+     * decoded frame whose height disagrees with the playlist track wins, so a
+     * master-playlist RESOLUTION cannot keep advertising another quality.
      */
+    fun playingQuality(active: String?, videoHeight: Int): String? {
+        val declared = active?.takeIf { it.isNotBlank() }
+        val decoded = videoHeight.takeIf { it > 0 }?.let { "${it}p" }
+        if (declared == null) return decoded
+        if (decoded == null) return declared
+        val declaredHeight = declared.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
+        return if (declaredHeight > 0 && declaredHeight != videoHeight) decoded else declared
+    }
+
+    /** Quality chip: the pin when set, else `Auto` plus [playingQuality]. */
     fun qualityButtonLabel(
         pinned: String?,
         active: String?,
@@ -162,16 +190,15 @@ object PlayerUi {
         videoHeight: Int,
     ): String {
         if (pinned != null) return pinned
-        val current = active?.takeIf { it.isNotBlank() }
-            ?: videoHeight.takeIf { it > 0 }?.let { "${it}p" }
+        val current = playingQuality(active, videoHeight)
         return if (current != null) "$autoPrefix $current" else autoPrefix
     }
 
     /** Human-readable language name; falls back to the raw code. */
     fun languageLabel(code: String): String {
         if (code.isBlank()) return code
-        val name = java.util.Locale.forLanguageTag(code.replace('_', '-'))
-            .getDisplayName(java.util.Locale.getDefault())
+        val name = Locale.forLanguageTag(code.replace('_', '-'))
+            .getDisplayName(Locale.getDefault())
             .trim()
         return name.ifBlank { code }
     }

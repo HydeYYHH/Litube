@@ -98,6 +98,26 @@ class PlayerUiTest {
     }
 
     @Test
+    fun landscapeMini_compactPhoneFallsBackButRoomyTabletStaysEmbedded() {
+        assertTrue(PlayerUi.useLandscapeMiniPlayer(880, 360, 495))
+        assertTrue(PlayerUi.useLandscapeMiniPlayer(880, 360, null))
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(1024, 840, 576))
+        // A wide device still needs mini when the actual page player is tall.
+        assertTrue(PlayerUi.useLandscapeMiniPlayer(1280, 800, 720))
+        // A shorter slot fits even in a phone-sized landscape window.
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(880, 480, 220))
+    }
+
+    @Test
+    fun landscapeMini_boundaryAndPortraitRestoration() {
+        assertTrue(PlayerUi.useLandscapeMiniPlayer(900, 539, 300))
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(900, 540, 300))
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(360, 880, 495))
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(800, 800, 720))
+        assertFalse(PlayerUi.useLandscapeMiniPlayer(0, 0, null))
+    }
+
+    @Test
     fun resizeMode_mapsToExoAspectRatioConstants() {
         assertEquals(0, ResizeMode.Fit.exoResizeMode())
         assertEquals(1, ResizeMode.FixedWidth.exoResizeMode())
@@ -114,10 +134,15 @@ class PlayerUiTest {
             "1080p",
             PlayerUi.qualityButtonLabel(pinned = "1080p", active = null, autoPrefix = "Auto", videoHeight = 720),
         )
-        // Unpinned: the actually-rendering track drives the "Auto ·" suffix.
+        // Playlist track and decoded frame disagree: auto shows the frame.
         assertEquals(
-            "Auto 720p",
+            "Auto 1080p",
             PlayerUi.qualityButtonLabel(pinned = null, active = "720p", autoPrefix = "Auto", videoHeight = 1080),
+        )
+        // They agree: keep the track label, including a frame-rate suffix.
+        assertEquals(
+            "Auto 1080p60",
+            PlayerUi.qualityButtonLabel(pinned = null, active = "1080p60", autoPrefix = "Auto", videoHeight = 1080),
         )
         // Track unknown yet: fall back to the reported video height.
         assertEquals(

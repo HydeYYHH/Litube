@@ -1,5 +1,9 @@
 package com.hhst.youtubelite.downloader.io
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+
 enum class NetworkKind {
     NONE,
     WIFI,
@@ -32,17 +36,17 @@ object AssumeAvailableNetwork : NetworkMonitor {
 }
 
 class AndroidNetworkMonitor(
-    private val context: android.content.Context,
+    private val context: Context,
 ) : NetworkMonitor {
     override fun current(): NetworkKind {
-        val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
-            as? android.net.ConnectivityManager ?: return NetworkKind.OTHER
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+            as? ConnectivityManager ?: return NetworkKind.OTHER
         val network = cm.activeNetwork ?: return NetworkKind.NONE
         val caps = cm.getNetworkCapabilities(network) ?: return NetworkKind.NONE
         return when {
-            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
-                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkKind.WIFI
-            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkKind.CELLULAR
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkKind.WIFI
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkKind.CELLULAR
             else -> NetworkKind.OTHER
         }
     }

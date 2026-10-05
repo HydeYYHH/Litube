@@ -62,11 +62,12 @@ class DownloadConfirmSheetAndroidTest {
             }
         }
         composeRule.waitUntil(8_000) {
-            composeRule.onAllNodesWithText("720p").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("1080p").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_video)).assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_audio)).assertIsDisplayed()
-        composeRule.onNodeWithText("1080p").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_quality)).performScrollTo().performClick()
+        composeRule.onNodeWithText("720p").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("720p").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_more_options)).performScrollTo().performClick()
         composeRule.waitForIdle()

@@ -9,6 +9,17 @@
 
   const MEDIA_HOLD_MS = 420;
   const MOVE_CANCEL_PX = 12;
+  // Begin the same native task on the selected link, before navigation and
+  // watch-page rendering. No hover/visible-card prefetch or media download.
+  // Window capture runs before nav.js can stop the document's click handlers.
+  window.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    const link = event.target.closest && event.target.closest('a[href]');
+    const href = link && link.href;
+    const id = href && Lite.id(href);
+    if (!id || id === Lite.id()) return;
+    try { Lite.bridge()?.prepare?.(href); } catch {}
+  }, true);
   const MEDIA_CONTEXT_BLOCK_MS = 400;
   let activeId = null;
   let playerShown = false;
@@ -107,7 +118,7 @@
   // A drag over the watch content must not reach YouTube's fullscreen
   // gesture logic on the suppressed page player; taps and scrolling need
   // no JS events. The scheduler re-runs this after every re-render.
-  const GESTURE_TRAP = 'liteGestureTrap';
+  const GESTURE_TRAP = 'gestureTrap';
   const GESTURE_TYPES =
     ['touchmove', 'touchend', 'touchcancel', 'pointermove', 'pointerup', 'pointercancel'];
 
@@ -124,11 +135,44 @@
 
   let lastLayoutKey = '';
   let lastPlaylist = false;
+  const COMPACT_CLASS = 'lite-compact-player';
+
+  function syncCompactPlayer(b) {
+    const root = document.documentElement;
+    if (!root) return;
+    const compact = !!(Lite.id() && !new URL(location.href).pathname.startsWith('/shorts/') &&
+      typeof b.isPlayerCompact === 'function' && b.isPlayerCompact());
+    if (compact && !document.getElementById('lite-compact-player-style')) {
+      const style = document.createElement('style');
+      style.id = 'lite-compact-player-style';
+      style.textContent = `
+        html.${COMPACT_CLASS} .player-container,
+        html.${COMPACT_CLASS} #player-container-id,
+        html.${COMPACT_CLASS} ytm-player {
+          height: 0 !important;
+          min-height: 0 !important;
+          padding-bottom: 0 !important;
+          overflow: hidden !important;
+        }
+        html.${COMPACT_CLASS} .watch-below-the-player {
+          padding-top: 0 !important;
+          margin-top: 0 !important;
+        }
+      `;
+      root.appendChild(style);
+    }
+    root.classList.toggle(COMPACT_CLASS, compact);
+  }
 
   function reportLayout(b) {
+    const root = document.documentElement;
+    const compact = root && root.classList.contains(COMPACT_CLASS);
     try {
       const p = pagePlayer();
       if (!p || typeof b.setPlayerLayout !== 'function') return;
+      // Probe the original slot, including after rotation or a page re-render.
+      // Never feed our collapsed height back into the native layout policy.
+      if (compact) root.classList.remove(COMPACT_CLASS);
       const r = p.getBoundingClientRect();
       const top = Math.round(r.top);
       const height = Math.round(r.height);
@@ -137,7 +181,9 @@
       if (key === lastLayoutKey) return;
       lastLayoutKey = key;
       b.setPlayerLayout(top, height);
-    } catch {}
+    } catch {} finally {
+      if (compact) root.classList.add(COMPACT_CLASS);
+    }
   }
 
   function hideNative(b) {
@@ -211,6 +257,7 @@
       hideNative(b);
       restorePagePlayer();
     }
+    syncCompactPlayer(b);
   }
 
   /** Returns false until the bridge shows up; the backoff chain retries. */
@@ -226,6 +273,7 @@
     sync(bridge);
     return true;
   }
+  window.__syncPlayerCompact = ensure;
 
   // Timestamp links (?t=1m30s / &t=90) → seek the native player instead of navigating.
   function interceptTimestamps() {
@@ -647,9 +695,9 @@
       warnSelectorMiss('sheet-menu-container');
       return false;
     }
-    const marked = '[data-lite="queue-item"]';
+    const marked = '[data-injected="queue-item"]';
     const existing = Array.from(menuContainer.children).filter(
-      (child) => child instanceof Element && child.getAttribute('data-lite') === 'queue-item',
+      (child) => child instanceof Element && child.getAttribute('data-injected') === 'queue-item',
     );
     existing.forEach((node, index) => { if (index > 0) node.remove(); });
     if (!payload || !payload.videoId) {
@@ -661,16 +709,16 @@
       const template = Array.from(menuContainer.children)
         .reverse()
         .find((child) => child instanceof Element &&
-          child.getAttribute('data-lite') !== 'queue-item' &&
+          child.getAttribute('data-injected') !== 'queue-item' &&
           isSheetItem(child)) || menuContainer.lastElementChild;
       if (!(template instanceof Element)) {
         warnSelectorMiss('sheet-menu-item');
         return false;
       }
       item = template.cloneNode(true);
-      item.setAttribute('data-lite', 'queue-item');
+      item.setAttribute('data-injected', 'queue-item');
     }
-    item.dataset.liteQueuePayload = JSON.stringify(payload);
+    item.dataset.queuePayload = JSON.stringify(payload);
     if (!styleQueueMenuItem(item)) return false;
     if (item.parentElement !== menuContainer || item !== menuContainer.firstElementChild) {
       menuContainer.insertBefore(item, menuContainer.firstElementChild);
@@ -704,12 +752,12 @@
 
   function queueItemFromPath(event) {
     for (const node of pathOf(event)) {
-      if (node instanceof Element && node.getAttribute('data-lite') === 'queue-item') {
+      if (node instanceof Element && node.getAttribute('data-injected') === 'queue-item') {
         return node;
       }
     }
     const target = event.target;
-    return (target && target.closest && target.closest('[data-lite="queue-item"]')) || null;
+    return (target && target.closest && target.closest('[data-injected="queue-item"]')) || null;
   }
 
   /** ⋮ on a media card → YouTube sheet → inject Add to queue as the first row. */
@@ -724,7 +772,7 @@
     document.addEventListener('click', (event) => {
       const item = queueItemFromPath(event);
       if (!item) return;
-      const payload = item.dataset.liteQueuePayload;
+      const payload = item.dataset.queuePayload;
       const b = Lite.bridge();
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -748,6 +796,7 @@
     interceptTimestamps();
     interceptMediaHold();
     interceptMediaMenu();
+    window.addEventListener('resize', ensure);
     Lite.module('player', ensure);
   }
 

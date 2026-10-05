@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.player.service
 
+import android.os.Handler
+import android.os.Looper
+
 /**
  * Decouples [PlaybackService] (notification buttons, MediaSession media keys)
  * from the ViewModel that owns queue and cast semantics. The host app
@@ -12,7 +15,7 @@ object PlaybackCommandRouter {
     @Volatile
     var handler: Handler? = null
 
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val main = Handler(Looper.getMainLooper())
 
     fun playPause() = post { it.onPlayPause() }
     fun play() = post { it.onPlay() }

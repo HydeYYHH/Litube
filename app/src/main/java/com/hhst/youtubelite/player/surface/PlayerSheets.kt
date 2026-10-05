@@ -34,6 +34,7 @@ import com.hhst.youtubelite.downloader.ui.DownloadEntries
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
+import com.hhst.youtubelite.player.queue.QueueItem
 
 /** Player sheets: More + Queue. */
 sealed interface PlayerSheet {
@@ -79,6 +80,7 @@ fun PlayerSheetHost(
 ) {
     if (sheet == null) return
     val context = LocalContext.current
+    val queueAdded = stringResource(R.string.queue_item_added)
     PlayerModalSheet(onDismiss = onDismiss) {
         when (sheet) {
             PlayerSheet.More -> MoreSheet(
@@ -114,6 +116,13 @@ fun PlayerSheetHost(
                     onDismiss()
                 },
                 onShare = { callbacks.onShare(); onDismiss() },
+                onQueueAdd = {
+                    state.videoId?.let { id ->
+                        callbacks.onQueueAdd(QueueItem(id, VideoId.watchUrl(id), state.title, state.author, VideoId.thumbnailUrl(id)))
+                        callbacks.onHint(queueAdded)
+                    }
+                    onDismiss()
+                },
             )
             PlayerSheet.Queue -> QueueSheet(
                 items = state.queueItems,
@@ -223,6 +232,7 @@ private fun MoreSheet(
     onInfo: () -> Unit,
     onDownload: () -> Unit,
     onShare: () -> Unit,
+    onQueueAdd: () -> Unit,
 ) {
     Column(
         Modifier
@@ -237,6 +247,7 @@ private fun MoreSheet(
         MoreRow(R.drawable.ic_subtitles_on, stringResource(R.string.subtitle_style), onSubtitleStyle)
         MoreRow(R.drawable.ic_info, stringResource(R.string.info), onInfo)
         MoreRow(R.drawable.ic_download, stringResource(R.string.download), onDownload)
+        MoreRow(R.drawable.ic_queue_add, stringResource(R.string.add_to_queue), onQueueAdd)
         MoreRow(R.drawable.ic_share, stringResource(R.string.share), onShare)
     }
 }

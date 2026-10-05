@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
+import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -18,48 +20,30 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleExtractor
 import com.hhst.youtubelite.extractor.Format
-import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Stream
+import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Subtitle
 import androidx.core.net.toUri
 
 /**
- * Converts extractor [Stream] + [Metadata] into an ExoPlayer [MediaSource].
- *
- * VOD order (all decisions driven by the googlevideo risk-control experiments
- * of 2026-08; see docs in [StreamSelection]):
- * 1. Adaptive DASH whose URLs carry a streaming poToken — exempt from the
- *    ~64 s read window and full-quality.
- * 2. Muxed progressive from a client exempt from the window (ANDROID itag 18)
- *    when forced (muxed fallback) — 360p floor.
- *    A muxed format with a sidx goes out as synthetic DASH ([singleFormatSource]);
- *    without one it rides ExoPlayer's progressive pipeline (moov at the
- *    head), which still serves dynamic Range-based seeks — NOT a static stream.
- * 3. Adaptive DASH from a window-exempt client (VISIONOS direct URLs). Full
- *    quality without a poToken; outranks muxed and HLS.
- * 4. HLS (iOS/WEB) is deliberately NOT a VOD fallback: an HLS load error
- *    walks Media3 1.10.0's HlsChunkSource fallback selection into a fatal
- *    ArrayIndexOutOfBoundsException inside BaseTrackSelection — the error
- *    path itself crashes the app. Live stays on HLS.
- * 5. Remote DASH manifest URL.
- * 6. Muxed floor when no exempt adaptive pool exists at all.
- * 7. Adaptive DASH from window-bound clients without pot — subject to the
- *    64 s window, kept only when nothing else plays.
- * 8. Audio-only.
- *
- * Formats are always filtered by [CodecCapabilities] first: av01 is dropped on
- * devices without AV1 decode (software decode janks mid-range SoCs), and the
- * muxed/adaptive pick falls back to a decodable codec at the same height.
- *
- * Live: DASH URL with [YoutubeDashLiveManifestParser] + 20 s target offset,
- * else HLS — both uncached.
- *
- * Consumes the already-resolved [Stream]; never re-extracts.
+ * Converts the engine's candidates into a Media3 source using their frozen request plans.
+ * Device codec support, quality and audio-track preferences drive format selection.
+ * VOD can use synthetic DASH, progressive streams or remote HLS/DASH manifests.
+ * Live manifest updates and all child requests inherit the same session and profile.
+ * Sources built from the legacy Java adapter retain its compatibility selection rules.
  */
 @UnstableApi
 class MediaSourceResolver(
     private val dataSources: PlayerDataSource,
+    /** Player bandwidth estimate for the HLS start-variant order; null keeps the manifest order. */
+    private val startupBandwidth: (() -> Long)? = null,
+    private val startupVideoSupport: ((androidx.media3.common.Format) -> Int)? = null,
 ) {
+    @Volatile private var startupParameters: (() -> TrackSelectionParameters)? = null
+
+    fun configureStartupTrackSelection(parameters: () -> TrackSelectionParameters) {
+        startupParameters = parameters
+    }
 
     data class Resolved(
         val mediaSource: MediaSource,
@@ -98,6 +82,11 @@ class MediaSourceResolver(
 
         val subtitles = SubtitleSelection.select(stream.subtitles, subtitleKey)
         val durationMs = metadata.duration * 1000
+        if (stream.formats.any { it.requestPlan != null } && !forceMuxed) {
+            val requested = stream.formats.filter { excludeClient == null || it.requestPlan?.profile?.clientName != excludeClient }
+            adaptive(requested, subtitles, durationMs, preferredQuality, audioTrackKey,
+                requirePoToken = false, meta = meta)?.let { return it }
+        }
 
         // Last-resort pool: without the rejected client the remainder may be
         // ANDROID_VR-only, so VR restrictions are lifted for this resolve.
@@ -139,14 +128,35 @@ class MediaSourceResolver(
             )?.let { return it }
         }
 
-        // 4. HLS is deliberately skipped for VOD (see the class doc): its
-        //    load errors crash inside Media3 instead of surfacing as
-        //    recoverable playback errors.
+        stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            // Keep every named rendition. Stripping them down to one merged
+            // file leaves the audio menu with only Default.
+            val parsers = AudioCodecHlsPlaylistParserFactory()
+            val select = startupVideoSupport?.let { support ->
+                { formats: List<androidx.media3.common.Format>, estimate: Long ->
+                    val parameters = startupParameters?.invoke()
+                        ?: TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT.buildUpon()
+                            .apply {
+                                preferredQuality?.let(StreamSelection::parseHeight)?.takeIf { it > 0 }?.let {
+                                    setMinVideoSize(0, it); setMaxVideoSize(Int.MAX_VALUE, it)
+                                }
+                            }.build()
+                    PlaybackStartup.selectFormat(formats, estimate, parameters, support)
+                }
+            }
+            val factory = HlsMediaSource.Factory(dataSources.vodHls(stream.hlsRequestPlan))
+                .setAllowChunklessPreparation(true)
+                .setPlaylistParserFactory(startupBandwidth?.let { StartupHlsPlaylistParserFactory(parsers, it, preferredQuality, select) } ?: parsers)
+            val video = factory.createMediaSource(
+                MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build(),
+            )
+            return Resolved(withSubtitles(video, subtitles), null, null)
+        }
 
         // 5. Remote DASH manifest URL.
         stream.dashUrl?.takeIf { it.isNotBlank() }?.let {
             return Resolved(
-                withSubtitles(dashSource(it, meta), subtitles),
+                withSubtitles(dashSource(it, meta, stream.dashRequestPlan), subtitles),
                 null, null,
             )
         }
@@ -251,8 +261,8 @@ class MediaSourceResolver(
         val subtitles = SubtitleSelection.select(stream.subtitles, subtitleKey)
         stream.dashUrl?.takeIf { it.isNotBlank() }?.let { url ->
             val factory = DashMediaSource.Factory(
-                DefaultDashChunkSource.Factory(dataSources.live),
-                dataSources.live,
+                DefaultDashChunkSource.Factory(dataSources.manifest(stream.dashRequestPlan)),
+                dataSources.manifest(stream.dashRequestPlan),
             ).setManifestParser(YoutubeDashLiveManifestParser())
             return Resolved(
                 withSubtitles(factory.createMediaSource(liveItem(url)), subtitles),
@@ -260,7 +270,7 @@ class MediaSourceResolver(
             )
         }
         stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
-            val factory = HlsMediaSource.Factory(dataSources.live)
+            val factory = HlsMediaSource.Factory(dataSources.manifest(stream.hlsRequestPlan))
                 .setAllowChunklessPreparation(true)
             return Resolved(
                 withSubtitles(factory.createMediaSource(liveItem(url)), subtitles),
@@ -293,8 +303,8 @@ class MediaSourceResolver(
     ): MediaSource = withSubtitles(
         MergingMediaSource(
             true,
-            syntheticDash(DashManifestFactory.buildVideoPool(videos, durationMs), meta),
-            syntheticDash(DashManifestFactory.build(audio, durationMs), meta),
+            syntheticDash(DashManifestFactory.buildVideoPool(videos, durationMs), meta, videos),
+            syntheticDash(DashManifestFactory.build(audio, durationMs), meta, listOf(audio)),
         ),
         subtitles,
     )
@@ -305,9 +315,9 @@ class MediaSourceResolver(
      */
     private fun singleFormatSource(format: Format, durationMs: Long, meta: MediaMetadata): MediaSource =
         if (format.hasDashRanges) {
-            syntheticDash(DashManifestFactory.build(format, durationMs), meta)
+            syntheticDash(DashManifestFactory.build(format, durationMs), meta, listOf(format))
         } else {
-            progressive(format.url, format.mimeType.ifBlank { null }, meta)
+            progressive(format.url, format.mimeType.ifBlank { null }, meta, format)
         }
 
     private fun pickMuxed(
@@ -333,27 +343,27 @@ class MediaSourceResolver(
         subtitleSources(SubtitleSelection.select(subtitles, trackKey)).isNotEmpty()
 
     /** Synthetic DASH manifest served from a data: URI; chunks via cached YT factory. */
-    private fun syntheticDash(mpd: String, meta: MediaMetadata): MediaSource {
+    private fun syntheticDash(mpd: String, meta: MediaMetadata, formats: List<Format>): MediaSource {
         val item = MediaItem.fromUri(
             ("data:application/dash+xml," + Uri.encode(mpd)).toUri(),
         ).buildUpon().setMediaMetadata(meta).build()
         return DashMediaSource.Factory(
-            DefaultDashChunkSource.Factory(dataSources.ytDash),
+            DefaultDashChunkSource.Factory(dataSources.formats(formats)),
             DataSource.Factory { DataSchemeDataSource() },
         ).createMediaSource(item)
     }
 
-    private fun dashSource(url: String, meta: MediaMetadata): MediaSource =
+    private fun dashSource(url: String, meta: MediaMetadata, plan: RequestPlan?): MediaSource =
         DashMediaSource.Factory(
-            DefaultDashChunkSource.Factory(dataSources.ytDash),
-            dataSources.ytDash,
+            DefaultDashChunkSource.Factory(dataSources.manifest(plan)),
+            dataSources.manifest(plan),
         ).createMediaSource(MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build())
 
-    private fun progressive(url: String, mimeType: String? = null, meta: MediaMetadata): MediaSource {
+    private fun progressive(url: String, mimeType: String? = null, meta: MediaMetadata, format: Format? = null): MediaSource {
         val builder = MediaItem.fromUri(url).buildUpon()
         if (mimeType != null) builder.setMimeType(mimeType)
         builder.setMediaMetadata(meta)
-        return ProgressiveMediaSource.Factory(dataSources.ytProgressive)
+        return ProgressiveMediaSource.Factory(dataSources.formats(listOfNotNull(format), dash = false))
             .setContinueLoadingCheckIntervalBytes(
                 PlayerDataSource.PROGRESSIVE_LOAD_INTERVAL_BYTES,
             )
@@ -403,7 +413,7 @@ class MediaSourceResolver(
             val extractorsFactory = ExtractorsFactory {
                 arrayOf(SubtitleExtractor(parserFactory.create(format), format))
             }
-            ProgressiveMediaSource.Factory(dataSources.ytProgressive, extractorsFactory)
+            ProgressiveMediaSource.Factory(dataSources.manifest(sub.requestPlan), extractorsFactory)
                 .createMediaSource(MediaItem.fromUri(sub.url))
         }
     }

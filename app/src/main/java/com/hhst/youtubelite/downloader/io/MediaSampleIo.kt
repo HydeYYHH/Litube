@@ -4,6 +4,7 @@ package com.hhst.youtubelite.downloader.io
 
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.DataReader
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.extractor.Extractor
@@ -13,6 +14,7 @@ import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.mp4.Mp4Extractor
+import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.media3.extractor.text.SubtitleParser
 import com.hhst.youtubelite.downloader.core.MediaCombo
 import java.io.ByteArrayOutputStream
@@ -32,15 +34,21 @@ object MediaSampleIo {
     fun extract(file: File): List<ExtractedTrack> = extract(file.readBytes())
 
     fun extract(bytes: ByteArray): List<ExtractedTrack> {
-        val extractor = Mp4Extractor(
+        val input = BytesInput(bytes)
+        var extractor: Extractor = Mp4Extractor(
             SubtitleParser.Factory.UNSUPPORTED,
             Mp4Extractor.FLAG_EMIT_RAW_SUBTITLE_DATA,
         )
+        if (!extractor.sniff(input)) {
+            extractor.release()
+            input.resetPeekPosition()
+            extractor = FragmentedMp4Extractor(SubtitleParser.Factory.UNSUPPORTED,
+                FragmentedMp4Extractor.FLAG_EMIT_RAW_SUBTITLE_DATA)
+            check(extractor.sniff(input)) { "not an MP4/M4A" }
+        }
+        input.resetPeekPosition()
         val output = DumpOutput()
         extractor.init(output)
-        val input = BytesInput(bytes)
-        check(extractor.sniff(input)) { "not an MP4/M4A" }
-        input.resetPeekPosition()
         val seek = PositionHolder()
         var result = Extractor.RESULT_CONTINUE
         var hops = 0
@@ -49,7 +57,8 @@ object MediaSampleIo {
             if (result == Extractor.RESULT_SEEK) {
                 check(++hops < 64) { "seek loop" }
                 input.seekTo(seek.position)
-                extractor.seek(seek.position, 0)
+                // RESULT_SEEK repositions the input for the current read;
+                // extractor.seek() would restart sample selection at time 0.
                 result = Extractor.RESULT_CONTINUE
             }
         }
@@ -113,7 +122,7 @@ object MediaSampleIo {
         }
 
         override fun sampleData(
-            input: androidx.media3.common.DataReader,
+            input: DataReader,
             length: Int,
             allowEndOfInput: Boolean,
             sampleDataPart: Int,
