@@ -1,0 +1,4 @@
+- Rewritten playback engine on native Media3: faster startup and far fewer playback errors
+- New download pipeline: resumable transfers, playlist batch download, background scheduling
+- Refreshed Shorts, gallery, and settings experience; 88 app languages
+- Support for Android 6.0 and later

@@ -61,7 +61,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 mmkv = { group = "com.tencent", name = "mmkv", version.ref = "mmkv" }
-newpipe-extractor = { group = "net.newpipe", name = "extractor", version = "0.26.0-aria" }
+newpipe-extractor = { group = "com.github.HydeYYHH", name = "NewPipeExtractor", version = "e9912c491553d6e5ebef9f491c235cb9b3d74015" }
 
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-exoplayer-dash = { group = "androidx.media3", name = "media3-exoplayer-dash", version.ref = "media3" }
