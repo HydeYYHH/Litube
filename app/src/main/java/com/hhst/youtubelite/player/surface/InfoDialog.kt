@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 
 @Composable
@@ -49,7 +50,7 @@ internal fun ResizeDialog(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
             )
         },
         text = {
@@ -84,8 +85,8 @@ internal fun ResizeDialog(
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
-                            fontSize = 15.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = SettingsTokens.BodySize.sp,
+                            fontWeight = FontWeight.Normal,
                         )
                     }
                 }
@@ -117,7 +118,7 @@ internal fun OptionDialog(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
             )
         },
         text = {
@@ -134,8 +135,8 @@ internal fun OptionDialog(
                         Text(
                             text = row.label,
                             modifier = Modifier.weight(1f),
-                            fontSize = 16.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = SettingsTokens.BodySize.sp,
+                            fontWeight = FontWeight.Normal,
                             color = if (isSelected) {
                                 MaterialTheme.colorScheme.primary
                             } else {
@@ -169,12 +170,37 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
     val copiedLabel = stringResource(R.string.copied)
     fun copy(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("info", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.info), text))
         onCopyHint(copiedLabel)
     }
-    fun kbps(v: Int): String = if (v > 0) "${v / 1000} kbps" else "-"
     val autoLabel = stringResource(R.string.player_quality_auto)
+    val diagnostic = state.diagnostics
+    val unavailable = stringResource(R.string.info_unavailable)
+    val playbackState = stringResource(when (diagnostic.playbackState) {
+        "idle" -> R.string.info_state_idle
+        "playing" -> R.string.info_state_playing
+        "paused" -> R.string.info_state_paused
+        "buffering" -> R.string.info_state_buffering
+        "ended" -> R.string.info_state_ended
+        "cast" -> R.string.info_state_cast
+        else -> R.string.info_unavailable
+    })
+    val bufferCount = stringResource(R.string.info_buffer_count, diagnostic.bufferCount)
+    fun kbps(value: Int?) = value?.takeIf { it > 0 }?.let { "${it / 1000} kbps" } ?: unavailable
+    fun fps(value: Float?) = value?.let { "%.1f fps".format(it) } ?: unavailable
     val details = buildList {
+        add(stringResource(R.string.info_nominal_fps) to fps(diagnostic.nominalFps))
+        add(stringResource(R.string.info_rendered_fps) to fps(diagnostic.renderedFps))
+        add(stringResource(R.string.info_expected_fps) to fps(diagnostic.expectedFps))
+        add(stringResource(R.string.info_video_decoder) to (diagnostic.videoDecoder ?: unavailable))
+        add(stringResource(R.string.info_audio_decoder) to (diagnostic.audioDecoder ?: unavailable))
+        add(stringResource(R.string.info_video_codec) to (diagnostic.videoCodec ?: unavailable))
+        add(stringResource(R.string.info_audio_codec) to (diagnostic.audioCodec ?: unavailable))
+        add(stringResource(R.string.info_dropped_frames) to "${diagnostic.droppedFrames} / ${diagnostic.renderedFrames + diagnostic.droppedFrames} (${diagnostic.droppedRatio?.let { "%.1f%%".format(it * 100) } ?: unavailable})")
+        add(stringResource(R.string.info_playback_speed) to "${state.speed}×")
+        add(stringResource(R.string.info_buffer_state) to "$playbackState · ${diagnostic.bufferingMs} ms · $bufferCount")
+        add(stringResource(R.string.info_first_frame) to (diagnostic.firstFrameMs?.let { "$it ms" } ?: unavailable))
+
         add(stringResource(R.string.player_info_title) to state.title)
         state.author?.let { add(stringResource(R.string.player_info_author) to it) }
         add(
@@ -186,18 +212,13 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
         add(stringResource(R.string.player_info_duration) to PlayerUi.formatTime(state.durationMs))
         if (state.isLive) add(stringResource(R.string.player_info_type) to stringResource(R.string.player_live))
         state.videoId?.let { add(stringResource(R.string.player_info_id) to it) }
-        state.videoCodec?.let { add(stringResource(R.string.info_video_codec) to it) }
-        if (state.videoWidth > 0 && state.videoHeight > 0) {
-            val fps = if (state.videoFps > 0) "@${state.videoFps}fps" else ""
-            add(
-                stringResource(R.string.info_resolution) to
-                    "${state.videoWidth}x${state.videoHeight}$fps",
-            )
-        }
-        if (state.videoBitrate > 0) add(stringResource(R.string.info_bitrate) to kbps(state.videoBitrate))
+
+        add(stringResource(R.string.info_resolution) to
+            if ((diagnostic.width ?: 0) > 0 && (diagnostic.height ?: 0) > 0) "${diagnostic.width}×${diagnostic.height}" else unavailable)
+        add(stringResource(R.string.info_bitrate) to kbps(diagnostic.videoBitrate))
         state.videoItag?.let { add(stringResource(R.string.info_itag) to it.toString()) }
-        state.audioCodec?.let { add(stringResource(R.string.info_audio_codec) to it) }
-        if (state.audioBitrate > 0) add(stringResource(R.string.info_audio_bitrate) to kbps(state.audioBitrate))
+
+        add(stringResource(R.string.info_audio_bitrate) to kbps(diagnostic.audioBitrate))
         if (state.audioSampleRate > 0) {
             add(stringResource(R.string.info_sample_rate) to "${state.audioSampleRate} Hz")
         }
@@ -214,7 +235,7 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
             )
         },
         text = {
@@ -251,19 +272,19 @@ private fun InfoLine(label: String, value: String, onCopy: () -> Unit = {}) {
             )
             Icon(
                 painter = painterResource(R.drawable.ic_copy),
-                contentDescription = stringResource(R.string.copy),
+                contentDescription = "${stringResource(R.string.copy)} $label",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onCopy)
-                    .padding(6.dp),
+                    .padding(14.dp),
             )
         }
         Text(
             value,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = SettingsTokens.BodySize.sp,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }

@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.extractor
 
+import com.google.common.util.concurrent.SettableFuture
 import android.app.Application
 import android.app.Service
 import android.content.*
@@ -8,20 +9,23 @@ import android.webkit.WebView
 import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
 import com.grack.nanojson.JsonObject
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.*
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicLong
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request
+import org.schabi.newpipe.extractor.downloader.Response
+import org.schabi.newpipe.extractor.services.youtube.streams.*
 
 /** The fallback owns a separate browser process/data directory; terminating it cannot kill the account WebView. */
 internal object EjsRuntimeProcess {
     var ready = false
+    fun canIsolate(context: Context): Boolean = Build.VERSION.SDK_INT >= 28 ||
+        WebViewFeature.isStartupFeatureSupported(context, WebViewFeature.STARTUP_FEATURE_SET_DATA_DIRECTORY_SUFFIX)
     fun initialize(app: Application): Boolean {
         val name = if (Build.VERSION.SDK_INT >= 28) Application.getProcessName()
             else File("/proc/self/cmdline").readText().trimEnd('\u0000')
@@ -29,7 +33,7 @@ internal object EjsRuntimeProcess {
         ready = runCatching {
             if (Build.VERSION.SDK_INT >= 28) WebView.setDataDirectorySuffix("youtube-ejs")
             else {
-                if (!WebViewFeature.isStartupFeatureSupported(app, WebViewFeature.STARTUP_FEATURE_SET_DATA_DIRECTORY_SUFFIX))
+                if (!canIsolate(app))
                     throw IOException("JS_DATA_DIRECTORY_UNAVAILABLE")
                 ProcessGlobalConfig.apply(ProcessGlobalConfig().setDataDirectorySuffix(app, "youtube-ejs"))
             }
@@ -43,7 +47,7 @@ private const val EVALUATE = 2
 
 internal class RemoteEjsRuntime(private val app: Context, private val userAgent: String) : JavascriptRuntime {
     private var remote: Messenger? = null
-    private val pending = ConcurrentHashMap<Long, CompletableFuture<String>>()
+    private val pending = ConcurrentHashMap<Long, SettableFuture<String>>()
     private val ids = AtomicLong()
     @Volatile private var connection: ServiceConnection? = null
     @Volatile private var servicePid = 0
@@ -56,12 +60,12 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
             val future = pending.remove(data.getLong("id")) ?: return
             if (message.arg1 > 0 && !closed) servicePid = message.arg1
             val error = data.getString("error")
-            if (error != null) future.completeExceptionally(IOException(error))
-            else future.complete(data.getString("result").orEmpty())
+            if (error != null) future.setException(IOException(error))
+            else future.set(data.getString("result").orEmpty())
         }
     })
     private fun died() {
-        pending.values.forEach { it.completeExceptionally(IOException("JS_SERVICE_DIED")) }
+        pending.values.forEach { it.setException(IOException("JS_SERVICE_DIED")) }
     }
     private fun transport(context: ExtractionContext): Messenger {
         if (closed) throw IOException("JS_RUNTIME_CLOSED")
@@ -71,15 +75,15 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
             // Android can briefly retain the old ServiceRecord after a deliberate termination.
             // Retry only that startup race, with a fresh connection and the same deadline.
             repeat(3) { attempt ->
-                val connected = CompletableFuture<Messenger>()
+                val connected = SettableFuture.create<Messenger>()
                 val candidate = object : ServiceConnection {
                     private fun dead() {
-                        connected.completeExceptionally(IOException("JS_SERVICE_DIED"))
+                        connected.setException(IOException("JS_SERVICE_DIED"))
                         if (connection === this) died()
                     }
                     override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                         if (closed || connection !== this) return
-                        try { binder.linkToDeath({ dead() }, 0); connected.complete(Messenger(binder)) }
+                        try { binder.linkToDeath({ dead() }, 0); connected.set(Messenger(binder)) }
                         catch (_: RemoteException) { dead() }
                     }
                     override fun onServiceDisconnected(name: ComponentName) = dead()
@@ -112,7 +116,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
     private fun request(remote: Messenger, kind: Int, data: Bundle, timeoutMs: Long, context: ExtractionContext,
                         closeOnFailure: Boolean = true): String {
         val id = ids.incrementAndGet()
-        val future = CompletableFuture<String>()
+        val future = SettableFuture.create<String>()
         pending[id] = future
         data.putLong("id", id)
         data.putLong("timeout", minOf(timeoutMs, context.remainingMillis()))
@@ -137,7 +141,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         stopHost()
     }
     private fun stopHost() {
-        pending.values.forEach { it.completeExceptionally(IOException("JS_RUNTIME_CLOSED")) }
+        pending.values.forEach { it.setException(IOException("JS_RUNTIME_CLOSED")) }
         pending.clear()
         connection?.let { runCatching { app.unbindService(it) } }
         connection = null
@@ -167,6 +171,7 @@ class EjsRuntimeService : Service() {
             val reply = message.replyTo
             val kind = message.what
             worker.execute {
+                val started = System.nanoTime()
                 val response = Bundle().apply { putLong("id", data.getLong("id")) }
                 try {
                     if (!EjsRuntimeProcess.ready) throw IOException("JS_DATA_DIRECTORY_UNAVAILABLE")
@@ -205,6 +210,9 @@ class EjsRuntimeService : Service() {
                         "JS_EVALUATION_ReferenceError", "JS_RENDERER_GONE", "JS_RUNTIME_CLOSED")
                     response.putString("error", failure.message?.takeIf(safe::contains) ?: "JS_SERVICE_FAILURE")
                 }
+                AppLog.event(AppLog.Category.EXTRACTOR, "ejs_process_result",
+                    mapOf("operation" to data.getLong("id"), "kind" to kind, "duration_ms" to (System.nanoTime() - started) / 1_000_000,
+                        "error_code" to response.getString("error")), critical = response.containsKey("error"))
                 runCatching { reply.send(Message.obtain().apply { arg1 = Process.myPid(); this.data = response }) }
             }
         }

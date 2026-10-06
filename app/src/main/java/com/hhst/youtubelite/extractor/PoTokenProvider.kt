@@ -2,6 +2,7 @@ package com.hhst.youtubelite.extractor
 
 import android.content.Context
 import com.grack.nanojson.JsonWriter
+import com.grack.nanojson.JsonObject as NanoJsonObject
 import com.google.gson.JsonObject
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
@@ -14,7 +15,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
-import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import org.schabi.newpipe.extractor.services.youtube.streams.InnertubeAuth
@@ -24,7 +24,6 @@ import java.io.IOException
 /** BgUtils thin host; all transport goes through the immutable extraction context. */
 class PoTokenProvider(
     context: Context,
-    @Suppress("UNUSED_PARAMETER") http: OkHttpClient,
     private val timers: WebViewTimerOccupancy = WebViewTimerOccupancy.NOOP,
     private val heavy: HeavyJsGate = HeavyJsGate(),
 ) : CorePoTokenProvider {
@@ -97,7 +96,7 @@ class PoTokenProvider(
                 it.evaluate(bundle + "\n'loaded'", remaining(), context)
             }
         }
-        fun pairedChallenge(config: com.grack.nanojson.JsonObject): JsonObject? {
+        fun pairedChallenge(config: NanoJsonObject): JsonObject? {
             config.remove("_BG_CHALLENGE")?.let {
                 return JsonParser.parseString(JsonWriter.string(it)).asJsonObject
             }

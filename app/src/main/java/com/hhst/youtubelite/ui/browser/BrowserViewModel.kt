@@ -8,6 +8,7 @@ import com.hhst.youtubelite.browser.TabState
 import com.hhst.youtubelite.browser.UrlPolicy
 import com.hhst.youtubelite.browser.WebViewCallbacks
 import com.hhst.youtubelite.core.Constants
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.VideoId
@@ -26,6 +27,7 @@ class BrowserViewModel(
 
     private val tabs = TabController()
     private val canGoBackByTab = mutableMapOf<Long, Boolean>()
+    private val loginSources = mutableMapOf<Long, Tab>()
 
     /** Player surface is showing; wired by the screen. */
     var isPlayerShowing: () -> Boolean = { false }
@@ -33,11 +35,16 @@ class BrowserViewModel(
     /** Watch tab got suspended; the player should enter the mini-player. */
     var onWatchSuspended: (() -> Unit)? = null
 
-    /** A watch/shorts tab became active; the player should leave the mini-player. */
+    /** A watch tab became active; show its native surface. */
     var onWatchOpened: ((url: String?) -> Unit)? = null
 
-    /** Shorts tab left (Back / bottom-nav); the player re-docks as mini. */
+    /** Shorts tab left; release the webpage playback ownership. */
     var onShortsClosed: (() -> Unit)? = null
+    var onShortsOpened: (() -> Unit)? = null
+    var onTabSwitched: (() -> Unit)? = null
+    private var shortsSource: Tab? = null
+    @Volatile private var inheritShorts = false
+    private var inheritedShortsId: Long? = null
 
     private val _uiState = MutableStateFlow(BrowserUiState.from(tabs.state()))
     val uiState: StateFlow<BrowserUiState> = _uiState.asStateFlow()
@@ -56,11 +63,37 @@ class BrowserViewModel(
 
     fun openTab(url: String) {
         if (!UrlPolicy.isAllowedUrl(url)) return
+        if (UrlPolicy.isLoginUrl(url)) {
+            val id = _uiState.value.activeId
+            rememberLoginSource(id, _uiState.value.url)
+            tabs.updateUrl(id, url)
+            publish(tabs.state(), resetLoading = true)
+            _loadRequests.tryEmit(id to url)
+            return
+        }
         val kind = PageKind.of(url)
         if (kind == "unknown") return
 
+        if (kind == Constants.PAGE_SHORTS) {
+            if (!PageKind.isShorts(_uiState.value.url)) {
+                shortsSource = tabs.state().active
+                onShortsOpened?.invoke()
+            }
+            if (inheritShorts) {
+                val source = shortsSource ?: return
+                inheritedShortsId = source.id
+                val state = tabs.inheritShorts(source, url)
+                publish(state, resetLoading = true)
+                _loadRequests.tryEmit(source.id to url)
+                return
+            }
+        } else if (PageKind.isShorts(_uiState.value.url)) {
+            restoreInheritedSource()
+            onShortsClosed?.invoke()
+            shortsSource = null
+        }
+
         val previousActive = _uiState.value.activeId
-        val previousKind = _uiState.value.tabs.find { it.id == previousActive }?.kind
         // Hosts stay alive across suspension, so a revived suspended tab needs
         // its explicit load request emitted just like any other existing tab.
         val existingIds = _uiState.value.tabs.mapTo(mutableSetOf()) { it.id }
@@ -70,15 +103,7 @@ class BrowserViewModel(
         // Enter mini before publishing: the screen's URL effect must observe
         // the final player state, not the intermediate non-watch one.
         if (suspendWatch) onWatchSuspended?.invoke()
-        when {
-            // watch -> shorts keeps the watch tab on the stack (Back returns
-            // to it). Playback switches to the Shorts; leaving docks mini.
-            previousKind == Constants.PAGE_WATCH && kind == Constants.PAGE_SHORTS -> Unit
-            PageKind.isPlayerSurface(kind) -> onWatchOpened?.invoke(url)
-            // Leaving shorts for a non-video page: dock the current media as mini
-            // instead of letting the URL effect resume/expand playback.
-            previousKind == Constants.PAGE_SHORTS -> onShortsClosed?.invoke()
-        }
+        if (PageKind.isPlayerSurface(kind)) onWatchOpened?.invoke(url)
         val switched = state.activeId != previousActive
         publish(state, resetLoading = switched, forward = if (switched) true else null)
         // New tabs load on host create; existing tabs (incl. just-revived
@@ -93,21 +118,38 @@ class BrowserViewModel(
         // Back on a watch page suspends it to the mini-player and returns to
         // the previous page instead of walking the WebView history or popping
         // the tab.
+        if (UrlPolicy.isLoginUrl(_uiState.value.url)) {
+            if (webCanGoBack) return BackResult.GoWebBack
+            val source = loginSources.remove(_uiState.value.activeId)
+            if (source != null) {
+                tabs.updateUrl(source.id, source.url)
+                publish(tabs.state(), resetLoading = true, forward = false)
+                _loadRequests.tryEmit(source.id to source.url)
+                if (PageKind.isPlayerSurface(source.kind)) onWatchOpened?.invoke(source.url)
+                return BackResult.Handled
+            }
+        }
         if (shouldSuspendWatch()) {
             val state = tabs.suspendActiveWatch() ?: return BackResult.Finish
             onWatchSuspended?.invoke()
             publish(state, resetLoading = true, forward = false)
             return BackResult.Handled
         }
+        if (PageKind.isShorts(_uiState.value.url)) {
+            if (!restoreInheritedSource()) {
+                val state = tabs.pop() ?: return BackResult.Finish
+                publish(state, resetLoading = true, forward = false)
+                if (PageKind.isPlayerSurface(PageKind.of(state.active?.url)))
+                    onWatchOpened?.invoke(state.active?.url)
+            }
+            onShortsClosed?.invoke()
+            shortsSource = null
+            return BackResult.Handled
+        }
         if (webCanGoBack) return BackResult.GoWebBack
         if (tabs.canPop()) {
-            val poppedKind = _uiState.value.tabs.find { it.id == _uiState.value.activeId }?.kind
             val state = tabs.pop() ?: return BackResult.Finish
             when {
-                // Back out of shorts: dock current playback as mini; the tab
-                // underneath takes over.
-                poppedKind == Constants.PAGE_SHORTS -> onShortsClosed?.invoke()
-                // pop() never routes through openTab, so re-show the player here.
                 PageKind.isPlayerSurface(state.active?.kind) ->
                     onWatchOpened?.invoke(state.active?.url)
             }
@@ -146,10 +188,8 @@ class BrowserViewModel(
     /** True when leaving the active watch tab for [targetKind] should suspend it. */
     private fun shouldSuspendWatch(targetKind: String? = null): Boolean {
         val active = _uiState.value.tabs.find { it.id == _uiState.value.activeId } ?: return false
-        if (active.kind != Constants.PAGE_WATCH) return false
-        // Player surfaces (watch/shorts) never suspend the watch tab: shorts
-        // keeps the tab on the stack so Back returns to it.
-        if (targetKind != null && PageKind.isPlayerSurface(targetKind)) return false
+        if (active.kind != Constants.PAGE_WATCH || UrlPolicy.isLoginUrl(_uiState.value.url)) return false
+        if (targetKind == Constants.PAGE_SHORTS || PageKind.isPlayerSurface(targetKind)) return false
         if (!extensionManager.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) return false
         return isPlayerShowing()
     }
@@ -161,7 +201,40 @@ class BrowserViewModel(
         }
     }
 
+    private fun restoreInheritedSource(): Boolean {
+        val source = shortsSource ?: return false
+        if (inheritedShortsId != source.id) return false
+        inheritedShortsId = null
+        publish(tabs.restoreShortsSource(source), resetLoading = true, forward = false)
+        _loadRequests.tryEmit(source.id to source.url)
+        if (PageKind.isPlayerSurface(PageKind.of(source.url))) onWatchOpened?.invoke(source.url)
+        return true
+    }
+
+    private fun rememberLoginSource(tabId: Long, url: String) {
+        if (!UrlPolicy.shouldInject(url)) return
+        val tab = tabs.state().tabs.find { it.id == tabId } ?: return
+        loginSources.putIfAbsent(tabId, tab.copy(url = url))
+    }
+
     fun callbacksFor(tabId: Long): WebViewCallbacks = object : WebViewCallbacks {
+        override fun onLoginStarted(sourceUrl: String) { rememberLoginSource(tabId, sourceUrl) }
+        override fun onLoginFinished() { loginSources.remove(tabId) }
+        override fun shouldInheritShorts(): Boolean = inheritShorts
+        override fun isActiveTab(): Boolean = _uiState.value.activeId == tabId
+        override fun isActiveDocument(): Boolean = (_uiState.value.activeId == tabId || _uiState.value.suspendedWatchId == tabId) &&
+            !PageKind.isShorts(_uiState.value.url) && !UrlPolicy.isLoginUrl(_uiState.value.url)
+        override fun onShortsAutoplayBlocked(url: String, reason: String) {
+            if (inheritShorts || _uiState.value.activeId != tabId || !PageKind.isShorts(url)) return
+            val source = shortsSource ?: return
+            inheritShorts = true
+            inheritedShortsId = source.id
+            AppLog.event(
+                AppLog.Category.PLAYER, "shorts_audio_fallback",
+                mapOf("reason" to reason, "tab" to tabId), critical = true)
+            publish(tabs.inheritShorts(source, url), resetLoading = true)
+            _loadRequests.tryEmit(source.id to url)
+        }
         override fun onPageStarted(url: String) {
             tabs.updateUrl(tabId, url)
             if (_uiState.value.activeId != tabId) return
@@ -222,7 +295,9 @@ class BrowserViewModel(
         // cached history flag must survive the retainAll below.
         state.suspendedWatchId?.let(liveIds::add)
         canGoBackByTab.keys.retainAll(liveIds)
+        loginSources.keys.retainAll(liveIds)
         val active = state.active
+        if (state.activeId != _uiState.value.activeId) onTabSwitched?.invoke()
         _uiState.update {
             it.copy(
                 tabs = state.tabs,

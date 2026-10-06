@@ -4,7 +4,13 @@ import com.hhst.youtubelite.extractor.Format
 import java.util.Locale
 
 /** Menu row for one audio track: stable key + human label. */
-data class AudioTrackChoice(val key: String, val label: String)
+data class AudioTrackChoice(
+    val key: String,
+    val label: String,
+    val languageTag: String? = null,
+    val trackType: String? = null,
+    val trackName: String? = null,
+)
 
 /**
  * Concrete audio identity: YouTube track id when present, otherwise
@@ -48,7 +54,10 @@ object AudioTrackIdentity {
             val k = key(format).ifBlank { format.audioLocale.orEmpty() }
             val showType = (localeCounts[languageOf(format.audioLocale)] ?: 0) > 1 ||
                 (!format.audioTrackType.isNullOrBlank() && format.audioTrackType != "original")
-            AudioTrackChoice(k, label(format, showType))
+            AudioTrackChoice(
+                k, label(format, showType), format.audioLocale,
+                format.audioTrackType.takeIf { showType }, format.audioTrackName,
+            )
         }.filter { it.key.isNotBlank() }
     }
 
@@ -72,7 +81,7 @@ object AudioTrackIdentity {
             val text = label?.trim()?.takeIf { it.isNotEmpty() }
                 ?: language?.trim()?.takeIf { it.isNotEmpty() }?.let(::displayLanguage)
                 ?: continue
-            unique[key] = AudioTrackChoice(key, text)
+            unique[key] = AudioTrackChoice(key, text, languageTag = language.takeIf { label.isNullOrBlank() })
         }
         return if (unique.size < 2) emptyList() else unique.values.toList()
     }

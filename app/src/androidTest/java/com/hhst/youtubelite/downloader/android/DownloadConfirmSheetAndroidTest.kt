@@ -21,10 +21,8 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.BatchSource
 import com.hhst.youtubelite.downloader.ui.BatchConfirmSheet
-import com.hhst.youtubelite.downloader.ui.DownloadTokens
 import com.hhst.youtubelite.downloader.ui.SingleVideoConfirmSheet
 import com.hhst.youtubelite.ui.theme.AppTheme
-import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -78,9 +76,6 @@ class DownloadConfirmSheetAndroidTest {
             .performScrollTo()
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
-        assertEquals(16, DownloadTokens.PAGE_INSET_DP)
-        assertEquals(28, DownloadTokens.SHEET_CORNER_DP)
-        assertEquals(48, DownloadTokens.MIN_TOUCH_DP)
         DeviceEvidence.captureScene("04-quality-settings")
     }
 

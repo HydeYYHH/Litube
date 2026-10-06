@@ -2,7 +2,7 @@ package com.hhst.youtubelite.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** YouTube-style brand red. */
+/** Primary brand color. */
 val YtRed = Color(0xFFFF0000)
 
 // Material 3 light roles.

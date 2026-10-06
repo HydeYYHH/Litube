@@ -9,7 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.*
 import com.hhst.youtubelite.downloader.io.FileIntegrity
-import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.net.YoutubeDownloadRequestAdapter
 import com.hhst.youtubelite.downloader.resolve.*
@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
@@ -31,7 +32,8 @@ class YoutubeDownloadSelectionAndroidTest {
     @Test fun playbackThenCatalogSelectTransferResumeMuxAndSeek() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
-        val id = InstrumentationRegistry.getArguments().getString("videoId") ?: "jNQXAC9IVRw"
+        val id = InstrumentationRegistry.getArguments().getString("videoId").orEmpty()
+        assumeTrue("Supply -e videoId <id> for real-network download acceptance", id.isNotEmpty())
         val extractor = GlobalContext.get().get<Extractor>()
         extractor.extract(id).stream.await() // Opening downloads after a playback-only cache hit.
         val catalog = GlobalContext.get().get<DownloadCatalogSource>().catalog(id)

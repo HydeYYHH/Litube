@@ -28,6 +28,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -47,6 +48,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -63,6 +65,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 /** Coalescing window for style pushes while the user drags a control. */
@@ -115,7 +118,7 @@ internal fun SubtitleStyleDialog(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
                 textAlign = TextAlign.Center,
-                fontSize = 18.sp,
+                fontSize = SettingsTokens.TitleSize.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -158,7 +161,7 @@ internal fun SubtitleStyleDialog(
             ) {
                 Text(
                     text = stringResource(R.string.subtitle_style_bold),
-                    fontSize = 13.sp,
+                    fontSize = SettingsTokens.DetailSize.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -255,14 +258,14 @@ private fun StyleSlider(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
-    colors: androidx.compose.material3.SliderColors,
+    colors: SliderColors,
     onChange: (Float) -> Unit,
 ) {
     Column(Modifier.padding(top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = label,
-                fontSize = 13.sp,
+                fontSize = SettingsTokens.DetailSize.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
@@ -289,7 +292,7 @@ private fun ColorPicker(
 ) {
     val hsv = remember(selected) {
         val out = FloatArray(3)
-        android.graphics.Color.colorToHSV(selected, out)
+        AndroidColor.colorToHSV(selected, out)
         out
     }
     var hexText by remember { mutableStateOf(SubtitleStyle.formatColorHex(selected)) }
@@ -301,7 +304,7 @@ private fun ColorPicker(
     Column(Modifier.padding(top = 10.dp)) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = SettingsTokens.DetailSize.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SaturationValueBox(
@@ -309,14 +312,14 @@ private fun ColorPicker(
             saturation = hsv[1],
             value = hsv[2],
             onChange = { sat, value ->
-                onSelect(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], sat, value)))
+                onSelect(AndroidColor.HSVToColor(floatArrayOf(hsv[0], sat, value)))
             },
             modifier = Modifier.padding(top = 8.dp),
         )
         HueBar(
             hue = hsv[0],
             onChange = { hue ->
-                onSelect(android.graphics.Color.HSVToColor(floatArrayOf(hue, hsv[1], hsv[2])))
+                onSelect(AndroidColor.HSVToColor(floatArrayOf(hue, hsv[1], hsv[2])))
             },
             modifier = Modifier.padding(top = 10.dp),
         )
@@ -358,7 +361,7 @@ private fun SaturationValueBox(
     modifier: Modifier = Modifier,
 ) {
     var sizePx by remember { mutableStateOf(IntSize.Zero) }
-    val hueColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 1f, 1f)))
+    val hueColor = Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, 1f)))
     val thumbRadiusPx = with(LocalDensity.current) { 8.dp.roundToPx() }
     fun applyAt(x: Float, y: Float) {
         val w = sizePx.width.toFloat().coerceAtLeast(1f)
@@ -421,7 +424,7 @@ private fun HueBar(
     // saturation/value pick made since.
     val latestOnChange = rememberUpdatedState(onChange)
     val rainbow = remember {
-        (0..6).map { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }
+        (0..6).map { Color(AndroidColor.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }
     }
     val thumbHalfPx = with(LocalDensity.current) { 2.dp.roundToPx() }
     fun applyAt(x: Float) {
@@ -471,7 +474,7 @@ private fun <T> StyleOptionRow(
     Column(Modifier.padding(top = 10.dp)) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = SettingsTokens.DetailSize.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(
@@ -489,7 +492,7 @@ private fun <T> StyleOptionRow(
                         Text(
                             text = text,
                             maxLines = 1,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = FontWeight.Normal,
                         )
                     },
                     modifier = Modifier.weight(1f),

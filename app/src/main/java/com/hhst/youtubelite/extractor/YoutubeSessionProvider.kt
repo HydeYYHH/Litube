@@ -12,6 +12,8 @@ import org.schabi.newpipe.extractor.services.youtube.streams.SessionProvider
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
 import android.net.LinkProperties
 import android.net.Proxy
 import android.content.BroadcastReceiver
@@ -58,12 +60,18 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
 
     init {
         routeChanged()
-        connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) = routeChanged()
             override fun onLost(network: Network) = routeChanged()
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = routeChanged()
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = routeChanged()
-        })
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            connectivity.registerDefaultNetworkCallback(callback)
+        } else {
+            connectivity.registerNetworkCallback(NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), callback)
+        }
         ContextCompat.registerReceiver(context.applicationContext, object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) { routeChanged() }
         }, IntentFilter(Proxy.PROXY_CHANGE_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)

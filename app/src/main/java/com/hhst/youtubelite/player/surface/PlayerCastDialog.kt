@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
 
@@ -70,7 +71,7 @@ internal fun CastDialog(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Normal,
             )
         },
         text = {
@@ -82,7 +83,7 @@ internal fun CastDialog(
                             state.castingDeviceName ?: stringResource(R.string.cast),
                         ),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = SettingsTokens.BodySize.sp,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                     TextButton(onClick = onStop) {
@@ -91,7 +92,7 @@ internal fun CastDialog(
                 }
                 Text(
                     text = stringResource(R.string.cast_section_devices),
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                 )
@@ -103,7 +104,7 @@ internal fun CastDialog(
                             stringResource(R.string.cast_unavailable)
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
+                        fontSize = SettingsTokens.DetailSize.sp,
                     )
                     Text(
                         text = if (state.castAvailable) {
@@ -163,7 +164,7 @@ internal fun CastDialog(
                     )
                     Text(
                         text = stringResource(R.string.cast_section_link),
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(bottom = 2.dp),
                     )

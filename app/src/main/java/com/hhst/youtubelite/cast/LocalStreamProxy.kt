@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.cast
 
 import android.content.Context
+import android.view.View
+import com.hhst.youtubelite.R
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
 import android.net.ConnectivityManager
@@ -15,6 +17,7 @@ import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.LENGTH_UNSET
 import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.resolveBindHost
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.core.Markup
+import androidx.core.os.ConfigurationCompat
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.player.datasource.YoutubeHttpDataSource
 import fi.iki.elonen.NanoHTTPD
@@ -286,7 +289,13 @@ class LocalStreamProxy(
         return try {
             val raw = appContext.assets.open("cast/player.html").use { it.readBytes() }
             var html = String(raw, Charsets.UTF_8)
-            html = html.replace("__VIDEO_TITLE__", Markup.html(videoTitle ?: "Player"))
+            val locale = ConfigurationCompat.getLocales(appContext.resources.configuration)[0]?.toLanguageTag() ?: "en"
+            val direction = if (appContext.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) "rtl" else "ltr"
+            html = html.replace("__VIDEO_TITLE__", Markup.html(videoTitle ?: appContext.getString(R.string.player)))
+                .replace("__LANGUAGE__", Markup.html(locale))
+                .replace("__DIRECTION__", direction)
+                .replace("__SOURCE_ERROR__", Markup.jsString(appContext.getString(R.string.web_source_unavailable)))
+                .replace("__PLAYBACK_ERROR__", Markup.jsString(appContext.getString(R.string.player_error)))
                 .replace("__MANIFEST_URL__", Markup.jsString(proxyUrl("/manifest.mpd")))
             val bytes = html.toByteArray(Charsets.UTF_8)
             newFixedLengthResponse(

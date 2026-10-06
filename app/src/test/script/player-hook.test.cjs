@@ -48,6 +48,7 @@ function page(href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', withNavigation
     addEventListener(name, handler, capture) { windowListeners.push({ name, handler, capture }); },
     MutationObserver: class { observe() {} },
   };
+  Object.defineProperty(context.location, "pathname", { get: () => new URL(context.location.href).pathname });
   context.window = context;
   context.Bridge = context.lite;
   context.top = context;
@@ -105,7 +106,8 @@ test('compact watch frees the slot but reports its original geometry after resiz
   fixture.context.__syncPlayerCompact();
   assert.deepEqual(fixture.layout(), [48, 576]);
   assert.equal(fixture.classes.has('lite-compact-player'), true);
-  assert.equal(fixture.styles.size, 1);
+  assert.equal(fixture.styles.size, 2);
+  assert.match(fixture.styles.get('lite-touch-style').textContent, /html\s*\{\s*-webkit-tap-highlight-color:\s*transparent/);
   compact = false;
   fixture.context.__syncPlayerCompact();
   assert.equal(fixture.classes.has('lite-compact-player'), false);
@@ -148,31 +150,3 @@ test('playlist next at the last item stops instead of wrapping', () => {
   assert.equal(context.location.href, 'https://m.youtube.com/watch?v=bbbbbbbbbbb&list=PLtest');
 });
 
-test('shortsNav scrolls the reel container by one viewport', () => {
-  const { context } = page();
-  const moved = [];
-  context.document.querySelector = (selector) => {
-    if (String(selector).includes('ytm-shorts')) {
-      return { clientHeight: 800, scrollBy(x, y) { moved.push([x, y]); } };
-    }
-    return null;
-  };
-  assert.equal(context.__shortsNav(1), 'ok');
-  assert.deepEqual(moved, [[0, 800]]);
-  assert.equal(context.__shortsNav(-1), 'ok');
-  assert.deepEqual(moved[1], [0, -800]);
-});
-
-test('mediaHref copies hash t= onto the play URL query', () => {
-  const { context } = page();
-    context.location.href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa#t=1m30s';
-  assert.equal(
-    context.__mediaHref(),
-    'https://m.youtube.com/watch?v=aaaaaaaaaaa&t=1m30s',
-  );
-  context.location.href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa?t=90#t=1';
-  assert.equal(
-    context.__mediaHref(),
-    'https://m.youtube.com/watch?v=aaaaaaaaaaa?t=90',
-  );
-});

@@ -13,7 +13,7 @@ import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.MuxResult
 import com.hhst.youtubelite.downloader.data.DownloadRepository
-import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
 import com.hhst.youtubelite.extractor.ExtractionTestActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking

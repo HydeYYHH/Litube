@@ -21,7 +21,7 @@ import androidx.media3.extractor.ChunkIndex;
  * Parses an ISO 14496-12 SegmentIndex (sidx) box into a {@link ChunkIndex}.
  * <p>
  * The sidx box lives at the index range the extractor reported for the fmp4
- * stream (see {@link com.hhst.youtubelite.extractor.Format#getIndexStart()}).
+ * stream (see the extractor Format's indexStart/indexEnd).
  * Parsing it on the phone lets the cast proxy emit a DASH {@code SegmentList}
  * with explicit per-segment byte ranges, so the Chromecast default receiver
  * issues targeted Range GETs for individual fmp4 segments instead of

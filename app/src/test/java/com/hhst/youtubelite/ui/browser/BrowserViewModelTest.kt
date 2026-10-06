@@ -39,6 +39,53 @@ class BrowserViewModelTest {
         }
     }
 
+    @Test fun loginBackRestoresTheSourceWhenTheProviderClearsWebHistory() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        val source = "https://m.youtube.com/watch?v=abc"
+        vm.openTab(source)
+        val id = vm.uiState.value.activeId
+        val callbacks = vm.callbacksFor(id)
+        callbacks.onLoginStarted(source)
+        callbacks.onPageStarted("https://accounts.google.com/ServiceLogin")
+        assertFalse(callbacks.isActiveDocument())
+        assertEquals(BackResult.Handled, vm.onBack(false))
+        assertEquals(source, vm.uiState.value.url)
+        assertEquals(id, vm.uiState.value.activeId)
+        assertEquals(Constants.PAGE_WATCH, activeKind(vm))
+        assertNull(vm.uiState.value.suspendedWatchId)
+    }
+
+    @Test fun loginFromWatchRetainsItsTabAndUsesWebHistoryBeforeMinimizing() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        vm.openTab("https://m.youtube.com/watch?v=abc")
+        val id = vm.uiState.value.activeId
+        vm.openTab("https://accounts.google.com/ServiceLogin")
+        assertEquals(id, vm.uiState.value.activeId)
+        assertEquals(Constants.PAGE_WATCH, activeKind(vm))
+        assertNull(vm.uiState.value.suspendedWatchId)
+        assertEquals(BackResult.GoWebBack, vm.onBack(true))
+        vm.callbacksFor(id).onPageFinished("https://m.youtube.com/watch?v=abc")
+        assertEquals(id, vm.uiState.value.activeId)
+    }
+
+    @Test fun shortsFailureReusesSourceAndBackRestoresIt() {
+        val vm = vm()
+        val source = "https://m.youtube.com/results?search_query=test"
+        vm.openTab(source)
+        val sourceId = vm.uiState.value.activeId
+        vm.openTab("https://m.youtube.com/shorts/aaaaaaaaaaa")
+        val failedId = vm.uiState.value.activeId
+        assertTrue(sourceId != failedId)
+        vm.callbacksFor(failedId).onShortsAutoplayBlocked(vm.uiState.value.url, "muted_after_ready")
+        assertEquals(sourceId, vm.uiState.value.activeId)
+        assertFalse(vm.uiState.value.tabs.any { it.id == failedId })
+        assertTrue(vm.callbacksFor(sourceId).shouldInheritShorts())
+        assertEquals(BackResult.Handled, vm.onBack(true))
+        assertEquals(source, vm.uiState.value.url)
+        vm.openTab("https://m.youtube.com/shorts/bbbbbbbbbbb")
+        assertEquals(sourceId, vm.uiState.value.activeId)
+    }
+
     @Test
     fun openTab_rejectsDisallowedUrl() {
         val vm = vm()
@@ -129,10 +176,10 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun openTab_shorts_signalsWatchOpened() {
+    fun openTab_shorts_signalsWebPlayback() {
         val vm = vm()
         var opened = 0
-        vm.onWatchOpened = { _ -> opened++ }
+        vm.onShortsOpened = { opened++ }
 
         vm.openTab("https://m.youtube.com/shorts/aaaaaaaaaaa")
 

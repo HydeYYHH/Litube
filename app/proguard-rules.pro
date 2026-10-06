@@ -13,8 +13,8 @@
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 
--keep class com.hhst.youtubelite.player.queue.QueueItem { <init>(...); <fields>; }
--keep class com.hhst.youtubelite.player.queue.QueueState { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.QueueItem { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.QueueState { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.player.engine.ResumePoint { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.player.surface.SubtitleStyle { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Format { <init>(...); <fields>; }
@@ -27,7 +27,6 @@
 -keep class com.hhst.youtubelite.extractor.ChapterList { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectReport { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectFailure { <init>(...); <fields>; }
--keep class com.hhst.youtubelite.extension.InjectIconState { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.DownloadConfig { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.EnqueueResult { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.TaskRef { <init>(...); <fields>; }
@@ -36,10 +35,10 @@
 
 # Manifest meta-data class name is a string; R8 must not rename it.
 -keep class com.hhst.youtubelite.cast.CastOptionsProvider { *; }
--keep class com.hhst.youtubelite.downloader.work.DownloadTransferWorker { *; }
--keep class com.hhst.youtubelite.downloader.work.DownloadFinalizeWorker { *; }
--keep class com.hhst.youtubelite.downloader.work.DownloadUidtJobService { *; }
--keep class com.hhst.youtubelite.downloader.work.KoinDownloadWorkerFactory { *; }
+-keep class com.hhst.youtubelite.downloader.engine.DownloadTransferWorker { *; }
+-keep class com.hhst.youtubelite.downloader.engine.DownloadFinalizeWorker { *; }
+-keep class com.hhst.youtubelite.downloader.engine.DownloadUidtJobService { *; }
+-keep class com.hhst.youtubelite.downloader.engine.KoinDownloadWorkerFactory { *; }
 
 # Optional jsoup / NewPipe paths unused on Android.
 -dontwarn java.beans.**

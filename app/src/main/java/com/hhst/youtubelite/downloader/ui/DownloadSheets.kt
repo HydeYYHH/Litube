@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.downloader.ui
 
 import android.content.res.Configuration
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,47 +14,36 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Checkbox
-import java.util.Locale
-import com.hhst.youtubelite.player.datasource.StreamSelection
-import com.hhst.youtubelite.downloader.resolve.DownloadSelector
-import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
-import kotlinx.coroutines.currentCoroutineContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.semantics.Role
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SheetState
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.ensureActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,23 +51,33 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.downloader.core.DownloadRequest
 import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.EnqueueResult
-import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
+import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
+import com.hhst.youtubelite.downloader.resolve.DownloadSelector
 import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
 import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
+import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.SubtitleSelection
+import com.hhst.youtubelite.ui.components.audioTrackLabel
+import java.util.Locale
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 
 /**
  * Batch rows have no per-video catalog, so the subtitle picker offers common
@@ -151,14 +152,7 @@ fun SingleVideoConfirmSheet(
     }) }
     val defaultLabel = stringResource(R.string.player_audio_default)
     val audioOptions = listOf("" to defaultLabel) + audioChoices.map { choice ->
-        val format = catalog?.formats?.firstOrNull { AudioTrackIdentity.key(it) == choice.key }
-        val language = format?.audioLocale?.let(AudioTrackIdentity::displayLanguage) ?: choice.label
-        val type = when {
-            format?.audioTrackOriginal == true || format?.audioTrackType == "original" -> stringResource(R.string.download_audio_original)
-            format?.audioTrackType == "dubbed" -> stringResource(R.string.download_audio_dubbed)
-            else -> format?.audioTrackType.orEmpty()
-        }
-        choice.key to (language + if (type.isNotBlank()) " · $type" else "")
+        choice.key to audioTrackLabel(choice)
     }
     val selectedAudioKey = if (audioTrack.isBlank()) "" else catalog?.formats?.firstOrNull {
         it.audioOnly && AudioTrackIdentity.matches(it, audioTrack)
@@ -212,7 +206,7 @@ fun SingleVideoConfirmSheet(
                 val subtitleMissing = ready?.plan?.subtitleFailure == DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE
                 if (reason != null || subtitleMissing) {
                     Text(unavailableCopy((reason ?: DownloadUnavailableReason.SUBTITLE_LANGUAGE_UNAVAILABLE).name),
-                        color = MaterialTheme.colorScheme.error, fontSize = 13.sp, lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.error, fontSize = SettingsTokens.DetailSize.sp, lineHeight = SettingsTokens.BodyLine.sp,
                         modifier = Modifier.padding(vertical = 8.dp))
                 }
                 if (catalogState is DownloadViewModel.CatalogState.Failed || reason == DownloadUnavailableReason.NO_FILE_STREAMS) {
@@ -220,7 +214,7 @@ fun SingleVideoConfirmSheet(
                 }
                 existing.value?.let { item ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(phaseString(DownloadPresentation.phaseCopy(item))), Modifier.weight(1f), fontSize = 13.sp)
+                        Text(stringResource(phaseString(DownloadPresentation.phaseCopy(item))), Modifier.weight(1f), fontSize = SettingsTokens.DetailSize.sp)
                         TextButton(onClick = { viewModel.redownload(DownloadTarget.Task(item.taskId)) }) { Text(stringResource(R.string.download_redownload)) }
                     }
                 }
@@ -270,7 +264,7 @@ fun SingleVideoConfirmSheet(
 private fun SelectionRow(name: String, selected: String, enabled: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
         .heightIn(min = 56.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Normal)
         Text(selected, Modifier.weight(1.2f), maxLines = 2, overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
         Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.padding(start = 8.dp).size(20.dp),
@@ -304,7 +298,7 @@ internal fun SectionLabel(text: String) {
         text = text,
         fontSize = 12.sp,
         letterSpacing = 0.8.sp,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
     )
@@ -316,9 +310,9 @@ private fun SheetIdentity(title: String, author: String) {
         text = title,
         maxLines = DownloadTokens.TITLE_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 22.sp,
+        fontWeight = FontWeight.Bold,
+        fontSize = SettingsTokens.TitleSize.sp,
+        lineHeight = SettingsTokens.TitleLine.sp,
         color = MaterialTheme.colorScheme.onSurface,
     )
     if (author.isNotBlank()) {
@@ -326,7 +320,7 @@ private fun SheetIdentity(title: String, author: String) {
             text = author,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
+            fontSize = SettingsTokens.DetailSize.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
         )
@@ -395,8 +389,8 @@ private fun MoreOptionsHandle(open: Boolean, onToggle: () -> Unit) {
     ) {
         Text(
             text = moreLabel,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = SettingsTokens.BodySize.sp,
+            fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
@@ -518,14 +512,14 @@ fun BatchConfirmSheet(
         ) {
             Text(
                 snapshot.name,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 18.sp,
-                lineHeight = 24.sp,
+                fontWeight = FontWeight.Bold,
+                fontSize = SettingsTokens.TitleSize.sp,
+                lineHeight = SettingsTokens.TitleLine.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 stringResource(R.string.download_batch_meta, snapshot.items.size, snapshot.source.name),
-                fontSize = 13.sp,
+                fontSize = SettingsTokens.DetailSize.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
             )
@@ -544,7 +538,7 @@ fun BatchConfirmSheet(
                 Text(
                     stringResource(R.string.download_selected_count, selected.size, snapshot.items.size),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = SettingsTokens.DetailSize.sp,
                 )
             }
             Column(
@@ -573,8 +567,8 @@ fun BatchConfirmSheet(
                                 request.title.ifBlank { request.videoId },
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = SettingsTokens.BodySize.sp,
                             )
                             request.author?.let {
                                 Text(

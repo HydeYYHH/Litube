@@ -15,8 +15,8 @@ import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.ui.DownloadActionActivity
 import com.hhst.youtubelite.downloader.ui.DownloadActionReceiver
 import com.hhst.youtubelite.downloader.ui.DownloadActions
-import com.hhst.youtubelite.downloader.work.DownloadTransferWorker
-import com.hhst.youtubelite.downloader.work.DownloadWorkNames
+import com.hhst.youtubelite.downloader.engine.DownloadTransferWorker
+import com.hhst.youtubelite.downloader.engine.DownloadWorkNames
 import com.hhst.youtubelite.extractor.Promise
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,7 +77,11 @@ class AndroidNotificationPort(
             context.getString(R.string.download_view),
             activityIntent(DownloadActions.VIEW, payload.batchId),
         )
-        runCatching { nm.notify(id, builder.build()) }
+        try {
+            nm.notify(id, builder.build())
+        } catch (_: SecurityException) {
+            // Notification access can change after the enabled check.
+        }
     }
 
     override fun cancel(id: Int) {

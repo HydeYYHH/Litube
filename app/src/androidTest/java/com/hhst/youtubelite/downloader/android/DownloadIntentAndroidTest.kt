@@ -7,9 +7,9 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
-import com.hhst.youtubelite.downloader.share.DownloadShareOnce
-import com.hhst.youtubelite.downloader.share.DownloadShareParser
+import com.hhst.youtubelite.core.PipAutoEnter
+import com.hhst.youtubelite.downloader.core.DownloadShareOnce
+import com.hhst.youtubelite.downloader.core.DownloadShareParser
 import com.hhst.youtubelite.downloader.ui.DownloadActionActivity
 import com.hhst.youtubelite.downloader.ui.DownloadActions
 import com.hhst.youtubelite.downloader.ui.DownloadActivity

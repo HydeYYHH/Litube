@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.extractor
 
+import com.hhst.youtubelite.diagnostics.AppLog
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 
 /** Bounded local diagnostics containing only enums, counters and durations. */
@@ -12,6 +13,9 @@ class ExtractionDiagnostics : ExtractionContext.Diagnostics {
         // Call sites supply fixed identifiers; never accept response bodies or exception messages.
         val safe = listOf(stage, profile, detail).map { it.replace(Regex("[^A-Za-z0-9_.:-]"), "_").take(80) }
         events.addLast(Event(++sequence, safe[0], safe[1], safe[2], elapsedMillis, httpStatus))
+        AppLog.event(AppLog.Category.EXTRACTOR, safe[0],
+            mapOf("sequence" to sequence, "profile" to safe[1], "detail" to safe[2], "duration_ms" to elapsedMillis, "http_status" to httpStatus),
+            critical = httpStatus >= 400 || safe[2].contains("fail", true) || safe[2].contains("error", true))
         while (events.size > 128) events.removeFirst()
     }
     @Synchronized fun mark(): Long = sequence

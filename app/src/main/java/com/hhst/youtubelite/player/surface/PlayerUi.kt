@@ -7,6 +7,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
 
@@ -33,7 +34,7 @@ object PlayerUi {
     val GlassBg = Color(0x66000000)
     val GlassStroke = Color(0x24FFFFFF)
 
-    /** Time bar: 2 dp track, 20 dp hit area, 100 dp edge gradients. */
+    /** Time bar: 2 dp track, 48 dp minimum accessibility hit area, 100 dp edge gradients. */
     const val TIME_BAR_HIT_DP = 48
     const val TIME_BAR_THICKNESS_DP = 2
     const val TIME_BAR_OVERLAP_DP = 2
@@ -61,20 +62,20 @@ object PlayerUi {
 
     val SpeedChoices = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
 
-    /** Title: 14 sp, no extra font padding (tight author stack). */
+    /** Regular title with the shared body metrics and no extra font padding. */
     val TitleStyle = TextStyle(
         color = Color.White,
-        fontSize = 14.sp,
-        lineHeight = 14.sp,
-        fontWeight = FontWeight.Bold,
+        fontSize = SettingsTokens.BodySize.sp,
+        lineHeight = SettingsTokens.BodyLine.sp,
+        fontWeight = FontWeight.Normal,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 
-    /** Author: 11 sp, no extra font padding. */
+    /** Secondary text uses the shared detail metrics. */
     val AuthorStyle = TextStyle(
         color = Author,
-        fontSize = 11.sp,
-        lineHeight = 11.sp,
+        fontSize = SettingsTokens.DetailSize.sp,
+        lineHeight = SettingsTokens.DetailLine.sp,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 

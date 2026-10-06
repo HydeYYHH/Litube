@@ -47,7 +47,7 @@ object YoutubeThumbnail {
                 connect()
             }
             if (conn.responseCode != HttpURLConnection.HTTP_OK) return null
-            val declared = conn.contentLengthLong
+            val declared = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1
             if (declared > MAX_DOWNLOAD_BYTES) return null
             val bytes = conn.inputStream.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return null
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)

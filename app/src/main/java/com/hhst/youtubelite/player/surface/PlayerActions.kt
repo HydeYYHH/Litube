@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.player.surface
 
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 
 /**
  * Playback intents handled by [player.PlayerViewModel].
@@ -12,8 +12,6 @@ interface PlayerPlaybackActions {
     fun onToggleControls()
     fun onHideControls()
     fun onFullscreenToggle()
-    /** Shorts feed: vertical swipe switches the page video instead of brightness. */
-    fun onShortsSwipe(up: Boolean) {}
     fun onSpeedHoldStart()
     fun onSpeedHoldEnd()
     fun onHint(text: String?)

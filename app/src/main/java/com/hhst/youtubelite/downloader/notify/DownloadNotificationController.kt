@@ -5,7 +5,7 @@ import com.hhst.youtubelite.downloader.core.CompletionKind
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.FileAvailability
-import com.hhst.youtubelite.downloader.work.DownloadWorkNames
+import com.hhst.youtubelite.downloader.engine.DownloadWorkNames
 
 /**
  * Per-batch notification. Progress posts at most once per second; pause,

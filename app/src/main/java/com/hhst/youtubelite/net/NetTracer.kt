@@ -54,12 +54,6 @@ class NetTracer(
             val record = runCatching { gson.fromJson(json, RequestRecord::class.java) }.getOrNull() ?: return
             push(record)
         }
-
-        @JavascriptInterface
-        fun dbg(msg: String?) {
-            if (msg.isNullOrBlank()) return
-            Log.d(CACHE_TAG, msg)
-        }
     }
 
     data class RequestRecord(
@@ -73,7 +67,6 @@ class NetTracer(
 
     companion object {
         const val TAG = "NetTracer"
-        const val CACHE_TAG = "InnertubeCache"
         const val JS_NAME = "NetTrace"
         const val ASSET = "script/net-tracer.js"
         const val DEFAULT_SLOW_MS = 500L

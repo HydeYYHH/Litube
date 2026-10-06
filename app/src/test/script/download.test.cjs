@@ -151,7 +151,7 @@ function descendants(node) {
 function page({
   href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', live = false,
   withSvg = true, nestedOnly = false, subscribeOnly = false, hydrated = false,
-  c3State = null,
+  c3State = null, withVoteCount = false,
 } = {}) {
   const row = new El('div', 'slim-video-action-bar-actions');
   const avatar = new El('img', 'slim-video-owner-icon');
@@ -203,6 +203,12 @@ function page({
   dislikeHost.appendChild(dislikeC3);
   dislikeHost.appendChild(new El('div', 'ytSpecButtonShapeNextButtonTextContent'));
   dislikeHost.appendChild(new El('span', 'ytAttributedStringHost'));
+  if (withVoteCount) {
+    const count = new El('span');
+    count.setAttribute('data-lite-vote-count', '');
+    count.textContent = '128';
+    dislikeHost.appendChild(count);
+  }
   dislike.appendChild(dislikeHost);
 
   // The subscribe pill hosts no view-model and its svg is a lottie frame.
@@ -290,6 +296,20 @@ function page({
 function ids(row) {
   return row.children.map((n) => n.id || n.tagName.toLowerCase());
 }
+
+test('reused action buttons refresh translations without duplicating controls', () => {
+  const { context, row, posted } = page();
+  const queue = row.querySelector('#queueButton');
+  const requestCount = posted.length;
+  context.document.documentElement.lang = 'de-DE'; context.Lite.wake();
+  assert.equal(queue.getAttribute('aria-label'), 'Zur Warteschlange hinzufügen');
+  assert.equal(row.querySelector('#openWithButton').getAttribute('aria-label'), 'Öffnen mit');
+  context.document.documentElement.lang = 'zh-Hant-HK'; context.Lite.wake();
+  assert.equal(row.querySelector('#queueButton'), queue);
+  assert.equal(queue.getAttribute('aria-label'), '加入佇列');
+  assert.equal(row.querySelectorAll('#queueButton').length, 1);
+  assert.equal(posted.length, requestCount);
+});
 
 test('watch page injects download, queue, and open with before the native chip, in order', () => {
   const { row } = page();
@@ -383,6 +403,15 @@ test('a bar with only nested hosts clones the dislike entry and follows it', () 
   const download = row.querySelector('#downloadButton');
   assert.equal(download.getAttribute('aria-label'), 'Download');
   assert.equal(download.querySelector('.ytAttributedStringHost').textContent, '');
+});
+
+test('cloned actions remove the injected vote label without changing the original dislike', () => {
+  const { row, dislike } = page({ nestedOnly: true, withVoteCount: true });
+  assert.equal(dislike.querySelector('[data-lite-vote-count]').textContent, '128');
+  for (const id of ['downloadButton', 'queueButton', 'openWithButton']) {
+    assert.equal(row.querySelector('#' + id).querySelector('[data-lite-vote-count]'), null);
+    assert.ok(row.querySelector('#' + id).querySelector('svg'));
+  }
 });
 
 test('a c3-icon is replaced in its slot without leaving a blank icon beside the glyph', () => {
@@ -514,4 +543,3 @@ test('playlist snapshots walk page data and DOM without duplicates', () => {
   ]);
 });
 
-module.exports = { page, ids };

@@ -12,11 +12,9 @@ class AndroidWebViewTimerClock(
         view = host as? WebView
     }
 
-    // Fire-and-forget on purpose: pause/resume are process-global state flips
-    // whose ordering is already decided by the occupancy lock, and a blocking
-    // hop here used to throw the 8s main-thread timeout straight through the
-    // mint's finally block (App-startup jams) — killing a mint that had just
-    // succeeded.
+    // Fire-and-forget: a blocking hop here deadlocked App-startup mints
+    // against the gate's main-thread timeout. Ordering is the occupancy
+    // lock's job.
     override fun pauseTimers() {
         val host = view ?: return
         main.post { host.pauseTimers() }

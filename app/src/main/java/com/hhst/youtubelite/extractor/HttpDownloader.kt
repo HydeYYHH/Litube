@@ -11,7 +11,6 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 /** Generic legacy transport. Explicit YouTube extraction uses its own immutable host context. */
 class HttpDownloader(
     private val client: OkHttpClient,
-    @Suppress("UNUSED_PARAMETER") playerCache: PlayerCache? = null,
 ) : Downloader() {
     override fun execute(request: Request): Response {
         val builder = okhttp3.Request.Builder().url(request.url())

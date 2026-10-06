@@ -14,10 +14,10 @@ import com.hhst.youtubelite.downloader.core.NoOpPublisher
 import com.hhst.youtubelite.downloader.core.NoOpScheduler
 import com.hhst.youtubelite.downloader.core.NoOpTransport
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
+import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
-import com.hhst.youtubelite.downloader.share.DownloadShareOnce
+import com.hhst.youtubelite.downloader.core.DownloadShareOnce
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Subtitle
@@ -186,7 +186,6 @@ internal suspend fun DownloadAndroidHarness.seedList(): SeededTasks {
 
 internal object DeviceEvidence {
     const val DATE = "2026-09-17"
-    const val HOST_DIR = "app/src/androidTest/assets/downloader/device"
 
     fun deviceDir(): File {
         val dir = File("/data/local/tmp/device-$DATE")

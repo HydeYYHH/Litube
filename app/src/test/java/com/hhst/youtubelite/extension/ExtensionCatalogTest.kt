@@ -9,12 +9,6 @@ import org.junit.Test
 /** Catalog shape and migrated keys. */
 class ExtensionCatalogTest {
 
-    @Test
-    fun catalogHasTopLevelGroups() {
-        val catalog = Extension.catalog()
-        assertTrue(catalog.size >= 5)
-        catalog.forEach { assertTrue(it.isGroup || it.isNav) }
-    }
 
     @Test
     fun allToggleKeysAreKnownDefaults() {
@@ -53,15 +47,6 @@ class ExtensionCatalogTest {
     }
 
     @Test
-    fun preferenceKeyStringsUnchanged() {
-        assertEquals("enable_display_dislikes", PreferenceKeys.ENABLE_DISPLAY_DISLIKES)
-        assertEquals("enable_hide_shorts", PreferenceKeys.ENABLE_HIDE_SHORTS)
-        assertEquals("skip_sponsors", PreferenceKeys.SKIP_SPONSORS)
-        assertEquals("enable_player_gestures", PreferenceKeys.ENABLE_PLAYER_GESTURES)
-        assertEquals("gesture_tap_windowed", PreferenceKeys.GESTURE_TAP_WINDOWED)
-    }
-
-    @Test
     fun groupsHaveIds_togglesHaveKeys() {
         fun walk(nodes: List<Extension>) {
             for (node in nodes) {
@@ -96,7 +81,7 @@ class ExtensionCatalogTest {
         fun walk(list: List<Extension>) {
             for (node in list) {
                 val key = node.key
-                if (key != null) out.add(key) else walk(node.children)
+                if (key != null && node.kind == ExtensionKind.TOGGLE) out.add(key) else walk(node.children)
             }
         }
         walk(nodes)

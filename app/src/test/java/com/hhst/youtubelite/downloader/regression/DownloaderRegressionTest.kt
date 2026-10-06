@@ -32,9 +32,9 @@ import com.hhst.youtubelite.downloader.net.DownloadSleeper
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.net.ForbiddenRecovery
 import com.hhst.youtubelite.downloader.net.RecoveredSource
-import com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl
-import com.hhst.youtubelite.downloader.publish.PublishBackend
-import com.hhst.youtubelite.downloader.publish.PublishTarget
+import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
+import com.hhst.youtubelite.downloader.io.PublishBackend
+import com.hhst.youtubelite.downloader.io.PublishTarget
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.DownloadSelection
@@ -45,8 +45,8 @@ import com.hhst.youtubelite.downloader.ui.DownloadPresentation
 import com.hhst.youtubelite.downloader.ui.DownloadRowAction
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
 import com.hhst.youtubelite.downloader.webview.DownloadWebGuard
-import com.hhst.youtubelite.downloader.work.DownloadBatchExecutor
-import com.hhst.youtubelite.downloader.work.SchedulerHarness
+import com.hhst.youtubelite.downloader.engine.DownloadBatchExecutor
+import com.hhst.youtubelite.downloader.engine.SchedulerHarness
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse

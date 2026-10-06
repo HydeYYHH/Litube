@@ -1,9 +1,12 @@
 package com.hhst.youtubelite.player.sponsor
 
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.VideoId
+import java.io.IOException
 import java.net.URLEncoder
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
@@ -139,7 +142,7 @@ class SponsorBlockManager(
         call.execute().use { response ->
             val body = response.body?.string()
             return interpretHttp(response.code, body, videoId)
-                ?: throw java.io.IOException("sponsorblock HTTP ${response.code}")
+                ?: throw IOException("sponsorblock HTTP ${response.code}")
         }
     }
 
@@ -164,9 +167,9 @@ class SponsorBlockManager(
 /** Pure SponsorBlock response parser (no Android deps; unit-testable). */
 object SponsorBlockParser {
 
-    private val gson = com.google.gson.Gson()
+    private val gson = Gson()
     private val type =
-        object : com.google.gson.reflect.TypeToken<List<SponsorBlockResponse>>() {}.type
+        object : TypeToken<List<SponsorBlockResponse>>() {}.type
 
     fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> {
         val responses: List<SponsorBlockResponse> =

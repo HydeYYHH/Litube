@@ -2,6 +2,8 @@
 
 package com.hhst.youtubelite.ui.browser
 
+import android.os.Build
+
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -18,6 +20,8 @@ import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -64,9 +68,10 @@ import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.Tab
 import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.browser.WebViewFactory
+import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.SnapshotReject
-import com.hhst.youtubelite.downloader.share.DownloadShareParser
+import com.hhst.youtubelite.downloader.core.DownloadShareParser
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.downloader.ui.DownloadUiStart
 import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
@@ -80,7 +85,7 @@ import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.net.NetTracer
 import com.hhst.youtubelite.player.PlayerViewModel
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.player.service.NotificationPermission
 import com.hhst.youtubelite.player.surface.MiniPlayerStore
 import com.hhst.youtubelite.player.surface.MiniPlayerWindow
@@ -122,6 +127,9 @@ fun BrowserScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val hosts = remember { mutableStateMapOf<Long, BrowserHost>() }
+    var displayedTabId by remember { mutableLongStateOf(uiState.activeId) }
+    val presentationId = if (hosts[uiState.activeId] != null) uiState.activeId else displayedTabId
+    SideEffect { if (hosts[uiState.activeId] != null) displayedTabId = uiState.activeId }
     var showExtension by remember { mutableStateOf(false) }
     // PiP flips without a recreate; the activity pushes it through [inPipFlow].
     var inPip by remember { mutableStateOf(inPipFlow?.value == true) }
@@ -254,15 +262,20 @@ fun BrowserScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.loadRequests.collect { (tabId, url) ->
-            hosts[tabId]?.webView?.loadUrl(url)
+            hosts[tabId]?.webView?.let { webView ->
+                WebViewFactory.prepareBackground(webView, url)
+                webView.loadUrl(url)
+            }
         }
     }
 
+    val haptics: HapticsController = koinInject()
     // History is per WebView; re-read after switch (inactive tabs skip nav callbacks).
     LaunchedEffect(activeId, hosts[activeId]) {
         val webView = hosts[activeId]?.webView ?: return@LaunchedEffect
         viewModel.canGoBack = webView.canGoBack()
         hosts.forEach { (id, host) ->
+            host.webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:${id == activeId}}}));", null)
             if (id == activeId) host.webView.onResume() else host.webView.onPause()
         }
     }
@@ -305,12 +318,18 @@ fun BrowserScreen(
             val active = latestHosts.value[latestActiveId.value]?.webView
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
+                    active?.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:true}}));", null)
+                    playerViewModel.setVideoVisible(playerViewModel.uiState.value.visible)
                     active?.onResume()
                     acquireTimers()
                 }
                 Lifecycle.Event.ON_PAUSE -> {
-                    val pausedInPip = activity?.isInPictureInPictureMode == true
-                    latestHosts.value.values.forEach { it.webView.onPause() }
+                    val pausedInPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
+                    playerViewModel.setVideoVisible(pausedInPip)
+                    latestHosts.value.values.forEach {
+                        it.webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:false}}));", null)
+                        it.webView.onPause()
+                    }
                     releaseTimers()
                     // "Visible" not "playing": pausing an already-paused player is harmless.
                     val playerVisible = playerViewModel.uiState.value.visible
@@ -323,7 +342,7 @@ fun BrowserScreen(
                 // Dismissing the PiP window goes pause→stop with no second
                 // pause event; without this audio keeps playing invisible.
                 Lifecycle.Event.ON_STOP -> {
-                    val stoppedInPip = activity?.isInPictureInPictureMode == true
+                    val stoppedInPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
                     val playerVisible = playerViewModel.uiState.value.visible
                     if (playerVisible && !stoppedInPip &&
                         !extensionManager.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)
@@ -436,16 +455,18 @@ fun BrowserScreen(
         viewModel.onWatchSuspended = { playerViewModel.enterMiniPlayer() }
         viewModel.onWatchOpened = { playerViewModel.onReturnToWatch(it) }
         viewModel.onShortsClosed = { playerViewModel.onShortsClosed() }
+        viewModel.onShortsOpened = { playerViewModel.onShortsOpened() }
+        viewModel.onTabSwitched = { haptics.perform(HapticsController.Event.TAB) }
         onDispose {
             viewModel.onWatchSuspended = null
             viewModel.onWatchOpened = null
             viewModel.onShortsClosed = null
+            viewModel.onShortsOpened = null
+            viewModel.onTabSwitched = null
         }
     }
-    // Active-tab URL left a video page with no watch-tab suspension. Shorts
-    // is NAV: leaving it docks the current media as mini (onShortsClosed).
-    // A still-visible player that reaches this effect left a non-video page
-    // without going through those hooks.
+    LaunchedEffect(playerState.visible) { playerViewModel.setVideoVisible(playerState.visible) }
+    // Redirects can enter Shorts without going through the tab router.
     LaunchedEffect(
         uiState.activeId,
         uiState.url,
@@ -453,6 +474,10 @@ fun BrowserScreen(
         playerState.visible,
         playerState.mini,
     ) {
+        if (PageKind.isShorts(uiState.url)) {
+            playerViewModel.onShortsOpened()
+            return@LaunchedEffect
+        }
         if (uiState.suspendedWatchId != null) return@LaunchedEffect
         if (VideoId.parse(uiState.url) != null) return@LaunchedEffect
         if (playerState.visible &&
@@ -595,10 +620,16 @@ fun BrowserScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             AnimatedContent(
-                targetState = activeId,
+                targetState = presentationId,
                 transitionSpec = {
                     val offset = { width: Int -> width / 14 }
-                    if (forward) {
+                    // Video surfaces do not participate in an alpha transition.
+                    val shortsTransition = PageKind.isShorts(uiState.url) ||
+                        PageKind.isShorts(hosts[initialState]?.webView?.url) ||
+                        PageKind.isShorts(hosts[targetState]?.webView?.url)
+                    if (shortsTransition) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else if (forward) {
                         (
                             fadeIn(animationSpec = tween(TAB_FADE_MS)) +
                                 slideInHorizontally(tween(TAB_SLIDE_MS), offset)
@@ -679,6 +710,7 @@ fun BrowserScreen(
                     onDismiss = playerViewModel::onMiniClose,
                     mini = isMini,
                     fillsWindow = inPip || playerState.fullscreen,
+                    fullscreenSwipeEnabled = !inPip,
                     embeddedTopDp = PlayerUi.playerTopOffsetDp(false, playerState.pageTopDp, topInsetDp),
                     embeddedHeightDp = PlayerUi.embeddedHeightDp(playerState.pageHeightDp, availableWidthDp),
                     topInsetDp = topInsetDp,
@@ -760,7 +792,10 @@ private fun createHosts(
             onPlaylistPresence = onPlaylistPresence?.let { callback ->
                 { has: Boolean -> callback(tabId, has) }
             },
-        ).also { it.webView.loadUrl(tab.url) }
+        ).also {
+            WebViewFactory.prepareBackground(it.webView, tab.url)
+            it.webView.loadUrl(tab.url)
+        }
     }
 }
 

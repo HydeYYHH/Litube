@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
+import java.util.Locale
+
 /**
  * User-adjustable subtitle appearance.
  *
@@ -51,7 +53,7 @@ data class SubtitleStyle(
 
         /** Locale-independent `1.50` so [toFloatOrNull] can parse on comma-decimal devices. */
         private fun formatDecimal(value: Float): String =
-            java.lang.String.format(java.util.Locale.US, "%.2f", value)
+            String.format(Locale.US, "%.2f", value)
 
         fun decode(raw: String?): SubtitleStyle {
             if (raw.isNullOrBlank()) return SubtitleStyle()

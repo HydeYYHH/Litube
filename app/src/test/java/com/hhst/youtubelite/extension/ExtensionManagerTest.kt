@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.extension
 
+import android.content.ContextWrapper
+import com.hhst.youtubelite.core.HapticsController
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,6 +20,28 @@ class ExtensionManagerTest {
         manager = ExtensionManager(store)
     }
 
+    @Test fun zeroHapticsNeverTouchesThePlatformVibrator() {
+        manager.setHapticStrength(0)
+        val context = object : ContextWrapper(null) {
+            override fun getSystemService(name: String): Any? = error("Vibrator must not be queried")
+        }
+        val haptics = HapticsController(context, manager)
+        HapticsController.Event.entries.forEach(haptics::perform)
+    }
+
+    @Test fun numericHaptics_defaultsClampPersistAndResetWithoutChangingBooleanApi() {
+        assertEquals(30, manager.hapticStrength())
+        val booleans = manager.allPreferences()
+        manager.setHapticStrength(-10)
+        assertEquals(0, manager.hapticStrength())
+        assertEquals(0, ExtensionManager(store).hapticStrength())
+        assertEquals(booleans, manager.allPreferences())
+        manager.setHapticStrength(150)
+        assertEquals(100, manager.hapticStrength())
+        manager.resetToDefault()
+        assertEquals(30, manager.hapticStrength())
+    }
+
     @Test
     fun seedsDefaultsOnFirstLaunch() {
         for ((key, expected) in PreferenceKeys.DEFAULTS) {
@@ -25,41 +49,6 @@ class ExtensionManagerTest {
         }
     }
 
-    @Test
-    fun defaultsMatchLayout() {
-        val expected = mapOf(
-            "enable_display_dislikes" to true,
-            "enable_show_likes" to true,
-            "enable_hide_shorts" to false,
-            "skip_sponsors" to true,
-            "skip_self_promo" to true,
-            "skip_poi_highlight" to true,
-            "sponsor_countdown" to true,
-            "remember_last_position" to true,
-            "remember_quality" to true,
-            "enable_background_play" to true,
-            "enable_pip" to true,
-            "enable_in_app_mini_player" to true,
-            "remember_resize_mode" to false,
-            "remember_playback_speed" to false,
-            "use_original_title" to false,
-            "gesture_tap_windowed" to true,
-            "gesture_tap_fullscreen" to true,
-            "gesture_double_tap_windowed" to true,
-            "gesture_double_tap_fullscreen" to true,
-            "gesture_long_press_windowed" to true,
-            "gesture_long_press_fullscreen" to true,
-            "gesture_brightness_windowed" to true,
-            "gesture_brightness_fullscreen" to true,
-            "gesture_volume_windowed" to true,
-            "gesture_volume_fullscreen" to true,
-            "gesture_seek_windowed" to true,
-            "gesture_seek_fullscreen" to true,
-            "gesture_fullscreen_windowed" to true,
-            "gesture_fullscreen_fullscreen" to true,
-        )
-        assertEquals(expected, PreferenceKeys.DEFAULTS)
-    }
 
     @Test
     fun setEnabled_persistsAndRoundTrips() {

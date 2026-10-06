@@ -15,49 +15,6 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable
 import java.io.InputStream
 
 /**
- * YouTube master playlists declare both muxed audio codecs and an
- * `#EXT-X-MEDIA` audio rendition. Media3 then drops the muxed audio and plays
- * only that rendition, so a failed rendition playlist is silent. When the
- * extractor already has the selected audio, the video playlist is reduced to
- * video and that audio is merged beside it.
- */
-@UnstableApi
-internal fun withoutHlsAudio(playlist: HlsPlaylist): HlsPlaylist {
-    val multi = playlist as? HlsMultivariantPlaylist ?: return playlist
-    val variants = multi.variants.map { variant ->
-        val videoCodecs = Util.getCodecsOfType(variant.format.codecs, C.TRACK_TYPE_VIDEO)
-        val format = variant.format.buildUpon()
-            .setCodecs(videoCodecs)
-            .setSampleMimeType(MimeTypes.getMediaMimeType(videoCodecs))
-            .build()
-        HlsMultivariantPlaylist.Variant(
-            variant.url,
-            format,
-            variant.videoGroupId,
-            null,
-            variant.subtitleGroupId,
-            variant.captionGroupId,
-            variant.pathwayId,
-            variant.stableVariantId,
-        )
-    }
-    return HlsMultivariantPlaylist(
-        multi.baseUri,
-        multi.tags,
-        variants,
-        multi.videos,
-        emptyList(),
-        multi.subtitles,
-        multi.closedCaptions,
-        null,
-        multi.muxedCaptionFormats,
-        multi.hasIndependentSegments,
-        multi.variableDefinitions,
-        multi.sessionKeyDrmInitData,
-    )
-}
-
-/**
  * YouTube audio renditions name each language but omit `CODECS`, channel count,
  * and sample rate. Media3 then either skips chunkless preparation or marks the
  * track unsupported, so the menu never sees the other languages. Fill those in
@@ -144,24 +101,5 @@ internal class AudioCodecHlsPlaylistParserFactory : HlsPlaylistParserFactory {
     private fun stamp(parser: ParsingLoadable.Parser<HlsPlaylist>) =
         ParsingLoadable.Parser { uri: Uri, inputStream: InputStream ->
             declareAudioCodecs(parser.parse(uri, inputStream))
-        }
-}
-
-@UnstableApi
-internal class VideoOnlyHlsPlaylistParserFactory : HlsPlaylistParserFactory {
-    private val delegate = DefaultHlsPlaylistParserFactory()
-
-    override fun createPlaylistParser(): ParsingLoadable.Parser<HlsPlaylist> =
-        strip(delegate.createPlaylistParser())
-
-    override fun createPlaylistParser(
-        multivariantPlaylist: HlsMultivariantPlaylist,
-        previousMediaPlaylist: HlsMediaPlaylist?,
-    ): ParsingLoadable.Parser<HlsPlaylist> =
-        strip(delegate.createPlaylistParser(multivariantPlaylist, previousMediaPlaylist))
-
-    private fun strip(parser: ParsingLoadable.Parser<HlsPlaylist>) =
-        ParsingLoadable.Parser { uri: Uri, inputStream: InputStream ->
-            withoutHlsAudio(parser.parse(uri, inputStream))
         }
 }

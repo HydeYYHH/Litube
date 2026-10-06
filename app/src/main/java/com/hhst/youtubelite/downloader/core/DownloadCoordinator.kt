@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.downloader.core
 
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.DownloadSession
 import com.hhst.youtubelite.extractor.VideoId
@@ -13,6 +14,9 @@ class DownloadCoordinator(
     private val ids: IdFactory = UuidIdFactory,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
+    private fun log(event: String, fields: Map<String, Any?>, critical: Boolean = false) =
+        AppLog.event(AppLog.Category.DOWNLOADER, event, fields, critical = critical)
+
     fun observeDownloads(filter: DownloadFilter = DownloadFilter()): Flow<List<TaskSnapshot>> =
         repository.observeDownloads(filter)
 
@@ -66,6 +70,7 @@ class DownloadCoordinator(
         if (!acceptProgress(taskId, generation)) return@transact false
         val asset = assetsForTask(taskId).firstOrNull { it.kind == kind } ?: return@transact false
         val publish = publishForAsset(asset.id) ?: return@transact false
+        if (publish.phase != phase) log("publish", mapOf("task" to taskId, "generation" to generation, "asset" to kind, "phase" to phase, "error" to errorMessage), errorMessage != null)
         updatePublish(
             publish.copy(
                 phase = phase,
@@ -96,24 +101,28 @@ class DownloadCoordinator(
     }
 
     suspend fun pause(target: DownloadTarget) {
+        log("pause", mapOf("target" to target))
         val effects = SideEffects()
         repository.transact { pauseTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun resume(target: DownloadTarget) {
+        log("resume", mapOf("target" to target))
         val effects = SideEffects()
         repository.transact { resumeTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun cancel(target: DownloadTarget) {
+        log("cancel", mapOf("target" to target))
         val effects = SideEffects()
         repository.transact { cancelTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun retryFailed(target: DownloadTarget) {
+        log("retryFailed", mapOf("target" to target))
         val effects = SideEffects()
         repository.transact { retryTarget(target, effects) }
         applyEffects(effects)
@@ -153,6 +162,8 @@ class DownloadCoordinator(
         val task = getTask(taskId) ?: return@transact false
         when (DownloadStateMachine.acceptBackground(task, generation, status)) {
             BackgroundDecision.APPLY -> {
+                if (task.status != status || (phase != null && task.phase != phase) || (errorMessage != null && task.errorMessage != errorMessage))
+                    log("state", mapOf("task" to taskId, "generation" to generation, "status" to status, "phase" to phase, "error" to errorMessage), status == DownloadStatus.FAILED)
                 updateTask(
                     task.copy(
                         status = status,
@@ -210,6 +221,7 @@ class DownloadCoordinator(
     ): Boolean = repository.transact {
         if (!acceptProgress(taskId, generation)) return@transact false
         val asset = assetsForTask(taskId).firstOrNull { it.kind == kind } ?: return@transact false
+        log("asset_failed", mapOf("task" to taskId, "generation" to generation, "asset" to kind, "error" to message), true)
         updateAsset(
             asset.copy(
                 published = false,

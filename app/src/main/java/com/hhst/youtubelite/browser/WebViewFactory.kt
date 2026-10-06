@@ -1,7 +1,10 @@
 package com.hhst.youtubelite.browser
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Color
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -9,30 +12,42 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
-import android.content.ActivityNotFoundException
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.webkit.WebViewFeature
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.createBitmap
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.WebViewFeature
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
 import com.hhst.youtubelite.extension.ExtensionInjector
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.VideoId
+import com.hhst.youtubelite.gallery.GalleryActivity
 import com.hhst.youtubelite.net.NetTracer
 import com.hhst.youtubelite.net.PageScript
 import com.hhst.youtubelite.ui.theme.YtRed
+import java.util.concurrent.Executors
 
 /** Builds a swipe-refresh + mobile YouTube WebView host. */
 object WebViewFactory {
+    private val cookieWriter by lazy {
+        Executors.newSingleThreadExecutor { task -> Thread(task, "cookie-persistence").apply { isDaemon = true } }
+    }
+
+    internal fun persistCookies() {
+        cookieWriter.execute { runCatching { CookieManager.getInstance().flush() } }
+    }
+
+    internal fun prepareBackground(webView: WebView, url: String) {
+        val dark = webView.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        webView.setBackgroundColor(if (PageKind.isShorts(url) || dark) Color.BLACK else Color.WHITE)
+    }
+
 
     private const val NAV_JS = "script/nav.js"
     private const val INNERTUBE_JS = "script/innertube.js"
@@ -48,6 +63,10 @@ object WebViewFactory {
     private val dislikesScript = PageScript(DISLIKES_JS, "DisplayDislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
     private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "RemoveShortsAds")
+    private val shortsScript = PageScript("script/shorts.js", "Shorts")
+    private val shortsQualityScript = PageScript("script/shorts-quality.js", "ShortsQuality")
+    private val galleryScript = PageScript("script/gallery.js", "Gallery")
+    private val adsScript = PageScript("script/ads.js", "Ads")
     private val downloadScript = PageScript(DownloadWebBridge.ASSET, "Download")
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -82,6 +101,11 @@ object WebViewFactory {
             onShowMediaItemMenu = onShowMediaItemMenu,
             onPlaylistPresence = onPlaylistPresence,
             tabId = tabId,
+            canPlay = callbacks::isActiveDocument,
+            isActive = callbacks::isActiveTab,
+            inheritShorts = callbacks::shouldInheritShorts,
+            onShortsAutoplayBlocked = callbacks::onShortsAutoplayBlocked,
+            onGallery = { urls, index -> GalleryActivity.open(context, urls, index) },
         )
         val netTracer = NetTracer()
         val innertube = PageScript(INNERTUBE_JS, "Innertube")
@@ -93,10 +117,7 @@ object WebViewFactory {
             setColorSchemeColors(YtRed.toArgb())
             setProgressViewOffset(true, 24, 96)
         }
-        val downloadBridge = DownloadWebBridge(
-            appContext = appContext,
-            tabId = tabId,
-        )
+        val downloadBridge = DownloadWebBridge(appContext = appContext, tabId = tabId)
         val webView = WebView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -118,6 +139,8 @@ object WebViewFactory {
                 builtInZoomControls = false
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
+                userAgentString = BrowserUserAgent.from(userAgentString)
+                setSupportMultipleWindows(false)
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             }
             addJavascriptInterface(bridge, Bridge.NAME)
@@ -130,6 +153,10 @@ object WebViewFactory {
             dislikesScript.install(appContext, this)
             hideShortsScript.install(appContext, this)
             shortsAdsScript.install(appContext, this)
+            shortsScript.install(appContext, this)
+            shortsQualityScript.install(appContext, this)
+            galleryScript.install(appContext, this)
+            adsScript.install(appContext, this)
             downloadScript.install(appContext, this)
             downloadBridge.attach(this)
             webViewClient = BrowserWebViewClient(
@@ -155,6 +182,13 @@ object WebViewFactory {
         swipeRefresh.setOnRefreshListener { onRefresh(webView) }
 
         return BrowserHost(swipeRefresh, webView, downloadBridge)
+    }
+
+    internal fun injectExtras(context: Context, webView: WebView) {
+        shortsScript.inject(context, webView)
+        shortsQualityScript.inject(context, webView)
+        galleryScript.inject(context, webView)
+        adsScript.inject(context, webView)
     }
 
     internal fun injectNavScript(context: Context, webView: WebView) {
@@ -184,8 +218,11 @@ private class BrowserWebViewClient(
     private val bridge: Bridge,
     private val swipeRefresh: SwipeRefreshLayout,
 ) : WebViewClient() {
+    private val login = LoginNavigation()
+    private var lastContentUrl: String? = null
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        if (!request.isForMainFrame) return false
         val uri = request.url
         val url = uri.toString()
         if (uri.scheme.equals("intent", ignoreCase = true)) {
@@ -195,8 +232,10 @@ private class BrowserWebViewClient(
             return openExternal(view.context, uri)
         }
         val current = view.url
+        if (login.keepInTab(current, url)) return false
         if (!current.isNullOrBlank()) {
             val nextKind = PageKind.of(url)
+            if (nextKind == Constants.PAGE_SHORTS && callbacks.shouldInheritShorts()) return false
             if (nextKind != "unknown" && nextKind != PageKind.of(current)) {
                 callbacks.onOpenTab(url)
                 return true
@@ -207,11 +246,13 @@ private class BrowserWebViewClient(
 
     /** Inject every page script in dependency order. */
     private fun injectAll(view: WebView) {
+        if (!UrlPolicy.shouldInject(view.url)) return
         coreScript.inject(appContext, view)
         WebViewFactory.injectNavScript(appContext, view)
         netTracer.inject(appContext, view)
         innertube.inject(appContext, view)
         playerHook.inject(appContext, view)
+        WebViewFactory.injectExtras(appContext, view)
         dislikes.inject(appContext, view)
         hideShorts.inject(appContext, view)
         shortsAds.inject(appContext, view)
@@ -223,9 +264,11 @@ private class BrowserWebViewClient(
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         updateRefreshEnabled(url)
+        if (login.started(url)) lastContentUrl?.let(callbacks::onLoginStarted)
+        if (UrlPolicy.shouldInject(url)) lastContentUrl = url
         bridge.onDocumentStarted()
         downloadBridge.bumpPage()
-        downloadBridge.stamp(view)
+        if (UrlPolicy.shouldInject(url)) downloadBridge.stamp(view)
         if (!hasDocumentStartScript) injectAll(view)
         callbacks.onPageStarted(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
@@ -233,7 +276,11 @@ private class BrowserWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
-        if (hasDocumentStartScript) {
+        if (url == view.url && login.finished(url)) {
+            callbacks.onLoginFinished()
+            WebViewFactory.persistCookies()
+        }
+        if (UrlPolicy.shouldInject(url) && hasDocumentStartScript) {
             injector.inject(view)
             downloadBridge.stamp(view)
             downloadScript.inject(appContext, view)
@@ -248,10 +295,12 @@ private class BrowserWebViewClient(
         super.doUpdateVisitedHistory(view, url, isReload)
         // SPA navigations often skip full reloads; re-run inject for settings.
         updateRefreshEnabled(url)
-        injector.inject(view)
-        downloadBridge.bumpPage()
-        downloadBridge.stamp(view)
-        downloadScript.inject(appContext, view)
+        if (UrlPolicy.shouldInject(url)) {
+            injector.inject(view)
+            downloadBridge.bumpPage()
+            downloadBridge.stamp(view)
+            downloadScript.inject(appContext, view)
+        }
         callbacks.onHistoryChanged(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
     }

@@ -16,9 +16,9 @@ class PageKindTest {
     }
 
     @Test
-    fun playerSurface_watchAndShorts() {
+    fun playerSurface_watchOnly() {
         assertTrue(PageKind.isPlayerSurface(Constants.PAGE_WATCH))
-        assertTrue(PageKind.isPlayerSurface(Constants.PAGE_SHORTS))
+        assertFalse(PageKind.isPlayerSurface(Constants.PAGE_SHORTS))
         assertFalse(PageKind.isPlayerSurface(Constants.PAGE_HOME))
         assertFalse(PageKind.isPlayerSurface(null))
     }

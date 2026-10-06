@@ -7,6 +7,8 @@ import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.room.Room
 import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
+import com.hhst.youtubelite.core.HapticsController
+import com.hhst.youtubelite.core.PipSupport
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.core.MmkvJsonCache
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
@@ -24,7 +26,7 @@ import com.hhst.youtubelite.downloader.engine.DownloadEngine
 import com.hhst.youtubelite.downloader.io.AndroidNetworkMonitor
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
-import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
 import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.net.ForbiddenRecovery
@@ -33,8 +35,8 @@ import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationPort
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
-import com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl
-import com.hhst.youtubelite.downloader.publish.createPublishBackend
+import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
+import com.hhst.youtubelite.downloader.io.createPublishBackend
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
@@ -42,13 +44,16 @@ import com.hhst.youtubelite.downloader.resolve.SharedExtractorCatalogSource
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
 import com.hhst.youtubelite.downloader.webview.AndroidWebViewTimerClock
 import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.work.AndroidUidtJobPort
-import com.hhst.youtubelite.downloader.work.AndroidWorkEnqueuePort
-import com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler
-import com.hhst.youtubelite.downloader.work.DownloadBatchExecutor
-import com.hhst.youtubelite.downloader.work.DownloadStartupReconciler
-import com.hhst.youtubelite.downloader.work.UidtJobPort
-import com.hhst.youtubelite.downloader.work.WorkEnqueuePort
+import com.hhst.youtubelite.downloader.engine.AndroidUidtJobPort
+import com.hhst.youtubelite.downloader.engine.AndroidWorkEnqueuePort
+import com.hhst.youtubelite.downloader.engine.BackgroundDownloadScheduler
+import com.hhst.youtubelite.downloader.engine.DownloadBatchExecutor
+import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
+import com.hhst.youtubelite.downloader.engine.UidtJobPort
+import com.hhst.youtubelite.downloader.engine.WorkEnqueuePort
+import com.hhst.youtubelite.extension.ExtensionManager
+import com.hhst.youtubelite.extension.MmkvPrefStore
+import com.hhst.youtubelite.extension.PrefStore
 import com.hhst.youtubelite.extractor.AndroidChallengeSolver
 import com.hhst.youtubelite.extractor.BrowserPlayerResponses
 import com.hhst.youtubelite.extractor.Cache
@@ -64,9 +69,6 @@ import com.hhst.youtubelite.extractor.PoTokenProvider
 import com.hhst.youtubelite.extractor.YoutubeExtractionHost
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.extractor.YoutubeSessionProvider
-import com.hhst.youtubelite.extension.ExtensionManager
-import com.hhst.youtubelite.extension.MmkvPrefStore
-import com.hhst.youtubelite.extension.PrefStore
 import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
@@ -74,20 +76,20 @@ import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.engine.PlaybackEngine
 import com.hhst.youtubelite.player.engine.PlaybackNotificationController
-import com.hhst.youtubelite.player.queue.QueueRepository
+import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.ServiceNotificationController
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.MiniPlayerStore
 import com.hhst.youtubelite.ui.browser.BrowserViewModel
 import com.hhst.youtubelite.ui.extension.ExtensionViewModel
 import com.tencent.mmkv.MMKV
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import java.util.concurrent.TimeUnit
 
 /** Application-scoped Koin module. */
 val appModule = module {
@@ -111,6 +113,7 @@ val appModule = module {
     single<PrefStore> { MmkvPrefStore(get()) }
     single<DownloadPrefs> { MmkvDownloadPrefs(get(), get()) }
     single { ExtensionManager(get()) }
+    single { HapticsController(androidContext(), get()) }
 
     single { HttpDownloader(get()) }
     single { WebViewTimerOccupancy(AndroidWebViewTimerClock()) }
@@ -120,7 +123,7 @@ val appModule = module {
     single { BrowserPlayerResponses(get()) }
     single { YoutubeMediaRequests(get<YoutubeSessionProvider>(), get()) }
     single { AndroidChallengeSolver(androidContext(), get(), get()) }
-    single { PoTokenProvider(androidContext(), get(), get(), get()) }
+    single { PoTokenProvider(androidContext(), get(), get()) }
     single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get()) }
     single { OEmbedTitleFetcher(get()) }
     single {
@@ -239,10 +242,11 @@ val appModule = module {
             cache = get(),
             cast = get(),
             appContext = androidContext(),
+            haptics = get(),
         )
     }
     viewModelOf(::BrowserViewModel)
-    viewModel { ExtensionViewModel(manager = get()) }
+    viewModel { ExtensionViewModel(manager = get(), pipSupported = PipSupport.isSupported(androidContext())) }
 
     single {
         Room.databaseBuilder(
@@ -311,6 +315,7 @@ val appModule = module {
             prefs = get(),
             interaction = get(),
             downloadHttp = get(named("downloadHttp")),
+            haptics = get(),
         )
     }
 }

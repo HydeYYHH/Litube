@@ -59,6 +59,12 @@ class MemCache(
         synchronized(chapterLists) { chapterLists.put(videoId, Boxed(chapters, expiresAt)) }
     }
 
+    fun clear() {
+        synchronized(meta) { meta.evictAll() }
+        synchronized(streams) { streams.evictAll() }
+        synchronized(chapterLists) { chapterLists.evictAll() }
+    }
+
     /** Expiry-stamped wrapper so TTL checks need no extra map. */
     private class Boxed<T>(val value: T, val expiresAt: Long)
 

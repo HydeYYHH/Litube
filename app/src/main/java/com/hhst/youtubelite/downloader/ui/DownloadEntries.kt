@@ -6,7 +6,7 @@ import com.hhst.youtubelite.downloader.core.BatchSource
 import com.hhst.youtubelite.downloader.core.DownloadLimits
 import com.hhst.youtubelite.downloader.core.DownloadRequest
 import com.hhst.youtubelite.extractor.VideoId
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 
 /** Confirm-sheet payload for a single video. Prefs/tasks are created only on confirm. */
 data class DownloadSingleSpec(

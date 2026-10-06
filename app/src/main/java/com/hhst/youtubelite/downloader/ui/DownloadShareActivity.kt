@@ -8,10 +8,10 @@ import android.os.SystemClock
 import android.widget.Toast
 import com.hhst.youtubelite.MainActivity
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
-import com.hhst.youtubelite.downloader.share.DownloadShareOnce
-import com.hhst.youtubelite.downloader.share.DownloadShareParser
-import com.hhst.youtubelite.downloader.share.DownloadShareTarget
+import com.hhst.youtubelite.core.PipAutoEnter
+import com.hhst.youtubelite.downloader.core.DownloadShareOnce
+import com.hhst.youtubelite.downloader.core.DownloadShareParser
+import com.hhst.youtubelite.downloader.core.DownloadShareTarget
 
 /**
  * Independent share-sheet "Download" entry. Cold start is supported because

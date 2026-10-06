@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.hhst.litube"
-        minSdk = 26
+        minSdk = 23
         targetSdk = 36
         versionCode = 300
         versionName = "3.0.0-devx"
@@ -55,8 +55,6 @@ android {
 
     lint {
         abortOnError = false
-        // Only en/zh/zh-rTW are maintained; the other locales fall back to the
-        // default (English) strings by design, so a missing key is expected.
         warning += "MissingTranslation"
     }
 
@@ -80,6 +78,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.guava)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -88,7 +87,6 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.material)
     implementation(libs.androidx.swiperefreshlayout)
@@ -113,7 +111,6 @@ dependencies {
     implementation(libs.media3.cast)
     implementation(libs.media3.extractor)
     implementation(libs.media3.muxer)
-    implementation(libs.media3.container)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
@@ -122,7 +119,6 @@ dependencies {
     implementation(libs.androidx.mediarouter)
     implementation(libs.nanohttpd)
 
-    debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)

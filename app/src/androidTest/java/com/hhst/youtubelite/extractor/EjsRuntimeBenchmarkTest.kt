@@ -7,8 +7,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.grack.nanojson.JsonObject
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
 import org.junit.Assert.*
 import org.junit.Test
 import org.schabi.newpipe.extractor.downloader.Downloader

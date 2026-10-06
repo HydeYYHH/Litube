@@ -133,7 +133,12 @@
   function ensure(settings, template, anchor) {
     for (const def of BUTTONS) {
       const existing = document.getElementById(def.id);
-      if (existing && settings.contains(existing)) continue;
+      if (existing && settings.contains(existing)) {
+        const label = Lite.text(def.label), text = existing.querySelector(LABEL);
+        if (text && text.textContent !== label) text.textContent = label;
+        if (existing.getAttribute('aria-label') !== label) existing.setAttribute('aria-label', label);
+        continue;
+      }
       const button = build(template, def);
       if (!button) {
         report.failures.push({ element: 'template_button', reason: 'clone or insert failed' });

@@ -1,40 +1,97 @@
 package com.hhst.youtubelite.ui.about
 
 import android.content.ClipData
-import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.*
+import androidx.core.content.FileProvider
+import com.google.gson.JsonParser
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.extractor.Extractor
+import com.hhst.youtubelite.extractor.MemCache
 import com.hhst.youtubelite.ui.theme.AppTheme
+import com.tencent.mmkv.MMKV
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.koin.java.KoinJavaComponent.get
 
-/** App info screen opened from the page's settings entries. */
 class AboutActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            AppTheme {
-                AboutScreen(
-                    label = applicationInfo.loadLabel(packageManager).toString(),
-                    version = versionName(),
-                    onClose = { finish() },
-                    onCopyDiagnostics = {
-                        val extractor = get<Extractor>(Extractor::class.java)
-                        getSystemService(ClipboardManager::class.java).setPrimaryClip(
-                            ClipData.newPlainText("Extraction diagnostics", extractor.extractionDiagnostics()))
-                    },
-                )
+        super.onCreate(savedInstanceState); enableEdgeToEdge()
+        setContent { AppTheme {
+            val scope = rememberCoroutineScope()
+            var busy by remember { mutableStateOf(false) }
+            var status by remember { mutableStateOf("") }
+            val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+            fun action(work: suspend () -> String) {
+                if (busy) return
+                busy = true; status = getString(R.string.about_working)
+                scope.launch {
+                    status = runCatching { work() }.getOrElse { getString(R.string.about_operation_failed) }
+                    busy = false
+                }
             }
-        }
+            AboutScreen(applicationInfo.loadLabel(packageManager).toString(), version, { finish() }, busy, status,
+                onSource = { openUrl(SOURCE) },
+                onUpdate = { action {
+                    val latest = withContext(Dispatchers.IO) {
+                        val request = Request.Builder().url("https://api.github.com/repos/HydeYYHH/litube/releases/latest")
+                            .header("Accept", "application/vnd.github+json").build()
+                        get<OkHttpClient>(OkHttpClient::class.java).newCall(request).execute().use { response ->
+                            check(response.isSuccessful) { "HTTP ${response.code}" }
+                            val body = response.body?.string() ?: error("Empty release response")
+                            val json = JsonParser.parseString(body).asJsonObject
+                            check(!json.get("prerelease").asBoolean && !json.get("draft").asBoolean)
+                            json.get("tag_name").asString
+                        }
+                    }
+                    when {
+                        StableVersion.isDevelopment(version) -> getString(R.string.about_development_version, latest)
+                        StableVersion.isNewer(version, latest) -> getString(R.string.about_update_available, latest)
+                        else -> getString(R.string.about_up_to_date, latest)
+                    }
+                } },
+                onRelease = { openUrl("$SOURCE/releases/latest") },
+                onClear = { action {
+                    // clearCache removes HTTP cache only; cookies and WebStorage keep the account.
+                    WebView(this@AboutActivity).let { it.clearCache(true); it.destroy() }
+                    withContext(Dispatchers.IO) {
+                        get<MemCache>(MemCache::class.java).clear()
+                        val kv = get<MMKV>(MMKV::class.java)
+                        kv.allKeys()?.filter { it.startsWith("extractor:metadata:") || it.startsWith("extractor:stream:") || it.startsWith("extractor:segment:") }?.forEach(kv::removeValueForKey)
+                        listOf("gallery", "thumbnails").forEach { File(cacheDir, it).deleteRecursively() }
+                    }
+                    getString(R.string.about_cache_cleared)
+                } },
+                onExport = { action {
+                    val archive = withContext(Dispatchers.IO) {
+                        AppLog.export(this@AboutActivity, mapOf("extractor" to get<Extractor>(Extractor::class.java).extractionDiagnostics(),
+                            "retention" to "Categories: crash, extractor, downloader, player\nRetention: 3 days / 20 MiB"))
+                    }
+                    val uri = FileProvider.getUriForFile(this@AboutActivity, "$packageName.download.fileprovider", archive)
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri("diagnostics", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }, getString(R.string.about_export_logs)))
+                    getString(R.string.about_export_ready)
+                } })
+        } }
     }
-
-    private fun versionName(): String = try {
-        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-    } catch (_: Exception) {
-        ""
+    private fun openUrl(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { Toast.makeText(this, R.string.application_not_found, Toast.LENGTH_SHORT).show() }
     }
+    companion object { private const val SOURCE = "https://github.com/HydeYYHH/litube" }
 }

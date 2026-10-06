@@ -12,7 +12,6 @@ class DownloadFileShareTest {
     @Test
     fun shareIntent_grantsReadViaClipData() {
         val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-        assertTrue(flag != 0)
         assertTrue(DownloadFileShare.grantsRead(flag, hasClipData = true))
         assertFalse(DownloadFileShare.grantsRead(0, hasClipData = true))
         assertFalse(DownloadFileShare.grantsRead(flag, hasClipData = false))

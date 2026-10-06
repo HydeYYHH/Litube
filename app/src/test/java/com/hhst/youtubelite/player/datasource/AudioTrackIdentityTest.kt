@@ -3,6 +3,7 @@ package com.hhst.youtubelite.player.datasource
 import com.hhst.youtubelite.extractor.Format
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,6 +56,21 @@ class AudioTrackIdentityTest {
         assertEquals(2, rows.size)
         assertTrue(rows.any { it.key == "id:en.0" && it.label.contains("Original") })
         assertTrue(rows.any { it.key == "id:en.d" && it.label.contains("Descriptive") })
+    }
+
+    @Test
+    fun menuMetadataCanBeLocalizedWithoutChangingTrackKeys() {
+        val original = audio(locale = "en-US", type = "original", trackId = "en.0")
+        val descriptive = audio(locale = "en-US", type = "descriptive", trackId = "en.d")
+        val rows = AudioTrackIdentity.choices(listOf(original, descriptive))
+        assertEquals(listOf("id:en.0", "id:en.d"), rows.map { it.key })
+        assertEquals(listOf("en-US", "en-US"), rows.map { it.languageTag })
+        assertEquals(listOf("original", "descriptive"), rows.map { it.trackType })
+        assertNull(AudioTrackIdentity.choices(listOf(original)).single().trackType)
+        val renditions = AudioTrackIdentity.renditionChoices(listOf("en" to "Director", "ja" to null))
+        assertEquals("Director", renditions[0].label)
+        assertNull(renditions[0].languageTag)
+        assertEquals("ja", renditions[1].languageTag)
     }
 
     private fun audio(

@@ -2,7 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- The optional sandbox is only loaded on API 26+; older systems use WebView. -->
+    <uses-sdk tools:overrideLibrary="androidx.javascriptengine" />
+    <uses-feature android:name="android.software.picture_in_picture" android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Required by the Cast framework's merged manifest (route discovery);
          declared here so the permission is intentional and auditable. -->
@@ -29,6 +34,7 @@
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.App"
@@ -100,6 +106,7 @@
             android:name=".ui.about.AboutActivity"
             android:exported="false"
             android:theme="@style/Theme.App" />
+        <activity android:name=".gallery.GalleryActivity" android:exported="false" android:theme="@style/Theme.App" />
         <activity
             android:name=".downloader.ui.DownloadActionActivity"
             android:excludeFromRecents="true"
@@ -130,7 +137,7 @@
             android:foregroundServiceType="mediaPlayback" />
 
         <service
-            android:name=".downloader.work.DownloadUidtJobService"
+            android:name=".downloader.engine.DownloadUidtJobService"
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing"
             android:permission="android.permission.BIND_JOB_SERVICE" />

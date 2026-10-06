@@ -11,14 +11,16 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.UrlPolicy
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
-import com.hhst.youtubelite.downloader.share.DownloadShareParser
+import com.hhst.youtubelite.core.PipSupport
+import com.hhst.youtubelite.core.PipAutoEnter
+import com.hhst.youtubelite.downloader.core.DownloadShareParser
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -178,7 +180,7 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // API 31+ uses PictureInPictureParams.setAutoEnterEnabled.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+        if (!PipSupport.isSupported(this) || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
         if (SystemClock.elapsedRealtime() < PipAutoEnter.legacySuppressUntil) return
         if (PipAutoEnter.isSuppressed()) return
         if (pipEligible()) {
@@ -191,13 +193,16 @@ class MainActivity : ComponentActivity() {
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration,
     ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        }
         inPip.value = isInPictureInPictureMode
     }
 
     private fun pipEligible(): Boolean =
-        playerActive && playerPlaying && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
+        PipSupport.isSupported(this) && playerActive && playerPlaying && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun pipParams(autoEnter: Boolean): PictureInPictureParams {
         val (n, d) = PlayerUi.pipAspect(playerWidth, playerHeight)
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(n, d))
@@ -208,6 +213,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncPipParams() {
+        if (!PipSupport.isSupported(this)) return
         val (n, d) = PlayerUi.pipAspect(playerWidth, playerHeight)
         PipAutoEnter.apply(
             this,

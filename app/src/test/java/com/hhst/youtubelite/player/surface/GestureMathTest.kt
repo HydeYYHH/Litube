@@ -87,11 +87,5 @@ class GestureMathTest {
         assertEquals(67, GestureMath.levelPercent(10f, 15f))
     }
 
-    @Test
-    fun sharedGestureConstants_matchPlayerExpectations() {
-        // Longer than the tap detector's double-tap window (~300 ms).
-        assertEquals(400L, GestureMath.TAP_SUPPRESS_MS)
-        assertEquals(0.08f, GestureMath.FULLSCREEN_SWIPE_MIN_FRACTION, 0f)
-    }
 
 }

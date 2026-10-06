@@ -47,30 +47,13 @@ class MiniPlayerLayoutTest {
         assertEquals(0, MiniPlayerLayout.popupWidthPx(0, 1000))
     }
 
-    // -- swipe-down dismiss rule --
-
-    private val d = 2f // density
-
-    @Test
-    fun shouldDismiss_travelPastThreshold() {
-        // 96 dp * 2 = 192 px travel threshold.
-        assertTrue(MiniPlayerLayout.shouldDismiss(200f, 0f, 0f, d))
-        assertFalse(MiniPlayerLayout.shouldDismiss(150f, 0f, 0f, d))
+    @Test fun closeTarget_requiresWindowCenterInsideBothAxes() {
+        assertTrue(MiniPlayerLayout.hitsCloseTarget(200f, 750f, 152f, 714f, 248f, 786f))
+        assertFalse(MiniPlayerLayout.hitsCloseTarget(150f, 750f, 152f, 714f, 248f, 786f))
+        assertFalse(MiniPlayerLayout.hitsCloseTarget(200f, 800f, 152f, 714f, 248f, 786f))
+        assertFalse(MiniPlayerLayout.hitsCloseTarget(200f, 500f, 152f, 714f, 248f, 786f))
     }
-
-    @Test
-    fun shouldDismiss_flingBeatsShortTravel() {
-        // 700 dp/s * 2 = 1400 px/s fling threshold.
-        assertTrue(MiniPlayerLayout.shouldDismiss(10f, 0f, 1600f, d))
-        assertFalse(MiniPlayerLayout.shouldDismiss(10f, 0f, 1000f, d))
-    }
-
-    @Test
-    fun shouldDismiss_upwardOrHorizontalNeverDismisses() {
-        assertFalse(MiniPlayerLayout.shouldDismiss(-300f, 0f, 0f, d))
-        // More horizontal than vertical: a sideways drag, not a dismiss swipe.
-        assertFalse(MiniPlayerLayout.shouldDismiss(300f, 400f, 0f, d))
-        // Fling rule still requires the predominant-downward shape.
-        assertFalse(MiniPlayerLayout.shouldDismiss(10f, 400f, 1600f, d))
+    @Test fun closeTarget_rejectsInvalidOrUnmeasuredTarget() {
+        assertFalse(MiniPlayerLayout.hitsCloseTarget(0f, 0f, 0f, 0f, 0f, 0f))
     }
 }

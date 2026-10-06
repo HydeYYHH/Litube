@@ -65,10 +65,13 @@
 
   function cleanSourceHash() {
     if (!location.hash) return;
+    const oldURL = location.href;
     const clean = location.href.split('#')[0];
     if (clean === location.href) return;
     try {
       originalReplaceState.call(history, null, '', clean);
+      // replaceState does not notify hash-driven overlays that their route ended.
+      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL, newURL: clean }));
     } catch (e) {
       // Best-effort: replaceState can throw on cross-origin documents.
     }
@@ -85,7 +88,10 @@
   function maybeOpen(url) {
     if (typeof url !== 'string') return false;
     const nextUrl = absolute(url);
+    const path = new URL(nextUrl).pathname;
+    if (/^\/signin(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(path)) return false;
     const nextKind = kind(nextUrl);
+    if (nextKind === 'shorts' && window.Bridge?.shouldInheritShorts?.()) return false;
     if (nextKind === 'unknown' || nextKind === kind(location.href)) return false;
     openTab(nextUrl);
     return true;

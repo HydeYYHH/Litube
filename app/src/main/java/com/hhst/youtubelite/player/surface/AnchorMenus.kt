@@ -57,6 +57,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
@@ -172,8 +173,8 @@ private fun <T> OptionDropdown(
                 Text(
                     text = row.label,
                     modifier = Modifier.fillMaxWidth(),
-                    fontSize = 16.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = SettingsTokens.BodySize.sp,
+                    fontWeight = FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = when {
@@ -196,7 +197,7 @@ private fun <T> OptionDropdown(
                 Text(
                     text = extra.label,
                     modifier = Modifier.fillMaxWidth(),
-                    fontSize = 16.sp,
+                    fontSize = SettingsTokens.BodySize.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -287,14 +288,14 @@ private fun SegmentsDropdown(
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
-                        fontSize = 16.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = SettingsTokens.BodySize.sp,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                     )
                     Text(
                         PlayerUi.formatTime(startMs),
-                        fontSize = 13.sp,
+                        fontSize = SettingsTokens.DetailSize.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
@@ -326,13 +327,13 @@ private fun SegmentsDropdown(
                             .weight(1f)
                             .basicMarquee(iterations = Int.MAX_VALUE),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 16.sp,
+                        fontSize = SettingsTokens.BodySize.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                     )
                     Text(
                         PlayerUi.formatTime(segment.startMs),
-                        fontSize = 13.sp,
+                        fontSize = SettingsTokens.DetailSize.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
@@ -349,7 +350,7 @@ private fun SegmentsDropdown(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 15.sp,
+                    fontSize = SettingsTokens.BodySize.sp,
                     maxLines = 1,
                 )
             }
@@ -382,14 +383,14 @@ private fun SegmentPreviewDialog(
                     text = title,
                     modifier = Modifier.padding(top = 12.dp),
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = SettingsTokens.TitleSize.sp,
+                    fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = timeLabel,
                     modifier = Modifier.padding(top = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    fontSize = SettingsTokens.BodySize.sp,
                 )
             }
         },
@@ -427,7 +428,7 @@ private fun popupMenuWidth(labels: List<String>): Dp {
     // 16 dp horizontal padding × 2, plus slack so measurement cannot undershoot.
     val padPx = with(density) { 40.dp.toPx() }
     val measurer = rememberTextMeasurer()
-    val style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    val style = TextStyle(fontSize = SettingsTokens.BodySize.sp, fontWeight = FontWeight.Normal)
     val contentPx = remember(labels) {
         // Measuring every label janks first paint on videos with 100+
         // chapters. Within one text style, character count is a safe proxy

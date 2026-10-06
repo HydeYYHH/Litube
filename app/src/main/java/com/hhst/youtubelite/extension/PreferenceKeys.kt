@@ -2,6 +2,7 @@ package com.hhst.youtubelite.extension
 
 /** Preference keys and first-launch defaults. Strings match the existing MMKV layout. */
 object PreferenceKeys {
+    const val HAPTIC_STRENGTH = "haptic_strength"
     const val ENABLE_DISPLAY_DISLIKES = "enable_display_dislikes"
     const val ENABLE_HIDE_SHORTS = "enable_hide_shorts"
     const val REMEMBER_QUALITY = "remember_quality"

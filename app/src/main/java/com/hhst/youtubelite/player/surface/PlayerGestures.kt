@@ -6,6 +6,12 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -27,6 +33,8 @@ interface GestureCallbacks {
     fun onBrightness(delta: Float) {}
     fun onVolume(delta: Float) {}
     fun onFullscreenSwipe(up: Boolean) {}
+    fun onFullscreenSwipeProgress(distancePx: Float) {}
+    fun onFullscreenSwipeCancel() {}
     /** Finger up: overlays (edge sliders) clear. */
     fun onGestureEnd() {}
     /** Fullscreen pinch: multiplicative scale factor for this event. */
@@ -61,7 +69,9 @@ fun Modifier.playerGestures(
     verticalFeed: Boolean = false,
 ): Modifier = composed {
     val tapGuard = remember { TapGuard() }
+    var originInWindow by remember { mutableStateOf(Offset.Zero) }
     this
+        .onGloballyPositioned { originInWindow = it.positionInWindow() }
         .pointerInput(enabled, callbacks, zoomEnabled, restartKey, verticalFeed) {
             if (!enabled) return@pointerInput
             detectTapGestures(
@@ -84,7 +94,7 @@ fun Modifier.playerGestures(
         }
         .pointerInput(enabled, callbacks, zoomEnabled, restartKey, verticalFeed) {
             if (!enabled) return@pointerInput
-            awaitEachGesture { trackDrag(callbacks, zoneEnabled, tapGuard, zoomEnabled, verticalFeed) }
+            awaitEachGesture { trackDrag(callbacks, zoneEnabled, tapGuard, zoomEnabled, verticalFeed) { originInWindow } }
         }
 }
 
@@ -94,12 +104,15 @@ private suspend fun AwaitPointerEventScope.trackDrag(
     tapGuard: TapGuard,
     zoomEnabled: Boolean,
     verticalFeed: Boolean,
+    windowOffset: () -> Offset,
 ) {
     val down = awaitFirstDown(requireUnconsumed = false)
     // A consumed down belongs to a child (time bar, chrome button): tracking
     // it here would double-drive the same finger.
     if (down.isConsumed) return
     val start = down.position
+    val startInWindow = start + windowOffset()
+    var lastYInWindow = startInWindow.y
     val startTime = SystemClock.uptimeMillis()
     val width = size.width.toFloat()
     val height = size.height.toFloat()
@@ -151,6 +164,10 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         }
 
         val pressed = event.changes.filter { it.pressed }
+        if (pressed.size >= 2) {
+            callbacks.onFullscreenSwipeCancel()
+            if (!zoomEnabled) return
+        }
         if (zoomEnabled && pressed.size >= 2) {
             if (longPressActive) {
                 longPressActive = false
@@ -184,8 +201,12 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         if (!change.positionChanged()) continue
         if (zooming) continue
 
-        totalDx = change.position.x - start.x
-        totalDy = change.position.y - start.y
+        // The surface moves during fullscreen interpolation; track the finger in window space.
+        val inWindow = change.position + windowOffset()
+        totalDx = inWindow.x - startInWindow.x
+        totalDy = inWindow.y - startInWindow.y
+        val stepDy = inWindow.y - lastYInWindow
+        lastYInWindow = inWindow.y
         val slop = viewConfiguration.touchSlop
 
         if (longPressActive && max(abs(totalDx), abs(totalDy)) > slop) {
@@ -209,11 +230,12 @@ private suspend fun AwaitPointerEventScope.trackDrag(
                     GestureMath.DragMode.NONE -> GestureMath.DragMode.NONE
                 }
                 if (dragMode != GestureMath.DragMode.NONE) change.consume()
+                if (!verticalFeed && rawMode == GestureMath.DragMode.NONE &&
+                    zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onFullscreenSwipeProgress(totalDy)
             }
             continue
         }
 
-        val stepDy = change.position.y - change.previousPosition.y
         when (dragMode) {
             GestureMath.DragMode.SEEK ->
                 callbacks.onSeekPreview(GestureMath.seekOffsetMs(totalDx, width))
@@ -221,7 +243,8 @@ private suspend fun AwaitPointerEventScope.trackDrag(
                 callbacks.onBrightness(GestureMath.brightnessDelta(stepDy, height))
             GestureMath.DragMode.VOLUME ->
                 callbacks.onVolume(GestureMath.volumeDelta(stepDy, height))
-            GestureMath.DragMode.NONE -> {}
+            GestureMath.DragMode.NONE -> if (!verticalFeed && rawMode == GestureMath.DragMode.NONE &&
+                zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onFullscreenSwipeProgress(totalDy)
         }
         change.consume()
     }

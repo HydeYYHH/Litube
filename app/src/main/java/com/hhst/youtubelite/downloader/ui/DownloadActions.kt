@@ -7,8 +7,8 @@ import android.content.Intent
 import android.os.Bundle
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadTarget
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
-import com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler
+import com.hhst.youtubelite.core.PipAutoEnter
+import com.hhst.youtubelite.downloader.engine.BackgroundDownloadScheduler
 import com.hhst.youtubelite.extractor.Promise
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext

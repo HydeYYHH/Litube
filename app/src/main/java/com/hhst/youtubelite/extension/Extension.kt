@@ -4,7 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.hhst.youtubelite.R
 
-enum class ExtensionKind { GROUP, TOGGLE, NAV }
+enum class ExtensionKind { GROUP, TOGGLE, NAV, SLIDER }
 
 /** Settings catalog node: group (children), toggle (key), or navigation. */
 data class Extension(
@@ -20,12 +20,14 @@ data class Extension(
     val isNav: Boolean get() = kind == ExtensionKind.NAV
 
     companion object {
-        fun catalog(): List<Extension> = listOf(
+        fun catalog(pipSupported: Boolean = true): List<Extension> = listOf(
             group(
                 id = "interface",
                 title = R.string.interface_category,
                 icon = R.drawable.ic_settings,
                 children = listOf(
+                    Extension(id = PreferenceKeys.HAPTIC_STRENGTH, key = PreferenceKeys.HAPTIC_STRENGTH,
+                        title = R.string.haptic_strength, kind = ExtensionKind.SLIDER),
                     toggle(
                         PreferenceKeys.ENABLE_DISPLAY_DISLIKES,
                         R.string.display_dislikes,
@@ -89,8 +91,8 @@ data class Extension(
                 id = "background",
                 title = R.string.background_mini_player,
                 icon = R.drawable.ic_pip,
-                children = listOf(
-                    toggle(PreferenceKeys.ENABLE_PIP, R.string.pip),
+                children = listOfNotNull(
+                    if (pipSupported) toggle(PreferenceKeys.ENABLE_PIP, R.string.pip) else null,
                     toggle(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, R.string.in_app_mini_player),
                     toggle(PreferenceKeys.ENABLE_BACKGROUND_PLAY, R.string.background_play),
                 ),

@@ -30,11 +30,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.downloader.ui.DownloadEntries
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.ui.components.audioTrackLabel
 
 /** Player sheets: More + Queue. */
 sealed interface PlayerSheet {
@@ -191,7 +193,7 @@ fun PlayerDialogHost(
             title = stringResource(R.string.audio_track),
             rows = buildList<OptionRow<String>> {
                 add(OptionRow(null, stringResource(R.string.player_audio_default)))
-                state.audioTracks.forEach { add(OptionRow(it.key, it.label)) }
+                state.audioTracks.forEach { add(OptionRow(it.key, audioTrackLabel(it))) }
             },
             selected = state.audioTrackKey,
             onPick = { callbacks.onAudioTrack(it); onDismiss() },
@@ -260,7 +262,7 @@ private fun SheetTitle(text: String) {
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 16.dp),
         textAlign = TextAlign.Center,
-        fontSize = 18.sp,
+        fontSize = SettingsTokens.TitleSize.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface,
     )
@@ -286,7 +288,7 @@ private fun MoreRow(icon: Int, label: String, onClick: () -> Unit) {
         )
         Text(
             text = label,
-            fontSize = 16.sp,
+            fontSize = SettingsTokens.BodySize.sp,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )

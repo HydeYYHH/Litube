@@ -53,8 +53,7 @@
     return dislikesEnabled || showLikes;
   }
 
-  // Desktop ytd-* branches are inherited from the RYD extension and kept
-  // as a fallback for desktop-served pages, not dead code.
+  // Desktop ytd-* branches are the fallback for desktop-served pages.
   function getButtons() {
     if (isShorts()) {
       const elements = document.querySelectorAll(
@@ -93,6 +92,8 @@
     if (firstChild.tagName === "YTD-SEGMENTED-LIKE-DISLIKE-BUTTON-RENDERER") {
       return document.querySelector("#segmented-like-button") ?? firstChild.children[0] ?? null;
     }
+    if (isMobile && !isShorts()) return buttons.querySelector("like-button-view-model") ??
+      Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[0] ?? null;
     return buttons.querySelector("like-button-view-model") ?? firstChild;
   }
 
@@ -104,6 +105,8 @@
       if (firstChild.tagName === "YTD-SEGMENTED-LIKE-DISLIKE-BUTTON-RENDERER") {
         return document.querySelector("#segmented-dislike-button") ?? firstChild.children[1] ?? null;
       }
+      if (isMobile && !isShorts()) return buttons.querySelector("dislike-button-view-model") ??
+        Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[1] ?? null;
       return buttons.querySelector("dislike-button-view-model") ?? buttons.children[1] ?? null;
     } catch {
       return null;
@@ -111,23 +114,39 @@
   }
 
   // Find-or-create the count text node inside a like/dislike button.
-  function getCountTextContainer(button) {
+  const countControls = new WeakMap();
+  function getCountTextContainer(button, create = true) {
     if (!button) return null;
-    const existing =
-      button.querySelector(".button-renderer-text") ??
-      button.querySelector("#text") ??
-      button.getElementsByTagName("yt-formatted-string")[0] ??
-      button.querySelector("span[role='text']");
-    if (existing) return existing;
+    const owned = button.querySelector('[data-lite-vote-count]');
+    if (owned) return owned;
+    for (const existing of button.querySelectorAll(".button-renderer-text,#text,yt-formatted-string,span[role='text']")) {
+      // A reused text wrapper can also own the glyph; only edit plain labels.
+      if (!existing.closest('svg,c3-icon,animated-icon,lottie-component') &&
+          !existing.querySelector('svg,c3-icon,yt-icon,animated-icon,lottie-component,button')) return existing;
+    }
+    if (!create) return null;
     // Desktop segmented renderer hides the text; create it inside the button.
     const inner = button.querySelector("button");
     if (!inner) return null;
     const textSpan = document.createElement("span");
-    textSpan.id = "text";
-    textSpan.style.marginLeft = "6px";
+    textSpan.setAttribute('data-lite-vote-count', '');
+    textSpan.style.marginInlineStart = "6px";
     inner.appendChild(textSpan);
+    countControls.set(textSpan, { inner, width: inner.style.width, minWidth: inner.style.minWidth });
     inner.style.width = "auto";
+    inner.style.minWidth = "48px";
     return textSpan;
+  }
+
+  function restoreCount(container, original) {
+    if (!container) return;
+    const saved = countControls.get(container);
+    if (saved) {
+      saved.inner.style.width = saved.width;
+      saved.inner.style.minWidth = saved.minWidth;
+      container.remove();
+      countControls.delete(container);
+    } else if (original !== null) container.textContent = original;
   }
 
   function getDislikeTextContainer() {
@@ -135,10 +154,8 @@
   }
 
   function clearDislikeCount() {
-    const container = getDislikeTextContainer();
-    if (container && dislikeOriginalText !== null) {
-      container.textContent = dislikeOriginalText;
-    }
+    const container = getCountTextContainer(getDislikeButton(), false);
+    restoreCount(container, dislikeOriginalText);
     dislikeOriginalText = null;
   }
 
@@ -251,10 +268,8 @@
   function clearLikeCount() {
     if (!likeTextTouched) return;
     likeTextTouched = false;
-    const container = getLikeTextContainer();
-    if (container && likeOriginalText !== null) {
-      container.textContent = likeOriginalText;
-    }
+    const container = getCountTextContainer(getLikeButton(), false);
+    restoreCount(container, likeOriginalText);
     likeOriginalText = null;
   }
 
@@ -528,7 +543,8 @@
   function scheduleInitialize() {
     if (!anyEnabled()) return;
     // Same video with buttons already bound: nothing to do.
-    if (getVideoId() === activeVideoId && lastLikeButton && lastLikeButton.isConnected) {
+    if (getVideoId() === activeVideoId && lastLikeButton?.isConnected && lastDislikeButton?.isConnected &&
+        lastLikeButton === getLikeButton() && lastDislikeButton === getDislikeButton()) {
       return;
     }
     initToken += 1;
@@ -602,29 +618,11 @@
 
   window.__displayDislikes = { syncPreferences };
 
-  // The bridge can lag behind document-start injection (the same race
-  // player-hook.js init() retries for); without this the feature
-  // would stay off until the user next flips any preference.
-  let bridgeAttempts = 0;
-  function bridgeReady() {
-    const b = window.Bridge;
-    return !!(b && typeof b.getPreferences === "function");
-  }
-  function startWhenBridgeReady() {
-    if (bridgeReady()) {
-      syncPreferences();
-      return;
-    }
-    if (bridgeAttempts++ < 25) {
-      setTimeout(startWhenBridgeReady, 300);
-      return;
-    }
-    console.warn("[display-dislikes] bridge unavailable; re-reading prefs on next navigation");
-    window.addEventListener(
-      "yt-navigate-finish",
-      () => setTimeout(syncPreferences, 300),
-      { once: true, capture: true },
-    );
-  }
-  startWhenBridgeReady();
+  // The bridge can lag behind document-start injection; core.js polls
+  // for it and re-runs on the next navigation when it never arrives.
+  Lite.bridgeReady(() => {
+    if (typeof window.Bridge?.getPreferences !== "function") return false;
+    syncPreferences();
+    return true;
+  });
 })();

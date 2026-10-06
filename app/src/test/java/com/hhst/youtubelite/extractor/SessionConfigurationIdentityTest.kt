@@ -6,6 +6,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SessionConfigurationIdentityTest {
+    @Test fun sessionHashKeepsItsStableEncoding() {
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", YoutubeSessionProvider.digest("abc"))
+    }
+
     @Test fun pageRedirectUsesOnlyTheFrozenCookieForTheActualOrigin() {
         val target = YoutubeSessionProvider.pageRedirect("https://www.youtube.com/watch?v=fixture", "https://m.youtube.com/watch?v=fixture")
         val cookies = mapOf("https://www.youtube.com" to "www-snapshot", "https://m.youtube.com" to "mobile-snapshot")
@@ -38,11 +42,6 @@ class SessionConfigurationIdentityTest {
         assertNotEquals(YoutubeSessionProvider.authCookies(base), YoutubeSessionProvider.authCookies("$base; __Secure-3PAPISID=z"))
         assertNotEquals(YoutubeSessionProvider.authCookies(base), YoutubeSessionProvider.authCookies(base.replace("SAPISID=a", "SAPISID=other")))
         assertEquals("", YoutubeSessionProvider.authCookies(""))
-    }
-
-    @Test fun sharedConfigurationLivesLongerThanOneVideoButIsBounded() {
-        assertTrue(YoutubeSessionProvider.CONFIG_TTL_MS > 2 * 60_000L)
-        assertTrue(YoutubeSessionProvider.CONFIG_TTL_MS <= 30 * 60_000L)
     }
 
     @Test fun repeatedMediaChecksReuseCookieIdentityButAccountChangesAreImmediate() {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="__LANGUAGE__" dir="__DIRECTION__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -28,11 +28,13 @@ video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 <script>
 (function() {
     var manifestUrl = __MANIFEST_URL__;
+    var sourceError = __SOURCE_ERROR__;
+    var playbackError = __PLAYBACK_ERROR__;
     var video = document.getElementById('video');
     var errorEl = document.getElementById('error-msg');
 
     if (!manifestUrl || (manifestUrl.indexOf('http://') !== 0 && manifestUrl.indexOf('https://') !== 0)) {
-        errorEl.textContent = 'No manifest URL available.';
+        errorEl.textContent = sourceError;
         errorEl.style.display = 'block';
         video.style.display = 'none';
         return;
@@ -60,9 +62,9 @@ video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 
     function onError(e) {
         if (e.error && e.error.message) {
-            errorEl.textContent = 'Playback error: ' + e.error.message;
+            errorEl.textContent = playbackError + ': ' + e.error.message;
         } else {
-            errorEl.textContent = 'Playback error.';
+            errorEl.textContent = playbackError;
         }
         errorEl.style.display = 'block';
         stopProbe();

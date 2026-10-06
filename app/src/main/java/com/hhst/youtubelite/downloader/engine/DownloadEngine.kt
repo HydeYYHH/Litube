@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.downloader.engine
 
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.AssetSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
@@ -20,10 +21,10 @@ import com.hhst.youtubelite.downloader.core.TransferResult
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
 import com.hhst.youtubelite.downloader.io.DownloadFileNames
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ensureActive
 import java.io.File
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 
 enum class EngineStage {
     TRANSFER,
@@ -51,11 +52,14 @@ class DownloadEngine(
     suspend fun runFinalize(taskId: String) = run(taskId, EngineStage.FINALIZE)
 
     suspend fun run(taskId: String, stage: EngineStage) {
+        val started = System.nanoTime()
+        AppLog.event(AppLog.Category.DOWNLOADER, "execution_start", mapOf("task" to taskId, "stage" to stage))
         try {
             execute(taskId, stage)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (t: Throwable) {
+            AppLog.event(AppLog.Category.DOWNLOADER, "execution_failed", mapOf("task" to taskId, "stage" to stage), t)
             val snap = repository.transact { snapshot(taskId) } ?: return
             coordinator.reportExecution(
                 taskId,
@@ -63,6 +67,8 @@ class DownloadEngine(
                 DownloadStatus.FAILED,
                 errorMessage = t.message,
             )
+        } finally {
+            AppLog.event(AppLog.Category.DOWNLOADER, "execution_finished", mapOf("task" to taskId, "stage" to stage, "duration_ms" to (System.nanoTime() - started) / 1_000_000))
         }
     }
 

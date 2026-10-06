@@ -1,13 +1,12 @@
 package com.hhst.youtubelite.player.surface
 
-import androidx.compose.animation.core.Animatable
 import android.provider.Settings
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,12 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
@@ -41,8 +38,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -53,20 +53,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.GestureUi
-import kotlin.math.roundToInt
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private const val HINT_VERTICAL_BIAS = -0.5f
 
-/**
- * YouTube-style per-gesture overlays: double-tap arcs with triangle +
- * accumulated seconds, the 2x hold capsule, the scrub/timebar target bubble,
- * and vertical volume/brightness rails on the opposite edge from the hand.
- *
- * All overlays share the glass look — translucent surface + hairline border —
- * instead of a heavy black slab. Each overlay joins/leaves composition with
- * the gesture state itself, so there is no separate enter/exit transition.
- */
+/** Pointer-rate feedback is composed independently of the playback controls. */
 @Composable
 fun GestureOverlays(
     gestureState: State<GestureUi?>,
@@ -123,7 +115,7 @@ private fun GesturePill(
         modifier = modifier
             .background(PlayerUi.GlassBg, shape)
             .border(0.5.dp, PlayerUi.GlassStroke, shape)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 5.dp),
     ) { content() }
 }
 
@@ -230,8 +222,8 @@ private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modi
             Text(
                 text = PlayerUi.formatTime(state.targetMs),
                 color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
             )
             Text(
                 text = deltaLabel,
@@ -254,14 +246,14 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
     val percent = state.percent.coerceIn(0, 100)
     val fill = percent / 100f
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
-        val trackHeight = (maxHeight * 0.38f).coerceAtLeast(72.dp)
+        val trackHeight = (maxHeight * 0.26f).coerceIn(48.dp, 112.dp)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .background(PlayerUi.GlassBg, RoundedCornerShape(16.dp))
                 .border(0.5.dp, PlayerUi.GlassStroke, RoundedCornerShape(16.dp))
-                .padding(horizontal = 6.dp, vertical = 10.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
         ) {
             Icon(
                 painter = painterResource(icon),
@@ -290,7 +282,7 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
                 text = "$percent%",
                 color = Color.White,
                 fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 modifier = Modifier.widthIn(min = 36.dp),
@@ -325,7 +317,7 @@ fun SponsorCountdownCard(
             text = stringResource(R.string.cancel),
             color = Color.White,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier
                 .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
                 .padding(horizontal = 8.dp, vertical = 3.dp),
@@ -352,7 +344,7 @@ fun SponsorSkipChip(
             text = stringResource(if (highlight) R.string.jump else R.string.sponsor_skip_chip),
             color = Color.White,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
         )
         Icon(
             painter = painterResource(R.drawable.ic_next),

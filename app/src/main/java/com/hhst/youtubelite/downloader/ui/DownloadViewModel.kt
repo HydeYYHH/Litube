@@ -1,8 +1,8 @@
 package com.hhst.youtubelite.downloader.ui
 
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.viewModelScope
+import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DefaultDownloadPrefs
@@ -19,18 +19,19 @@ import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.downloader.core.RemoveMode
 import com.hhst.youtubelite.downloader.core.SnapshotReject
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
-import com.hhst.youtubelite.downloader.resolve.DownloadPlan
-import java.io.IOException
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
+import com.hhst.youtubelite.downloader.resolve.DownloadPlan
 import com.hhst.youtubelite.downloader.resolve.DownloadSelection
 import com.hhst.youtubelite.downloader.resolve.DownloadSelector
 import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
+import java.io.IOException
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import java.util.UUID
 
 /**
  * Thin facade over [DownloadCoordinator]. UI must not talk to Worker/Service/DB.
@@ -42,6 +43,7 @@ class DownloadViewModel(
     val prefs: DownloadPrefs = DefaultDownloadPrefs,
     private val interaction: DownloadInteraction = DownloadInteraction { },
     private val downloadHttp: OkHttpClient? = null,
+    private val haptics: HapticsController? = null,
 ) : ViewModel() {
 
     fun observeDownloads(filter: DownloadFilter = DownloadFilter()): Flow<List<DownloadItemUiState>> =
@@ -129,7 +131,7 @@ class DownloadViewModel(
      */
     suspend fun confirmSingle(request: DownloadRequest, persistPrefs: Boolean = true): EnqueueResult {
         if (persistPrefs) prefs.setLastConfig(request.config)
-        return coordinator.enqueue(request, UUID.randomUUID().toString())
+        return coordinator.enqueue(request, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
     }
 
     suspend fun confirmBatch(
@@ -139,7 +141,7 @@ class DownloadViewModel(
     ): EnqueueResult {
         DownloadSnapshotGuard.validate(snapshot)?.let { throw IllegalArgumentException(it.message) }
         if (persistPrefs) prefs.setLastConfig(snapshot.config)
-        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString())
+        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
     }
 
     fun pause(target: DownloadTarget) = viewModelScope.launch { coordinator.pause(target) }

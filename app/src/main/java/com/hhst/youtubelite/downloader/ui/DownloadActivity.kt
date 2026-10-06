@@ -6,7 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.hhst.youtubelite.downloader.pip.PipAutoEnter
+import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.ui.theme.AppTheme
 import org.koin.androidx.compose.koinViewModel
 

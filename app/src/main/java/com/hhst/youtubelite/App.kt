@@ -6,10 +6,11 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.di.appModule
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.downloader.engine.DownloadNetworkRestore
+import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
+import com.hhst.youtubelite.downloader.engine.KoinDownloadWorkerFactory
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
-import com.hhst.youtubelite.downloader.ui.DownloadUi
-import com.hhst.youtubelite.downloader.work.DownloadStartupReconciler
-import com.hhst.youtubelite.downloader.work.KoinDownloadWorkerFactory
 import com.hhst.youtubelite.extractor.EjsRuntimeProcess
 import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
@@ -26,6 +27,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
         Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         MMKV.initialize(this)

@@ -1,8 +1,6 @@
 package com.hhst.youtubelite.downloader.ui
 
 import android.content.ClipData
-import androidx.compose.ui.semantics.Role
-import androidx.compose.runtime.saveable.Saver
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -10,7 +8,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -49,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,18 +56,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
+import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.DownloadFilter
 import com.hhst.youtubelite.downloader.core.DownloadSettings
 import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.RemoveMode
+import com.hhst.youtubelite.ui.components.ConstrainedPage
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 sealed class DownloadDest {
     data object List : DownloadDest()
@@ -116,6 +121,7 @@ fun DownloadManagerScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val haptics: HapticsController = koinInject()
     var pendingDelete by remember { mutableStateOf<DownloadItemUiState?>(null) }
 
     fun handle(item: DownloadItemUiState, action: DownloadRowAction) {
@@ -128,6 +134,8 @@ fun DownloadManagerScreen(
         if (item.skipped && action != DownloadRowAction.DELETE && action != DownloadRowAction.COPY_ID) {
             return
         }
+        if (action in listOf(DownloadRowAction.PAUSE, DownloadRowAction.RESUME, DownloadRowAction.CANCEL, DownloadRowAction.RETRY, DownloadRowAction.REDOWNLOAD))
+            haptics.perform(HapticsController.Event.CONFIRM)
         when (action) {
             DownloadRowAction.PAUSE -> viewModel.pause(target)
             DownloadRowAction.RESUME -> viewModel.resume(target)
@@ -151,6 +159,7 @@ fun DownloadManagerScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
+                expandedHeight = settingsAppBarHeight(),
                 title = {
                     Text(
                         when (dest) {
@@ -195,31 +204,33 @@ fun DownloadManagerScreen(
             )
         },
     ) { padding ->
-        when (val current = dest) {
-            DownloadDest.List -> DownloadListPane(
-                viewModel = viewModel,
-                highlightTaskId = initialTaskId,
-                padding = padding,
-                onOpenBatch = { dest = DownloadDest.Batch(it) },
-                onAction = ::handle,
-            )
-            is DownloadDest.Batch -> DownloadBatchPane(
-                batchId = current.batchId,
-                viewModel = viewModel,
-                padding = padding,
-                onAction = ::handle,
-            )
-            DownloadDest.Settings -> DownloadSettingsPane(
-                viewModel = viewModel,
-                padding = padding,
-                onHistory = { dest = DownloadDest.History },
-            )
-            DownloadDest.History -> DownloadHistoryPane(
-                viewModel = viewModel,
-                padding = padding,
-                onAction = ::handle,
-                snackbar = snackbar,
-            )
+        ConstrainedPage {
+            when (val current = dest) {
+                DownloadDest.List -> DownloadListPane(
+                    viewModel = viewModel,
+                    highlightTaskId = initialTaskId,
+                    padding = padding,
+                    onOpenBatch = { dest = DownloadDest.Batch(it) },
+                    onAction = ::handle,
+                )
+                is DownloadDest.Batch -> DownloadBatchPane(
+                    batchId = current.batchId,
+                    viewModel = viewModel,
+                    padding = padding,
+                    onAction = ::handle,
+                )
+                DownloadDest.Settings -> DownloadSettingsPane(
+                    viewModel = viewModel,
+                    padding = padding,
+                    onHistory = { dest = DownloadDest.History },
+                )
+                DownloadDest.History -> DownloadHistoryPane(
+                    viewModel = viewModel,
+                    padding = padding,
+                    onAction = ::handle,
+                    snackbar = snackbar,
+                )
+            }
         }
     }
 
@@ -231,6 +242,7 @@ fun DownloadManagerScreen(
                     null -> DownloadTarget.Task(item.taskId)
                     else -> DownloadTarget.Item(id)
                 }
+                haptics.perform(HapticsController.Event.CONFIRM)
                 viewModel.remove(target, mode)
                 pendingDelete = null
             },
@@ -304,7 +316,7 @@ private fun EmptyDownloads() {
             Text(
                 text = stringResource(R.string.download_empty),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
+                fontSize = SettingsTokens.BodySize.sp,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -327,7 +339,7 @@ private fun DownloadBatchPane(
             text = batch?.name.orEmpty(),
             modifier = Modifier.padding(horizontal = DownloadTokens.PageInset, vertical = 12.dp),
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
+            fontSize = SettingsTokens.BodySize.sp,
         )
         if (stats != null && stats.total > 0) {
             val completedText = stringResource(R.string.download_batch_progress, stats.completed, stats.total)

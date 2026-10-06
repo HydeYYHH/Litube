@@ -18,6 +18,7 @@
     const href = link && link.href;
     const id = href && Lite.id(href);
     if (!id || id === Lite.id()) return;
+    if (/\/shorts(?:\/|$)/.test(new URL(href, location.href).pathname)) return;
     try { Lite.bridge()?.prepare?.(href); } catch {}
   }, true);
   const MEDIA_CONTEXT_BLOCK_MS = 400;
@@ -221,24 +222,15 @@
     }
     return base;
   }
-  window.__mediaHref = mediaHref;
-
-  /** Shorts vertical feed: native overlay swipes must move the page, not brightness. */
-  function shortsNav(dir) {
-    const step = dir >= 0 ? 1 : -1;
-    const scroller = document.querySelector(
-      'ytm-shorts, #shorts-container, #shorts-inner-container, ytm-reel-watch-fragment, #shorts-player',
-    );
-    if (scroller && typeof scroller.scrollBy === 'function') {
-      const h = scroller.clientHeight || window.innerHeight || 800;
-      scroller.scrollBy(0, step * h);
-      return 'ok';
-    }
-    return 'none';
-  }
-  window.__shortsNav = shortsNav;
 
   function sync(b) {
+    if (/^\/shorts(?:\/|$)/.test(location.pathname)) {
+      hideNative(b);
+      restorePagePlayer();
+      skipAdIfPlaying();
+      syncCompactPlayer(b);
+      return;
+    }
     trapWatchGestures();
     const id = Lite.id();
     if (id) {
@@ -648,12 +640,13 @@
 
   function sheetRoot() {
     return document.querySelector('.bottom-sheet-media-menu-item') ||
+      document.querySelector('.menu-content[role="dialog"]') ||
       document.querySelector('bottom-sheet-layout') ||
       document.querySelector('ytm-bottom-sheet-renderer') ||
       document.querySelector('ytm-app-bottom-sheet-layout');
   }
 
-  function styleQueueMenuItem(menuItem) {
+  function styleQueueMenuItem(menuItem, template) {
     const menuButton = SHEET_BUTTONS.map((selector) => menuItem.querySelector(selector))
       .find((node) => node instanceof Element);
     if (!(menuButton instanceof Element)) return false;
@@ -669,17 +662,7 @@
       menuButton.appendChild(menuText);
     }
     const label = Lite.text('addToQueue');
-    if (menuItem.querySelector('svg')) {
-      Lite.icon(menuItem, Lite.queueIcon);
-      Lite.fit(menuItem);
-    } else {
-      const iconHost = menuItem.querySelector('.yt-spec-button-shape-next__icon');
-      if (iconHost instanceof Element && !iconHost.querySelector('svg')) {
-        iconHost.appendChild(Lite.svg(Lite.queueIcon));
-      } else if (!menuItem.querySelector('svg')) {
-        menuButton.prepend(Lite.svg(Lite.queueIcon));
-      }
-    }
+    Lite.menuIcon(menuItem, Lite.queueIcon, template);
     menuText.textContent = label;
     menuButton.setAttribute('aria-label', label);
     return true;
@@ -705,12 +688,9 @@
       return true;
     }
     let item = existing[0];
+    const template = Array.from(menuContainer.children).reverse().find(
+      child => child instanceof Element && !child.hasAttribute('data-injected') && isSheetItem(child));
     if (!(item instanceof Element)) {
-      const template = Array.from(menuContainer.children)
-        .reverse()
-        .find((child) => child instanceof Element &&
-          child.getAttribute('data-injected') !== 'queue-item' &&
-          isSheetItem(child)) || menuContainer.lastElementChild;
       if (!(template instanceof Element)) {
         warnSelectorMiss('sheet-menu-item');
         return false;
@@ -719,7 +699,7 @@
       item.setAttribute('data-injected', 'queue-item');
     }
     item.dataset.queuePayload = JSON.stringify(payload);
-    if (!styleQueueMenuItem(item)) return false;
+    if (!styleQueueMenuItem(item, template)) return false;
     if (item.parentElement !== menuContainer || item !== menuContainer.firstElementChild) {
       menuContainer.insertBefore(item, menuContainer.firstElementChild);
     }

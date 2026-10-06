@@ -9,8 +9,6 @@ import java.io.IOException
 import android.webkit.WebView
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
-import org.schabi.newpipe.extractor.services.youtube.PoTokenProvider as NpPoTokenProvider
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -22,10 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class Extractor(
     downloader: HttpDownloader,
     private val cache: Cache,
-    poToken: NpPoTokenProvider? = null,
-    private val clientOrder: ClientOrderStore? = null,
     private val scope: CoroutineScope = Promise.DEFAULT_SCOPE,
-    private val playerCache: PlayerCache? = null,
     private val host: YoutubeExtractionHost? = null,
 ) {
     private val inFlight = ConcurrentHashMap<String, Inflight>()
@@ -42,10 +37,6 @@ class Extractor(
 
     init {
         NewPipe.init(downloader)
-        if (host == null && poToken != null) {
-            YoutubeStreamExtractor.setPoTokenProvider(poToken)
-        }
-        if (host == null) clientOrder?.load()
     }
 
     /**
@@ -80,7 +71,7 @@ class Extractor(
                 if (!preparation) existing.claim()
                 existing to false
             } else {
-                val createdSlot = Inflight.create(id, cache, scope, clientOrder, streamEpochs, host,
+                val createdSlot = Inflight.create(id, cache, scope, streamEpochs, host,
                     catalog = catalog, demand = demand, preparation = preparation)
                 inFlight[key] = createdSlot
                 createdSlot to true
@@ -130,7 +121,6 @@ class Extractor(
             id,
             StreamWriteDisabledCache(cache),
             scope,
-            clientOrder,
             streamEpochs,
             host,
             true,
@@ -158,9 +148,6 @@ class Extractor(
             streamEpochs.bumpUnlocked(id)
             cache.invalidateStream(id)
             host?.invalidateStream(id)
-            // The WebView-side raw /player response is stale too: page retries and
-            // replays must not replay the evicted URLs.
-            playerCache?.invalidate(id)
             inFlight.entries.removeIf { it.value.id == id && it.value.epoch < streamEpochs.epochFor(id) }
         }
     }
@@ -198,7 +185,6 @@ private class Inflight(
             id: String,
             cache: Cache,
             scope: CoroutineScope,
-            clientOrder: ClientOrderStore?,
             streamEpochs: StreamEpochGuard,
             host: YoutubeExtractionHost? = null,
             fresh: Boolean = false,
@@ -220,7 +206,7 @@ private class Inflight(
                 if (host != null) ({ activeContext() }) else null
             val scopedCache = if (host != null) host.cache(cache) { activeContext() } else cache
             val resolvedCache = if (fresh) StreamWriteDisabledCache(scopedCache) else scopedCache
-            val player = PlayerPage.shared(id, scope, clientOrder, contextFactory, host?.plans,
+            val player = PlayerPage.shared(id, scope, contextFactory, host?.plans,
                 if (host != null && !fresh) ({ createContext(true) }) else null)
             val streamCache = EpochGuardedCache(resolvedCache, id, epoch, streamEpochs)
             val extraction = Extraction(
@@ -246,7 +232,7 @@ private class Inflight(
 
 /**
  * Download 403 refresh must not persist googlevideo URLs into the playback
- * stream cache or reuse [PlayerCache] as download storage.
+ * stream cache.
  */
 internal class StreamWriteDisabledCache(
     private val inner: Cache,

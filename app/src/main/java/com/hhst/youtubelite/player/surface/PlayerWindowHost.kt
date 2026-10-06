@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.core.PipSupport
 import kotlin.math.roundToInt
 
 /**
@@ -73,9 +74,9 @@ class PlayerWindowHost(
     }
 
     override fun onPip() {
-        // minSdk 26: PictureInPictureParams exists everywhere.
         if (!pipAvailable()) return
         val act = activity ?: return
+        if (!PipSupport.isSupported(act)) return
         val (w, h) = videoSize()
         val (n, d) = PlayerUi.pipAspect(w, h)
         val params = PictureInPictureParams.Builder()

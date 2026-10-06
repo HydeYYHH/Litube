@@ -4,8 +4,8 @@ package com.hhst.youtubelite.downloader.android
 import androidx.media3.common.MimeTypes
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.downloader.core.MuxResult
-import com.hhst.youtubelite.downloader.io.MediaSampleIo
-import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.MediaFileIo
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -26,10 +26,10 @@ class FragmentedMuxAndroidTest {
             }
             val result = DownloadFinalizerImpl().muxAndVerify(listOf(input), output, audioOnly)
             assertTrue("mux $result", result is MuxResult.Ok)
-            val tracks = MediaSampleIo.extract(output)
-            assertEquals(null, MediaSampleIo.verify(tracks, audioOnly))
-            assertTrue(tracks.any { it.mime == MimeTypes.AUDIO_AAC && it.samples.isNotEmpty() })
-            if (!audioOnly) assertTrue(tracks.any { it.mime == MimeTypes.VIDEO_H264 && it.samples.isNotEmpty() })
+            val tracks = MediaFileIo.scan(output)
+            assertEquals(null, MediaFileIo.verify(tracks, audioOnly))
+            assertTrue(tracks.any { it.mime == MimeTypes.AUDIO_AAC && it.sampleCount > 0L })
+            if (!audioOnly) assertTrue(tracks.any { it.mime == MimeTypes.VIDEO_H264 && it.sampleCount > 0L })
             else assertEquals(1, tracks.size)
         } finally { input.delete(); output.delete() }
     }

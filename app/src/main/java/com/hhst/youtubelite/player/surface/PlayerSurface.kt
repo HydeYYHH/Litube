@@ -52,7 +52,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.player.GestureUi
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
@@ -96,6 +95,7 @@ fun PlayerSurface(
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
+    val fullscreenSwipe = LocalFullscreenSwipeHandle.current
     val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
     // The stable local host resizes the same view between embedded and mini.
     // Fullscreen and system PiP keep their separate window geometries.
@@ -311,7 +311,7 @@ fun PlayerSurface(
                             locked = state.locked,
                             fullscreen = state.fullscreen,
                             zoom = zoom,
-                            shortsFeed = PageKind.isShorts(state.url) && !state.mini,
+                            fullscreenSwipe = fullscreenSwipe,
                         ),
                         zoneEnabled = { zone ->
                             if (state.casting && zone == GestureMath.GestureZone.BRIGHTNESS) {
@@ -323,8 +323,7 @@ fun PlayerSurface(
                         enabled = !pip,
                         zoomEnabled = state.fullscreen && !state.locked &&
                             !state.mini && !state.casting && !pip,
-                        restartKey = state.casting to (PageKind.isShorts(state.url) && !state.mini),
-                        verticalFeed = PageKind.isShorts(state.url) && !state.mini,
+                        restartKey = state.casting,
                     ),
             ) {
                 val showChrome = state.controlsVisible && !state.locked && !pip
@@ -554,14 +553,14 @@ private fun rememberGestureCallbacks(
     locked: Boolean,
     fullscreen: Boolean,
     zoom: VideoZoom,
-    shortsFeed: Boolean,
-): GestureCallbacks = remember(callbacks, locked, fullscreen, zoom, shortsFeed) {
+    fullscreenSwipe: FullscreenSwipeHandle?,
+): GestureCallbacks = remember(callbacks, locked, fullscreen, zoom, fullscreenSwipe) {
     if (locked) {
         object : GestureCallbacks {
             override fun onTap() = Unit
         }
     } else {
-        ForwardingGestures(callbacks, fullscreen, zoom, shortsFeed)
+        ForwardingGestures(callbacks, fullscreen, zoom, fullscreenSwipe)
     }
 }
 
@@ -570,7 +569,7 @@ private class ForwardingGestures(
     private val c: PlayerSurfaceCallbacks,
     private val fullscreen: Boolean,
     private val zoom: VideoZoom,
-    private val shortsFeed: Boolean,
+    private val fullscreenSwipe: FullscreenSwipeHandle?,
 ) : GestureCallbacks {
     override fun onTap() = c.onToggleControls()
     override fun onDoubleTapSeek(offsetMs: Long) = c.onDoubleTapSeek(offsetMs)
@@ -581,13 +580,14 @@ private class ForwardingGestures(
     override fun onSeekCommit(offsetMs: Long) = c.onScrubCommit(offsetMs)
     override fun onBrightness(delta: Float) = c.onBrightness(delta)
     override fun onVolume(delta: Float) = c.onVolume(delta)
-    override fun onGestureEnd() = c.onGestureEnd()
+    override fun onGestureEnd() { fullscreenSwipe?.end?.invoke(false); c.onGestureEnd() }
+    override fun onFullscreenSwipeProgress(distancePx: Float) { fullscreenSwipe?.drag?.invoke(distancePx) }
+    override fun onFullscreenSwipeCancel() { fullscreenSwipe?.end?.invoke(false) }
     override fun onFullscreenSwipe(up: Boolean) {
-        if (shortsFeed) {
-            c.onShortsSwipe(up)
-            return
+        if (up != fullscreen) {
+            fullscreenSwipe?.end?.invoke(true)
+            c.onFullscreenToggle()
         }
-        if (up != fullscreen) c.onFullscreenToggle()
     }
     override fun onZoomScale(factor: Float) = zoom.applyScale(factor)
     override fun onZoomPan(dx: Float, dy: Float) = zoom.applyPan(dx, dy)

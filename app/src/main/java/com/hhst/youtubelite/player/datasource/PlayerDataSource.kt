@@ -12,7 +12,6 @@ import java.security.MessageDigest
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.extractor.Format
 import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
@@ -177,7 +176,7 @@ private class SessionCheckedDataSource(
 ) : DataSource by inner {
     private var nextCheck = 0L
     override fun open(dataSpec: DataSpec): Long {
-        if (plan.expiresAtMillis <= System.currentTimeMillis()) throw java.io.IOException("MEDIA_URL_EXPIRED")
+        if (plan.expiresAtMillis <= System.currentTimeMillis()) throw IOException("MEDIA_URL_EXPIRED")
         nextCheck = 0L
         checkSession()
         return inner.open(dataSpec)
@@ -189,7 +188,7 @@ private class SessionCheckedDataSource(
     private fun checkSession() {
         val now = SystemClock.elapsedRealtime()
         if (now >= nextCheck) {
-            if (!current()) throw java.io.IOException("MEDIA_SESSION_CHANGED")
+            if (!current()) throw IOException("MEDIA_SESSION_CHANGED")
             nextCheck = now + 100
         }
     }

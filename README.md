@@ -3,6 +3,8 @@ Litube
 
 Litube is an advanced WebView wrapper for YouTube.
 
+Requires Android 6.0 (API 23) or later and an up-to-date Android System WebView. Picture-in-Picture is available on Android 8.0 or later when the device supports it.
+
 ## Releases
 See the following release notes for details.
 

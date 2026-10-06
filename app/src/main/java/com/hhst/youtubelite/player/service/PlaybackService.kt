@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -89,16 +90,18 @@ class PlaybackService : Service() {
         super.onCreate()
         destroyed = false
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.player_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = getString(R.string.player_channel_desc)
-            setShowBadge(false)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.player_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(R.string.player_channel_desc)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager?.createNotificationChannel(channel)
         }
-        notificationManager?.createNotificationChannel(channel)
         startForegroundSafely(placeholderNotification())
     }
 
@@ -265,7 +268,7 @@ class PlaybackService : Service() {
         // Reject late thumbnail posts now (see [hidden]); removeCallbacks in
         // onDestroy may run after the queued post has already fired.
         hidden = true
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         notificationManager?.cancel(NOTIFICATION_ID)
         recycleArt()
         stopSelf()
@@ -421,7 +424,7 @@ class PlaybackService : Service() {
             return
         }
         super.onTaskRemoved(rootIntent)
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -429,7 +432,7 @@ class PlaybackService : Service() {
         destroyed = true
         mainHandler.removeCallbacksAndMessages(null)
         executor.shutdownNow()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         session?.release()
         session = null
         recycleArt()

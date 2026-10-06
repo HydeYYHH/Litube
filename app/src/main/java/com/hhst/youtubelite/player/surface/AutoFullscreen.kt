@@ -1,7 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 /**
- * Auto-fullscreen rules, extracted so the sensor listener stays dumb.
+ * Auto-fullscreen rules, kept separate from the sensor listener.
  *
  * Enter: watch is visible, system auto-rotate is on, the phone is physically
  * landscape, and nothing (mini / PiP / cast / lock / a fresh manual exit)

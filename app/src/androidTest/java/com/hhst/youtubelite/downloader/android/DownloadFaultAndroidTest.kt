@@ -36,16 +36,16 @@ import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
 import com.hhst.youtubelite.downloader.notify.DownloadNotificationPayload
-import com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl
-import com.hhst.youtubelite.downloader.publish.createPublishBackend
+import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
+import com.hhst.youtubelite.downloader.io.createPublishBackend
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.ui.DownloadActivity
 import com.hhst.youtubelite.downloader.ui.DownloadActions
-import com.hhst.youtubelite.downloader.work.BackgroundDownloadScheduler
-import com.hhst.youtubelite.downloader.work.DownloadStartupReconciler
-import com.hhst.youtubelite.downloader.work.DownloadWorkNames
+import com.hhst.youtubelite.downloader.engine.BackgroundDownloadScheduler
+import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
+import com.hhst.youtubelite.downloader.engine.DownloadWorkNames
 import com.hhst.youtubelite.extractor.Format
 import java.io.File
 import java.net.ConnectException
@@ -67,6 +67,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -545,6 +546,8 @@ class DownloadFaultAndroidTest {
 
     @Test
     fun liveYoutube_enqueueOnce_recordsStartOrBlocked() = runBlocking {
+        assumeTrue("Supply -e network=1 for live-network enqueue acceptance",
+            InstrumentationRegistry.getArguments().getString("network") == "1")
         waitDownloadReady()
         val koin = GlobalContext.get()
         val coordinator = koin.get<DownloadCoordinator>()

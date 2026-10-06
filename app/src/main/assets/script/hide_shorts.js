@@ -127,29 +127,11 @@
     window.addEventListener("preferencesChanged", syncPreferences, true);
     window.__hideShorts = { syncPreferences };
 
-    // The bridge can lag behind document-start injection; this script
-    // has no navigation listener, so without a retry it would stay off until
-    // a preference changes.
-    let bridgeAttempts = 0;
-    function bridgeReady() {
-        const bridge = window.Bridge;
-        return !!bridge && typeof bridge.getPreferences === "function";
-    }
-    function startWhenBridgeReady() {
-        if (bridgeReady()) {
-            syncPreferences();
-            return;
-        }
-        if (bridgeAttempts++ < 25) {
-            setTimeout(startWhenBridgeReady, 300);
-            return;
-        }
-        console.warn("[hide-shorts] bridge unavailable; re-reading prefs on next navigation");
-        window.addEventListener(
-            "yt-navigate-finish",
-            () => setTimeout(syncPreferences, 300),
-            { once: true, capture: true },
-        );
-    }
-    startWhenBridgeReady();
+    // The bridge can lag behind document-start injection; core.js polls
+    // for it and re-runs on the next navigation when it never arrives.
+    Lite.bridgeReady(() => {
+        if (typeof window.Bridge?.getPreferences !== "function") return false;
+        syncPreferences();
+        return true;
+    });
 })();

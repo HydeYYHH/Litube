@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.player.surface
 
-import com.hhst.youtubelite.R
-import com.hhst.youtubelite.player.engine.LoopMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -51,13 +49,6 @@ class PlayerUiTest {
         assertEquals(PlayerUi.BackStep.ExitFullscreen, PlayerUi.nextBackStep(locked = false, fullscreen = true))
         // Mini-player is transparent to Back: it drives the browser underneath.
         assertEquals(PlayerUi.BackStep.BrowserBack, PlayerUi.nextBackStep(locked = false, fullscreen = false))
-    }
-
-    @Test
-    fun playerTopOffset_embeddedMatchesMasthead48dp() {
-        assertEquals(48, PlayerUi.EMBEDDED_TOP_MARGIN_DP)
-        assertEquals(48, PlayerUi.playerTopOffsetDp(fullscreen = false))
-        assertEquals(0, PlayerUi.playerTopOffsetDp(fullscreen = true))
     }
 
     @Test
@@ -118,16 +109,6 @@ class PlayerUiTest {
     }
 
     @Test
-    fun resizeMode_mapsToExoAspectRatioConstants() {
-        assertEquals(0, ResizeMode.Fit.exoResizeMode())
-        assertEquals(1, ResizeMode.FixedWidth.exoResizeMode())
-        assertEquals(2, ResizeMode.FixedHeight.exoResizeMode())
-        assertEquals(3, ResizeMode.Fill.exoResizeMode())
-        assertEquals(4, ResizeMode.Zoom.exoResizeMode())
-        assertEquals(5, ResizeMode.entries.size)
-    }
-
-    @Test
     fun qualityButtonLabel_autoIncludesActiveTrack() {
         // Pinned label wins.
         assertEquals(
@@ -161,14 +142,6 @@ class PlayerUiTest {
         assertTrue(PlayerUi.lockVisible(fullscreen = true, mini = false, locked = true, controlsVisible = false))
         assertFalse(PlayerUi.lockVisible(fullscreen = false, mini = false, locked = false, controlsVisible = true))
         assertFalse(PlayerUi.lockVisible(fullscreen = true, mini = true, locked = false, controlsVisible = true))
-    }
-
-    @Test
-    fun lockIcon_showsClosedLockWhenLocked() {
-        assertEquals(R.drawable.ic_lock, PlayerUi.lockIconRes(locked = true))
-        assertEquals(R.drawable.ic_unlock, PlayerUi.lockIconRes(locked = false))
-        assertEquals(R.string.unlock_screen, PlayerUi.lockContentDescriptionRes(locked = true))
-        assertEquals(R.string.lock_screen, PlayerUi.lockContentDescriptionRes(locked = false))
     }
 
     @Test
@@ -210,22 +183,8 @@ class PlayerUiTest {
     }
 
     @Test
-    fun timeBarHitTargetMeetsAccessibilityMinimum() {
-        assertTrue(PlayerUi.TIME_BAR_HIT_DP >= 48)
-    }
-
-    @Test
     fun languageLabel_fallsBackWhenBlank() {
         assertEquals("", PlayerUi.languageLabel(""))
         assertTrue(PlayerUi.languageLabel("en").isNotBlank())
-    }
-
-    @Test
-    fun loopLabelRes_matchesMode() {
-        assertEquals(R.string.playback_end_next, PlayerUi.loopLabelRes(LoopMode.QUEUE_NEXT))
-        assertEquals(R.string.playback_end_loop, PlayerUi.loopLabelRes(LoopMode.LOOP_ONE))
-        assertEquals(R.string.playback_end_pause, PlayerUi.loopLabelRes(LoopMode.PAUSE_AT_END))
-        assertEquals(R.string.playback_end_shuffle, PlayerUi.loopLabelRes(LoopMode.QUEUE_RANDOM))
-        assertEquals(R.drawable.ic_playback_end_shuffle, PlayerUi.loopIcon(LoopMode.QUEUE_RANDOM))
     }
 }

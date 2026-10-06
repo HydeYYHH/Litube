@@ -1,0 +1,709 @@
+[
+  {
+    "tag": "af",
+    "aliases": [
+      "af"
+    ],
+    "download": "Laai af",
+    "haptic_strength": "Vibrasiesterkte"
+  },
+  {
+    "tag": "am",
+    "aliases": [
+      "am"
+    ],
+    "download": "አውርድ",
+    "haptic_strength": "የንዝረት ጥንካሬ"
+  },
+  {
+    "tag": "ar",
+    "aliases": [
+      "ar"
+    ],
+    "download": "تنزيل",
+    "haptic_strength": "شدة الاهتزاز"
+  },
+  {
+    "tag": "as",
+    "aliases": [
+      "as"
+    ],
+    "download": "ডাউনলোড কৰক",
+    "haptic_strength": "কম্পনৰ শক্তি"
+  },
+  {
+    "tag": "az",
+    "aliases": [
+      "az"
+    ],
+    "download": "Yüklə",
+    "haptic_strength": "Vibrasiya gücü"
+  },
+  {
+    "tag": "be",
+    "aliases": [
+      "be"
+    ],
+    "download": "Спампаваць",
+    "haptic_strength": "Сіла вібрацыі"
+  },
+  {
+    "tag": "bg",
+    "aliases": [
+      "bg"
+    ],
+    "download": "Изтегляне",
+    "haptic_strength": "Сила на вибрацията"
+  },
+  {
+    "tag": "bn",
+    "aliases": [
+      "bn"
+    ],
+    "download": "ডাউনলোড করুন",
+    "haptic_strength": "কম্পন শক্তি"
+  },
+  {
+    "tag": "bs",
+    "aliases": [
+      "bs"
+    ],
+    "download": "Preuzmi",
+    "haptic_strength": "Jačina vibracije"
+  },
+  {
+    "tag": "ca",
+    "aliases": [
+      "ca"
+    ],
+    "download": "Descarrega",
+    "haptic_strength": "Intensitat de vibració"
+  },
+  {
+    "tag": "ceb",
+    "aliases": [
+      "ceb"
+    ],
+    "download": "Pag-download",
+    "haptic_strength": "Kusog sa vibration"
+  },
+  {
+    "tag": "cs",
+    "aliases": [
+      "cs"
+    ],
+    "download": "Stáhnout",
+    "haptic_strength": "Intenzita vibrací"
+  },
+  {
+    "tag": "cy",
+    "aliases": [
+      "cy"
+    ],
+    "download": "Lawrlwytho",
+    "haptic_strength": "Cryfder dirgryniad"
+  },
+  {
+    "tag": "da",
+    "aliases": [
+      "da"
+    ],
+    "download": "Download",
+    "haptic_strength": "Vibrationsstyrke"
+  },
+  {
+    "tag": "de",
+    "aliases": [
+      "de"
+    ],
+    "download": "Herunterladen",
+    "haptic_strength": "Haptikstärke"
+  },
+  {
+    "tag": "el",
+    "aliases": [
+      "el"
+    ],
+    "download": "Λήψη",
+    "haptic_strength": "Ένταση δόνησης"
+  },
+  {
+    "tag": "en",
+    "aliases": [
+      "en"
+    ],
+    "download": "Download",
+    "haptic_strength": "Haptic strength"
+  },
+  {
+    "tag": "es",
+    "aliases": [
+      "es"
+    ],
+    "download": "Descargar",
+    "haptic_strength": "Intensidad de vibración"
+  },
+  {
+    "tag": "es-419",
+    "aliases": [
+      "es-419"
+    ],
+    "download": "Descargar",
+    "haptic_strength": "Intensidad de vibración"
+  },
+  {
+    "tag": "et",
+    "aliases": [
+      "et"
+    ],
+    "download": "Laadi alla",
+    "haptic_strength": "Vibratsiooni tugevus"
+  },
+  {
+    "tag": "eu",
+    "aliases": [
+      "eu"
+    ],
+    "download": "Deskargatu",
+    "haptic_strength": "Bibrazioaren indarra"
+  },
+  {
+    "tag": "fa",
+    "aliases": [
+      "fa"
+    ],
+    "download": "دانلود کنید",
+    "haptic_strength": "شدت لرزش"
+  },
+  {
+    "tag": "fi",
+    "aliases": [
+      "fi"
+    ],
+    "download": "Lataa",
+    "haptic_strength": "Värinän voimakkuus"
+  },
+  {
+    "tag": "fil",
+    "aliases": [
+      "fil"
+    ],
+    "download": "I-download",
+    "haptic_strength": "Lakas ng vibration"
+  },
+  {
+    "tag": "fr",
+    "aliases": [
+      "fr"
+    ],
+    "download": "Télécharger",
+    "haptic_strength": "Intensité des vibrations"
+  },
+  {
+    "tag": "ga",
+    "aliases": [
+      "ga"
+    ],
+    "download": "Íoslódáil",
+    "haptic_strength": "Neart creatha"
+  },
+  {
+    "tag": "gl",
+    "aliases": [
+      "gl"
+    ],
+    "download": "Descargar",
+    "haptic_strength": "Intensidade da vibración"
+  },
+  {
+    "tag": "gu",
+    "aliases": [
+      "gu"
+    ],
+    "download": "ડાઉનલોડ કરો",
+    "haptic_strength": "કંપન શક્તિ"
+  },
+  {
+    "tag": "ha",
+    "aliases": [
+      "ha"
+    ],
+    "download": "Zazzagewa",
+    "haptic_strength": "Ƙarfin girgiza"
+  },
+  {
+    "tag": "iw",
+    "aliases": [
+      "he"
+    ],
+    "download": "הורד",
+    "haptic_strength": "עוצמת רטט"
+  },
+  {
+    "tag": "hi",
+    "aliases": [
+      "hi"
+    ],
+    "download": "डाउनलोड",
+    "haptic_strength": "वाइब्रेशन की तीव्रता"
+  },
+  {
+    "tag": "hr",
+    "aliases": [
+      "hr"
+    ],
+    "download": "Preuzimanje",
+    "haptic_strength": "Jačina vibracije"
+  },
+  {
+    "tag": "hu",
+    "aliases": [
+      "hu"
+    ],
+    "download": "Letöltés",
+    "haptic_strength": "Rezgés erőssége"
+  },
+  {
+    "tag": "hy",
+    "aliases": [
+      "hy"
+    ],
+    "download": "Ներբեռնել",
+    "haptic_strength": "Թրթռման ուժը"
+  },
+  {
+    "tag": "in",
+    "aliases": [
+      "id"
+    ],
+    "download": "Download",
+    "haptic_strength": "Intensitas getaran"
+  },
+  {
+    "tag": "ig",
+    "aliases": [
+      "ig"
+    ],
+    "download": "Budata",
+    "haptic_strength": "Ike ịma jijiji"
+  },
+  {
+    "tag": "is",
+    "aliases": [
+      "is"
+    ],
+    "download": "Sækja",
+    "haptic_strength": "Titringsstyrkur"
+  },
+  {
+    "tag": "it",
+    "aliases": [
+      "it"
+    ],
+    "download": "Scarica",
+    "haptic_strength": "Intensità vibrazione"
+  },
+  {
+    "tag": "ja",
+    "aliases": [
+      "ja"
+    ],
+    "download": "ダウンロード",
+    "haptic_strength": "触覚フィードバックの強さ"
+  },
+  {
+    "tag": "jv",
+    "aliases": [
+      "jv"
+    ],
+    "download": "Ngundhuh",
+    "haptic_strength": "Kuwat geter"
+  },
+  {
+    "tag": "ka",
+    "aliases": [
+      "ka"
+    ],
+    "download": "ჩამოტვირთვა",
+    "haptic_strength": "ვიბრაციის სიძლიერე"
+  },
+  {
+    "tag": "kk",
+    "aliases": [
+      "kk"
+    ],
+    "download": "Жүктеп алу",
+    "haptic_strength": "Діріл күші"
+  },
+  {
+    "tag": "km",
+    "aliases": [
+      "km"
+    ],
+    "download": "ទាញយក",
+    "haptic_strength": "កម្លាំងរំញ័រ"
+  },
+  {
+    "tag": "kn",
+    "aliases": [
+      "kn"
+    ],
+    "download": "ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
+    "haptic_strength": "ಕಂಪನ ಶಕ್ತಿ"
+  },
+  {
+    "tag": "ko",
+    "aliases": [
+      "ko"
+    ],
+    "download": "다운로드",
+    "haptic_strength": "햅틱 강도"
+  },
+  {
+    "tag": "ky",
+    "aliases": [
+      "ky"
+    ],
+    "download": "Жүктөп алуу",
+    "haptic_strength": "Титирөө күчү"
+  },
+  {
+    "tag": "lo",
+    "aliases": [
+      "lo"
+    ],
+    "download": "ດາວໂຫຼດ",
+    "haptic_strength": "ຄວາມແຮງສັ່ນສະເທືອນ"
+  },
+  {
+    "tag": "lt",
+    "aliases": [
+      "lt"
+    ],
+    "download": "Atsisiųsti",
+    "haptic_strength": "Vibracijos stiprumas"
+  },
+  {
+    "tag": "lv",
+    "aliases": [
+      "lv"
+    ],
+    "download": "Lejupielādēt",
+    "haptic_strength": "Vibrācijas stiprums"
+  },
+  {
+    "tag": "mk",
+    "aliases": [
+      "mk"
+    ],
+    "download": "Преземи",
+    "haptic_strength": "Јачина на вибрации"
+  },
+  {
+    "tag": "ml",
+    "aliases": [
+      "ml"
+    ],
+    "download": "ഡൗൺലോഡ് ചെയ്യുക",
+    "haptic_strength": "വൈബ്രേഷൻ ശക്തി"
+  },
+  {
+    "tag": "mn",
+    "aliases": [
+      "mn"
+    ],
+    "download": "Татаж авах",
+    "haptic_strength": "Чичиргээний хүч"
+  },
+  {
+    "tag": "mr",
+    "aliases": [
+      "mr"
+    ],
+    "download": "डाउनलोड करा",
+    "haptic_strength": "कंपन शक्ती"
+  },
+  {
+    "tag": "ms",
+    "aliases": [
+      "ms"
+    ],
+    "download": "Muat turun",
+    "haptic_strength": "Kekuatan getaran"
+  },
+  {
+    "tag": "my",
+    "aliases": [
+      "my"
+    ],
+    "download": "ဒေါင်းလုဒ်",
+    "haptic_strength": "တုန်ခါမှုစွမ်းအား"
+  },
+  {
+    "tag": "nb",
+    "aliases": [
+      "nb"
+    ],
+    "download": "Last ned",
+    "haptic_strength": "Vibrasjonsstyrke"
+  },
+  {
+    "tag": "ne",
+    "aliases": [
+      "ne"
+    ],
+    "download": "डाउनलोड गर्नुहोस्",
+    "haptic_strength": "कम्पन शक्ति"
+  },
+  {
+    "tag": "nl",
+    "aliases": [
+      "nl"
+    ],
+    "download": "Downloaden",
+    "haptic_strength": "Trilsterkte"
+  },
+  {
+    "tag": "or",
+    "aliases": [
+      "or"
+    ],
+    "download": "ଡାଉନଲୋଡ୍ କରନ୍ତୁ |",
+    "haptic_strength": "କମ୍ପନ ଶକ୍ତି |"
+  },
+  {
+    "tag": "pa",
+    "aliases": [
+      "pa"
+    ],
+    "download": "ਡਾਊਨਲੋਡ ਕਰੋ",
+    "haptic_strength": "ਵਾਈਬ੍ਰੇਸ਼ਨ ਤਾਕਤ"
+  },
+  {
+    "tag": "pl",
+    "aliases": [
+      "pl"
+    ],
+    "download": "Pobierz",
+    "haptic_strength": "Siła wibracji"
+  },
+  {
+    "tag": "ps",
+    "aliases": [
+      "ps"
+    ],
+    "download": "ډاونلوډ کړئ",
+    "haptic_strength": "د کمپن ځواک"
+  },
+  {
+    "tag": "pt-BR",
+    "aliases": [
+      "pt"
+    ],
+    "download": "Baixar",
+    "haptic_strength": "Intensidade da vibração"
+  },
+  {
+    "tag": "pt-PT",
+    "aliases": [
+      "pt-PT"
+    ],
+    "download": "Transferir",
+    "haptic_strength": "Intensidade da vibração"
+  },
+  {
+    "tag": "ro",
+    "aliases": [
+      "ro"
+    ],
+    "download": "Descărcați",
+    "haptic_strength": "Intensitatea vibrației"
+  },
+  {
+    "tag": "ru",
+    "aliases": [
+      "ru"
+    ],
+    "download": "Скачать",
+    "haptic_strength": "Сила виброотклика"
+  },
+  {
+    "tag": "si",
+    "aliases": [
+      "si"
+    ],
+    "download": "බාගන්න",
+    "haptic_strength": "කම්පන ශක්තිය"
+  },
+  {
+    "tag": "sk",
+    "aliases": [
+      "sk"
+    ],
+    "download": "Stiahnite si",
+    "haptic_strength": "Intenzita vibrácií"
+  },
+  {
+    "tag": "sl",
+    "aliases": [
+      "sl"
+    ],
+    "download": "Prenos",
+    "haptic_strength": "Moč vibriranja"
+  },
+  {
+    "tag": "so",
+    "aliases": [
+      "so"
+    ],
+    "download": "Download",
+    "haptic_strength": "Xoogga gariirka"
+  },
+  {
+    "tag": "sq",
+    "aliases": [
+      "sq"
+    ],
+    "download": "Shkarko",
+    "haptic_strength": "Fuqia e dridhjes"
+  },
+  {
+    "tag": "sr",
+    "aliases": [
+      "sr"
+    ],
+    "download": "Преузми",
+    "haptic_strength": "Јачина вибрације"
+  },
+  {
+    "tag": "sr-Latn",
+    "aliases": [
+      "sr-Latn"
+    ],
+    "download": "Preuzmi",
+    "haptic_strength": "Jačina vibracije"
+  },
+  {
+    "tag": "su",
+    "aliases": [
+      "su"
+    ],
+    "download": "Ngundeur",
+    "haptic_strength": "Kakuatan geter"
+  },
+  {
+    "tag": "sv",
+    "aliases": [
+      "sv"
+    ],
+    "download": "Ladda ner",
+    "haptic_strength": "Vibrationsstyrka"
+  },
+  {
+    "tag": "sw",
+    "aliases": [
+      "sw"
+    ],
+    "download": "Pakua",
+    "haptic_strength": "Nguvu ya mtetemo"
+  },
+  {
+    "tag": "ta",
+    "aliases": [
+      "ta"
+    ],
+    "download": "பதிவிறக்கு",
+    "haptic_strength": "அதிர்வு வலிமை"
+  },
+  {
+    "tag": "te",
+    "aliases": [
+      "te"
+    ],
+    "download": "డౌన్‌లోడ్ చేయండి",
+    "haptic_strength": "కంపన బలం"
+  },
+  {
+    "tag": "th",
+    "aliases": [
+      "th"
+    ],
+    "download": "ดาวน์โหลด",
+    "haptic_strength": "ความแรงการสั่น"
+  },
+  {
+    "tag": "tr",
+    "aliases": [
+      "tr"
+    ],
+    "download": "İndir",
+    "haptic_strength": "Titreşim gücü"
+  },
+  {
+    "tag": "uk",
+    "aliases": [
+      "uk"
+    ],
+    "download": "Завантажити",
+    "haptic_strength": "Сила вібрації"
+  },
+  {
+    "tag": "ur",
+    "aliases": [
+      "ur"
+    ],
+    "download": "ڈاؤن لوڈ",
+    "haptic_strength": "کمپن کی طاقت"
+  },
+  {
+    "tag": "uz",
+    "aliases": [
+      "uz"
+    ],
+    "download": "Yuklab olish",
+    "haptic_strength": "Tebranish kuchi"
+  },
+  {
+    "tag": "vi",
+    "aliases": [
+      "vi"
+    ],
+    "download": "Tải xuống",
+    "haptic_strength": "Cường độ rung"
+  },
+  {
+    "tag": "yo",
+    "aliases": [
+      "yo"
+    ],
+    "download": "Ṣe igbasilẹ",
+    "haptic_strength": "Agbara gbigbọn"
+  },
+  {
+    "tag": "zh-Hans",
+    "aliases": [
+      "zh"
+    ],
+    "download": "下载",
+    "haptic_strength": "触感强度"
+  },
+  {
+    "tag": "zh-Hant",
+    "aliases": [
+      "zh-HK",
+      "zh-Hant",
+      "zh-MO",
+      "zh-TW"
+    ],
+    "download": "下載",
+    "haptic_strength": "觸覺回饋強度"
+  },
+  {
+    "tag": "zu",
+    "aliases": [
+      "zu"
+    ],
+    "download": "Landa",
+    "haptic_strength": "Amandla okudlidliza"
+  }
+]

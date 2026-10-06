@@ -21,7 +21,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import androidx.core.net.toUri
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
@@ -46,7 +45,6 @@ class YoutubeHttpDataSource private constructor(
     private var responseCode = 0
     private var bytesToRead = 0L
     private var bytesRead = 0L
-    private var requestNumber = 0L
     private var activePlan: RequestPlan? = null
     private var windowRead = 0L
     private var windowLimit = 0L
@@ -459,7 +457,6 @@ class YoutubeHttpDataSource private constructor(
         private const val MAX_REDIRECTS = 20
         private val REDIRECT_CODES = setOf(300, 301, 302, 303, 307, 308)
         private val REDIRECT_CODES_GET_FALLBACK = setOf(300, 301, 302, 303)
-        private val RN_PARAM = Regex("[?&]rn=")
         /** media3's C.LENGTH_UNSET is the int -1; this is the long form used by DataSpec lengths. */
         private const val LENGTH_UNSET: Long = C.LENGTH_UNSET.toLong()
 

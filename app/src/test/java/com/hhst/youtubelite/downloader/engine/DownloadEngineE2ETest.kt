@@ -12,11 +12,11 @@ import com.hhst.youtubelite.downloader.core.SeqIdFactory
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
-import com.hhst.youtubelite.downloader.mux.DownloadFinalizerImpl
+import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
 import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
-import com.hhst.youtubelite.downloader.publish.DownloadPublisherImpl
-import com.hhst.youtubelite.downloader.publish.LocalPublishBackend
+import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
+import com.hhst.youtubelite.downloader.io.LocalPublishBackend
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl

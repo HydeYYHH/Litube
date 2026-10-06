@@ -15,13 +15,13 @@ object PageKind {
         Constants.PAGE_LIBRARY,
     )
 
-    /** Native player overlays these surfaces (watch, live/embed, shorts). */
+    /** Native player overlays watch, live and embed pages. */
     fun isPlayerSurface(kind: String?): Boolean =
-        kind == Constants.PAGE_WATCH || kind == Constants.PAGE_SHORTS
+        kind == Constants.PAGE_WATCH
 
     /** True when [url] is a /shorts/ URL (case-insensitive). */
     fun isShorts(url: String?): Boolean =
-        url != null && url.contains("/shorts/", ignoreCase = true)
+        of(url) == Constants.PAGE_SHORTS
 
     fun of(url: String?): String {
         if (url.isNullOrBlank()) return "unknown"

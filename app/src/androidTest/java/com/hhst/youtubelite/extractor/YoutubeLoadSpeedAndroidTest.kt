@@ -1,9 +1,7 @@
 package com.hhst.youtubelite.extractor
 
 import android.os.Bundle
-import com.hhst.youtubelite.player.engine.mediaBufferBudgetBytes
 import com.hhst.youtubelite.player.engine.defaultLoadControl
-import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import android.os.SystemClock
@@ -22,11 +20,11 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
-import com.hhst.youtubelite.player.engine.defaultLoadControl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
@@ -51,7 +49,8 @@ class YoutubeLoadSpeedAndroidTest {
                 host.setTurnScreenOn(true)
             }
         }
-        val ids = args.getString("videoIds", "jNQXAC9IVRw,aqz-KE-bpKQ").split(',').mapNotNull(VideoId::parse)
+        val ids = args.getString("videoIds").orEmpty().split(',').mapNotNull(VideoId::parse)
+        assumeTrue("Supply -e videoIds id1,id2 for real-network load-speed benchmarking", ids.isNotEmpty())
         val extractor = GlobalContext.get().get<Extractor>()
         val diagnostics = GlobalContext.get().get<ExtractionDiagnostics>()
         // startup=off is the A/B control: manifest variant order and the uncapped selector.

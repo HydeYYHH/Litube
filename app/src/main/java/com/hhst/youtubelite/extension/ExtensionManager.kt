@@ -50,6 +50,8 @@ class ExtensionManager(private val store: PrefStore) {
 
     fun resetToDefault() {
         val changedKeys = mutableListOf<String>()
+        if (hapticStrength() != 30) changedKeys += PreferenceKeys.HAPTIC_STRENGTH
+        store.putLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), 30L)
         for ((key, value) in PreferenceKeys.DEFAULTS) {
             val pref = prefKey(key)
             if (!store.contains(pref) || store.getBool(pref, value) != value) {
@@ -65,6 +67,16 @@ class ExtensionManager(private val store: PrefStore) {
 
     fun allPreferences(): Map<String, Boolean> =
         PreferenceKeys.DEFAULTS.keys.associateWith { isEnabled(it) }
+
+    fun hapticStrength(): Int = store.getLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), 30L).coerceIn(0, 100).toInt()
+
+    fun setHapticStrength(value: Int) {
+        val next = value.coerceIn(0, 100)
+        if (next == hapticStrength()) return
+        store.putLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), next.toLong())
+        bumpVersion()
+        notifyChanged(PreferenceKeys.HAPTIC_STRENGTH)
+    }
 
     fun version(): Long = store.getLong(KEY_VERSION, 0L)
 

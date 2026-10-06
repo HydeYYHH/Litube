@@ -4,9 +4,11 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
 import com.google.gson.Gson
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.VideoId
+import com.hhst.youtubelite.gallery.GalleryImages
 import java.util.concurrent.atomic.AtomicLong
 
 /** Player operations callable from injected page scripts. */
@@ -75,6 +77,11 @@ class Bridge(
     /** Owning browser tab; stamped onto every player callback. */
     private val tabId: Long = 0L,
     private val gson: Gson = Gson(),
+    private val canPlay: () -> Boolean = { true },
+    private val inheritShorts: () -> Boolean = { false },
+    private val onShortsAutoplayBlocked: (String, String) -> Unit = { _, _ -> },
+    private val isActive: () -> Boolean = { true },
+    private val onGallery: (List<String>, Int) -> Unit = { _, _ -> },
 ) {
     /** Minimal shape the page's add-to-queue payload must have. */
     data class QueueItemJson(
@@ -93,6 +100,26 @@ class Bridge(
     }
 
     fun pageOrigin(): PageOrigin = PageOrigin(tabId, documentGeneration.get())
+    @JavascriptInterface fun shouldInheritShorts(): Boolean = inheritShorts()
+    @JavascriptInterface fun shortsAutoplayBlocked(url: String?, reason: String?) {
+        if (url == null || !UrlPolicy.isAllowedUrl(url) || !PageKind.isShorts(url)) return
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin()) onShortsAutoplayBlocked(url, reason.orEmpty().take(120)) }
+    }
+    @JavascriptInterface fun shortsAudioReady(url: String?) {
+        if (url == null || !UrlPolicy.isAllowedUrl(url) || !PageKind.isShorts(url)) return
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin() && isActive())
+            AppLog.event(AppLog.Category.PLAYER,
+                "shorts_audio_ready", mapOf("tab" to tabId, "source_webview" to inheritShorts())) }
+    }
+    @JavascriptInterface fun gallery(json: String?, index: Int) {
+        if (json == null || json.length > 32768) return
+        val urls = runCatching { gson.fromJson(json, Array<String>::class.java).toList() }.getOrNull() ?: return
+        if (urls.size !in 1..30 || index !in urls.indices || urls.any { !GalleryImages.allowed(it) }) return
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin() && isActive()) onGallery(urls, index) }
+    }
     @JavascriptInterface fun currentDocumentGeneration(): Long = documentGeneration.get()
     @JavascriptInterface fun currentExtractionSession(): String = extractor?.sessionStamp().orEmpty()
 
@@ -185,16 +212,16 @@ class Bridge(
 
     @JavascriptInterface
     fun prepare(url: String?) {
-        if (url == null || mediaIdOf(url) == null) return
+        if (url == null || PageKind.isShorts(url) || mediaIdOf(url) == null) return
         val origin = pageOrigin()
-        main.post { if (origin == pageOrigin()) playerHooks?.prepareVideo(url) }
+        main.post { if (origin == pageOrigin() && canPlay()) playerHooks?.prepareVideo(url) }
     }
 
     @JavascriptInterface
     fun play(url: String?) {
-        if (url == null || mediaIdOf(url) == null) return
+        if (url == null || PageKind.isShorts(url) || mediaIdOf(url) == null) return
         val origin = pageOrigin()
-        main.post { playerHooks?.playVideo(url, origin) }
+        main.post { if (origin == pageOrigin() && canPlay()) playerHooks?.playVideo(url, origin) }
     }
 
     @JavascriptInterface

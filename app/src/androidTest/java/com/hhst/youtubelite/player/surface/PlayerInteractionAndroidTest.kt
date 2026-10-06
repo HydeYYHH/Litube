@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.surface
 
 import android.view.SurfaceView
+import android.os.Build
+import android.provider.Settings
 import com.hhst.youtubelite.downloader.android.DeviceEvidence
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -13,15 +15,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.GestureUi
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.ui.theme.AppTheme
 import com.tencent.mmkv.MMKV
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import java.lang.reflect.Proxy
@@ -50,9 +54,9 @@ class PlayerInteractionAndroidTest {
         compose.mainClock.autoAdvance = false
         val gesture = mutableStateOf<GestureUi?>(GestureUi.DoubleTapSeek(true, 10_000))
         compose.setContent { AppTheme {
-            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).align(Alignment.Center)
-                    .background(androidx.compose.ui.graphics.Color(0xFF242424)).testTag("gesture-frame")) {
+                    .background(Color(0xFF242424)).testTag("gesture-frame")) {
                     GestureOverlays(gesture, Modifier.fillMaxSize())
                 }
             }
@@ -60,17 +64,20 @@ class PlayerInteractionAndroidTest {
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithContentDescription(">>").assertIsDisplayed()
         compose.onNodeWithText("+10s").assertIsDisplayed()
-        val before = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
-        compose.mainClock.advanceTimeBy(200)
-        val after = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
-        var changedPixels = 0
-        for (y in 0 until minOf(before.height, after.height)) for (x in 0 until minOf(before.width, after.width)) {
-            if (before[x, y] != after[x, y]) changedPixels++
-        }
-        val animations = android.provider.Settings.Global.getFloat(compose.activity.contentResolver,
-            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
-        if (animations) assertTrue("Animated arrows did not move or fade", changedPixels > 5)
-        else assertEquals("Disabled animations must keep static arrows", 0, changedPixels)
+        val animations = Settings.Global.getFloat(compose.activity.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+        // Window pixel capture requires API 26; text and layout checks run on all versions.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val before = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
+            compose.mainClock.advanceTimeBy(200)
+            val after = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
+            var changedPixels = 0
+            for (y in 0 until minOf(before.height, after.height)) for (x in 0 until minOf(before.width, after.width)) {
+                if (before[x, y] != after[x, y]) changedPixels++
+            }
+            if (animations) assertTrue("Animated arrows did not move or fade", changedPixels > 5)
+            else assertEquals("Disabled animations must keep static arrows", 0, changedPixels)
+        } else compose.mainClock.advanceTimeBy(200)
         compose.runOnIdle { gesture.value = GestureUi.DoubleTapSeek(true, 30_000) }
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithContentDescription(">>").assertIsDisplayed()
@@ -91,14 +98,16 @@ class PlayerInteractionAndroidTest {
         speed.assertIsDisplayed()
         val frame = compose.onNodeWithTag("gesture-frame").fetchSemanticsNode().boundsInRoot
         assertTrue(speed.fetchSemanticsNode().boundsInRoot.top < frame.top + frame.height * .25f)
-        val speedBefore = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
-        compose.mainClock.advanceTimeBy(200)
-        val speedAfter = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
-        var speedChanges = 0
-        for (y in 0 until speedBefore.height) for (x in 0 until speedBefore.width) {
-            if (speedBefore[x,y] != speedAfter[x,y]) speedChanges++
-        }
-        if (animations) assertTrue(speedChanges > 5) else assertEquals(0, speedChanges)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val speedBefore = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
+            compose.mainClock.advanceTimeBy(200)
+            val speedAfter = compose.onNodeWithContentDescription(">>").captureToImage().toPixelMap()
+            var speedChanges = 0
+            for (y in 0 until speedBefore.height) for (x in 0 until speedBefore.width) {
+                if (speedBefore[x,y] != speedAfter[x,y]) speedChanges++
+            }
+            if (animations) assertTrue(speedChanges > 5) else assertEquals(0, speedChanges)
+        } else compose.mainClock.advanceTimeBy(200)
         DeviceEvidence.captureScene("youtube-speed-hold")
         compose.runOnIdle { gesture.value = null }
         compose.mainClock.advanceTimeByFrame()
@@ -247,6 +256,8 @@ class PlayerInteractionAndroidTest {
 
     @androidx.media3.common.util.UnstableApi
     @Test fun decodedPlaybackContinuesThroughMiniAndRestoreWithoutSurfaceReplacement() {
+        assumeTrue("Supply -e network=1 for live-network playback acceptance",
+            InstrumentationRegistry.getArguments().getString("network") == "1")
         val extraction = GlobalContext.get().get<Extractor>().extract("jNQXAC9IVRw")
         val source = runBlocking {
             GlobalContext.get().get<MediaSourceResolver>().resolve(extraction.stream.await(), extraction.metadata.await())

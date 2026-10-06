@@ -10,23 +10,27 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,8 +51,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.extension.Extension
+import com.hhst.youtubelite.extension.ExtensionKind
+import com.hhst.youtubelite.ui.components.ConstrainedPage
+import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 private val ExpandSpec = spring<IntSize>(
     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -68,6 +78,7 @@ fun ExtensionScreen(
     onNavigate: (String) -> Unit = {},
     viewModel: ExtensionViewModel = koinViewModel(),
 ) {
+    val haptics: HapticsController = koinInject()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showReset by remember { mutableStateOf(false) }
     val iconTint = MaterialTheme.colorScheme.onSurface
@@ -79,7 +90,8 @@ fun ExtensionScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.extension)) },
+                title = { Text(stringResource(R.string.extension), style = MaterialTheme.typography.titleLarge) },
+                expandedHeight = settingsAppBarHeight(),
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(
@@ -107,32 +119,37 @@ fun ExtensionScreen(
             )
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
-            items(
-                items = uiState.sections,
-                key = { it.id },
-            ) { section ->
-                if (section.isNav) {
-                    NavRow(
-                        node = section,
-                        depth = 0,
-                        onClick = { onNavigate(section.id) },
-                    )
-                } else {
-                    GroupBlock(
-                        node = section,
-                        depth = 0,
-                        expanded = uiState.expanded,
-                        toggles = uiState.toggles,
-                        onToggleExpand = viewModel::toggleExpanded,
-                        onToggle = viewModel::setEnabled,
-                        onNavigate = onNavigate,
-                    )
+        ConstrainedPage(Modifier.padding(padding), maxWidth = 720.dp) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(top = SettingsTokens.GroupGap, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(SettingsTokens.GroupGap),
+            ) {
+                items(
+                    items = uiState.sections,
+                    key = { it.id },
+                ) { section ->
+                    if (section.isNav) {
+                        NavRow(
+                            node = section,
+                            depth = 0,
+                            onClick = { onNavigate(section.id) },
+                        )
+                    } else {
+                        GroupBlock(
+                            node = section,
+                            depth = 0,
+                            expanded = uiState.expanded,
+                            toggles = uiState.toggles,
+                            onToggleExpand = viewModel::toggleExpanded,
+                            onToggle = { key, enabled -> viewModel.setEnabled(key, enabled); haptics.perform(HapticsController.Event.SELECTION) },
+                            strength = uiState.hapticStrength,
+                            onStrength = viewModel::setHapticStrength,
+                            onPreview = { haptics.perform(HapticsController.Event.SELECTION) },
+                            onNavigate = onNavigate,
+                        )
+                    }
                 }
             }
         }
@@ -181,25 +198,31 @@ private fun GroupBlock(
     onToggleExpand: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onNavigate: (String) -> Unit,
+    strength: Int,
+    onStrength: (Int) -> Unit,
+    onPreview: () -> Unit,
 ) {
     val open = node.id in expanded
-    val startPad = 16.dp + (depth * 12).dp
+    val startPad = SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = SettingsTokens.RowHeight)
             .clickable(role = Role.Button) { onToggleExpand(node.id) }
-            .padding(start = startPad, end = 16.dp, top = 14.dp, bottom = 14.dp),
+            .padding(start = startPad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (node.icon != 0) {
-            Icon(
+            Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
                 painter = painterResource(node.icon),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(14.dp))
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(SettingsTokens.IconSize),
+            ) }
+            Spacer(Modifier.width(SettingsTokens.LabelGap))
+        } else {
+            Spacer(Modifier.width(SettingsTokens.PageInset))
         }
         Text(
             text = stringResource(node.title),
@@ -207,14 +230,14 @@ private fun GroupBlock(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
-        Icon(
+        Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
             painter = painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(20.dp)
+                .size(SettingsTokens.IconSize)
                 .rotate(if (open) 90f else 0f),
-        )
+        ) }
     }
 
     AnimatedVisibility(
@@ -232,6 +255,9 @@ private fun GroupBlock(
                         toggles = toggles,
                         onToggleExpand = onToggleExpand,
                         onToggle = onToggle,
+                        strength = strength,
+                        onStrength = onStrength,
+                        onPreview = onPreview,
                         onNavigate = onNavigate,
                     )
                 } else if (child.isNav) {
@@ -240,6 +266,14 @@ private fun GroupBlock(
                         depth = depth + 1,
                         onClick = { onNavigate(child.id) },
                     )
+                } else if (child.kind == ExtensionKind.SLIDER) {
+                    Column(Modifier.fillMaxWidth().padding(start = startPad + SettingsTokens.PageInset,
+                        end = SettingsTokens.PageInset, top = SettingsTokens.RowPadding, bottom = SettingsTokens.RowPadding)) {
+                        Text(stringResource(child.title), style = MaterialTheme.typography.bodyMedium)
+                        Text(if (strength == 0) stringResource(R.string.haptics_off) else "$strength%", style = MaterialTheme.typography.bodySmall)
+                        Slider(value = strength.toFloat(), onValueChange = { onStrength(it.toInt()) },
+                            valueRange = 0f..100f, onValueChangeFinished = onPreview)
+                    }
                 } else {
                     val key = child.key ?: continue
                     ToggleRow(
@@ -261,22 +295,25 @@ private fun NavRow(
     depth: Int,
     onClick: () -> Unit,
 ) {
-    val startPad = 16.dp + (depth * 12).dp
+    val startPad = SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = SettingsTokens.RowHeight)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = startPad, end = 16.dp, top = 14.dp, bottom = 14.dp),
+            .padding(start = startPad),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (node.icon != 0) {
-            Icon(
+            Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
                 painter = painterResource(node.icon),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(14.dp))
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(SettingsTokens.IconSize),
+            ) }
+            Spacer(Modifier.width(SettingsTokens.LabelGap))
+        } else {
+            Spacer(Modifier.width(SettingsTokens.PageInset))
         }
         Text(
             text = stringResource(node.title),
@@ -284,12 +321,12 @@ private fun NavRow(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
-        Icon(
+        Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
             painter = painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
+            modifier = Modifier.size(SettingsTokens.IconSize),
+        ) }
     }
 }
 
@@ -301,12 +338,14 @@ private fun ToggleRow(
     depth: Int,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val startPad = 16.dp + (depth * 12).dp
+    val startPad = SettingsTokens.PageInset + SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Switch) { onCheckedChange(!checked) }
-            .padding(start = startPad, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            .heightIn(min = SettingsTokens.RowHeight)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(start = startPad, end = SettingsTokens.PageInset,
+                top = SettingsTokens.RowPadding, bottom = SettingsTokens.RowPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -326,7 +365,7 @@ private fun ToggleRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null,
         )
     }
 }

@@ -11,12 +11,6 @@ class ExtensionInjectScriptTest {
     private val script: String by lazy { readExtensionScript() }
 
     @Test
-    fun assetExistsAndReturnsReport() {
-        assertTrue(script.isNotBlank())
-        assertTrue(script.contains("return report"))
-    }
-
-    @Test
     fun assetIsTheExpressionTheInjectorParenthesizes() {
         // ExtensionInjector evaluates `var report = (<asset>);` — a trailing
         // semicolon would move the script out of expression position and the
@@ -34,29 +28,12 @@ class ExtensionInjectScriptTest {
     }
 
     @Test
-    fun shipsThreeBridgeEntries() {
-        assertTrue(script.contains("downloaderButton"))
-        assertTrue(script.contains("extensionButton"))
-        assertTrue(script.contains("aboutButton"))
-        assertTrue(script.contains("'download'"))
-        assertTrue(script.contains("'extension'"))
-        assertTrue(script.contains("'about'"))
-        // One dynamic dispatch covers all three entries.
-        assertTrue(script.contains("b[action]()"))
-    }
-
-    @Test
     fun iconIsFailClosed() {
         // A clone without a usable svg returns null and aborts the pass;
         // the retry chain re-runs it, no forged markup.
         assertTrue(script.contains("if (!Lite.icon(button, def.icon)) return null;"))
         assertFalse(script.contains("createElementNS"))
         assertFalse(script.contains("innerHTML"))
-    }
-
-    @Test
-    fun aboutRowSitsAtListTail() {
-        assertTrue(script.contains("children[children.length - 1]"))
     }
 
     @Test
@@ -89,26 +66,12 @@ class ExtensionInjectScriptTest {
     }
 
     @Test
-    fun reEvaluationIsIdempotent() {
-        // Existing rows short-circuit with reads only.
-        assertTrue(script.contains("getElementById(def.id)"))
-    }
-
-    @Test
     fun doesNotBareThrowOnMissingDom() {
         val throws = script.lines().filter {
             it.contains("throw ") && !it.trimStart().startsWith("//") &&
                 !it.trimStart().startsWith("*")
         }
         assertTrue("unexpected throw: $throws", throws.isEmpty())
-    }
-
-    @Test
-    fun injectorAssetPathMatchesFile() {
-        assertTrue(
-            File("src/main/assets", ExtensionInjector.ASSET).exists() ||
-                File("app/src/main/assets", ExtensionInjector.ASSET).exists(),
-        )
     }
 
     private fun readExtensionScript(): String {

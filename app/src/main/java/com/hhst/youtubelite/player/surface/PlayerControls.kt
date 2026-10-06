@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.player.surface
 
-import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,14 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,16 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import kotlin.math.abs
-import kotlin.math.hypot
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,8 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +60,9 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.engine.LoopMode
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlinx.coroutines.CancellationException
 
 private val ScrimTop = Brush.verticalGradient(
     listOf(PlayerUi.Scrim, Color.Transparent),
@@ -410,7 +409,7 @@ private fun PositionText(
             text = stringResource(R.string.player_live),
             color = PlayerUi.YtRed,
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
         )
     } else {
         Text(
@@ -591,8 +590,8 @@ fun ErrorOverlay(
         Text(
             text = stringResource(R.string.player_error),
             color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
         )
         Text(
@@ -608,7 +607,7 @@ fun ErrorOverlay(
             Text(
                 text = stringResource(R.string.retry),
                 color = PlayerUi.YtRed,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
             )
         }
     }
@@ -738,7 +737,6 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
     // frame: deltas measured in it shrink to half the finger distance while
     // dragging. Anchor drags and pinches in the window frame instead.
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val density = LocalDensity.current
     fun rootPos(change: PointerInputChange): Offset {
         val windowOrigin = coords?.localToWindow(Offset.Zero) ?: Offset.Zero
         return change.position + windowOrigin
@@ -748,6 +746,7 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
         .onGloballyPositioned { coords = it }
         .pointerInput(handle) {
             awaitEachGesture {
+                try {
                 val down = awaitFirstDown(requireUnconsumed = true)
                 handle.begin()
                 val slop = viewConfiguration.touchSlop
@@ -758,12 +757,6 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 // handled the tap) — only then it counts as a background tap.
                 var backgroundTap = false
                 val start = rootPos(down)
-                // Swipe-down dismiss tracking: pointer samples smoothed into a
-                // vertical fling velocity so one jitter cannot fake a fling.
-                var lastX = start.x
-                var lastY = start.y
-                var lastT = 0L
-                var velocityY = 0f
                 do {
                     val event = awaitPointerEvent()
                     val pressed = event.changes.filter { it.pressed }
@@ -785,16 +778,6 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                     } else if (pressed.isNotEmpty() && !pinching) {
                         val current = rootPos(pressed[0])
                         val delta = current - start
-                        val now = SystemClock.uptimeMillis()
-                        if (lastT > 0L) {
-                            val dt = (now - lastT).coerceAtLeast(1L)
-                            val instant = (current.y - lastY) / dt * 1000f
-                            velocityY =
-                                if (velocityY == 0f) instant else velocityY * 0.5f + instant * 0.5f
-                        }
-                        lastX = current.x
-                        lastY = current.y
-                        lastT = now
                         if (!dragging && (abs(delta.x) > slop || abs(delta.y) > slop)) {
                             dragging = true
                         }
@@ -809,21 +792,17 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 } while (event.changes.any { it.pressed })
                 when {
                     dragging || pinching -> {
-                        val dy = lastY - start.y
-                        val dx = lastX - start.x
-                        if (!pinching &&
-                            MiniPlayerLayout.shouldDismiss(dy, dx, velocityY, density.density)
-                        ) {
-                            handle.dismiss()
-                        } else {
-                            handle.end(true)
-                        }
+                        if (dragging && !pinching) handle.release() else handle.end(true)
                     }
                     backgroundTap -> {
                         handle.end(false)
                         handle.tap()
                     }
                     else -> handle.end(false)
+                }
+                } catch (cancelled: CancellationException) {
+                    handle.cancel()
+                    throw cancelled
                 }
             }
         }

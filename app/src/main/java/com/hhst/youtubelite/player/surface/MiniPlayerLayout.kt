@@ -24,12 +24,8 @@ object MiniPlayerLayout {
     const val CONTROL_SIDE_DP = 30
     const val CONTROL_PLAY_DP = 34
     const val TRANSITION_MS = 260
-    /** Swipe-down dismiss animation: slide below the parent while fading out. */
+    /** Duration of the close-target exit animation. */
     const val DISMISS_MS = 240
-    /** Vertical travel past this (dp) dismisses the mini-player. */
-    const val DISMISS_TRAVEL_DP = 96
-    /** A downward fling faster than this (dp/s) dismisses regardless of travel. */
-    const val DISMISS_FLING_DP_PER_S = 700
     const val POPUP_MAX_WIDTH_RATIO = 0.8f
 
     data class Spec(
@@ -130,16 +126,8 @@ object MiniPlayerLayout {
         }
     }
 
-    /**
-     * Swipe-down dismiss rule (official YouTube): the drag must be predominantly
-     * vertical and downward, and either travel past [DISMISS_TRAVEL_DP] or fling
-     * faster than [DISMISS_FLING_DP_PER_S]. Everything else snaps back.
-     */
-    fun shouldDismiss(dyPx: Float, dxPx: Float, flingPxPerS: Float, density: Float): Boolean {
-        if (dyPx <= 0f || dyPx <= abs(dxPx)) return false
-        return dyPx > DISMISS_TRAVEL_DP * density ||
-            flingPxPerS > DISMISS_FLING_DP_PER_S * density
-    }
+    fun hitsCloseTarget(centerX: Float, centerY: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean =
+        right > left && bottom > top && centerX >= left && centerX <= right && centerY >= top && centerY <= bottom
 
     private fun clamp(value: Int, min: Int, max: Int): Int = value.coerceIn(min, max)
 

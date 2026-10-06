@@ -8,6 +8,7 @@ import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.core.JsonCache
 import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.common.Tracks
@@ -21,6 +22,12 @@ import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.junit.Rule
+import androidx.test.ext.junit.rules.ActivityScenarioRule
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
@@ -30,7 +37,7 @@ import java.util.concurrent.TimeUnit
 /** Device decoder, sustained read and >60s seek acceptance using production request plans. */
 @UnstableApi
 class YoutubePlaybackAndroidTest {
-    @get:org.junit.Rule val activity = androidx.test.ext.junit.rules.ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
 
     @Test fun rememberedManualHlsHeightMatchesFirstDecodedFrameAndSwitches() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -41,8 +48,8 @@ class YoutubePlaybackAndroidTest {
         val oldQuality = cache.get("player:quality", String::class.java)
         lateinit var engine: PlaybackApi
         instrumentation.runOnMainSync { engine = GlobalContext.get().get() }
-        val frames = java.util.concurrent.CountDownLatch(1)
-        val firstHeight = java.util.concurrent.atomic.AtomicInteger()
+        val frames = CountDownLatch(1)
+        val firstHeight = AtomicInteger()
         val error = AtomicReference<String>()
         var observedPlayer: ExoPlayer? = null
         val listener = object : Player.Listener {
@@ -63,7 +70,7 @@ class YoutubePlaybackAndroidTest {
             assertNull(error.get())
             assertEquals("Manual start must not fall to the automatic 480p cap", 720, firstHeight.get())
             // Video can pre-render while the separate HLS audio loader is still preparing.
-            val audioReady = java.util.concurrent.atomic.AtomicBoolean()
+            val audioReady = AtomicBoolean()
             val audioDeadline = SystemClock.elapsedRealtime() + 15_000
             while (!audioReady.get() && error.get() == null && SystemClock.elapsedRealtime() < audioDeadline) {
                 instrumentation.runOnMainSync { audioReady.set(observedPlayer!!.audioFormat != null && observedPlayer!!.isPlaying) }
@@ -71,6 +78,21 @@ class YoutubePlaybackAndroidTest {
             }
             assertNull(error.get())
             assertTrue("Production audio did not become ready", audioReady.get())
+            val diagnosticsDeadline = SystemClock.elapsedRealtime() + 15_000
+            while (engine.snapshot.value.diagnostics.renderedFps == null && SystemClock.elapsedRealtime() < diagnosticsDeadline) Thread.sleep(100)
+            val diagnostics = engine.snapshot.value.diagnostics
+            assertNotNull("Native renderer FPS was not sampled", diagnostics.renderedFps)
+            assertTrue((diagnostics.renderedFps ?: 0f) > 0f)
+            assertNotNull(diagnostics.videoDecoder)
+            assertNotNull(diagnostics.audioDecoder)
+            assertNotNull(diagnostics.videoCodec)
+            assertEquals(720, diagnostics.height)
+            File(instrumentation.targetContext.filesDir, "upgrade-native-diagnostics.json").writeText(Gson().toJson(diagnostics))
+            activity.scenario.moveToState(Lifecycle.State.CREATED)
+            val backgroundDeadline = SystemClock.elapsedRealtime() + 4000
+            while (engine.snapshot.value.diagnostics.renderedFps != null && SystemClock.elapsedRealtime() < backgroundDeadline) Thread.sleep(100)
+            assertNull("Hidden video output must not contribute FPS samples", engine.snapshot.value.diagnostics.renderedFps)
+            activity.scenario.moveToState(Lifecycle.State.RESUMED)
             instrumentation.runOnMainSync { engine.setQuality("480p") }
             val deadline = SystemClock.elapsedRealtime() + 15_000
             while (engine.snapshot.value.activeQuality != "480p" && error.get() == null && SystemClock.elapsedRealtime() < deadline) Thread.sleep(100)
@@ -93,7 +115,8 @@ class YoutubePlaybackAndroidTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
         val args = InstrumentationRegistry.getArguments()
-        val id = args.getString("videoId") ?: "aqz-KE-bpKQ"
+        val id = args.getString("videoId").orEmpty()
+        assumeTrue("Supply -e videoId <id> for real-network playback acceptance", id.isNotEmpty())
         val mode = args.getString("mode") ?: "hls"
         val seconds = args.getString("playSeconds")?.toInt() ?: 120
         val height = args.getString("height")?.toInt() ?: 720

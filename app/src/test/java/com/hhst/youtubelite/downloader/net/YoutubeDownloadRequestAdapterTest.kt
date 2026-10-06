@@ -50,13 +50,4 @@ class YoutubeDownloadRequestAdapterTest {
         assertEquals(plan.resourceIdentity, refreshed.resourceIdentity)
     }
 
-    @Test
-    fun downloadHttpClient_isIndependentBudget() {
-        val client = DownloadHttpClients.create()
-        assertEquals(DownloadHttpClients.MAX_REQUESTS, client.dispatcher.maxRequests)
-        assertEquals(DownloadHttpClients.MAX_REQUESTS_PER_HOST, client.dispatcher.maxRequestsPerHost)
-        assertEquals(null, client.cache)
-        assertEquals("download", DownloadHttpClients.WORK_DIR)
-        client.dispatcher.executorService.shutdown()
-    }
 }

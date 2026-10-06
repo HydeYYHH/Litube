@@ -52,8 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.engine.LoopMode
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 @Composable
@@ -179,7 +180,7 @@ internal fun QueueSheet(
                     .align(Alignment.Center)
                     .padding(horizontal = 40.dp),
                 textAlign = TextAlign.Center,
-                fontSize = 18.sp,
+                fontSize = SettingsTokens.TitleSize.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -227,7 +228,7 @@ internal fun QueueSheet(
             Spacer(Modifier.weight(1f))
             Text(
                 text = stringResource(R.string.queue_autoplay),
-                fontSize = 14.sp,
+                fontSize = SettingsTokens.BodySize.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(end = 8.dp),
             )
@@ -250,7 +251,7 @@ internal fun QueueSheet(
                     Text(
                         stringResource(R.string.clear_queue),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Normal,
                     )
                 },
                 text = {
@@ -283,7 +284,7 @@ internal fun QueueSheet(
             ) {
                 Text(
                     text = stringResource(R.string.queue_empty),
-                    fontSize = 15.sp,
+                    fontSize = SettingsTokens.BodySize.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
@@ -430,14 +431,14 @@ private fun DraggableQueueRow(
                 Text(
                     text = stringResource(R.string.queue_now_playing),
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Normal,
                     color = PlayerUi.YtRed,
                     letterSpacing = 0.8.sp,
                 )
             }
             Text(
                 text = item.title.ifBlank { item.videoId },
-                fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = FontWeight.Normal,
                 color = if (current) PlayerUi.YtRed else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

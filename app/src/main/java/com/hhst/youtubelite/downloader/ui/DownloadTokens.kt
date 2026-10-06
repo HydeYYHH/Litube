@@ -1,14 +1,11 @@
 package com.hhst.youtubelite.downloader.ui
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 
-/**
- * Download-module tokens mapped onto the YouTube Android help's scene set
- * (2026-09-16 reference board). Use these — do not invent a parallel scale.
- */
+/** Shared spacing, sizing and touch targets for download components. */
 object DownloadTokens {
-    const val PAGE_INSET_DP = 16
+    const val PAGE_INSET_DP = 12
     const val ICON_DP = 24
     const val MIN_TOUCH_DP = 48
     const val FILTER_HEIGHT_DP = 40
@@ -20,9 +17,9 @@ object DownloadTokens {
     const val CAPSULE_DP = 20
     const val DIVIDER_ALPHA = 0.4f
 
-    val PageInset = PAGE_INSET_DP.dp
-    val Icon = ICON_DP.dp
-    val MinTouch = MIN_TOUCH_DP.dp
+    val PageInset = SettingsTokens.PageInset
+    val Icon = SettingsTokens.IconSize
+    val MinTouch = SettingsTokens.RowHeight
     val FilterHeight = FILTER_HEIGHT_DP.dp
     val RowActionWidth = ROW_ACTION_WIDTH_DP.dp
     val SheetCorner = SHEET_CORNER_DP.dp

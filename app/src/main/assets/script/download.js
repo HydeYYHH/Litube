@@ -84,9 +84,10 @@
   /** Entries are icon-only: the like template's count and rolling digits
    *  must not survive as stray glyphs; the label lives in aria-labels. */
   function blankText(button) {
+    for (const node of button.querySelectorAll('[data-lite-vote-count]')) node.remove();
     for (const node of button.querySelectorAll(
       '.ytSpecButtonShapeNextButtonTextContent, .ytAttributedStringHost, ' +
-      '.yt-core-attributed-string, #text')) {
+        '.yt-core-attributed-string, #text')) {
       if (node.textContent !== '') node.textContent = '';
     }
   }
@@ -200,6 +201,10 @@
         if (!el) return false;
         built += 1;
       }
+      const label = def.label();
+      if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
+      const inner = el.querySelector('button, a');
+      if (inner && inner.getAttribute('aria-label') !== label) inner.setAttribute('aria-label', label);
       nodes.push(el);
     }
     const settled = (node, i) =>
@@ -234,6 +239,13 @@
   /** The single watch-bar pass: watch pages get the three entries, live
    *  pages the chat entry, everything else none. */
   function ensure() {
+    const chat = document.getElementById(CHAT_BOX_ID);
+    if (chat) {
+      const title = chat.querySelector('h2'), close = chat.querySelector('button'), frame = chat.querySelector('iframe');
+      if (title && title.textContent !== Lite.text('chat')) title.textContent = Lite.text('chat');
+      if (close) close.setAttribute('aria-label', Lite.text('closeChat'));
+      if (frame) frame.title = Lite.text('chat');
+    }
     const video = Lite.id();
     const row = video ? Lite.bar() : null;
     const chip = row && Lite.chip(row);
@@ -302,8 +314,11 @@
     title.textContent = Lite.text('chat');
     title.style.cssText = 'font-family:"YouTube Sans","Roboto",sans-serif;font-size:1.8rem;' +
       'font-weight:600;color:var(--yt-spec-text-primary);margin:0;';
-    const closeButton = document.createElement('div');
-    closeButton.style.cssText = 'cursor:pointer;color:var(--yt-spec-text-primary);padding:4px;';
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.setAttribute('aria-label', Lite.text('closeChat'));
+    closeButton.style.cssText = 'cursor:pointer;color:var(--yt-spec-text-primary);padding:12px;' +
+      'width:48px;height:48px;flex-shrink:0;border:0;background:transparent;';
     closeButton.appendChild(Lite.svg(ICONS.close, CLOSE_BOX));
     closeButton.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -315,6 +330,7 @@
 
     const frame = document.createElement('iframe');
     frame.id = CHAT_FRAME_ID;
+    frame.title = Lite.text('chat');
     frame.src = `https://www.youtube.com/live_chat?v=${videoId}` +
       `&embed_domain=${location.hostname}${darkMode() ? '&dark_theme=1' : ''}`;
     frame.style.cssText = 'width:100%;height:100%;border:none;flex:1;background-color:transparent;';

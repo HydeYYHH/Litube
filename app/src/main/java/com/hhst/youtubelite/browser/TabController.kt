@@ -36,6 +36,7 @@ class TabController(
     private val tabs = mutableListOf<Tab>()
     private var activeId: Long
     private var suspendedWatch: Tab? = null
+    private var inheritedShortsId: Long? = null
 
     init {
         val home = Tab(id = nextId++, kind = Constants.PAGE_HOME, url = homeUrl)
@@ -59,6 +60,14 @@ class TabController(
         val kind = PageKind.of(url)
         val active = tabs.find { it.id == activeId }
 
+        if (kind == Constants.PAGE_SHORTS) {
+            val shorts = tabs.find { it.kind == Constants.PAGE_SHORTS }
+            if (shorts == null) return create(kind, url)
+            moveToEnd(shorts.id)
+            activeId = shorts.id
+            return loadOrShow(shorts, url)
+        }
+
         if (suspendWatch && active?.kind == Constants.PAGE_WATCH && tabs.size > 1) {
             suspendActiveWatch()
         }
@@ -79,6 +88,24 @@ class TabController(
         return if (kind in PageKind.NAV) openNav(url, kind) else openStack(url, kind)
     }
 
+    /** Reuse a source document after a separate Shorts host fails audio startup. */
+    fun inheritShorts(source: Tab, url: String): TabState {
+        tabs.removeAll { it.kind == Constants.PAGE_SHORTS && it.id != source.id }
+        inheritedShortsId = source.id
+        replace(source.id, source.copy(url = url))
+        moveToEnd(source.id)
+        activeId = source.id
+        return state()
+    }
+
+    fun restoreShortsSource(source: Tab): TabState {
+        inheritedShortsId = null
+        replace(source.id, source)
+        activeId = source.id
+        moveToEnd(source.id)
+        return state()
+    }
+
     fun updateUrl(tabId: Long, url: String) {
         suspendedWatch?.takeIf { it.id == tabId }?.let {
             suspendedWatch = it.copy(url = url)
@@ -90,7 +117,7 @@ class TabController(
         // redirect chain) cannot leave routing identity stuck on the old kind.
         // Home is the exception: its kind is its identity (homeTab()/openNav
         // keep it alive), so it stays home wherever its WebView wanders.
-        val kind = if (tab.kind == Constants.PAGE_HOME) tab.kind else PageKind.of(url)
+        val kind = if (tab.kind == Constants.PAGE_HOME || tab.id == inheritedShortsId || UrlPolicy.isLoginUrl(url)) tab.kind else PageKind.of(url)
         // A redirect can re-derive a kind another tab already owns; two
         // same-kind tabs break routing (openNav/openTab pick the first). Keep
         // this tab's identity sticky in that case — it sheds the stray URL on
@@ -163,12 +190,7 @@ class TabController(
         val keepIds = buildSet {
             add(home.id)
             existing?.let { add(it.id) }
-            // Opening shorts must not evict the watch tab: it stays routable
-            // so Back from shorts lands on it. Playback is unified — Shorts
-            // uses the same player/cast target; leaving shorts docks mini.
-            if (kind == Constants.PAGE_SHORTS) {
-                tabs.find { it.kind == Constants.PAGE_WATCH }?.let { add(it.id) }
-            }
+
         }
         tabs.removeAll { it.id !in keepIds }
 

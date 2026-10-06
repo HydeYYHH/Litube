@@ -87,15 +87,3 @@ class WebViewTimerOccupancy(
         )
     }
 }
-
-class RecordingWebViewTimerClock : WebViewTimerClock {
-    val events = mutableListOf<String>()
-
-    override fun pauseTimers() {
-        events += "pause"
-    }
-
-    override fun resumeTimers() {
-        events += "resume"
-    }
-}

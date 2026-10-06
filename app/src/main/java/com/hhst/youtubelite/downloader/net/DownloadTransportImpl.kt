@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.downloader.net
 
+import androidx.annotation.OptIn as Media3OptIn
+import androidx.media3.common.util.UnstableApi
 import com.hhst.youtubelite.downloader.core.DownloadChunk
 import kotlinx.coroutines.InternalCoroutinesApi
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
@@ -16,6 +18,7 @@ import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import okhttp3.Request
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import androidx.media3.datasource.HttpUtil
 import kotlinx.coroutines.CancellationException
@@ -62,7 +65,7 @@ class DownloadTransportImpl(
     /** Live policy lookup so a settings change applies without re-creating the transport. */
     private val wifiOnlyProvider: () -> Boolean = { wifiOnly },
     private val chunkBytes: Long = DownloadSettings.CHUNK_BYTES,
-    private val sleeper: DownloadSleeper = DownloadSleeper { kotlinx.coroutines.delay(it) },
+    private val sleeper: DownloadSleeper = DownloadSleeper { delay(it) },
     private val random: Random = Random.Default,
     private val forbidden: ForbiddenRecovery? = null,
     private val mediaRequests: YoutubeMediaRequests? = null,
@@ -313,6 +316,7 @@ class DownloadTransportImpl(
     }
 
     @OptIn(InternalCoroutinesApi::class)
+    @Media3OptIn(markerClass = [UnstableApi::class])
     private suspend fun executeAndWrite(
         taskId: String,
         request: Request,

@@ -2,12 +2,14 @@ package com.hhst.youtubelite.extractor
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.RequiresApi
 import androidx.javascriptengine.IsolateStartupParameters
 import androidx.javascriptengine.JavaScriptIsolate
 import androidx.javascriptengine.JavaScriptSandbox
@@ -25,7 +27,7 @@ import androidx.javascriptengine.MemoryLimitExceededException
 import androidx.webkit.WebViewCompat
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.CompletableFuture
+import com.google.common.util.concurrent.SettableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -143,6 +145,7 @@ private fun compileInput(prepared: Boolean): String = if (prepared) {
         "globalThis._solver=jsc.compile(_prepared);String(_prepared.length)"
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal class SandboxRuntime private constructor(
     private val app: Context,
     private val sandbox: JavaScriptSandbox,
@@ -223,7 +226,7 @@ internal class HiddenJavascriptRuntime(
     private val userAgent: String,
 ) : JavascriptRuntime {
     private val main = AndroidWebViewMainGate()
-    private val pending = ConcurrentHashMap<Long, CompletableFuture<String>>()
+    private val pending = ConcurrentHashMap<Long, SettableFuture<String>>()
     private val sequence = AtomicLong()
     private var view: WebView? = null
     override val version = "webview:${WebViewCompat.getCurrentWebViewPackage(app)?.versionName}"
@@ -231,7 +234,7 @@ internal class HiddenJavascriptRuntime(
     @SuppressLint("SetJavaScriptEnabled")
     private fun initialize(context: ExtractionContext) {
         if (view != null) return
-        val ready = CompletableFuture<Unit>()
+        val ready = SettableFuture.create<Unit>()
         main.run {
             view = WebView(app).apply {
                 settings.javaScriptEnabled = true
@@ -243,9 +246,9 @@ internal class HiddenJavascriptRuntime(
                 addJavascriptInterface(Callbacks(), "JsResult")
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
-                    override fun onPageFinished(view: WebView, url: String) { ready.complete(Unit) }
+                    override fun onPageFinished(view: WebView, url: String) { ready.set(Unit) }
                     override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                        pending.values.forEach { it.completeExceptionally(IOException("JS_RENDERER_GONE")) }
+                        pending.values.forEach { it.setException(IOException("JS_RENDERER_GONE")) }
                         close()
                         return true
                     }
@@ -257,10 +260,10 @@ internal class HiddenJavascriptRuntime(
     }
 
     private inner class Callbacks {
-        @JavascriptInterface fun result(id: Long, value: String) { pending.remove(id)?.complete(value) }
+        @JavascriptInterface fun result(id: Long, value: String) { pending.remove(id)?.set(value) }
         @JavascriptInterface fun error(id: Long, kind: String) {
             val safe = kind.takeIf { it in setOf("Error", "TypeError", "ReferenceError", "RangeError", "SyntaxError") } ?: "Error"
-            pending.remove(id)?.completeExceptionally(IOException("JS_EVALUATION_$safe"))
+            pending.remove(id)?.setException(IOException("JS_EVALUATION_$safe"))
         }
     }
 
@@ -268,7 +271,7 @@ internal class HiddenJavascriptRuntime(
         timers.withOwner(owner) {
             initialize(context)
             val id = sequence.incrementAndGet()
-            val future = CompletableFuture<String>()
+            val future = SettableFuture.create<String>()
             pending[id] = future
             try {
                 main.run {
@@ -279,7 +282,7 @@ internal class HiddenJavascriptRuntime(
         }
 
     override fun close() {
-        pending.values.forEach { it.completeExceptionally(IOException("JS_RUNTIME_CLOSED")) }
+        pending.values.forEach { it.setException(IOException("JS_RUNTIME_CLOSED")) }
         pending.clear()
         main.run { view?.removeJavascriptInterface("JsResult"); view?.destroy(); view = null }
     }
@@ -295,7 +298,19 @@ internal fun <T> await(future: Future<T>, timeoutMs: Long,
             if (remaining <= 0) throw IOException("JS_TIMEOUT")
             try { return future.get(minOf(100, remaining), TimeUnit.MILLISECONDS) }
             catch (_: TimeoutException) { }
-            catch (failure: ExecutionException) { throw IOException(when (failure.cause) { is MemoryLimitExceededException -> "JS_HEAP_LIMIT"; is IsolateTerminatedException -> "JS_ISOLATE_TERMINATED"; else -> "JS_RUNTIME_FAILURE" }, failure.cause) }
+            catch (failure: ExecutionException) {
+                val cause = failure.cause
+                if (cause is IOException && cause.message?.matches(Regex("JS_[A-Za-z_]{1,64}")) == true) throw cause
+                val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) sandboxFailure(failure.cause) else "JS_RUNTIME_FAILURE"
+                throw IOException(code, failure.cause)
+            }
         }
     } catch (failure: Throwable) { abort(); throw failure }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+private fun sandboxFailure(failure: Throwable?): String = when (failure) {
+    is MemoryLimitExceededException -> "JS_HEAP_LIMIT"
+    is IsolateTerminatedException -> "JS_ISOLATE_TERMINATED"
+    else -> "JS_RUNTIME_FAILURE"
 }

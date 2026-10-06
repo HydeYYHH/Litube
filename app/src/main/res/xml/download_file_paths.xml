@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <cache-path name="diagnostic_exports" path="diagnostic-exports/" />
+    <cache-path name="gallery_share" path="gallery/" />
     <cache-path name="download_tmp" path="download/" />
     <files-path name="download_files" path="download/" />
     <external-files-path name="download_ext" path="Download/Litube/" />

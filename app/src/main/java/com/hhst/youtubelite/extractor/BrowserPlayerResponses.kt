@@ -3,6 +3,7 @@ package com.hhst.youtubelite.extractor
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.grack.nanojson.JsonParser as NanoJsonParser
 import com.google.gson.JsonParser
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
@@ -24,7 +25,7 @@ class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
                 if (json.get("generation")?.asLong != document() || json.get("session")?.asString != sessions.captureStamp()) return@runCatching
                 json.getAsJsonObject("configuration")?.let {
                     if (it.toString().length <= 256 * 1024) {
-                        sessions.acceptBrowserConfig(com.grack.nanojson.JsonParser.`object`().from(it.toString()), document(), document)
+                        sessions.acceptBrowserConfig(NanoJsonParser.`object`().from(it.toString()), document(), document)
                     }
                 }
                 if (json.get("session")?.asString != sessions.captureStamp()) return@runCatching

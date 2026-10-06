@@ -5,6 +5,7 @@ import java.net.URI
 import java.io.Reader
 import java.security.MessageDigest
 import android.content.Context
+import android.os.Build
 import androidx.javascriptengine.JavaScriptSandbox
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -41,7 +42,7 @@ class AndroidChallengeSolver(
         reaper.scheduleWithFixedDelay({ lock.tryRunIdle {
             // A compiled sandbox solver is cheap to keep and spares the next video a cold compile;
             // the WebView fallback peaks near 400 MiB, so it keeps the short idle lifetime.
-            val idle = if (runtime is SandboxRuntime) SANDBOX_IDLE_MS else FALLBACK_IDLE_MS
+            val idle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && runtime is SandboxRuntime) SANDBOX_IDLE_MS else FALLBACK_IDLE_MS
             if (runtime != null && System.currentTimeMillis() - lastUsed >= idle) release()
         } }, 60, 60, TimeUnit.SECONDS)
     }
@@ -90,7 +91,7 @@ class AndroidChallengeSolver(
      * to start speculatively, so an unsupported sandbox leaves the first solve to do it on demand.
      */
     fun initialize(playerUrl: String, context: ExtractionContext): Boolean = lock.run(context) {
-        if (lowRam || runtime is RemoteEjsRuntime || !JavaScriptSandbox.isSupported()) return@run false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || lowRam || runtime is RemoteEjsRuntime || !JavaScriptSandbox.isSupported()) return@run false
         val start = System.nanoTime()
         try {
             val source = source(playerUrl, context)
@@ -127,12 +128,23 @@ class AndroidChallengeSolver(
 
     private fun compile(key: String, source: PlayerSource, execution: ExtractionContext, allowFallback: Boolean) {
         val previous = runtime
-        if (previous is SandboxRuntime && runCatching { previous.restartIsolate(execution) }.isSuccess) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && previous is SandboxRuntime && runCatching { previous.restartIsolate(execution) }.isSuccess) {
             active = ""
         } else {
             release()
-            runtime = runCatching { SandboxRuntime.create(app, execution) }.getOrNull()
-                ?: if (allowFallback) RemoteEjsRuntime(app, execution.session.userAgent) else return
+            runtime = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                runCatching { SandboxRuntime.create(app, execution) }.getOrNull()
+            } else null
+            if (runtime == null) {
+                if (!allowFallback) return
+                runtime = if (EjsRuntimeProcess.canIsolate(app)) {
+                    RemoteEjsRuntime(app, execution.session.userAgent)
+                } else {
+                    // Old providers cannot isolate their data directory across processes.
+                    execution.diagnostics.event("js", "EJS", "webview-local-fallback", 0, 0)
+                    HiddenJavascriptRuntime(app, timers, WebViewTimerOwner.EJS, execution.session.userAgent)
+                }
+            }
         }
         val libraries = app.assets.open("ejs/yt.solver.lib.min.js").bufferedReader().use { it.readText() } +
             "\nObject.assign(globalThis,lib);\n" + app.assets.open("ejs/yt.solver.core.js").bufferedReader().use { it.readText() }

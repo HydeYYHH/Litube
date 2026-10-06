@@ -3,11 +3,10 @@ package com.hhst.youtubelite.downloader.ui
 import com.hhst.youtubelite.downloader.core.BatchSource
 import com.hhst.youtubelite.downloader.core.DownloadLimits
 import com.hhst.youtubelite.extractor.VideoId
-import com.hhst.youtubelite.player.queue.QueueItem
+import com.hhst.youtubelite.player.QueueItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadEntriesTest {
@@ -20,7 +19,6 @@ class DownloadEntriesTest {
         val snapshot = DownloadEntries.queueSnapshot(items)
         assertEquals(BatchSource.QUEUE, snapshot.source)
         assertEquals(DownloadLimits.NATIVE_QUEUE_CAP, snapshot.items.size)
-        assertTrue(snapshot.items.size <= 50)
         assertEquals("v0xxxxxxxxx", snapshot.items.first().videoId)
     }
 

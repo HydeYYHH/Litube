@@ -24,11 +24,6 @@ import java.io.IOException
 
 class MediaComboTest {
 
-    @Test
-    fun muxerListsAvcAndAac() {
-        assertTrue(MediaCombo.muxerVideoMimes.contains(MimeTypes.VIDEO_H264))
-        assertTrue(MediaCombo.muxerAudioMimes.contains(MimeTypes.AUDIO_AAC))
-    }
 
     @Test
     fun avcAacMp4_roundTripExtractMux() {

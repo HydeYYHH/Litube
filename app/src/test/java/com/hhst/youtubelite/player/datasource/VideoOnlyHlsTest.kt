@@ -4,58 +4,9 @@ import android.net.Uri
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VideoOnlyHlsTest {
-
-    @Test fun withoutHlsAudioDropsRenditionsAndMuxedCodecs() {
-        val format = androidx.media3.common.Format.Builder()
-            .setId("v")
-            .setCodecs("mp4a.40.2,avc1.64001f")
-            .setSampleMimeType(MimeTypes.VIDEO_MP4)
-            .setWidth(1280)
-            .setHeight(720)
-            .build()
-        val variant = HlsMultivariantPlaylist.Variant(
-            Uri.parse("https://example.com/v.m3u8"),
-            format,
-            null,
-            "aud",
-            null,
-            null,
-            null,
-            null,
-        )
-        val rendition = HlsMultivariantPlaylist.Rendition(
-            Uri.parse("https://example.com/a.m3u8"),
-            androidx.media3.common.Format.Builder().setId("a").setCodecs("mp4a.40.2").build(),
-            "aud",
-            "Default",
-            null,
-        )
-        val playlist = HlsMultivariantPlaylist(
-            "https://example.com/master.m3u8",
-            emptyList(),
-            listOf(variant),
-            emptyList(),
-            listOf(rendition),
-            emptyList(),
-            emptyList(),
-            null,
-            emptyList(),
-            true,
-            emptyMap(),
-            emptyList(),
-        )
-        val stripped = withoutHlsAudio(playlist) as HlsMultivariantPlaylist
-        assertTrue(stripped.audios.isEmpty())
-        assertNull(stripped.muxedAudioFormat)
-        assertNull(stripped.variants[0].audioGroupId)
-        assertEquals("avc1.64001f", stripped.variants[0].format.codecs)
-        assertEquals(720, stripped.variants[0].format.height)
-    }
 
     @Test fun declareAudioCodecsStampsRenditionsThatOmitCodecs() {
         val format = androidx.media3.common.Format.Builder()

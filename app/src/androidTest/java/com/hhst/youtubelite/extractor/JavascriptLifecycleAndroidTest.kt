@@ -1,13 +1,20 @@
 package com.hhst.youtubelite.extractor
 
+import com.google.common.util.concurrent.SettableFuture
+import org.junit.Rule
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import android.app.ActivityManager
 import android.os.Process
+import android.os.Build
 import android.webkit.CookieManager
 import android.webkit.WebView
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
+import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grack.nanojson.JsonObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -20,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Real non-terminating JS, host death and heap exhaustion; no network or credential export. */
 class JavascriptLifecycleAndroidTest {
-    @get:org.junit.Rule val activity = androidx.test.ext.junit.rules.ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val app = instrumentation.targetContext
 
@@ -42,7 +49,24 @@ class JavascriptLifecycleAndroidTest {
         assertFalse("EJS process remained alive after termination", File("/proc/$pid").exists())
     }
 
+    @Test fun legacyWebViewRuntimeReturnsValuesAndSafeErrorsWithoutChangingCookies() {
+        assumeTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
+        val cookies = CookieManager.getInstance().getCookie(YoutubeSessionProvider.ORIGIN)
+        HiddenJavascriptRuntime(app, WebViewTimerOccupancy.NOOP, WebViewTimerOwner.EJS, "fixture").use { runtime ->
+            assertEquals("42", runtime.evaluate("String(6*7)", 5_000, context()))
+            try {
+                runtime.evaluate("throw new TypeError('private-body')", 5_000, context())
+                fail("JavaScript error was lost")
+            } catch (failure: IOException) {
+                assertEquals("JS_EVALUATION_TypeError", failure.message)
+                assertFalse(failure.toString().contains("private-body"))
+            }
+        }
+        assertEquals(cookies, CookieManager.getInstance().getCookie(YoutubeSessionProvider.ORIGIN))
+    }
+
     @Test fun remoteTimeoutCancellationAndCrashPreserveAccountWebView() {
+        assumeTrue(EjsRuntimeProcess.canIsolate(app))
         lateinit var browser: WebView
         var cookieSnapshot: String? = null
         instrumentation.runOnMainSync {
@@ -73,9 +97,9 @@ class JavascriptLifecycleAndroidTest {
                     runtime.close()
                     assertStopped(pid)
                     // Only this isolated EJS process was stopped; the user's browser remains usable.
-                    val heartbeat = CompletableFuture<String>()
+                    val heartbeat = SettableFuture.create<String>()
                     instrumentation.runOnMainSync {
-                        browser.evaluateJavascript("'alive'", heartbeat::complete)
+                        browser.evaluateJavascript("'alive'", heartbeat::set)
                         assertTrue("Account cookies changed", cookieSnapshot ==
                             CookieManager.getInstance().getCookie(YoutubeSessionProvider.ORIGIN))
                     }
@@ -92,6 +116,7 @@ class JavascriptLifecycleAndroidTest {
     }
 
     @Test fun sandboxHeapLimitAndTimeoutAllowFreshRuntime() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
         val runtime = SandboxRuntime.create(app, context())
         assumeNotNull(runtime)
         runtime!! .use {

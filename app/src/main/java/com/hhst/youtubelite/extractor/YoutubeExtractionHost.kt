@@ -4,7 +4,7 @@ import com.google.gson.Gson
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.CompletableFuture
+import com.google.common.util.concurrent.SettableFuture
 import java.net.URI
 import android.webkit.WebView
 import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
@@ -34,7 +34,7 @@ class YoutubeExtractionHost(
     private data class CachedStream(val stream: Stream, val expires: Long, val bytes: Int)
     private val streams = LinkedHashMap<String, CachedStream>(16, .75f, true)
     private val gson = Gson()
-    private data class Refresh(val session: CompletableFuture<YoutubeSession>, var at: Long)
+    private data class Refresh(val session: SettableFuture<YoutubeSession>, var at: Long)
     private val refreshes = LinkedHashMap<String, Refresh>()
     private val clientOrder = AdaptiveClientOrder()
 
@@ -43,7 +43,7 @@ class YoutubeExtractionHost(
         var owner = false
         val refresh = synchronized(refreshes) {
             refreshes.entries.removeAll { it.value.session.isDone && System.currentTimeMillis() - it.value.at >= 10_000 }
-            refreshes[key] ?: Refresh(CompletableFuture(), System.currentTimeMillis()).also {
+            refreshes[key] ?: Refresh(SettableFuture.create(), System.currentTimeMillis()).also {
                 if (refreshes.size >= 128) throw IOException("RECOVERY_CAPACITY")
                 refreshes[key] = it; owner = true
             }
@@ -53,8 +53,8 @@ class YoutubeExtractionHost(
             val snapshot = sessions.captureBounded(videoId, true, deadline, current)
             if (!sessions.isCurrent(snapshot)) throw IOException("SESSION_CHANGED_OR_CANCELLED")
             tokens.invalidateAll()
-            refresh.session.complete(snapshot)
-        } catch (failure: Throwable) { refresh.session.completeExceptionally(failure) }
+            refresh.session.set(snapshot)
+        } catch (failure: Throwable) { refresh.session.setException(failure) }
         finally { synchronized(refreshes) { refresh.at = System.currentTimeMillis() } }
         while (true) {
             if (!current() || System.nanoTime() >= deadline) throw IOException("EXTRACTION_DEADLINE")

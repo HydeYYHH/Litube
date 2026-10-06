@@ -30,7 +30,9 @@ import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.player.engine.CastSource
 import okhttp3.OkHttpClient
-import java.util.concurrent.CompletableFuture
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.MoreExecutors
+import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -381,12 +383,15 @@ class CastController(
     ) {
         val gen = configureGen.get()
         val p = proxy
-        CompletableFuture.runAsync({
-            val vFuture = CompletableFuture.supplyAsync({ p.fetchChunkIndex("v") }, io)
-            val aFuture = CompletableFuture.supplyAsync({ p.fetchChunkIndex("a") }, io)
+        io.execute {
+            val listening = MoreExecutors.listeningDecorator(io)
+            val vFuture = listening.submit(Callable { p.fetchChunkIndex("v") })
+            val aFuture = listening.submit(Callable { p.fetchChunkIndex("a") })
             var sidxReady = false
             try {
-                CompletableFuture.allOf(vFuture, aFuture).get(SIDX_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
+                    Futures.getDone(vFuture); Futures.getDone(aFuture)
+                }, MoreExecutors.directExecutor()).get(SIDX_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 sidxReady = true
             } catch (_: TimeoutException) {
                 Log.w(TAG, "sidx fetch timed out, loading SegmentBase first")
@@ -394,8 +399,8 @@ class CastController(
                 Log.w(TAG, "sidx fetch failed", e)
             }
 
-            val vci = runCatching { vFuture.getNow(null) }.getOrNull()
-            val aci = runCatching { aFuture.getNow(null) }.getOrNull()
+            val vci = runCatching { Futures.getDone(vFuture) }.getOrNull()
+            val aci = runCatching { Futures.getDone(aFuture) }.getOrNull()
             val firstLoadSegmentList = sidxReady && (vci != null || aci != null)
             main.post {
                 if (this.proxy !== p || gen != configureGen.get()) return@post
@@ -405,22 +410,24 @@ class CastController(
                 loadOnReceiver(session, player, p.proxyUrl("/manifest.mpd"), source, positionMs)
             }
 
-            if (sidxReady) return@runAsync
+            if (sidxReady) return@execute
 
             // SegmentBase was loaded; keep waiting and reload with SegmentList.
             try {
-                CompletableFuture.allOf(vFuture, aFuture).get(SIDX_RELOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
+                    Futures.getDone(vFuture); Futures.getDone(aFuture)
+                }, MoreExecutors.directExecutor()).get(SIDX_RELOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             } catch (_: TimeoutException) {
                 Log.w(TAG, "sidx reload timed out, staying on SegmentBase")
-                return@runAsync
+                return@execute
             } catch (e: ExecutionException) {
                 Log.w(TAG, "sidx reload failed", e)
-                return@runAsync
+                return@execute
             }
-            val vReload = runCatching { vFuture.getNow(null) }.getOrNull()
-            val aReload = runCatching { aFuture.getNow(null) }.getOrNull()
-            if (this.proxy !== p || gen != configureGen.get()) return@runAsync
-            if (!upgradeToSegmentList(p, source, vReload, aReload, expectedGen = gen)) return@runAsync
+            val vReload = runCatching { Futures.getDone(vFuture) }.getOrNull()
+            val aReload = runCatching { Futures.getDone(aFuture) }.getOrNull()
+            if (this.proxy !== p || gen != configureGen.get()) return@execute
+            if (!upgradeToSegmentList(p, source, vReload, aReload, expectedGen = gen)) return@execute
             main.post {
                 if (this.proxy !== p || gen != configureGen.get()) return@post
                 val reloadPos = runCatching { player.currentPosition }.getOrDefault(positionMs)
@@ -429,7 +436,7 @@ class CastController(
                     upgrade = true,
                 )
             }
-        }, io)
+        }
     }
 
     /** Rebuilds the manifest with per-segment URLs and hot-swaps it in. */

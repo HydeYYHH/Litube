@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
@@ -25,7 +26,8 @@ class YoutubeTransferAndroidTest {
     @Test fun fileResumeAndPhoneProxyRead() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
-        val id = InstrumentationRegistry.getArguments().getString("videoId") ?: "jNQXAC9IVRw"
+        val id = InstrumentationRegistry.getArguments().getString("videoId").orEmpty()
+        assumeTrue("Supply -e videoId <id> for real-network transfer acceptance", id.isNotEmpty())
         val extractor = GlobalContext.get().get<Extractor>()
         val policy = GlobalContext.get().get<YoutubeMediaRequests>()
         val stream = extractor.extractFresh(id).stream.await()

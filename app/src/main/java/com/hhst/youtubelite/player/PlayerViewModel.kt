@@ -14,12 +14,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.cast.CastDevice
 import com.hhst.youtubelite.cast.LocalStreamProxy
+import com.hhst.youtubelite.core.HapticsController
+import com.hhst.youtubelite.core.PipSupport
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -28,10 +31,11 @@ import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.engine.PlaybackApi
+import com.hhst.youtubelite.player.engine.PlaybackDiagnostics
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
 import com.hhst.youtubelite.player.engine.SubtitleTrack
-import com.hhst.youtubelite.player.queue.QueueItem
-import com.hhst.youtubelite.player.queue.QueueRepository
+import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.PlaybackCommandRouter
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.AutoFullscreen
@@ -40,6 +44,7 @@ import com.hhst.youtubelite.player.surface.PlayerPlaybackActions
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.player.surface.ResizeMode
 import com.hhst.youtubelite.player.surface.SubtitleStyle
+import java.lang.ref.WeakReference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +53,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import java.lang.ref.WeakReference
 
 /** Structured per-gesture overlay state shown on the player surface. */
 sealed interface GestureUi {
@@ -64,6 +68,7 @@ sealed interface GestureUi {
 
 /** Player-facing UI state: engine snapshot + surface-only flags. */
 data class PlayerUiState(
+    val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
     val visible: Boolean = false,
     val fullscreen: Boolean = false,
     val controlsVisible: Boolean = true,
@@ -94,7 +99,7 @@ data class PlayerUiState(
     val queueEnabled: Boolean = false,
     val sponsorSegments: List<SponsorBlockManager.Segment> = emptyList(),
     val resizeMode: ResizeMode = ResizeMode.Fit,
-    val pipAvailable: Boolean = true,
+    val pipAvailable: Boolean = false,
     val ended: Boolean = false,
     val mini: Boolean = false,
     val pageHeightDp: Int? = null,
@@ -156,6 +161,7 @@ class PlayerViewModel(
     private val cache: JsonCache,
     private val cast: CastController,
     private val appContext: Context? = null,
+    private val haptics: HapticsController? = null,
 ) : ViewModel(), PlayerHooks, PlayerPlaybackActions {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -292,7 +298,7 @@ class PlayerViewModel(
         _uiState.update {
             it.copy(
                 resizeMode = resize,
-                pipAvailable = prefs.isEnabled(PreferenceKeys.ENABLE_PIP),
+                pipAvailable = pipEnabled(),
                 subtitleStyle = SubtitleStyle.decode(
                     cache.get(KEY_SUBTITLE_STYLE, String::class.java),
                 ),
@@ -383,6 +389,7 @@ class PlayerViewModel(
         pushNavIfChanged(nav.next, nav.previous)
         _uiState.update {
             it.copy(
+                diagnostics = s.diagnostics,
                 loading = s.isBuffering && s.userWantsPlay,
                 isPlaying = s.isPlaying,
                 durationMs = s.durationMs,
@@ -456,26 +463,37 @@ class PlayerViewModel(
 
     // -- PlayerHooks (from JS bridge) --
 
-    /**
-     * Watch and Shorts share one playback target. Chromecast follows this
-     * request (including Shorts) instead of leaving the TV on the previous
-     * watch while the phone plays locally.
-     */
+    /** A web feed suspends local playback until the user resumes the preserved watch item. */
+    private var shortsPausedId: String? = null
+    private var inShorts = false
+
     override fun playVideo(url: String, origin: PageOrigin) {
+        if (inShorts || PageKind.isShorts(url)) return
+        if (VideoId.parse(url) == shortsPausedId) { onReturnToWatch(url); return }
+        shortsPausedId = null
         if (!origin.isHost) playbackOrigin = origin
         startPlayback(url, keepMini = _uiState.value.mini)
     }
 
-    override fun prepareVideo(url: String) = engine.preparePlayback(url)
-
-    /**
-     * Shorts tab left (Back / bottom-nav): dock the current media as mini.
-     * Playback keeps rolling; mini restore returns this Shorts page.
-     */
-    fun onShortsClosed() {
-        if (!_uiState.value.visible) return
-        enterMiniPlayer()
+    override fun prepareVideo(url: String) {
+        if (!inShorts && !PageKind.isShorts(url)) engine.preparePlayback(url)
     }
+
+    fun setVideoVisible(visible: Boolean) = engine.setVideoVisible(visible)
+
+    fun onShortsOpened() {
+        if (inShorts) return
+        inShorts = true
+        shortsPausedId = _uiState.value.videoId
+        playbackRequestSeq++
+        engine.cancelPending(pausePlayback = !_uiState.value.casting)
+        engine.pauseLocal()
+        if (speedBeforeHold != null) onSpeedHoldEnd()
+        autoEnteredFullscreen = false
+        _uiState.update { it.copy(visible = false, mini = false, fullscreen = false, locked = false) }
+    }
+
+    fun onShortsClosed() { inShorts = false }
 
     /**
      * Page left the active watch surface (in-place navigation or tab switch).
@@ -519,9 +537,15 @@ class PlayerViewModel(
         }
     }
 
-    /** A watch/shorts page became the active tab: leave the mini-player. */
+    /** An active watch page expands the preserved local player. */
     fun onReturnToWatch(pageUrl: String? = null) {
+        if (PageKind.isShorts(pageUrl)) return
         val state = _uiState.value
+        if (shortsPausedId != null && VideoId.parse(pageUrl) == shortsPausedId) {
+            inShorts = false
+            _uiState.update { it.copy(visible = true, mini = false, fullscreen = false, controlsVisible = true) }
+            return
+        }
         if (state.mini) {
             if (shouldExpandMiniOnReturn(pageUrl)) {
                 _uiState.update {
@@ -589,7 +613,7 @@ class PlayerViewModel(
                 sponsorCountdownSec = null,
                 sponsorChip = false,
                 sponsorChipHighlight = false,
-                pipAvailable = prefs.isEnabled(PreferenceKeys.ENABLE_PIP),
+                pipAvailable = pipEnabled(),
             )
         }
         engine.play(url)
@@ -715,12 +739,15 @@ class PlayerViewModel(
     }
 
     override fun onSpeed(speed: Float) {
+        haptics?.perform(HapticsController.Event.SELECTION)
         engine.setSpeed(speed)
         onHint(PlayerUi.speedLabel(speed))
     }
 
     /** Long-press 2x: save the current speed so release restores it. */
     override fun onSpeedHoldStart() {
+        if (speedBeforeHold != null) return
+        haptics?.perform(HapticsController.Event.HOLD)
         speedBeforeHold = _uiState.value.speed
         engine.setSpeedHold(true)
         engine.setSpeed(2f)
@@ -739,13 +766,14 @@ class PlayerViewModel(
         engine.setLoopMode(_uiState.value.loopMode.next())
     }
 
-    override fun onQuality(label: String?) = engine.setQuality(label)
+    override fun onQuality(label: String?) { haptics?.perform(HapticsController.Event.SELECTION); engine.setQuality(label) }
 
     /**
      * Subtitle menu: no "off" row. Tapping the active language
      * turns captions off; any other pick enables and switches.
      */
     override fun onSubtitle(trackKey: String?) {
+        haptics?.perform(HapticsController.Event.SELECTION)
         if (trackKey == null) return
         val current = _uiState.value
         val off = current.subtitleEnabled && current.subtitleKey == trackKey
@@ -821,7 +849,7 @@ class PlayerViewModel(
     }
 
     fun skipToPrevious() {
-        // Media-app convention (official YT / Media3): a previous tap past the
+        // A previous tap past the
         // first seconds restarts the current video; only near the start does
         // it actually go back — queue first, then the page playlist, then
         // WebView history.
@@ -886,10 +914,6 @@ class PlayerViewModel(
         autoEnteredFullscreen = false
         if (!next) suppressAutoEnter = true
         setFullscreen(next)
-    }
-
-    override fun onShortsSwipe(up: Boolean) {
-        watchPage?.evaluate("window.__shortsNav && window.__shortsNav(${if (up) 1 else -1});") { }
     }
 
     /**
@@ -1051,8 +1075,11 @@ class PlayerViewModel(
 
     /** Re-reads the PiP pref after a settings flip (wired from MainActivity). */
     fun refreshPipAvailability() {
-        _uiState.update { it.copy(pipAvailable = prefs.isEnabled(PreferenceKeys.ENABLE_PIP)) }
+        _uiState.update { it.copy(pipAvailable = pipEnabled()) }
     }
+
+    private fun pipEnabled(): Boolean = appContext?.let(PipSupport::isSupported) == true &&
+        prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
 
     /** Polls device discovery + link liveness (cast dialog open). */
     fun refreshCastState() {
@@ -1101,7 +1128,7 @@ class PlayerViewModel(
     private fun onPlaybackEnded() {
         // Auto-advance honors the same priority as manual skip (queue first,
         // then the YouTube playlist), never WebView back. The queue does NOT
-        // wrap here: at the tail playback simply ends (official behavior);
+        // wrap here: at the tail playback simply ends;
         // only the manual next button wraps.
         val queueContext = queueActive()
         val current = playbackQueueId()
@@ -1229,9 +1256,9 @@ class PlayerViewModel(
                 incoming.documentGeneration >= owner.documentGeneration
         }
 
-        /** Returning to any watch/shorts page expands mini so the new page is not stuck mini. */
+        /** Only a watch page can expand the native mini-player. */
         internal fun shouldExpandMiniOnReturn(pageUrl: String?): Boolean =
-            VideoId.parse(pageUrl) != null
+            !PageKind.isShorts(pageUrl) && VideoId.parse(pageUrl) != null
 
         internal fun gesturePrefKey(zone: GestureZone, fullscreen: Boolean): String = when (zone) {
             GestureZone.TAP ->

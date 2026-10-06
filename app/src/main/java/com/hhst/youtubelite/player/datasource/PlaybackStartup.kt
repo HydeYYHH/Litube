@@ -72,6 +72,11 @@ internal object PlaybackStartup {
             override fun addEventListener(handler: Handler, listener: BandwidthMeter.EventListener) = Unit
             override fun removeEventListener(listener: BandwidthMeter.EventListener) = Unit
         }
+        // Standalone selection with explicit parameters: the context-free
+        // selector constructor is the supported path here, and a null context
+        // inside the selector is never dereferenced unless parameters fall
+        // back to context-derived defaults.
+        @Suppress("DEPRECATION")
         val selector = DefaultTrackSelector(parameters, StartCappedSelectionFactory())
         selector.init(TrackSelector.InvalidationListener { }, meter)
         try {

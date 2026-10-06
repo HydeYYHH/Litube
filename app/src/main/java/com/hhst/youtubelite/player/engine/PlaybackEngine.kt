@@ -1,12 +1,18 @@
 package com.hhst.youtubelite.player.engine
 
 import android.content.Context
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import android.view.Display
+import android.view.SurfaceView
+import android.view.View
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format as MediaFormat
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -18,10 +24,12 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.core.JsonCache
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Chapter
@@ -29,29 +37,29 @@ import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
-import com.hhst.youtubelite.extractor.PoTokenProvider
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PREF_TTL_MS
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
-import com.hhst.youtubelite.player.datasource.CodecCapabilities
-import java.net.NoRouteToHostException
-import java.net.ConnectException
-import java.net.SocketTimeoutException
-import android.view.SurfaceView
 import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
 import com.hhst.youtubelite.player.datasource.CastAudioSelection
+import com.hhst.youtubelite.player.datasource.CodecCapabilities
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.SubtitleSelection
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.sponsor.SponsorSkipController
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -65,6 +73,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
+import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
 /**
  * End-of-playback behavior behind the loop settings toggle. Only [LOOP_ONE]
@@ -139,20 +149,18 @@ data class PlaybackSnapshot(
     val sponsorChip: Boolean = false,
     /** True when [sponsorChip] targets a highlight point (chip jumps TO it). */
     val sponsorChipHighlight: Boolean = false,
+    val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
 )
 
 /** Public player contract. */
 interface PlaybackApi {
     fun preparePlayback(urlOrId: String) { }
-    /**
-     * Loads and plays [urlOrId]. Watch and Shorts share this path: while a
-     * Cast session is attached the local player stays paused and the
-     * receiver owns A/V (the host recasts the new source onto the TV).
-     */
+    /** Loads a watch source; an attached receiver owns its playback controls. */
     fun play(urlOrId: String)
     /** Re-extract and reload the current video after a failure. */
     fun retry()
     fun stop()
+    fun setVideoVisible(visible: Boolean) {}
     fun setVideoSurface(surface: SurfaceView?)
     fun playOrPause()
     fun play()
@@ -257,7 +265,6 @@ class PlaybackEngine(
     private val cache: JsonCache,
     private val prefs: ExtensionManager,
     private val sponsorBlock: SponsorBlockManager,
-    private val poTokenProvider: PoTokenProvider? = null,
     private val titleFetcher: OEmbedTitleFetcher? = null,
 ) : PlaybackApi {
 
@@ -334,7 +341,73 @@ class PlaybackEngine(
     /** Drives the playback notification service; injected to avoid a hard dep. */
     var notificationController: PlaybackNotificationController? = null
 
+    private var videoVisible = true
+    private var videoSurface: SurfaceView? = null
+    private var outputWasVisible = false
+    private var loadStartedAt = 0L
+    private var firstFrameMs: Long? = null
+    private var videoDecoderName: String? = null
+    private var audioDecoderName: String? = null
+    private val performance = PlaybackPerformanceMonitor { kind, state, fields ->
+        playerLog("performance_$kind", fields + mapOf("state" to state), critical = state != "recovered")
+    }
+    private fun playerLog(event: String, fields: Map<String, Any?> = emptyMap(), failure: Throwable? = null, critical: Boolean = failure != null) {
+        AppLog.event(AppLog.Category.PLAYER, event,
+            fields + mapOf("video_id" to _snapshot.value.videoId, "operation" to playbackGeneration.get()), failure, critical)
+    }
+    private fun elapsed() = SystemClock.elapsedRealtime()
+    private val diagnosticTicker = object : Runnable {
+        override fun run() {
+            runCatching { sampleDiagnostics() }
+            if (_snapshot.value.videoId != null) handler.postDelayed(this, 1000)
+        }
+    }
+    private fun sampleDiagnostics() {
+        val now = elapsed()
+        val counters = player.videoDecoderCounters
+        counters?.ensureUpdated()
+        val rendered = counters?.renderedOutputBufferCount ?: 0
+        val dropped = counters?.droppedBufferCount ?: 0
+        val video = player.videoFormat; val audio = player.audioFormat
+        val nominal = video?.frameRate?.takeIf { it > 0 }
+        val refresh = appContext.getSystemService(DisplayManager::class.java)
+            ?.getDisplay(Display.DEFAULT_DISPLAY)?.refreshRate ?: 60f
+        val expected = PlaybackPerformanceMonitor.expectedFps(nominal, player.playbackParameters.speed, refresh)
+        val buffering = castPlayer == null && userWantsPlay &&
+            (player.playbackState == Player.STATE_BUFFERING || !_snapshot.value.prepared)
+        val visibleOutput = videoVisible && videoSurface?.let {
+            it.isShown && it.windowVisibility == View.VISIBLE && it.holder.surface.isValid
+        } == true
+        if (visibleOutput != outputWasVisible) {
+            outputWasVisible = visibleOutput
+            performance.stabilize(now)
+        }
+        performance.sample(now, rendered, dropped, expected,
+            visibleOutput && castPlayer == null && userWantsPlay &&
+                player.playbackState == Player.STATE_READY && video != null && _snapshot.value.prepared,
+            buffering)
+        val diagnostics = PlaybackDiagnostics(
+            nominalFps = nominal, renderedFps = performance.fps, expectedFps = expected,
+            videoCodec = video?.codecs ?: video?.sampleMimeType, audioCodec = audio?.codecs ?: audio?.sampleMimeType,
+            videoDecoder = videoDecoderName, audioDecoder = audioDecoderName,
+            width = video?.width?.takeIf { it > 0 }, height = video?.height?.takeIf { it > 0 },
+            videoBitrate = video?.bitrate?.takeIf { it > 0 }, audioBitrate = audio?.bitrate?.takeIf { it > 0 },
+            renderedFrames = rendered, droppedFrames = dropped,
+            droppedRatio = (rendered + dropped).takeIf { it > 0 }?.let { dropped.toFloat() / it },
+            firstFrameMs = firstFrameMs, bufferingMs = performance.bufferDuration, bufferCount = performance.bufferCount,
+            playbackState = when { castPlayer != null -> "cast"; buffering -> "buffering"; player.isPlaying -> "playing"; player.playbackState == Player.STATE_ENDED -> "ended"; else -> "paused" }, sampledAt = now)
+        _snapshot.value = _snapshot.value.copy(diagnostics = diagnostics)
+        AppLog.playerSummary = diagnostics.toString()
+    }
+
     init {
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+                videoDecoderName = decoderName; performance.stabilize(elapsed())
+                playerLog("video_decoder", mapOf("decoder" to decoderName, "duration_ms" to initializationDurationMs))
+            }
+            override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) { audioDecoderName = decoderName }
+        })
         resolver.configureStartupTrackSelection { trackSelector.parameters }
         // No tunneling: it is a decoder-pair constraint that
         // can silently veto track-selection changes on some devices.
@@ -354,6 +427,11 @@ class PlaybackEngine(
             }
 
             override fun onRenderedFirstFrame() {
+                if (firstFrameMs == null && loadStartedAt > 0 && attachedGeneration == playbackGeneration.get()) {
+                    firstFrameMs = elapsed() - loadStartedAt
+                    performance.stabilize(elapsed())
+                    playerLog("first_frame", mapOf("duration_ms" to firstFrameMs))
+                }
                 if (attachedGeneration == playbackGeneration.get()) firstMediaReady?.complete(Unit)
             }
 
@@ -366,6 +444,7 @@ class PlaybackEngine(
             }
 
             override fun onTracksChanged(tracks: Tracks) {
+                performance.stabilize(elapsed())
                 // Track truth drives the quality menu/badge (and re-applies
                 // a pin the source swap dropped). Skipped while casting: the
                 // cast player owns the visible stream then.
@@ -392,6 +471,7 @@ class PlaybackEngine(
                 // A seek the engine did NOT issue is deliberate: landing inside
                 // a sponsor segment opts out of auto-skipping it.
                 if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    performance.stabilize(elapsed())
                     if (skipSeekInProgress) {
                         skipSeekInProgress = false
                     } else {
@@ -453,13 +533,12 @@ class PlaybackEngine(
     // -- load --
 
     override fun play(urlOrId: String) {
+        if (PageKind.isShorts(urlOrId)) return
         val videoId = VideoId.parse(urlOrId) ?: return
-        val requestUrl = playbackUrl(urlOrId, videoId)
+        val requestUrl = VideoId.watchUrl(videoId)
         val explicitStart = VideoId.startPositionMs(urlOrId)
         userWantsPlay = true
         if (videoId == _snapshot.value.videoId && _snapshot.value.prepared) {
-            // Watch and Shorts share the 11-char id, so this path also covers
-            // /watch?v=V ↔ /shorts/V.
             _snapshot.value = _snapshot.value.copy(url = requestUrl)
             if (explicitStart != null) {
                 seekTo(PlaybackProgress.clampStartMs(explicitStart, activePlayer().duration))
@@ -507,6 +586,10 @@ class PlaybackEngine(
         startPositionMs: Long? = null,
     ) {
         val generation = playbackGeneration.get()
+        loadStartedAt = elapsed(); firstFrameMs = null; videoDecoderName = null; audioDecoderName = null
+        performance.reset(loadStartedAt)
+        playerLog("prepare_start", mapOf("video_id" to videoId, "reextract" to reExtract))
+        handler.removeCallbacks(diagnosticTicker); handler.post(diagnosticTicker)
         val speed = rememberedSpeed()
         val loop = rememberedLoopMode()
         // Selector constraints and hold state are per-video: a pin left over
@@ -521,7 +604,7 @@ class PlaybackEngine(
             .build()
         _snapshot.value = PlaybackSnapshot(
             videoId = videoId,
-            url = requestUrl?.let { playbackUrl(it, videoId) } ?: VideoId.watchUrl(videoId),
+            url = VideoId.watchUrl(videoId),
             isBuffering = true,
             speed = speed,
             loopMode = loop,
@@ -600,6 +683,7 @@ class PlaybackEngine(
                 audioFormat = source.audioFormat,
             )
             publishRenditionAudio()
+            playerLog("prepare_ready", mapOf("duration_ms" to (elapsed() - loadStartedAt)))
 
             // Recast path: local is paused and the TV still holds the previous
             // video until startCasting succeeds — binding the notification now
@@ -625,7 +709,8 @@ class PlaybackEngine(
                 if (stillCurrent(generation)) _snapshot.value = _snapshot.value.copy(chapters = chapters)
             }
         } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
+            if (t is CancellationException) throw t
+            playerLog("prepare_failed", mapOf("duration_ms" to (elapsed() - loadStartedAt)), t)
             // The previous media is still attached on failure; pausing keeps
             // its audio from running on under the new video's error screen.
             // The cast receiver is deliberately untouched: a failed local load
@@ -646,6 +731,8 @@ class PlaybackEngine(
         persistPosition()
         receiverVideoId = null
         handler.removeCallbacks(ticker)
+        handler.removeCallbacks(diagnosticTicker)
+        performance.reset(elapsed())
         player.stop()
         player.clearMediaItems()
         adaptiveVideoPool = emptyList()
@@ -657,7 +744,14 @@ class PlaybackEngine(
 
     // -- surface --
 
+    override fun setVideoVisible(visible: Boolean) {
+        if (videoVisible != visible) performance.stabilize(elapsed())
+        videoVisible = visible
+    }
+
     override fun setVideoSurface(surface: SurfaceView?) {
+        videoSurface = surface
+        performance.stabilize(elapsed())
         player.setVideoSurfaceView(surface)
     }
 
@@ -672,12 +766,15 @@ class PlaybackEngine(
 
     override fun play() {
         userWantsPlay = true
+        performance.stabilize(elapsed())
+        playerLog("resume", mapOf("position_ms" to activePlayer().currentPosition))
         resumePlayback(activePlayer())
         notifyTransport(activePlayer().isPlaying)
     }
 
     override fun pause() {
         userWantsPlay = false
+        playerLog("pause", mapOf("position_ms" to activePlayer().currentPosition))
         activePlayer().pause()
         notifyTransport(false)
     }
@@ -703,6 +800,7 @@ class PlaybackEngine(
         // and handing control back to the receiver pauses the phone.
         if (p === player) castPlayer?.pause() else player.pause()
         when {
+            !_snapshot.value.prepared && _snapshot.value.videoId != null -> retry()
             _snapshot.value.error != null -> retry()
             p.playbackState == Player.STATE_ENDED -> replayFromStart(p)
             p.playerError != null -> retry()
@@ -741,6 +839,7 @@ class PlaybackEngine(
     }
 
     override fun setSpeed(speed: Float) {
+        if (speed != activePlayer().playbackParameters.speed) performance.stabilize(elapsed())
         val clamped = speed.coerceIn(0.25f, 3f)
         activePlayer().setPlaybackSpeed(clamped)
         // Long-press 2x is transient: persisting it would poison the remembered
@@ -827,7 +926,7 @@ class PlaybackEngine(
     private data class VideoTrackRef(
         val group: Tracks.Group,
         val index: Int,
-        val format: androidx.media3.common.Format,
+        val format: MediaFormat,
     )
 
     /**
@@ -1014,7 +1113,7 @@ class PlaybackEngine(
     }
 
     /** Format of the currently selected video track, if any. */
-    private fun selectedVideoTrackFormat(): androidx.media3.common.Format? {
+    private fun selectedVideoTrackFormat(): MediaFormat? {
         for (group in player.currentTracks.groups) {
             if (group.type != C.TRACK_TYPE_VIDEO) continue
             for (i in 0 until group.length) {
@@ -1162,7 +1261,7 @@ class PlaybackEngine(
         val id = _snapshot.value.videoId ?: return null
         val generation = playbackGeneration.get()
         val media = try { withContext(Dispatchers.IO) { extractor.awaitMedia(id) } }
-            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { return null }
         if (!stillCurrent(generation) || _snapshot.value.videoId != id || media.first.id != id) return null
         currentStream = media.second
@@ -1299,7 +1398,7 @@ class PlaybackEngine(
 
     override fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? {
         if (currentMetadata?.id != videoId) return null
-        val profile = org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.values().firstOrNull { it.name == failedProfile } ?: return null
+        val profile = ClientProfile.values().firstOrNull { it.name == failedProfile } ?: return null
         val stream = currentStream ?: return null
         return pickPublishedUrl(stream.excluding(profile), token, itag)
     }
@@ -1382,6 +1481,7 @@ class PlaybackEngine(
     // -- error recovery --
 
     private fun handleError(error: PlaybackException) {
+        playerLog("playback_error", mapOf("error_code" to error.errorCode, "position_ms" to player.currentPosition), error)
         if (attachedGeneration != playbackGeneration.get()) return
         val videoId = _snapshot.value.videoId
         val metadata = currentMetadata
@@ -1494,7 +1594,7 @@ class PlaybackEngine(
     private fun recoveryReason(error: PlaybackException): RecoveryReason? {
         var cause: Throwable? = error
         while (cause != null) {
-            if (cause is java.io.IOException && cause.message in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return RecoveryReason.URL_STALE
+            if (cause is IOException && cause.message in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return RecoveryReason.URL_STALE
             when (cause) {
                 is HttpDataSource.InvalidResponseCodeException ->
                     if (cause.responseCode == 403) return RecoveryReason.HTTP_403
@@ -1637,7 +1737,7 @@ class PlaybackEngine(
                     handler.post { onCastManifestReload?.invoke() }
                 }
             } catch (t: Throwable) {
-                if (t is kotlinx.coroutines.CancellationException) throw t
+                if (t is CancellationException) throw t
                 _snapshot.value = _snapshot.value.copy(isBuffering = false, error = playbackFailed(t))
             }
         }
@@ -1705,7 +1805,7 @@ class PlaybackEngine(
             cache.get(KEY_QUALITY, String::class.java)
         } else null
 
-    private fun playbackDemand() = org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand(
+    private fun playbackDemand() = StreamDemand(
         rememberedQuality()?.let(StreamSelection::parseHeight) ?: 0,
         rememberedAudioTrackKey()?.takeIf { it.startsWith("id:") }?.removePrefix("id:"), false,
         setOf("avc", "vp9", "vp09", "hvc", "hev") +
@@ -1713,6 +1813,7 @@ class PlaybackEngine(
                     Format(codec = "av01", height = 1080))) setOf("av01") else emptySet())
 
     override fun preparePlayback(urlOrId: String) {
+        if (PageKind.isShorts(urlOrId)) return
         extractor.preparePlayback(urlOrId, playbackDemand())
     }
 
@@ -1782,9 +1883,6 @@ class PlaybackEngine(
 
     private fun stillCurrent(generation: Long): Boolean =
         generation == playbackGeneration.get()
-
-    private fun playbackUrl(urlOrId: String, videoId: String): String =
-        if (PageKind.isShorts(urlOrId)) urlOrId else VideoId.watchUrl(videoId)
 
     private fun publishNotification(
         player: Player,

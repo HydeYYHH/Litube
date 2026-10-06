@@ -3,7 +3,6 @@
 package com.hhst.youtubelite.player
 
 import android.content.ContextWrapper
-import com.hhst.youtubelite.extractor.VideoId
 import android.view.SurfaceView
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
@@ -11,18 +10,19 @@ import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
-import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extension.PrefStore
+import com.hhst.youtubelite.extension.PreferenceKeys
+import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.engine.CastSource
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
-import com.hhst.youtubelite.player.queue.QueueRepository
+import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.PlaybackCommandRouter
 import com.hhst.youtubelite.player.surface.GestureMath.GestureZone
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -157,7 +157,7 @@ class PlayerViewModelTest {
         assertFalse(PlayerViewModel.loadSettledFor(snapshot, null))
     }
 
-    // -- unified watch/Shorts + page ownership --
+    // -- Page ownership and native playback isolation --
 
     @Test
     fun acceptsPageCallback_rejectsOtherTabAndOlderDocument() {
@@ -196,8 +196,8 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun shouldExpandMiniOnReturn_anyWatchOrShortsPage() {
-        assertTrue(
+    fun shouldExpandMiniOnReturn_watchOnly() {
+        assertFalse(
             PlayerViewModel.shouldExpandMiniOnReturn(
                 "https://m.youtube.com/shorts/aaaaaaaaaaa",
             ),
@@ -210,8 +210,8 @@ class PlayerViewModelTest {
         assertFalse(PlayerViewModel.shouldExpandMiniOnReturn("https://m.youtube.com/"))
     }
 
-    private val watchId = "watchAAAAAA1"
-    private val shortsId = "shortszzzz12"
+    private val watchId = "watchAAAAA1"
+    private val shortsId = "shortszzzz1"
     private val watchUrl = "https://www.youtube.com/watch?v=$watchId"
     private val shortsUrl = "https://m.youtube.com/shorts/$shortsId"
 
@@ -259,19 +259,24 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun playVideo_shortsReplacesWatchWithoutRestoringOnClose() {
+    fun shortsPausesLongVideoPreservesPositionAndRejectsLatePlayCallbacks() {
         bindViewModel()
         viewModel.playVideo(watchUrl)
         engine.settle(watchId, positionMs = 42_000L)
+        viewModel.onShortsOpened()
         viewModel.playVideo(shortsUrl)
-        engine.settle(shortsId)
+        viewModel.playVideo(watchUrl, PageOrigin(1, 1))
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(watchId, viewModel.uiState.value.videoId)
+        assertFalse(viewModel.uiState.value.visible)
+        assertFalse(viewModel.uiState.value.mini)
         viewModel.onShortsClosed()
-
-        assertEquals(shortsUrl, engine.playCalls.last())
-        assertEquals(shortsId, viewModel.uiState.value.videoId)
-        assertTrue(viewModel.uiState.value.mini)
+        viewModel.onReturnToWatch(watchUrl)
+        viewModel.playVideo(watchUrl)
         assertTrue(viewModel.uiState.value.visible)
-        assertEquals(0, engine.pauseLocalCount)
+        assertFalse(viewModel.uiState.value.isPlaying)
+        assertEquals(42_000L, engine.snapshot.value.positionMs)
+        assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
     @Test
@@ -291,15 +296,12 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun onReturnToWatch_expandsMiniForShortsSourcePage() {
+    fun onReturnToWatch_shortsCannotRestoreNativeSurface() {
         bindViewModel()
         viewModel.playVideo(shortsUrl)
-        engine.settle(shortsId)
-        viewModel.enterMiniPlayer()
-        assertTrue(viewModel.uiState.value.mini)
         viewModel.onReturnToWatch(shortsUrl)
-        assertFalse(viewModel.uiState.value.mini)
-        assertTrue(viewModel.uiState.value.visible)
+        assertFalse(viewModel.uiState.value.visible)
+        assertTrue(engine.playCalls.isEmpty())
     }
 
     @Test
@@ -310,19 +312,14 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun onMiniClose_cancelsWithoutRestoringWatch() {
+    fun onMiniClose_cancelsLongVideoWithoutRestoringIt() {
         bindViewModel()
         viewModel.playVideo(watchUrl)
         engine.settle(watchId)
-        viewModel.playVideo(shortsUrl)
-        engine.settle(shortsId)
-        viewModel.onShortsClosed()
+        viewModel.enterMiniPlayer()
         viewModel.onMiniClose()
-        engine.settle(shortsId)
-
         assertFalse(viewModel.uiState.value.visible)
-        assertEquals(shortsUrl, engine.playCalls.last())
-        assertEquals(0, engine.pauseLocalCount)
+        assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
     /** In-memory JsonCache (mirrors QueueRepositoryTest's helper). */

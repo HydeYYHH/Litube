@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.browser.Bridge
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
@@ -80,7 +82,7 @@ fun MediaItemMenuDialog(
                             .fillMaxWidth()
                             .padding(top = 12.dp),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
+                        fontSize = SettingsTokens.TitleSize.sp,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -93,7 +95,7 @@ fun MediaItemMenuDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),
-                        fontSize = 14.sp,
+                        fontSize = SettingsTokens.DetailSize.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -106,14 +108,16 @@ fun MediaItemMenuDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onQueue) {
+                    IconButton(onClick = onQueue, modifier = Modifier.size(48.dp)) {
                         Icon(
                             painter = painterResource(R.drawable.ic_queue_add),
                             contentDescription = stringResource(R.string.add_to_queue),
                             tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                     IconButton(
+                        modifier = Modifier.size(48.dp),
                         onClick = {
                             VideoId.parse(item.url)?.let { id ->
                                 DownloadUi.showSingleConfirm(
@@ -131,9 +135,11 @@ fun MediaItemMenuDialog(
                             painter = painterResource(R.drawable.ic_download),
                             contentDescription = stringResource(R.string.download),
                             tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                     IconButton(
+                        modifier = Modifier.size(48.dp),
                         onClick = {
                             val send = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -154,6 +160,7 @@ fun MediaItemMenuDialog(
                             painter = painterResource(R.drawable.ic_share),
                             contentDescription = stringResource(R.string.share),
                             tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }

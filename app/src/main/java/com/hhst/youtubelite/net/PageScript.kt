@@ -7,6 +7,7 @@ import android.util.Log
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.hhst.youtubelite.browser.UrlPolicy
 
 /** Loads an asset script once and injects it into a WebView. */
 internal class PageScript(
@@ -27,7 +28,14 @@ internal class PageScript(
             // iframes (ads, consent frames) where the player hook does not belong.
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                script,
+                """
+                (() => {
+                  const h = location.hostname.toLowerCase();
+                  if (h === 'accounts.youtube.com' || h === 'consent.youtube.com' ||
+                      /^\/signin(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(location.pathname)) return;
+                  $script
+                })();
+                """.trimIndent(),
                 setOf("https://youtube.com", "https://*.youtube.com", "https://youtu.be"),
             )
         }
@@ -35,7 +43,7 @@ internal class PageScript(
 
     fun inject(context: Context, webView: WebView) {
         val script = load(context) ?: return
-        main.post { webView.evaluateJavascript(script, null) }
+        main.post { if (UrlPolicy.shouldInject(webView.url)) webView.evaluateJavascript(script, null) }
     }
 
     private fun load(context: Context): String? {
