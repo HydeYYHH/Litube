@@ -98,6 +98,8 @@ class LoginWebViewAndroidTest {
             assertFalse(evidence.optString("agent").contains("; wv"))
             instrumentation.runOnMainSync {
                 for (url in listOf("https://accounts.youtube.com/accounts/SetSID", "https://consent.google.com/m",
+                    "https://accounts.google.co.jp/accounts/SetSID",
+                    "https://accounts.google.co.uk/accounts/SetSID", "https://accounts.google.com.hk/accounts/SetSID",
                     "https://m.youtube.com/check_connection", "https://m.youtube.com/")) {
                     val request = object : WebResourceRequest {
                         override fun getUrl() = Uri.parse(url)

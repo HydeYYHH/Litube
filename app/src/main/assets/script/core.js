@@ -1253,6 +1253,12 @@
     return window.Bridge || null;
   }
 
+  /** Parsed getPreferences payload; {} when the bridge is missing or fails. */
+  function prefs() {
+    try { return JSON.parse(bridge()?.getPreferences() || '{}') || {}; }
+    catch { return {}; }
+  }
+
   function id(url) {
     try {
       const u = new URL(url || location.href, location.href);
@@ -1506,7 +1512,7 @@
   }
 
   window.Lite = {
-    text, bridge, id, isId, bar, chip, strip, icon, svg, fit, menuIcon, queueIcon,
+    text, bridge, prefs, id, isId, bar, chip, strip, icon, svg, fit, menuIcon, queueIcon,
     module, retry, bridgeReady, wake,
   };
   start();

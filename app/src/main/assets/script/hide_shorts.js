@@ -21,12 +21,7 @@
     let enabled = false;
 
     function readEnabled() {
-        try {
-            const bridge = window.Bridge;
-            return !!JSON.parse(bridge.getPreferences() || "{}").enable_hide_shorts;
-        } catch {
-            return false;
-        }
+        return !!Lite.prefs().enable_hide_shorts;
     }
 
     function hideContainer(container) {

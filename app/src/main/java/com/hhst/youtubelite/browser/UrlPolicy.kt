@@ -13,9 +13,6 @@ object UrlPolicy {
         "youtube.googleapis.com",
         "googlevideo.com",
         "ytimg.com",
-        "accounts.google.com",
-        "accounts.google",
-        "consent.google.com",
         "googleusercontent.com",
         "apis.google.com",
         "gstatic.com",
@@ -54,8 +51,23 @@ object UrlPolicy {
     fun shouldInject(url: String?): Boolean = isAllowedUrl(url) && !isLoginUrl(url) &&
         hostOf(url!!)?.lowercase(Locale.ROOT)?.let { isYoutubeHost(it) || it == "youtu.be" } == true
 
-    private val LOGIN_HOSTS = setOf("accounts.google", "accounts.google.com",
-        "accounts.youtube.com", "consent.google.com", "consent.youtube.com")
+    // Login hosts match exactly: regional Google sign-in domains are
+    // enumerated from https://www.google.com/supported_domains because a
+    // prefix match would admit lookalikes such as accounts.google.co.zz.
+    private val LOGIN_HOSTS = setOf(
+        "accounts.google", "accounts.youtube.com", "consent.google.com", "consent.youtube.com",
+    ) + (
+        "com ad ae com.af com.ag al am co.ao com.ar as at com.au az ba com.bd be bf bg com.bh bi bj " +
+        "com.bn com.bo com.br bs bt co.bw by com.bz ca cd cf cg ch ci co.ck cl cm cn com.co co.cr com.cu " +
+        "cv com.cy cz de dj dk dm com.do dz com.ec ee com.eg es com.et fi com.fj fm fr ga ge gg com.gh " +
+        "com.gi gl gm gr com.gt gy com.hk hn hr ht hu co.id ie co.il im co.in iq is it je com.jm jo " +
+        "co.jp co.ke com.kh ki kg co.kr com.kw kz la com.lb li lk co.ls lt lu lv com.ly co.ma md me mg " +
+        "mk ml com.mm mn com.mt mu mv mw com.mx com.my co.mz com.na com.ng com.ni ne nl no com.np nr nu " +
+        "co.nz com.om com.pa com.pe com.pg com.ph com.pk pl pn com.pr ps pt com.py com.qa ro ru rw " +
+        "com.sa com.sb sc se com.sg sh si sk com.sl sn so sm sr st com.sv td tg co.th com.tj tl tm tn to " +
+        "com.tr tt com.tw co.tz com.ua co.ug co.uk com.uy co.uz com.vc co.ve co.vi com.vn vu ws rs co.za " +
+        "co.zm co.zw cat"
+    ).split(' ').map { "accounts.google.$it" }
 
     private fun isYoutubeHost(host: String) = host == "youtube.com" || host.endsWith(".youtube.com")
 

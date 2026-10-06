@@ -9,15 +9,6 @@ import org.junit.Test
 
 class QueueRepositoryTest {
 
-    /** In-memory JsonCache for tests. */
-    private class MemJsonCache : JsonCache {
-        val map = mutableMapOf<String, Any>()
-        @Suppress("UNCHECKED_CAST")
-        override fun <T> get(key: String, type: Class<T>): T? = map[key] as? T
-        override fun put(key: String, value: Any, ttlMs: Long) { map[key] = value }
-        override fun invalidate(key: String) { map.remove(key) }
-    }
-
     /** Real YouTube ids are 11 chars; pad so [VideoId.parse] accepts fixtures. */
     private fun vid(raw: String) = raw.padEnd(11, 'x').take(11)
 
@@ -196,4 +187,16 @@ class QueueRepositoryTest {
         assertTrue(repo.state.value.enabled)
         assertTrue(repo.state.value.items.isEmpty())
     }
+}
+
+/** In-memory JsonCache shared with PlayerViewModelTest (same package). */
+class MemJsonCache : JsonCache {
+    private val map = mutableMapOf<String, Any>()
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T> get(key: String, type: Class<T>): T? = map[key] as? T
+
+    override fun put(key: String, value: Any, ttlMs: Long) { map[key] = value }
+
+    override fun invalidate(key: String) { map.remove(key) }
 }

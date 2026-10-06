@@ -40,9 +40,9 @@ object MiniPlayerLayout {
 
     fun clampWidthDp(screenWidthDp: Int, widthDp: Int): Int =
         if (isCompactScreen(screenWidthDp)) {
-            clamp(widthDp, COMPACT_MIN_WIDTH_DP, COMPACT_MAX_WIDTH_DP)
+            widthDp.coerceIn(COMPACT_MIN_WIDTH_DP, COMPACT_MAX_WIDTH_DP)
         } else {
-            clamp(widthDp, LARGE_MIN_WIDTH_DP, LARGE_MAX_WIDTH_DP)
+            widthDp.coerceIn(LARGE_MIN_WIDTH_DP, LARGE_MAX_WIDTH_DP)
         }
 
     fun computeHeightDp(widthDp: Int): Int = widthDp * 9 / 16
@@ -129,7 +129,6 @@ object MiniPlayerLayout {
     fun hitsCloseTarget(centerX: Float, centerY: Float, left: Float, top: Float, right: Float, bottom: Float): Boolean =
         right > left && bottom > top && centerX >= left && centerX <= right && centerY >= top && centerY <= bottom
 
-    private fun clamp(value: Int, min: Int, max: Int): Int = value.coerceIn(min, max)
 
     private fun isCompactScreen(screenWidthDp: Int): Boolean = screenWidthDp < COMPACT_BREAKPOINT_DP
 }

@@ -27,20 +27,12 @@
   // leaves the count at zero rather than showing a stale number.
   const votesCache = new Map();
 
-  function readPrefs() {
-    try {
-      return JSON.parse(window.Bridge.getPreferences() || "{}");
-    } catch {
-      return {};
-    }
-  }
-
   function readEnabled() {
-    return !!readPrefs().enable_display_dislikes;
+    return !!Lite.prefs().enable_display_dislikes;
   }
 
   function readShowLikes() {
-    return !!readPrefs().enable_show_likes;
+    return !!Lite.prefs().enable_show_likes;
   }
 
   function isShorts() {

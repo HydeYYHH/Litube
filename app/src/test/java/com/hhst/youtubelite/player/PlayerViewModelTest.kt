@@ -8,9 +8,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.cast.CastController
-import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
-import com.hhst.youtubelite.extension.PrefStore
+import com.hhst.youtubelite.extension.MemoryPrefStore
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.engine.CastSource
@@ -222,7 +221,7 @@ class PlayerViewModelTest {
         viewModel = PlayerViewModel(
             engine,
             QueueRepository(cache),
-            ExtensionManager(FakePrefStore()),
+            ExtensionManager(MemoryPrefStore()),
             cache,
             cast,
         )
@@ -320,30 +319,6 @@ class PlayerViewModelTest {
         viewModel.onMiniClose()
         assertFalse(viewModel.uiState.value.visible)
         assertEquals(listOf(watchUrl), engine.playCalls)
-    }
-
-    /** In-memory JsonCache (mirrors QueueRepositoryTest's helper). */
-    private class MemJsonCache : JsonCache {
-        private val map = mutableMapOf<String, Any>()
-
-        @Suppress("UNCHECKED_CAST")
-        override fun <T> get(key: String, type: Class<T>): T? = map[key] as? T
-
-        override fun put(key: String, value: Any, ttlMs: Long) { map[key] = value }
-
-        override fun invalidate(key: String) { map.remove(key) }
-    }
-
-    /** Field storage for ExtensionManager; defaults are seeded on init. */
-    private class FakePrefStore : PrefStore {
-        private val values = mutableMapOf<String, Boolean>()
-        private var version = 0L
-
-        override fun contains(key: String): Boolean = key in values
-        override fun getBool(key: String, default: Boolean): Boolean = values[key] ?: default
-        override fun putBool(key: String, value: Boolean) { values[key] = value }
-        override fun getLong(key: String, default: Long): Long = version
-        override fun putLong(key: String, value: Long) { version = value }
     }
 
     /**

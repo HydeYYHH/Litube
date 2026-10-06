@@ -13,6 +13,7 @@ class LoginNavigationTest {
         login.started(account)
         assertFalse(login.finished(account))
         assertTrue(login.keepInTab(account, "https://accounts.youtube.com/accounts/SetSID"))
+        assertFalse(login.finished("https://accounts.google.co.jp/accounts/SetSID"))
         assertFalse(login.finished("https://m.youtube.com/check_connection"))
         assertTrue(login.keepInTab("https://m.youtube.com/check_connection", source))
         assertTrue(login.finished(source))
@@ -31,12 +32,17 @@ class LoginNavigationTest {
 
     @Test fun loginPagesRemainScriptlessAndLookalikesAreRejected() {
         for (url in listOf("https://accounts.google.com/ServiceLogin", "https://accounts.youtube.com/accounts/SetSID",
+            "https://accounts.google.co.jp/accounts/SetSID",
+            "https://accounts.google.co.uk/accounts/SetSID", "https://accounts.google.com.hk/accounts/SetSID",
+            "https://accounts.google.de/accounts/SetSID", "https://accounts.google.co.in/accounts/SetSID",
             "https://consent.google.com/m", "https://consent.youtube.com/m", "https://m.youtube.com/signin")) {
             assertTrue(url, UrlPolicy.canLoad(url)); assertTrue(url, UrlPolicy.isLoginUrl(url))
             assertFalse(url, UrlPolicy.shouldInject(url))
         }
         for (url in listOf("https://accounts.google.com.evil.test", "https://accounts.google.fake", "https://user@accounts.google.com",
-            "http://accounts.google.com", "https://accounts.google.com:8443")) assertFalse(url, UrlPolicy.canLoad(url))
+            "http://accounts.google.com", "https://accounts.google.com:8443", "https://accounts.google.co.jp.evil.test",
+            "https://sub.accounts.google.co.jp", "https://accounts.google.co.uk.evil.test", "https://accounts.google.co.zz",
+            "https://accounts.google.co.uk@evil.test", "https://accounts.google.co.uk:8443")) assertFalse(url, UrlPolicy.canLoad(url))
         assertTrue(UrlPolicy.shouldInject("https://m.youtube.com/watch?v=abc"))
         assertFalse(UrlPolicy.shouldInject("https://gstatic.com/resource"))
     }
