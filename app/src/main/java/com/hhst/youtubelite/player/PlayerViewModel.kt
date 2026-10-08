@@ -2,7 +2,6 @@
 
 package com.hhst.youtubelite.player
 
-import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -34,8 +33,6 @@ import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.engine.PlaybackDiagnostics
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
 import com.hhst.youtubelite.player.engine.SubtitleTrack
-import com.hhst.youtubelite.player.QueueItem
-import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.PlaybackCommandRouter
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.AutoFullscreen
@@ -105,6 +102,10 @@ data class PlayerUiState(
     val pageHeightDp: Int? = null,
     /** Page player's viewport-relative top from player-hook.js, in dp. */
     val pageTopDp: Int? = null,
+    /** CSS viewport coordinates; the host converts page zoom to window dp. */
+    val pageLeftDp: Int = 0,
+    val pageWidthDp: Int? = null,
+    val pageViewportWidthDp: Int? = null,
     val videoWidth: Int = 0,
     val videoHeight: Int = 0,
     val chapters: List<Chapter> = emptyList(),
@@ -112,11 +113,7 @@ data class PlayerUiState(
     val activeQuality: String? = null,
     val subtitleEnabled: Boolean = false,
     /** Info-sheet stream details. */
-    val videoCodec: String? = null,
-    val audioCodec: String? = null,
     val videoItag: Int? = null,
-    val videoBitrate: Int = 0,
-    val videoFps: Int = 0,
     val audioBitrate: Int = 0,
     val audioSampleRate: Int = 0,
     val audioChannels: Int = 0,
@@ -426,12 +423,9 @@ class PlayerViewModel(
                 videoWidth = s.videoWidth,
                 videoHeight = s.videoHeight,
                 chapters = s.chapters,
-                videoCodec = s.videoFormat?.codec,
-                audioCodec = s.audioFormat?.codec,
+
                 videoItag = s.videoFormat?.itag,
-                videoBitrate = s.videoFormat?.bitrate ?: 0,
-                videoFps = s.videoFormat?.fps ?: 0,
-                audioBitrate = s.audioFormat?.bitrate ?: 0,
+
                 audioSampleRate = s.audioFormat?.sampleRate ?: 0,
                 audioChannels = s.audioFormat?.audioChannels ?: 0,
                 sponsorCountdownSec = s.sponsorCountdownSec,
@@ -533,8 +527,17 @@ class PlayerViewModel(
             it.copy(
                 pageTopDp = topDp,
                 pageHeightDp = heightDp.coerceAtLeast(0).takeIf { h -> h > 0 },
+                pageLeftDp = 0,
+                pageWidthDp = null,
+                pageViewportWidthDp = null,
             )
         }
+    }
+
+    override fun setPlayerBounds(left: Int, top: Int, width: Int, height: Int, viewportWidth: Int, origin: PageOrigin) {
+        if (!acceptsPageCallback(playbackOrigin, origin) || width <= 0 || height <= 0 || viewportWidth <= 0) return
+        _uiState.update { it.copy(pageLeftDp = left, pageTopDp = top, pageWidthDp = width,
+            pageHeightDp = height, pageViewportWidthDp = viewportWidth) }
     }
 
     /** An active watch page expands the preserved local player. */
@@ -610,6 +613,9 @@ class PlayerViewModel(
                 loading = if (switching) true else it.loading,
                 pageHeightDp = null,
                 pageTopDp = null,
+                pageLeftDp = 0,
+                pageWidthDp = null,
+                pageViewportWidthDp = null,
                 sponsorCountdownSec = null,
                 sponsorChip = false,
                 sponsorChipHighlight = false,
@@ -1117,7 +1123,7 @@ class PlayerViewModel(
      * reload the receiver at the current position with the receiver-capable
      * tracks from [PlaybackApi.currentCastSource].
      */
-    internal fun recastPublishedSource() {
+    private fun recastPublishedSource() {
         if (!cast.state.value.chromecastSession) return
         val source = engine.currentCastSource() ?: return
         if (!cast.startCasting(source, engine.snapshot.value.positionMs)) {
@@ -1205,8 +1211,8 @@ class PlayerViewModel(
         engine.stop()
     }
 
-    fun initializeCast(activity: Activity) {
-        cast.initialize(activity)
+    fun initializeCast() {
+        cast.initialize()
     }
 
     companion object {

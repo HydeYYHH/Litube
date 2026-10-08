@@ -16,22 +16,54 @@ import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.media3.extractor.text.SubtitleParser
-import com.hhst.youtubelite.downloader.core.MediaCombo
+import androidx.media3.muxer.BufferInfo
+import androidx.media3.muxer.Mp4Muxer
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
+
+/** One retained compressed sample; the reader/writer oracle's unit. */
+data class MediaSample(
+    val timeUs: Long,
+    val flags: Int,
+    val data: ByteArray,
+)
 
 /**
- * Test-only MP4/fMP4 reader that retains every sample in memory. Serves as an
- * independent oracle for [MediaFileIo], which streams samples instead.
+ * Test-only MP4/fMP4 reader and mux writer. Serves as an in-memory oracle for
+ * [MediaFileIo] and [Mp4Muxer], which stream samples instead.
  */
 data class ExtractedTrack(
     val format: Format,
-    val samples: List<MediaCombo.Sample>,
+    val samples: List<MediaSample>,
 ) {
     val durationUs: Long get() = samples.maxOfOrNull { it.timeUs } ?: 0L
     val mime: String? get() = format.sampleMimeType
+}
+
+/** [ExtractedTrack] contents handed back to the muxer for a round trip. */
+data class MuxTrack(val format: Format, val samples: List<MediaSample>)
+
+/** Mp4Muxer write path of the oracle: in-memory samples straight to a file. */
+fun mux(tracks: List<MuxTrack>, dest: File) {
+    FileOutputStream(dest).use { stream ->
+        @Suppress("DEPRECATION")
+        Mp4Muxer.Builder(stream).build().use { muxer ->
+            val ids = tracks.map { muxer.addTrack(it.format) }
+            tracks.forEachIndexed { index, track ->
+                track.samples.forEach { sample ->
+                    muxer.writeSampleData(
+                        ids[index],
+                        ByteBuffer.wrap(sample.data),
+                        BufferInfo(sample.timeUs, sample.data.size, sample.flags),
+                    )
+                }
+            }
+        }
+    }
 }
 
 object MediaSampleIo {
@@ -118,7 +150,7 @@ object MediaSampleIo {
 
     private class DumpTrack : TrackOutput {
         var format: Format? = null
-        val samples = mutableListOf<MediaCombo.Sample>()
+        val samples = mutableListOf<MediaSample>()
         private val pending = ByteArrayOutputStream()
 
         override fun format(format: Format) {
@@ -160,7 +192,7 @@ object MediaSampleIo {
             val bytes = pending.toByteArray()
             pending.reset()
             val start = (bytes.size - size - offset).coerceAtLeast(0)
-            samples += MediaCombo.Sample(timeUs, flags, bytes.copyOfRange(start, start + size))
+            samples += MediaSample(timeUs, flags, bytes.copyOfRange(start, start + size))
         }
     }
 

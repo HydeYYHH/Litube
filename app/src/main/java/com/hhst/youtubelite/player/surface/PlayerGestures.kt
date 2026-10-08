@@ -168,7 +168,7 @@ private suspend fun AwaitPointerEventScope.trackDrag(
             callbacks.onFullscreenSwipeCancel()
             if (!zoomEnabled) return
         }
-        if (zoomEnabled && pressed.size >= 2) {
+        if (pressed.size >= 2) {
             if (longPressActive) {
                 longPressActive = false
                 callbacks.onLongPressEnd()

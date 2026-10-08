@@ -9,8 +9,8 @@ import android.os.Build
 import androidx.javascriptengine.JavaScriptSandbox
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import org.schabi.newpipe.extractor.services.youtube.streams.ChallengeSolver
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import java.io.File

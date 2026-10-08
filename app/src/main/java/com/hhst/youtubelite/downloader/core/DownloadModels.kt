@@ -55,7 +55,6 @@ enum class BatchSource {
     VIDEO,
     PLAYLIST,
     QUEUE,
-    MIX,
     SHARE,
 }
 
@@ -63,7 +62,6 @@ enum class PublishPhase {
     PENDING,
     IN_PROGRESS,
     PUBLISHED,
-    FAILED,
     DELETE_INTENT,
     DELETED,
 }
@@ -130,7 +128,6 @@ data class BatchSelection(
 
 data class TaskRef(
     val taskId: String,
-    val videoId: String,
     val owned: Boolean,
 )
 

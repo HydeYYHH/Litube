@@ -16,7 +16,6 @@ import com.hhst.youtubelite.player.engine.CastSource
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
-import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.PlaybackCommandRouter
 import com.hhst.youtubelite.player.surface.GestureMath.GestureZone
 import kotlinx.coroutines.Dispatchers
@@ -331,7 +330,6 @@ class PlayerViewModelTest {
         override val snapshot: StateFlow<PlaybackSnapshot> = _snapshot.asStateFlow()
 
         val playCalls = mutableListOf<String>()
-        var pauseLocalCount = 0
 
         /** Publishes a settled (prepared) and playing engine state for [videoId]. */
         fun settle(videoId: String, positionMs: Long = 0L) {
@@ -368,7 +366,6 @@ class PlayerViewModelTest {
         }
 
         override fun pauseLocal() {
-            pauseLocalCount++
             _snapshot.value = _snapshot.value.copy(isPlaying = false)
         }
 

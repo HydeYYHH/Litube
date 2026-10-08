@@ -131,11 +131,7 @@ fun ExtensionScreen(
                     key = { it.id },
                 ) { section ->
                     if (section.isNav) {
-                        NavRow(
-                            node = section,
-                            depth = 0,
-                            onClick = { onNavigate(section.id) },
-                        )
+                        SectionRow(section, depth = 0, rotateChevron = false) { onNavigate(section.id) }
                     } else {
                         GroupBlock(
                             node = section,
@@ -204,41 +200,7 @@ private fun GroupBlock(
 ) {
     val open = node.id in expanded
     val startPad = SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = SettingsTokens.RowHeight)
-            .clickable(role = Role.Button) { onToggleExpand(node.id) }
-            .padding(start = startPad),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (node.icon != 0) {
-            Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
-                painter = painterResource(node.icon),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(SettingsTokens.IconSize),
-            ) }
-            Spacer(Modifier.width(SettingsTokens.LabelGap))
-        } else {
-            Spacer(Modifier.width(SettingsTokens.PageInset))
-        }
-        Text(
-            text = stringResource(node.title),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .size(SettingsTokens.IconSize)
-                .rotate(if (open) 90f else 0f),
-        ) }
-    }
+    SectionRow(node, depth, rotateChevron = true, open = open) { onToggleExpand(node.id) }
 
     AnimatedVisibility(
         visible = open,
@@ -261,11 +223,7 @@ private fun GroupBlock(
                         onNavigate = onNavigate,
                     )
                 } else if (child.isNav) {
-                    NavRow(
-                        node = child,
-                        depth = depth + 1,
-                        onClick = { onNavigate(child.id) },
-                    )
+                    SectionRow(child, depth + 1, rotateChevron = false) { onNavigate(child.id) }
                 } else if (child.kind == ExtensionKind.SLIDER) {
                     Column(Modifier.fillMaxWidth().padding(start = startPad + SettingsTokens.PageInset,
                         end = SettingsTokens.PageInset, top = SettingsTokens.RowPadding, bottom = SettingsTokens.RowPadding)) {
@@ -289,10 +247,13 @@ private fun GroupBlock(
     }
 }
 
+/** Shared group/nav header row: icon slot, label, trailing chevron. */
 @Composable
-private fun NavRow(
+private fun SectionRow(
     node: Extension,
     depth: Int,
+    rotateChevron: Boolean,
+    open: Boolean = false,
     onClick: () -> Unit,
 ) {
     val startPad = SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
@@ -325,7 +286,9 @@ private fun NavRow(
             painter = painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(SettingsTokens.IconSize),
+            modifier = Modifier
+                .size(SettingsTokens.IconSize)
+                .then(if (rotateChevron) Modifier.rotate(if (open) 90f else 0f) else Modifier),
         ) }
     }
 }

@@ -40,6 +40,8 @@ class YoutubePlaybackAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
 
     @Test fun rememberedManualHlsHeightMatchesFirstDecodedFrameAndSwitches() = runBlocking(Dispatchers.IO) {
+        assumeTrue("Supply -e network 1 for real-network playback acceptance",
+            InstrumentationRegistry.getArguments().getString("network") == "1")
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val cache = GlobalContext.get().get<JsonCache>()
         val prefs = GlobalContext.get().get<ExtensionManager>()

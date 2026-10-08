@@ -4,7 +4,7 @@
   window.__shorts = true;
   let active = true, key = '', video = null, readyAt = 0, attempts = 0;
   let userMuted = false, reported = false, hiddenVideo = null;
-  const isShorts = () => /^\/shorts(?:\/|$)/.test(location.pathname);
+  const isShorts = Lite.isShorts;
   const currentVideo = () => Array.from(document.querySelectorAll('video')).find(v => {
     const r = v.getBoundingClientRect();
     return r.width > 40 && r.height > 40 && r.top < innerHeight && r.bottom > 0;
@@ -67,5 +67,6 @@
       }, 100);
     }
   }, true);
+  // core.js is injected first (see WebViewFactory), so Lite is always present here.
   window.Lite?.module('shorts', ensure);
 })();

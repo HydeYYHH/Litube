@@ -6,7 +6,7 @@ package com.hhst.youtubelite.downloader.core
  */
 object DownloadSnapshotGuard {
 
-    fun estimatedBytes(snapshot: BatchSnapshot): Int {
+    private fun estimatedBytes(snapshot: BatchSnapshot): Int {
         var n = 64 + snapshot.name.length * 2 + snapshot.source.name.length
         snapshot.items.forEach { request ->
             n += 160

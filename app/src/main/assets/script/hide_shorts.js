@@ -122,8 +122,6 @@
     window.addEventListener("preferencesChanged", syncPreferences, true);
     window.__hideShorts = { syncPreferences };
 
-    // The bridge can lag behind document-start injection; core.js polls
-    // for it and re-runs on the next navigation when it never arrives.
     Lite.bridgeReady(() => {
         if (typeof window.Bridge?.getPreferences !== "function") return false;
         syncPreferences();

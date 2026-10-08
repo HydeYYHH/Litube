@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,9 +53,12 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,7 +77,7 @@ private val ScrimBottom = Brush.verticalGradient(
     listOf(Color.Transparent, PlayerUi.Scrim),
 )
 
-/** Chrome button. Default hit target is 32 dp; pass [modifier] size to override. */
+/** Chrome button. Default hit target is 48 dp; pass [modifier] size to override. */
 @Composable
 fun PlayerIconButton(
     icon: Int,
@@ -80,7 +86,7 @@ fun PlayerIconButton(
     modifier: Modifier = Modifier,
     tint: Color = PlayerUi.Icon,
     enabled: Boolean = true,
-    iconSize: Int = 24,
+    iconSize: Int = PlayerUi.CHROME_ICON_DP,
     onLongClick: (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -93,7 +99,7 @@ fun PlayerIconButton(
                     Modifier.combinedClickable(
                         enabled = enabled,
                         interactionSource = interaction,
-                        indication = ripple(bounded = false, radius = 18.dp),
+                        indication = ripple(bounded = false, radius = 24.dp),
                         onClick = onClick,
                         onLongClick = onLongClick,
                     )
@@ -101,7 +107,7 @@ fun PlayerIconButton(
                     Modifier.clickable(
                         enabled = enabled,
                         interactionSource = interaction,
-                        indication = ripple(bounded = false, radius = 18.dp),
+                        indication = ripple(bounded = false, radius = 24.dp),
                         onClick = onClick,
                     )
                 },
@@ -134,106 +140,132 @@ fun TopBar(
     callbacks: PlayerSurfaceCallbacks? = null,
     onCast: () -> Unit = {},
     onSubtitleStyle: () -> Unit = {},
+    showAuthor: Boolean = true,
+    compactBottom: Boolean = false,
+    sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(start = 2.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PlayerIconButton(
-            icon = R.drawable.ic_arrow_back,
-            contentDescription = stringResource(R.string.navigate_back),
-            onClick = onBack,
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            Text(
-                text = state.title,
-                style = PlayerUi.TitleStyle,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
-            )
-            state.author?.let { author ->
-                Text(
-                    text = author,
-                    style = PlayerUi.AuthorStyle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val compact = PlayerUi.compactChrome(maxWidth.value, LocalDensity.current.fontScale,
+            state.casting || state.castDevices.isNotEmpty())
         Row(
+            modifier = Modifier.fillMaxWidth()
+                .padding(start = 2.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy((-PlayerUi.TOP_ACTION_OVERLAP_DP).dp),
         ) {
             PlayerIconButton(
-                icon = R.drawable.ic_queue,
-                contentDescription = stringResource(R.string.queue),
-                onClick = onQueue,
+                icon = R.drawable.ic_arrow_back,
+                contentDescription = stringResource(R.string.navigate_back),
+                onClick = onBack,
+                iconSize = sizing.iconDp,
             )
-            Box {
-                PlayerIconButton(
-                    icon = R.drawable.ic_segment,
-                    contentDescription = stringResource(R.string.segments),
-                    onClick = onSegments,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                Text(
+                    text = state.title,
+                    style = PlayerUi.TitleStyle.copy(fontSize = (sizing.textSp + 2).sp,
+                        lineHeight = (sizing.textSp + 8).sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                 )
-                if (menu == PlayerAnchorMenu.Segments && callbacks != null) {
-                    PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                }
-            }
-            Box {
-                PlayerIconButton(
-                    icon = if (state.subtitleEnabled) {
-                        R.drawable.ic_subtitles_on
-                    } else {
-                        R.drawable.ic_subtitles_off
-                    },
-                    contentDescription = stringResource(R.string.subtitles),
-                    onClick = onSubtitle,
-                    onLongClick = onSubtitleStyle,
-                    tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
-                )
-                if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
-                    PlayerAnchorDropdown(
-                        menu,
-                        state,
-                        positionState,
-                        callbacks,
-                        onDismissMenu,
-                        onSubtitleStyle = {
-                            onDismissMenu()
-                            onSubtitleStyle()
-                        },
+                state.author?.takeIf { showAuthor }?.let { author ->
+                    Text(
+                        text = author,
+                        style = PlayerUi.AuthorStyle.copy(fontSize = (sizing.textSp - 2).sp,
+                            lineHeight = (sizing.textSp + 4).sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            PlayerIconButton(
-                icon = PlayerUi.loopIcon(state.loopMode),
-                contentDescription = loopDescription(state.loopMode),
-                onClick = onLoop,
-                tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
-            )
-            // Cast shortcut: only once a route exists or a session is live —
-            // a permanent cast button is noise for device-less users.
-            if (state.casting || state.castDevices.isNotEmpty()) {
-                PlayerIconButton(
-                    icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
-                    contentDescription = stringResource(R.string.cast),
-                    onClick = onCast,
-                    tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                if (!compact) {
+                    PlayerIconButton(
+                        icon = R.drawable.ic_queue,
+                        contentDescription = stringResource(R.string.queue),
+                        onClick = onQueue,
+                        iconSize = sizing.iconDp,
+                    )
+                    Box {
+                        PlayerIconButton(
+                            icon = R.drawable.ic_segment,
+                            contentDescription = stringResource(R.string.segments),
+                            onClick = onSegments,
+                            iconSize = sizing.iconDp,
+                        )
+                        if (menu == PlayerAnchorMenu.Segments && callbacks != null) {
+                            PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
+                        }
+                    }
+                }
+                Box {
+                    PlayerIconButton(
+                        icon = if (state.subtitleEnabled) {
+                            R.drawable.ic_subtitles_on
+                        } else {
+                            R.drawable.ic_subtitles_off
+                        },
+                        contentDescription = stringResource(R.string.subtitles),
+                        onClick = onSubtitle,
+                        iconSize = sizing.iconDp,
+                        onLongClick = onSubtitleStyle,
+                        tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
+                    )
+                    if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
+                        PlayerAnchorDropdown(
+                            menu,
+                            state,
+                            positionState,
+                            callbacks,
+                            onDismissMenu,
+                            onSubtitleStyle = {
+                                onDismissMenu()
+                                onSubtitleStyle()
+                            },
+                        )
+                    }
+                }
+                if (!compact) {
+                    PlayerIconButton(
+                        icon = PlayerUi.loopIcon(state.loopMode),
+                        contentDescription = loopDescription(state.loopMode),
+                        onClick = onLoop,
+                        iconSize = sizing.iconDp,
+                        tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
+                    )
+                    // Cast shortcut: only once a route exists or a session is live —
+                    // a permanent cast button is noise for device-less users.
+                    if (state.casting || state.castDevices.isNotEmpty()) {
+                        PlayerIconButton(
+                            icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
+                            contentDescription = stringResource(R.string.cast),
+                            onClick = onCast,
+                            iconSize = sizing.iconDp,
+                            tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
+                        )
+                    }
+                }
+                Box {
+                    PlayerIconButton(
+                        icon = R.drawable.ic_more,
+                        contentDescription = stringResource(R.string.more_options),
+                        onClick = onMore,
+                        iconSize = sizing.iconDp,
+                    )
+                    val overflowMenu = (compact && menu == PlayerAnchorMenu.Segments) ||
+                        (compactBottom && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality))
+                    if (overflowMenu && callbacks != null) {
+                        PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
+                    }
+                }
             }
-            PlayerIconButton(
-                icon = R.drawable.ic_more,
-                contentDescription = stringResource(R.string.more_options),
-                onClick = onMore,
-            )
         }
     }
 }
@@ -248,8 +280,10 @@ fun CenterControls(
     state: PlayerUiState,
     onPlayPause: () -> Unit,
     modifier: Modifier = Modifier,
+    playSizeDp: Int = PlayerUi.CENTER_PLAY_DP,
     onPrevious: () -> Unit = {},
     onNext: () -> Unit = {},
+    iconSize: Int = PlayerUi.CHROME_ICON_DP,
 ) {
     Row(
         modifier = modifier,
@@ -262,12 +296,12 @@ fun CenterControls(
             onClick = onPrevious,
             enabled = state.hasPrevious,
             modifier = Modifier.size(PlayerUi.CENTER_SKIP_DP.dp),
-            iconSize = 32,
+            iconSize = iconSize,
         )
         Box(
             modifier = Modifier
                 .padding(horizontal = 20.dp)
-                .size(PlayerUi.CENTER_PLAY_DP.dp)
+                .size(playSizeDp.dp)
                 .clip(CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -300,7 +334,7 @@ fun CenterControls(
                         },
                     ),
                     tint = Color.White,
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier.size(minOf(iconSize + 24, playSizeDp - 16).dp),
                 )
             }
         }
@@ -310,7 +344,7 @@ fun CenterControls(
             onClick = onNext,
             enabled = state.hasNext,
             modifier = Modifier.size(PlayerUi.CENTER_SKIP_DP.dp),
-            iconSize = 32,
+            iconSize = iconSize,
         )
     }
 }
@@ -322,6 +356,7 @@ fun CenterControls(
  * Position/buffered arrive as [State]s and are consumed only by the time bar
  * and [PositionText], so 4 Hz playback ticks never recompose this bar.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BottomBar(
     state: PlayerUiState,
@@ -335,6 +370,8 @@ fun BottomBar(
     menu: PlayerAnchorMenu? = null,
     onDismissMenu: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
+    compact: Boolean = false,
+    sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
 ) {
     val autoLabel = stringResource(R.string.player_quality_auto)
     Column(modifier = modifier.fillMaxWidth()) {
@@ -348,46 +385,82 @@ fun BottomBar(
             onCommit = { callbacks?.onTimeBarCommit() },
             modifier = Modifier.offset(y = PlayerUi.TIME_BAR_OVERLAP_DP.dp),
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(PlayerUi.BOTTOM_ROW_DP.dp)
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PositionText(
-                positionState = positionState,
-                durationMs = state.durationMs,
-                isLive = state.isLive,
-            )
-            Spacer(Modifier.weight(1f))
-            Box {
-                ChromeTextButton(label = PlayerUi.speedLabel(state.speed), onClick = onSpeed)
-                if (menu == PlayerAnchorMenu.Speed && callbacks != null) {
-                    PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val wraps = !compact && compactBottomControls(state, maxWidth.value, sizing.textSp)
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(Modifier.heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp).align(Alignment.CenterVertically),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    PositionText(
+                        positionState = positionState,
+                        durationMs = state.durationMs,
+                        isLive = state.isLive,
+                        textSizeSp = sizing.textSp,
+                    )
+                }
+                Row(
+                    modifier = (if (wraps) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                        .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!compact) {
+                        Box {
+                            ChromeTextButton(label = PlayerUi.speedLabel(state.speed), onClick = onSpeed,
+                                textSizeSp = sizing.textSp)
+                            if (menu == PlayerAnchorMenu.Speed && callbacks != null) {
+                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
+                            }
+                        }
+                        Box(Modifier.weight(1f, fill = false)) {
+                            ChromeTextButton(
+                                label = PlayerUi.qualityButtonLabel(
+                                    pinned = state.qualityLabel,
+                                    active = state.activeQuality,
+                                    autoPrefix = autoLabel,
+                                    videoHeight = state.videoHeight,
+                                ),
+                                onClick = onQuality,
+                                textSizeSp = sizing.textSp,
+                            )
+                            if (menu == PlayerAnchorMenu.Quality && callbacks != null) {
+                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
+                            }
+                        }
+                    }
+                    PlayerIconButton(
+                        icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
+                        contentDescription = stringResource(R.string.action_fullscreen),
+                        onClick = onFullscreen,
+                        iconSize = sizing.iconDp,
+                    )
                 }
             }
-            Box {
-                ChromeTextButton(
-                    label = PlayerUi.qualityButtonLabel(
-                        pinned = state.qualityLabel,
-                        active = state.activeQuality,
-                        autoPrefix = autoLabel,
-                        videoHeight = state.videoHeight,
-                    ),
-                    onClick = onQuality,
-                )
-                if (menu == PlayerAnchorMenu.Quality && callbacks != null) {
-                    PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                }
-            }
-            PlayerIconButton(
-                icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
-                contentDescription = stringResource(R.string.action_fullscreen),
-                onClick = onFullscreen,
-            )
         }
     }
+}
+
+/** Measure the bottom labels off-screen; returns true when they must wrap into More. */
+@Composable
+internal fun compactBottomControls(state: PlayerUiState, widthDp: Float,
+    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP): Boolean {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontSize = textSizeSp.sp)
+    fun width(label: String) = with(density) { measurer.measure(label, style).size.width.toDp().value }
+    val duration = if (state.isLive) stringResource(R.string.player_live) else PlayerUi.formatTime(state.durationMs)
+    // Width probe: widen every digit to '8' (the widest) so the reservation covers any time value.
+    val sample = if (state.isLive) "88:88:88" else PlayerUi.formatTime(state.durationMs)
+        .map { if (it.isDigit()) '8' else it }.joinToString("").let { if (it.length < 5) "88:88" else it }
+    val speedWidth = maxOf(48f, width(PlayerUi.speedLabel(state.speed)) + 20)
+    val quality = PlayerUi.qualityButtonLabel(state.qualityLabel, state.activeQuality,
+        stringResource(R.string.player_quality_auto), state.videoHeight)
+    val qualityWidth = maxOf(48f, width(quality) + 20)
+    return width("$sample / $duration") + speedWidth + qualityWidth + 48 + 24 > widthDp
 }
 
 /** Position / duration text, isolated so position ticks stay inside this leaf. */
@@ -396,26 +469,30 @@ private fun PositionText(
     positionState: State<Long>,
     durationMs: Long,
     isLive: Boolean,
+    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP,
 ) {
     val positionMs = positionState.value
     Text(
         text = PlayerUi.formatTime(positionMs),
         color = Color.White,
-        fontSize = 12.sp,
+        fontSize = textSizeSp.sp,
+        maxLines = 1,
     )
-    Text(" / ", color = Color.White, fontSize = 12.sp)
+    Text(" / ", color = Color.White, fontSize = textSizeSp.sp, maxLines = 1)
     if (isLive) {
         Text(
             text = stringResource(R.string.player_live),
             color = PlayerUi.YtRed,
-            fontSize = 12.sp,
+            fontSize = textSizeSp.sp,
+            maxLines = 1,
             fontWeight = FontWeight.Medium,
         )
     } else {
         Text(
             text = PlayerUi.formatTime(durationMs),
             color = Color.White,
-            fontSize = 12.sp,
+            fontSize = textSizeSp.sp,
+            maxLines = 1,
         )
     }
 }
@@ -441,31 +518,33 @@ fun ControlScrims(modifier: Modifier = Modifier) {
     }
 }
 
-/** Compact speed / quality label that opens the anchor dropdown menu. */
+/** Readable speed / quality label with an independent 48 dp touch target. */
 @Composable
-fun ChromeTextButton(
+private fun ChromeTextButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP,
 ) {
     Box(
         modifier = modifier
-            .height(28.dp)
-            .widthIn(min = 46.dp)
+            .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp)
+            .widthIn(min = PlayerUi.TOP_ACTION_DP.dp)
             .clip(RoundedCornerShape(4.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true),
                 onClick = onClick,
             )
-            .padding(horizontal = 7.dp),
+            .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = PlayerUi.Icon,
-            fontSize = 12.sp,
+            fontSize = textSizeSp.sp,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -478,9 +557,6 @@ fun ChromeTextButton(
 fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier = Modifier) {
     val hint = if (enabled) hintState.value else null
     var lastText by remember { mutableStateOf("") }
-    // SideEffect (not a composition-time write): keeps the last non-null text
-    // so the exit fade does not collapse the pill, without scheduling an
-    // extra recomposition from inside composition.
     SideEffect { if (hint != null) lastText = hint }
     AnimatedVisibility(
         visible = hint != null,
@@ -619,12 +695,14 @@ fun LockAffordance(
     locked: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    iconSize: Int = PlayerUi.CHROME_ICON_DP,
 ) {
     PlayerIconButton(
         icon = PlayerUi.lockIconRes(locked),
         contentDescription = stringResource(PlayerUi.lockContentDescriptionRes(locked)),
         onClick = onToggle,
         modifier = modifier,
+        iconSize = iconSize,
     )
 }
 

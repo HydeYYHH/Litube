@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DownloadsDao {
@@ -130,27 +129,4 @@ interface DownloadsDao {
     @Query("SELECT * FROM dl_schedule")
     suspend fun allSchedules(): List<ScheduleEntity>
 
-    @Query("SELECT * FROM dl_task")
-    fun observeTasks(): Flow<List<TaskEntity>>
-
-    @Query("SELECT * FROM dl_item")
-    fun observeItems(): Flow<List<ItemEntity>>
-
-    @Query("SELECT * FROM dl_asset")
-    fun observeAssets(): Flow<List<AssetEntity>>
-
-    @Query("SELECT * FROM dl_component")
-    fun observeComponents(): Flow<List<ComponentEntity>>
-
-    @Query("SELECT * FROM dl_chunk")
-    fun observeChunks(): Flow<List<ChunkEntity>>
-
-    @Query("SELECT * FROM dl_publish")
-    fun observePublish(): Flow<List<PublishEntity>>
-
-    @Query("SELECT * FROM dl_schedule")
-    fun observeSchedules(): Flow<List<ScheduleEntity>>
-
-    @Query("SELECT * FROM dl_batch")
-    fun observeBatches(): Flow<List<BatchEntity>>
 }

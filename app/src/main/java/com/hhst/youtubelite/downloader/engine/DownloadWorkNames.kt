@@ -1,10 +1,17 @@
 package com.hhst.youtubelite.downloader.engine
 
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+
+/** Phases past byte transfer (mux / verify / save) need finalize-family work. */
+fun workKindForPhase(phase: DownloadPhase): DownloadWorkKind =
+    if (phase == DownloadPhase.WAITING_PROCESS || phase == DownloadPhase.MERGE_VERIFY ||
+        phase == DownloadPhase.SAVE
+    ) DownloadWorkKind.FINALIZE else DownloadWorkKind.TRANSFER
+
 object DownloadWorkNames {
-    const val TRANSFER_PREFIX = "dl-transfer-"
+    private const val TRANSFER_PREFIX = "dl-transfer-"
     const val FINALIZE_PREFIX = "dl-finalize-"
     const val KEY_BATCH_ID = "batchId"
-    const val KEY_TASK_ID = "taskId"
 
     fun transfer(batchId: String): String = TRANSFER_PREFIX + batchId
 
@@ -28,7 +35,6 @@ object ScheduleReasons {
     const val ENQUEUE = "ENQUEUE"
     const val RESUME = "RESUME"
     const val RETRY = "RETRY"
-    const val NETWORK = "NETWORK"
     const val SYSTEM = "SYSTEM"
 
     fun isUserInitiated(reason: String): Boolean =

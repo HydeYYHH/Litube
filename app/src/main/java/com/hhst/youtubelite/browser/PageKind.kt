@@ -40,7 +40,7 @@ object PageKind {
         }
     }
 
-    internal fun fromHost(host: String, segments: List<String>): String {
+    private fun fromHost(host: String, segments: List<String>): String {
         val lowerHost = host.lowercase(Locale.ROOT)
         if (lowerHost == "youtu.be") {
             return if (segments.isEmpty()) "unknown" else Constants.PAGE_WATCH

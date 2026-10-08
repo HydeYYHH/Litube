@@ -2,21 +2,23 @@ package com.hhst.youtubelite.extractor
 
 import android.os.Bundle
 import android.webkit.CookieManager
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.hhst.youtubelite.core.Constants
+import java.io.File
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
+import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import org.schabi.newpipe.extractor.services.youtube.streams.*
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Anonymous native route with an empty credential handle; never signs the device's account out. */
 class YoutubeAnonymousReadAndroidTest {
-    @get:org.junit.Rule val activity = androidx.test.ext.junit.rules.ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
 
     @Test fun anonymousPageAndMediaAreReadWithoutAccountHeaders() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

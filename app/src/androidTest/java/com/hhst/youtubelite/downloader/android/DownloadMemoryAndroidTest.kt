@@ -15,12 +15,6 @@ import com.hhst.youtubelite.downloader.core.MuxResult
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
 import com.hhst.youtubelite.extractor.ExtractionTestActivity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
-import org.junit.Test
-import org.koin.core.context.GlobalContext
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -28,10 +22,17 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.junit.Rule
+import org.junit.Test
+import org.koin.core.context.GlobalContext
 
 /** Uses retained download inputs without changing the task or its original files. */
 class DownloadMemoryAndroidTest {
-    @get:org.junit.Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
 
     @Test fun retainedInputsLargerThanHeapMuxDecodeAndSeek() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

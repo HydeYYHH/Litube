@@ -1,5 +1,7 @@
 [versions]
 agp = "8.10.1"
+desugar_jdk_libs_nio = "2.1.5"
+javascriptengine = "1.1.1"
 kotlin = "2.2.20"
 koin = "4.1.0"
 coreKtx = "1.16.0"
@@ -11,7 +13,6 @@ junit = "4.13.2"
 androidxTestExtJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 androidxTestCore = "1.6.1"
-material = "1.12.0"
 swiperefreshlayout = "1.1.0"
 webkit = "1.14.0"
 okhttp = "4.12.0"
@@ -22,12 +23,10 @@ room = "2.8.4"
 ksp = "2.2.20-2.0.4"
 workManager = "2.10.5"
 nanohttpd = "2.3.1"
-playServicesCast = "22.1.0"
-# Declared explicitly because CastController uses androidx.mediarouter directly;
-# cast-framework 22.1.0 pulls 1.8.0-beta01 transitively while 1.8.1 is what resolves.
-mediarouter = "1.8.1"
 
 [libraries]
+androidx-javascriptengine = { module = "androidx.javascriptengine:javascriptengine", version.ref = "javascriptengine" }
+desugar_jdk_libs_nio = { module = "com.android.tools:desugar_jdk_libs_nio", version.ref = "desugar_jdk_libs_nio" }
 guava = { module = "com.google.guava:guava", version = "33.3.1-android" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -48,8 +47,6 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 androidx-test-core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCore" }
 androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestCore" }
 
-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
-
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 
@@ -69,7 +66,6 @@ media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls
 media3-datasource = { group = "androidx.media3", name = "media3-datasource", version.ref = "media3" }
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
-media3-cast = { group = "androidx.media3", name = "media3-cast", version.ref = "media3" }
 media3-extractor = { group = "androidx.media3", name = "media3-extractor", version.ref = "media3" }
 media3-muxer = { group = "androidx.media3", name = "media3-muxer", version.ref = "media3" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
@@ -77,8 +73,6 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
-androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
-play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

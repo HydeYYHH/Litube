@@ -26,7 +26,6 @@ data class DownloadItemUiState(
     val fullyDownloaded: Boolean,
     val watchPageDownloaded: Boolean = false,
     val fileMissing: Boolean = false,
-    val owned: Boolean = true,
     val skipped: Boolean = false,
     val progressBytes: Long = 0L,
     val expectedBytes: Long? = null,
@@ -39,7 +38,6 @@ data class DownloadItemUiState(
 )
 
 data class BatchUiState(
-    val batchId: String,
     val name: String,
     val stats: BatchStats,
     val items: List<DownloadItemUiState>,
@@ -91,7 +89,6 @@ object DownloadUiMapper {
             fullyDownloaded = allPublished,
             watchPageDownloaded = watch,
             fileMissing = fileMissing,
-            owned = item?.item?.owned ?: true,
             skipped = item?.item?.skipped ?: false,
             progressBytes = progress,
             expectedBytes = expected,
@@ -108,7 +105,6 @@ object DownloadUiMapper {
     }
 
     fun batch(view: BatchView): BatchUiState = BatchUiState(
-        batchId = view.batch.id,
         name = view.batch.name,
         stats = view.stats,
         items = view.items.map { item(it.task, it) },

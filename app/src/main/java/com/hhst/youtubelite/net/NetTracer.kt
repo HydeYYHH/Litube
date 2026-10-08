@@ -69,7 +69,7 @@ class NetTracer(
         const val TAG = "NetTracer"
         const val JS_NAME = "NetTrace"
         const val ASSET = "script/net-tracer.js"
-        const val DEFAULT_SLOW_MS = 500L
+        private const val DEFAULT_SLOW_MS = 500L
 
         private val URL_NOISE = listOf(
             "doubleclick", "googleads", "/pagead/", "pcs/activeview",

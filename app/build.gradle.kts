@@ -15,8 +15,8 @@ android {
         applicationId = "com.hhst.litube"
         minSdk = 23
         targetSdk = 36
-        versionCode = 300
-        versionName = "3.0.0"
+        versionCode = 301
+        versionName = "3.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -88,10 +88,9 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.material)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
-    implementation("androidx.javascriptengine:javascriptengine:1.1.1")
+    implementation(libs.androidx.javascriptengine)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.koin.android)
@@ -108,15 +107,12 @@ dependencies {
     implementation(libs.media3.datasource)
     implementation(libs.media3.session)
     implementation(libs.media3.ui)
-    implementation(libs.media3.cast)
     implementation(libs.media3.extractor)
     implementation(libs.media3.muxer)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.play.services.cast.framework)
-    implementation(libs.androidx.mediarouter)
     implementation(libs.nanohttpd)
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -132,5 +128,5 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.kotlinx.coroutines.test)
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
+    coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
 }

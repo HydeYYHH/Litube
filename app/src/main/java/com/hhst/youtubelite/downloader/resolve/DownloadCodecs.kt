@@ -12,13 +12,13 @@ import com.hhst.youtubelite.extractor.Format
  */
 object DownloadCodecs {
 
-    fun videoSampleMime(format: Format): String? = mimeFromCodec(format.codec, video = true)
+    private fun videoSampleMime(format: Format): String? = mimeFromCodec(format.codec, video = true)
         ?: format.mimeType.takeIf { it.startsWith("video/") }
 
-    fun audioSampleMime(format: Format): String? = mimeFromCodec(format.codec, video = false)
+    private fun audioSampleMime(format: Format): String? = mimeFromCodec(format.codec, video = false)
         ?: format.mimeType.takeIf { it.startsWith("audio/") }
 
-    fun isMp4Family(format: Format): Boolean {
+    private fun isMp4Family(format: Format): Boolean {
         val container = format.container?.uppercase().orEmpty()
         val mime = format.mimeType.lowercase()
         return container == "MPEG_4" || container == "MP4" || container == "M4A" ||

@@ -33,15 +33,11 @@ internal class FakePublisher : DownloadPublisher {
     val deleted = mutableListOf<String>()
     var failDelete: Boolean = false
     var failReason: String = "delete-failed"
-    val present = mutableSetOf<String>()
-    var missingUnknown: Boolean = false
     override fun delete(uri: String): DeleteResult {
         deleted += uri
-        present.remove(uri)
         return if (failDelete) DeleteResult.fail(failReason) else DeleteResult.OK
     }
-    override fun exists(uri: String): Boolean =
-        uri in present || (!missingUnknown && uri !in deleted)
+    override fun exists(uri: String): Boolean = uri !in deleted
 }
 
 internal class DownloadHarness {

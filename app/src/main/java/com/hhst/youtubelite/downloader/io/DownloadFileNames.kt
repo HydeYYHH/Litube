@@ -5,7 +5,7 @@ package com.hhst.youtubelite.downloader.io
  * characters, caps length, and disambiguates collisions.
  */
 object DownloadFileNames {
-    const val MAX_BASE = 180
+    private const val MAX_BASE = 180
     private val ILLEGAL = Regex("""[\\/:*?"<>|\u0000-\u001F]""")
 
     fun sanitize(raw: String, extension: String, existing: Set<String> = emptySet()): String {
@@ -19,7 +19,7 @@ object DownloadFileNames {
             base = "download"
         }
         if (base.length > MAX_BASE) base = base.take(MAX_BASE).trimEnd('.', ' ')
-        var candidate = base + extSuffix
+        val candidate = base + extSuffix
         if (candidate.lowercase() !in existing.map { it.lowercase() }.toSet()) return candidate
         var n = 1
         while (n < 10_000) {

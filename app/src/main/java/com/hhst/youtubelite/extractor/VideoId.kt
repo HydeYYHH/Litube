@@ -57,7 +57,7 @@ object VideoId {
      * YouTube `t=` forms: `90`, `90s`, `1m30s`, `1h2m3s`.
      * Matches player-hook.js `parseTime` (seconds unit may omit the `s`).
      */
-    internal fun parseYoutubeTimeSeconds(text: String): Long? {
+    private fun parseYoutubeTimeSeconds(text: String): Long? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
         trimmed.toLongOrNull()?.let { return if (it >= 0L) it else null }
@@ -65,7 +65,6 @@ object VideoId {
         val h = m.groupValues[1]
         val min = m.groupValues[2]
         val s = m.groupValues[3]
-        if (h.isEmpty() && min.isEmpty() && s.isEmpty()) return null
         val hours = h.toLongOrNull() ?: 0L
         val minutes = min.toLongOrNull() ?: 0L
         val seconds = s.toLongOrNull() ?: 0L

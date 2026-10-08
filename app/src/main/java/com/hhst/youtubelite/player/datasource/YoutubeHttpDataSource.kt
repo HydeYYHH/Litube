@@ -30,7 +30,6 @@ class YoutubeHttpDataSource private constructor(
     private val callFactory: Call.Factory,
     private val rangeParameterEnabled: Boolean,
     private val rnParameterEnabled: Boolean,
-    private val defaultRequestProperties: HttpDataSource.RequestProperties?,
     private val userAgent: String,
     private val mediaRequests: YoutubeMediaRequests?,
     private val inheritedPlan: RequestPlan?,
@@ -398,16 +397,15 @@ class YoutubeHttpDataSource private constructor(
         private val callFactory: Call.Factory,
         private val userAgent: String,
     ) : HttpDataSource.Factory {
-        private val defaultRequestProperties = HttpDataSource.RequestProperties()
         private var connectTimeoutMs = 20_000
         private var readTimeoutMs = 30_000
         private var rangeParameterEnabled = false
         private var rnParameterEnabled = false
 
-        override fun setDefaultRequestProperties(properties: Map<String, String>): Factory {
-            defaultRequestProperties.clearAndSet(properties)
-            return this
-        }
+        // Required by the Factory interface but unused: every request's headers
+        // come from DataSpec.httpRequestHeaders, so factory-level defaults have
+        // no path into a request.
+        override fun setDefaultRequestProperties(properties: Map<String, String>): Factory = this
 
         fun setConnectTimeoutMs(value: Int) = apply {
             connectTimeoutMs = value
@@ -429,7 +427,7 @@ class YoutubeHttpDataSource private constructor(
 
         override fun createDataSource(): YoutubeHttpDataSource = YoutubeHttpDataSource(
             sharedCallFactory(), rangeParameterEnabled,
-            rnParameterEnabled, defaultRequestProperties, userAgent, mediaRequests, inheritedPlan, planResolver,
+            rnParameterEnabled, userAgent, mediaRequests, inheritedPlan, planResolver,
         )
 
         @Volatile

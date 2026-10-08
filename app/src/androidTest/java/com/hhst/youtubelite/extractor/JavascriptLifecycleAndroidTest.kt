@@ -8,8 +8,8 @@ import android.os.Process
 import android.os.Build
 import android.webkit.CookieManager
 import android.webkit.WebView
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grack.nanojson.JsonObject
 import org.junit.Assert.*

@@ -5,4 +5,6 @@
     <color name="secondary">#AAAAAA</color>
     <color name="on_secondary">#0F0F0F</color>
     <color name="background">#0F0F0F</color>
+    <color name="window_icon_color">#E6E0E9</color>
+    <color name="window_icon_variant">#CAC4D0</color>
 </resources>

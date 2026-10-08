@@ -87,8 +87,6 @@ sealed class DownloadDest {
 fun DownloadManagerScreen(
     viewModel: DownloadViewModel,
     initialBatchId: String?,
-    initialTaskId: String?,
-    initialDest: String?,
     onClose: () -> Unit,
 ) {
     var dest by rememberSaveable(stateSaver = Saver(
@@ -110,16 +108,10 @@ fun DownloadManagerScreen(
         },
     )) {
         mutableStateOf(
-            when (initialDest) {
-                DownloadUi.DEST_SETTINGS -> DownloadDest.Settings
-                DownloadUi.DEST_HISTORY -> DownloadDest.History
-                DownloadUi.DEST_BATCH -> DownloadDest.Batch(initialBatchId.orEmpty())
-                else -> if (!initialBatchId.isNullOrBlank()) DownloadDest.Batch(initialBatchId) else DownloadDest.List
-            },
+            if (!initialBatchId.isNullOrBlank()) DownloadDest.Batch(initialBatchId) else DownloadDest.List,
         )
     }
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val haptics: HapticsController = koinInject()
     var pendingDelete by remember { mutableStateOf<DownloadItemUiState?>(null) }
@@ -208,7 +200,6 @@ fun DownloadManagerScreen(
             when (val current = dest) {
                 DownloadDest.List -> DownloadListPane(
                     viewModel = viewModel,
-                    highlightTaskId = initialTaskId,
                     padding = padding,
                     onOpenBatch = { dest = DownloadDest.Batch(it) },
                     onAction = ::handle,
@@ -253,7 +244,6 @@ fun DownloadManagerScreen(
 @Composable
 private fun DownloadListPane(
     viewModel: DownloadViewModel,
-    highlightTaskId: String?,
     padding: PaddingValues,
     onOpenBatch: (String) -> Unit,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,

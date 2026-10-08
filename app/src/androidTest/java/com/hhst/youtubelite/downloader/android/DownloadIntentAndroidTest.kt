@@ -24,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.hhst.youtubelite.core.DeviceEvidence
 
 @RunWith(AndroidJUnit4::class)
 class DownloadIntentAndroidTest {
@@ -50,13 +51,10 @@ class DownloadIntentAndroidTest {
             scenario.onActivity { activity ->
                 assertEquals("batch-device", activity.intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID))
                 assertTrue(PipAutoEnter.isSuppressed())
-                assertFalse(PipAutoEnter.shouldAutoEnter(eligible = true, sdk = Build.VERSION.SDK_INT))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    assertFalse(
-                        "API 31+ auto-enter must stay off while DownloadActivity is in front",
-                        PipAutoEnter.shouldAutoEnter(eligible = true, sdk = Build.VERSION.SDK_INT),
-                    )
-                }
+                assertFalse(
+                    "API 31+ auto-enter must stay off while DownloadActivity is in front",
+                    PipAutoEnter.shouldAutoEnter(eligible = true, sdk = Build.VERSION.SDK_INT),
+                )
             }
             DeviceEvidence.captureScene("download-activity-batch")
             DeviceEvidence.dumpUi("download-activity-batch.xml")

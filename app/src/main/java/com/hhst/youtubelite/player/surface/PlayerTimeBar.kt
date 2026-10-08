@@ -35,9 +35,8 @@ import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
  * recomposing the caller's tree.
  *
  * The 48 dp hit area stays centered for the finger, but the visible track is
- * drawn [VISUAL_BOTTOM_PAD_DP] above the canvas bottom: BottomBar stacks the
- * 36 dp controls row below this canvas, so the track sits just above the
- * row's text.
+ * drawn [VISUAL_BOTTOM_PAD_DP] above the canvas bottom: BottomBar stacks its
+ * controls row below this canvas, so the track sits just above the row's text.
  */
 @Composable
 fun PlayerTimeBar(
@@ -141,9 +140,7 @@ fun PlayerTimeBar(
 }
 
 /**
- * Bottom clearance of the visible track inside the 48 dp hit canvas: the
- * BottomBar's 36 dp controls row follows below, and 10 dp keeps the 2 dp
- * track clear of the row's text baseline while staying nearer it than the
- * old mid-canvas center (which sat 24 dp up).
+ * Bottom clearance of the visible track inside the 48 dp hit canvas: 10 dp
+ * keeps the 2 dp track clear of the BottomBar row's text baseline.
  */
 private const val VISUAL_BOTTOM_PAD_DP = 10

@@ -69,7 +69,6 @@ data class DownloadPlan(
 
 data class DownloadMediaChoice(
     val format: Format,
-    val bitrateBps: Long,
     /** Trusted length (clen). Never a bitrate estimate. */
     val expectedBytes: Long?,
     val resourceIdentity: String,

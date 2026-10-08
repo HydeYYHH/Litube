@@ -25,10 +25,15 @@ class LandscapeWatchLayoutAndroidTest {
     class LayoutBridge {
         val compact = AtomicBoolean(true)
         val reportedHeight = AtomicInteger()
+        val reportedWidth = AtomicInteger()
+        val reportedLeft = AtomicInteger()
         val plays = AtomicInteger()
         @JavascriptInterface fun isPlayerCompact() = compact.get()
         @JavascriptInterface fun play(url: String) { plays.incrementAndGet() }
         @JavascriptInterface fun setPlayerLayout(top: Int, height: Int) { reportedHeight.set(height) }
+        @JavascriptInterface fun setPlayerBounds(left: Int, top: Int, width: Int, height: Int, viewportWidth: Int) {
+            reportedHeight.set(height); reportedWidth.set(width); reportedLeft.set(left)
+        }
         @JavascriptInterface fun setPageHasPlaylist(has: Boolean) = Unit
     }
 
@@ -90,6 +95,12 @@ class LandscapeWatchLayoutAndroidTest {
             assertEquals("360", evaluate("document.querySelector('.player-container').getBoundingClientRect().height"))
             assertEquals("408", evaluate("document.querySelector('#action').getBoundingClientRect().top"))
             assertEquals(1, bridge.plays.get())
+            evaluate("document.querySelector('.player-container').style.cssText='height:180px;width:240px;margin-left:32px'; window.__syncPlayerCompact();")
+            assertEquals(240, bridge.reportedWidth.get())
+            assertEquals(32, bridge.reportedLeft.get())
+            evaluate("document.querySelector('.player-container').style.cssText='height:180px;width:200px;margin-left:60px'; window.dispatchEvent(new Event('resize'));")
+            assertEquals(200, bridge.reportedWidth.get())
+            assertEquals(60, bridge.reportedLeft.get())
         } finally {
             compose.runOnUiThread { webView.destroy() }
         }

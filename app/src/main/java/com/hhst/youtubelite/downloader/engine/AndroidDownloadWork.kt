@@ -75,7 +75,7 @@ class AndroidWorkEnqueuePort(
         } else {
             DownloadWorkKind.TRANSFER
         }
-        return WorkSnapshot(name, active = !info.state.isFinished, kind = kind)
+        return WorkSnapshot(active = !info.state.isFinished, kind = kind)
     }
 }
 
@@ -93,11 +93,7 @@ class AndroidUidtJobPort(
         val extras = PersistableBundle().apply {
             putString(DownloadWorkNames.KEY_BATCH_ID, request.batchId)
         }
-        val estimated = if (request.estimatedBytes > 0L) {
-            request.estimatedBytes
-        } else {
-            JobInfo.NETWORK_BYTES_UNKNOWN.toLong()
-        }
+        val estimated = JobInfo.NETWORK_BYTES_UNKNOWN.toLong()
         val job = JobInfo.Builder(
             request.jobId,
             ComponentName(context, DownloadUidtJobService::class.java),

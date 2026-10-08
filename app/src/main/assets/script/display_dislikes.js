@@ -35,9 +35,7 @@
     return !!Lite.prefs().enable_show_likes;
   }
 
-  function isShorts() {
-    return location.pathname.startsWith("/shorts");
-  }
+  const isShorts = Lite.isShorts;
 
   // Independent switches, one RYD request: either flag initializes and
   // fetches; each render path gates on its own flag.
@@ -610,8 +608,6 @@
 
   window.__displayDislikes = { syncPreferences };
 
-  // The bridge can lag behind document-start injection; core.js polls
-  // for it and re-runs on the next navigation when it never arrives.
   Lite.bridgeReady(() => {
     if (typeof window.Bridge?.getPreferences !== "function") return false;
     syncPreferences();

@@ -46,12 +46,12 @@ object DownloadWebStatus {
         ),
     )
 
-    fun webState(item: DownloadItemUiState?, watchPageDownloaded: Boolean): String {
+    private fun webState(item: DownloadItemUiState?, watchPageDownloaded: Boolean): String {
         if (item?.fileMissing == true) return FAILED
         if (watchPageDownloaded) return COMPLETE
         if (item == null) return QUEUED
         if (item.completion == CompletionKind.PARTIAL || item.attachmentsOnly) return PARTIAL
-        if (item.phase == DownloadPhase.COMPLETE && item.fullyDownloaded && !item.fileMissing) return COMPLETE
+        if (item.phase == DownloadPhase.COMPLETE && item.fullyDownloaded) return COMPLETE
         return when (item.status) {
             DownloadStatus.QUEUED -> QUEUED
             DownloadStatus.RUNNING, DownloadStatus.PAUSING, DownloadStatus.WAITING_SYSTEM -> RUNNING

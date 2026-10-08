@@ -91,6 +91,19 @@ test('first layout is reported after play resets native geometry', () => {
   assert.deepEqual(page().layout(), [32, 180]);
 });
 
+test('width and horizontal offset changes report even when height is unchanged', () => {
+  const fixture = page();
+  let bounds;
+  fixture.context.innerWidth = 1000;
+  fixture.context.lite.setPlayerBounds = (...values) => { bounds = values; };
+  fixture.player.getBoundingClientRect = () => ({ left: 120, top: 48, width: 640, height: 360 });
+  fixture.context.__syncPlayerCompact();
+  assert.deepEqual(bounds, [120, 48, 640, 360, 1000]);
+  fixture.player.getBoundingClientRect = () => ({ left: 80, top: 48, width: 700, height: 360 });
+  fixture.context.__syncPlayerCompact();
+  assert.deepEqual(bounds, [80, 48, 700, 360, 1000]);
+});
+
 test('compact watch frees the slot but reports its original geometry after resize', () => {
   const fixture = page();
   let compact = true;

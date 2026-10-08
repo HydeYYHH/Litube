@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.downloader.net
 
-import com.hhst.youtubelite.downloader.resolve.DownloadBitrate
 import java.util.Base64
 import java.security.MessageDigest
 import com.hhst.youtubelite.extractor.Format

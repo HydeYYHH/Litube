@@ -82,7 +82,7 @@ class DownloadEngineE2ETest {
             null
         }
         val env = env(
-            catalog = muxedCatalog(mediaUrl("/v.mp4", media.size.toLong(), 18), media.size.toLong()),
+            catalog = muxedCatalog(mediaUrl("/v.mp4", media.size.toLong(), 18)),
             chunkBytes = 64,
             interceptor = Interceptor { chain ->
                 val range = chain.request().header("Range").orEmpty()
@@ -185,7 +185,7 @@ class DownloadEngineE2ETest {
             if ("timedtext" in request.path.orEmpty()) MockResponse().setResponseCode(404) else null
         }
         val env = env(
-            catalog = muxedCatalog(mediaUrl("/v.mp4", media.size.toLong(), 18), media.size.toLong()).copy(
+            catalog = muxedCatalog(mediaUrl("/v.mp4", media.size.toLong(), 18)).copy(
                 subtitles = listOf(subtitle("en").copy(url = server.url("/timedtext").toString(), requestPlan = subtitlePlan)),
             ),
         )
@@ -307,7 +307,7 @@ class DownloadEngineE2ETest {
         }
     }
 
-    private fun muxedCatalog(url: String, bytes: Long) = DownloadCatalog(
+    private fun muxedCatalog(url: String) = DownloadCatalog(
         videoId = "abcdefghijk",
         title = "Clip",
         durationSec = 1,

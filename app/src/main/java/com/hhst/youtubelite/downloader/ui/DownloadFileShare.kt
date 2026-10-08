@@ -28,9 +28,6 @@ object DownloadFileShare {
         }
     }
 
-    fun grantsRead(intent: Intent): Boolean =
-        grantsRead(intent.flags, intent.clipData != null)
-
     fun grantsRead(flags: Int, hasClipData: Boolean): Boolean {
         val granted = flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
         return granted == Intent.FLAG_GRANT_READ_URI_PERMISSION && hasClipData

@@ -13,8 +13,8 @@ import java.net.URI
 import android.app.ActivityManager
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import org.schabi.newpipe.extractor.services.youtube.streams.InnertubeAuth
@@ -186,7 +186,6 @@ internal data class PoIntegrity(
     val integrityToken: String,
     val estimatedTtlSecs: Long,
     val mintRefreshThreshold: Long,
-    val websafeFallbackToken: String?,
 )
 
 internal fun parsePoIntegrity(body: String): PoIntegrity {
@@ -196,6 +195,6 @@ internal fun parsePoIntegrity(body: String): PoIntegrity {
         val token = item(0)?.asString?.takeIf { it.isNotBlank() } ?: throw IOException("PO_INVALID_INTEGRITY")
         val ttl = item(1)?.asLong?.takeIf { it in 1..(Long.MAX_VALUE / 1000) }
             ?: throw IOException("PO_INVALID_INTEGRITY")
-        return PoIntegrity(token, ttl, item(2)?.asLong?.coerceAtLeast(0) ?: 0, item(3)?.asString)
+        return PoIntegrity(token, ttl, item(2)?.asLong?.coerceAtLeast(0) ?: 0)
     } catch (failure: RuntimeException) { throw IOException("PO_INVALID_INTEGRITY", failure) }
 }

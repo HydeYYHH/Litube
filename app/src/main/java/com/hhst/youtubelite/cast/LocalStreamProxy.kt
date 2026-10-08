@@ -13,8 +13,6 @@ import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import androidx.media3.extractor.ChunkIndex
-import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.LENGTH_UNSET
-import com.hhst.youtubelite.cast.LocalStreamProxy.Companion.resolveBindHost
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.core.Markup
 import androidx.core.os.ConfigurationCompat
@@ -485,7 +483,7 @@ class LocalStreamProxy(
         }
     }
 
-    private fun recoverable(failure: Throwable): Boolean = generateSequence(failure as Throwable?) { it.cause }.any {
+    private fun recoverable(failure: Throwable): Boolean = generateSequence(failure) { it.cause }.any {
         it is InvalidResponseCodeException && it.responseCode == 403
             || it.message in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")
     }
@@ -692,14 +690,14 @@ class LocalStreamProxy(
         private const val LINK_PEER_TIMEOUT_MS = 30_000L
         private val RECEIVER_UAS = arrayOf("chromecast", "crkey", "castsdk")
 
-        internal fun isReceiverUa(ua: String?): Boolean {
+        private fun isReceiverUa(ua: String?): Boolean {
             if (ua == null) return false
             val lower = ua.lowercase()
             return RECEIVER_UAS.any { lower.contains(it) }
         }
 
         /** Loose browser check: dash.js link-cast receivers always send one. */
-        internal fun isLinkPeerUa(ua: String?): Boolean =
+        private fun isLinkPeerUa(ua: String?): Boolean =
             ua?.lowercase()?.contains("mozilla") == true
 
         /**

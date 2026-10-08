@@ -17,17 +17,11 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object DownloadUi {
     const val EXTRA_BATCH_ID = DownloadActions.EXTRA_BATCH_ID
-    const val EXTRA_TASK_ID = "taskId"
     const val EXTRA_VIDEO_ID = "videoId"
     const val EXTRA_TITLE = "title"
     const val EXTRA_AUTHOR = "author"
     const val EXTRA_THUMBNAIL = "thumbnailUrl"
     const val EXTRA_SNAPSHOT_ID = "snapshotId"
-    const val EXTRA_DEST = "dest"
-    const val DEST_LIST = "list"
-    const val DEST_SETTINGS = "settings"
-    const val DEST_HISTORY = "history"
-    const val DEST_BATCH = "batch"
 
     fun showSingleConfirm(
         context: Context,
@@ -50,33 +44,19 @@ object DownloadUi {
             DownloadSheetActivity.batchIntent(context, id)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
-        return DownloadUiStart.Started(id)
+        return DownloadUiStart.Started
     }
 
-    fun openManager(context: Context, batchId: String? = null, taskId: String? = null) {
+    fun openManager(context: Context, batchId: String? = null) {
         context.startActivity(
-            DownloadActivity.intent(context, batchId = batchId, taskId = taskId)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-        )
-    }
-
-    fun openSettings(context: Context) {
-        context.startActivity(
-            DownloadActivity.intent(context, dest = DEST_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-        )
-    }
-
-    fun openHistory(context: Context) {
-        context.startActivity(
-            DownloadActivity.intent(context, dest = DEST_HISTORY)
+            DownloadActivity.intent(context, batchId = batchId)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
         )
     }
 }
 
 sealed class DownloadUiStart {
-    data class Started(val snapshotId: String) : DownloadUiStart()
+    data object Started : DownloadUiStart()
     data class Rejected(val reason: SnapshotReject) : DownloadUiStart()
 }
 

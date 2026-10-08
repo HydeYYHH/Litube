@@ -7,10 +7,12 @@ import java.util.Base64
 /**
  * Byte-cache identity for googlevideo `/videoplayback` URLs.
  *
- * Version prefix isolates older `yt:id:itag` entries so they cannot be
- * replayed as a different language or content-length. Rotating `sig` /
- * `expire` / `pot` / `rn` are omitted so a 403 URL refresh still hits
- * previously cached bytes.
+ * Two schemes coexist, one per call site, and their prefixes never collide:
+ * - [of] keys by the extractor's opaque resource identity ("yt:v3:…"). Rotating
+ *   `sig` / `expire` / `pot` / `rn` are omitted so a 403 URL refresh still hits
+ *   previously cached bytes.
+ * - [ofQuery] keys by raw `/videoplayback` query parameters ("yt:v2:…"); [VERSION]
+ *   isolates pre-v2 `yt:id:itag` entries.
  */
 object YoutubePlaybackCacheKey {
     fun of(format: Format): String {
@@ -18,7 +20,7 @@ object YoutubePlaybackCacheKey {
         return if (identity.isNullOrBlank() || format.formatKey == null) "yt:unproven:" + MessageDigest.getInstance("SHA-256").digest(format.url.toByteArray()).joinToString("") { "%02x".format(it) }
         else "yt:v3:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
     }
-    const val VERSION = 2
+    private const val VERSION = 2
 
     fun ofQuery(query: String): String? {
         if (query.isEmpty()) return null

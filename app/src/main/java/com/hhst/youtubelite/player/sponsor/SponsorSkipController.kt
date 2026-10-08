@@ -168,9 +168,9 @@ class SponsorSkipController(
     }
 
     companion object {
-        const val DEFAULT_COUNTDOWN_MS = 5_000L
+        private const val DEFAULT_COUNTDOWN_MS = 5_000L
 
         /** Highlight chip visibility window around the point marker. */
-        const val HIGHLIGHT_CHIP_WINDOW_MS = 15_000L
+        private const val HIGHLIGHT_CHIP_WINDOW_MS = 15_000L
     }
 }

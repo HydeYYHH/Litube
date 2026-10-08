@@ -7,7 +7,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
 
@@ -23,7 +23,7 @@ object PlayerUi {
     val Buffered = Color.White
     /** Gesture hint background: #CC000000, 12 dp corners. */
     val HintBg = Color(0xCC000000)
-    val Author = Color.White.copy(alpha = 0.7f)
+    private val Author = Color.White.copy(alpha = 0.7f)
     /** Top/bottom chrome scrim. */
     val Scrim = Color(0x80000000)
     /**
@@ -39,17 +39,19 @@ object PlayerUi {
     const val TIME_BAR_THICKNESS_DP = 2
     const val TIME_BAR_OVERLAP_DP = 2
     const val GRADIENT_DP = 100
-    const val TOP_ACTION_DP = 32
-    const val TOP_ACTION_OVERLAP_DP = 2
+    const val TOP_ACTION_DP = 48
+    const val CHROME_ICON_DP = 28
+    private const val WIDE_CHROME_ICON_DP = 32
+    const val CHROME_TEXT_SP = 15
     const val TITLE_PADDING_DP = 6
     const val CENTER_PLAY_DP = 80
     const val CENTER_SKIP_DP = 56
-    const val BOTTOM_ROW_DP = 36
+    const val BOTTOM_ROW_DP = 48
     const val HINT_TEXT_SP = 12
     /** Fallback embedded top: YouTube masthead height in page space (the window offset adds the system-bar inset). */
-    const val EMBEDDED_TOP_MARGIN_DP = 48
+    private const val EMBEDDED_TOP_MARGIN_DP = 48
     /** Fullscreen chrome / lock: keep clear of rounded corners and cutouts. */
-    const val FULLSCREEN_SIDE_DP = 16
+    private const val FULLSCREEN_SIDE_DP = 16
     /** Subtitle block bottom clearance: extra when the chrome is visible. */
     const val SUBTITLE_CHROME_CLEAR_DP = 52
     const val SUBTITLE_CLEAR_DP = 12
@@ -62,20 +64,20 @@ object PlayerUi {
 
     val SpeedChoices = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
 
-    /** Regular title with the shared body metrics and no extra font padding. */
+    /** Player metadata stays readable above the video without extra font padding. */
     val TitleStyle = TextStyle(
         color = Color.White,
-        fontSize = SettingsTokens.BodySize.sp,
-        lineHeight = SettingsTokens.BodyLine.sp,
+        fontSize = 17.sp,
+        lineHeight = 23.sp,
         fontWeight = FontWeight.Normal,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 
-    /** Secondary text uses the shared detail metrics. */
+    /** Secondary player metadata. */
     val AuthorStyle = TextStyle(
         color = Author,
-        fontSize = SettingsTokens.DetailSize.sp,
-        lineHeight = SettingsTokens.DetailLine.sp,
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 
@@ -84,6 +86,19 @@ object PlayerUi {
         ExitFullscreen,
         BrowserBack,
     }
+
+    /** Reserve metadata space instead of packing smaller, overlapping action buttons. */
+    fun compactChrome(widthDp: Float, fontScale: Float, hasCast: Boolean): Boolean =
+        widthDp < TOP_ACTION_DP * (if (hasCast) 7 else 6) + 24 + 128 * fontScale
+
+    data class ChromeSizing(val iconDp: Int, val textSp: Int)
+
+    val CompactChromeSizing = ChromeSizing(CHROME_ICON_DP, CHROME_TEXT_SP)
+    private val WideChromeSizing = ChromeSizing(WIDE_CHROME_ICON_DP, 16)
+
+    /** Keep text and icons proportional to the actual space available for the player. */
+    fun chromeSizing(widthDp: Float, heightDp: Float): ChromeSizing =
+        if (widthDp >= 600 && heightDp >= 280) WideChromeSizing else CompactChromeSizing
 
     /**
      * Same order for the overlay back button and system Back. The mini-player
@@ -130,8 +145,20 @@ object PlayerUi {
         return (widthDp * 9 / 16).coerceAtLeast(1)
     }
 
+    data class EmbeddedBounds(val left: Int, val top: Int?, val width: Int, val height: Int)
+
+    /** Convert the page viewport (including zoom/desktop mode) into the WebView's actual width. */
+    fun embeddedBounds(state: PlayerUiState, viewportWidthDp: Int): EmbeddedBounds {
+        val available = viewportWidthDp.coerceAtLeast(1)
+        val scale = state.pageViewportWidthDp?.takeIf { it > 0 }?.let { available.toDouble() / it } ?: 1.0
+        fun scaled(value: Int) = (value * scale).toInt()
+        val width = state.pageWidthDp?.takeIf { it > 0 }?.let { scaled(it).coerceIn(1, available) } ?: available
+        return EmbeddedBounds(scaled(state.pageLeftDp), state.pageTopDp?.let(::scaled), width,
+            state.pageHeightDp?.takeIf { it > 0 }?.let { scaled(it).coerceAtLeast(1) } ?: embeddedHeightDp(null, width))
+    }
+
     /** Leave room for the watch actions and a useful portion of the content. */
-    const val MIN_WATCH_CONTENT_HEIGHT_DP = 192
+    private const val MIN_WATCH_CONTENT_HEIGHT_DP = 192
 
     fun useLandscapeMiniPlayer(
         viewportWidthDp: Int,

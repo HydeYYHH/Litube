@@ -284,17 +284,18 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             configAt = 0
         }
         val copied = NanoParser.`object`().from(JsonWriter.string(filtered))
-        browserConfig = BrowserConfig(copied, hint, documentGeneration, document, System.currentTimeMillis())
-        if (old?.generation != documentGeneration) browserConfig = browserConfig?.copy(capturedAt = System.currentTimeMillis())
+        val stored = BrowserConfig(copied, hint, documentGeneration, document, System.currentTimeMillis())
+        browserConfig = if (old?.generation != documentGeneration) {
+            stored.copy(capturedAt = System.currentTimeMillis())
+        } else {
+            stored
+        }
         true
     }
 
     /** Persistent metadata is scoped to the account, independently of visitor and route churn. */
-    fun accountScope(session: YoutubeSession): String {
-        val credentials = session.cookies(ORIGIN).split(';').map { it.trim() }
-            .filter { it.substringBefore('=') in setOf("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO") }.sorted().joinToString(";")
-        return digest("${session.account}:${session.accountIndex}:${session.dataSyncId.orEmpty()}:$credentials")
-    }
+    fun accountScope(session: YoutubeSession): String =
+        digest("${session.account}:${session.accountIndex}:${session.dataSyncId.orEmpty()}:${authCookies(session.cookies(ORIGIN))}")
 
     companion object {
         private fun pageOrigin(url: String): String {
@@ -324,7 +325,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
          * video. Identity changes (cookies, UA, route, account index, browser configuration) and explicit
          * recovery already refresh it earlier, so this is only the upper bound for an unchanged session.
          */
-        internal const val CONFIG_TTL_MS = 15 * 60_000L
+        private const val CONFIG_TTL_MS = 15 * 60_000L
 
         /** Account-bearing cookies only; visitor and consent cookies churn without changing the audience. */
         private val AUTH_COOKIE_NAMES = setOf("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO")

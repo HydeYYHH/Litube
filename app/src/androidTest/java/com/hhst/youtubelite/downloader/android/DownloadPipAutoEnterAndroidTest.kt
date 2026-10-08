@@ -128,7 +128,6 @@ class DownloadPipAutoEnterAndroidTest {
             ) { host -> DownloadUi.openManager(host) }
             waitUntil("ENABLE_PIP off overlay released") { !PipAutoEnter.isSuppressed() }
             main.onActivity { host ->
-                assertFalse(PipAutoEnter.isSuppressed())
                 assertFalse(
                     PipAutoEnter.shouldAutoEnter(eligible = false, sdk = sdk()),
                 )
@@ -153,7 +152,6 @@ class DownloadPipAutoEnterAndroidTest {
             overlay = monitor.waitForActivityWithTimeout(20_000)
             assertNotNull("$overlayClass should open from the host", overlay)
             waitUntil("$overlayClass suppress") { PipAutoEnter.isSuppressed() }
-            assertTrue(PipAutoEnter.isSuppressed())
             assertFalse(PipAutoEnter.shouldAutoEnter(eligible = playerEligible, sdk = sdk()))
             main.onActivity { host ->
                 assertFalse(

@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * YouTube extraction entry point.
  *
- * [extract] returns immediately; work runs on [scope]. Prefer a persistent [LayeredCache] in production.
+ * [extract] returns immediately; work runs on [scope].
  */
 class Extractor(
     downloader: HttpDownloader,
@@ -210,7 +210,6 @@ private class Inflight(
                 if (host != null && !fresh) ({ createContext(true) }) else null)
             val streamCache = EpochGuardedCache(resolvedCache, id, epoch, streamEpochs)
             val extraction = Extraction(
-                videoId = id,
                 metadata = Promise(Metadata(), scope, autostart = false) {
                     it.resolveMetadata(id, resolvedCache, player)
                 },
@@ -234,7 +233,7 @@ private class Inflight(
  * Download 403 refresh must not persist googlevideo URLs into the playback
  * stream cache.
  */
-internal class StreamWriteDisabledCache(
+private class StreamWriteDisabledCache(
     private val inner: Cache,
 ) : Cache by inner {
     override fun getStream(videoId: String): Stream? = null

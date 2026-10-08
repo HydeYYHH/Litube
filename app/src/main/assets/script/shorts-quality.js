@@ -8,7 +8,7 @@
   const heights = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720,
     hd1080: 1080, hd1440: 1440, hd2160: 2160, hd2880: 2880, hd4320: 4320 };
   let preference = null, lastPlayer = null, lastVideo = '', panel = null;
-  const isShorts = () => /^\/shorts(?:\/|$)/.test(location.pathname);
+  const isShorts = Lite.isShorts;
   function player() {
     for (const video of document.querySelectorAll('video')) {
       const rect = video.getBoundingClientRect();

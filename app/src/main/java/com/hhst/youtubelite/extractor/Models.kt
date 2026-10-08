@@ -31,15 +31,12 @@ data class Format(
     val audioOnly: Boolean = false,
     /** MIME type for DASH manifest (e.g. "video/mp4", "audio/webm"). */
     val mimeType: String = "",
-    // -- DASH segment ranges (from ItagItem; 0 is the Java-side "missing"
-    // default, so hasDashRanges below checks indexEnd > indexStart) --
     val initStart: Int = -1,
     val initEnd: Int = -1,
     val indexStart: Int = -1,
     val indexEnd: Int = -1,
     /** Approximate stream duration in ms; -1 when unknown. */
     val approxDurationMs: Long = -1L,
-    // -- audio extras (for track selection / DASH manifest) --
     val sampleRate: Int = -1,
     val audioChannels: Int = -1,
     val audioLocale: String? = null,
@@ -85,13 +82,6 @@ class Metadata {
     /** Length in seconds. */
     var duration: Long = 0L
     var thumbnailUrl: String? = null
-    var likeCount: Long = -1L
-    var dislikeCount: Long = -1L
-    /** Upload time as epoch milliseconds, or null if unknown. */
-    var uploadedAt: Long? = null
-    var uploaderUrl: String? = null
-    var uploaderAvatarUrl: String? = null
-    var viewCount: Long = -1L
     /** True for live / premiere streams. */
     var isLive: Boolean = false
 
@@ -102,12 +92,6 @@ class Metadata {
         description = other.description
         duration = other.duration
         thumbnailUrl = other.thumbnailUrl
-        likeCount = other.likeCount
-        dislikeCount = other.dislikeCount
-        uploadedAt = other.uploadedAt
-        uploaderUrl = other.uploaderUrl
-        uploaderAvatarUrl = other.uploaderAvatarUrl
-        viewCount = other.viewCount
         isLive = other.isLive
     }
 }
@@ -166,7 +150,6 @@ class ChapterList {
  * Call [Promise.get] only on the branches you need.
  */
 class Extraction(
-    val videoId: String,
     val metadata: Promise<Metadata>,
     val stream: Promise<Stream>,
     val chapters: Promise<ChapterList>,

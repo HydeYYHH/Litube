@@ -2,27 +2,29 @@ package com.hhst.youtubelite.extractor
 
 import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.hhst.youtubelite.cast.LocalStreamProxy
 import com.hhst.youtubelite.downloader.core.*
+import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
-import com.hhst.youtubelite.downloader.io.FileIntegrity
+import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
+import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Private test files only: production chunk verification/resume and actual phone proxy HTTP. */
 @UnstableApi
 class YoutubeTransferAndroidTest {
-    @get:org.junit.Rule val activity = androidx.test.ext.junit.rules.ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
     @Test fun fileResumeAndPhoneProxyRead() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext

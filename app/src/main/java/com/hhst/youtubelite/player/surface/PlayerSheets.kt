@@ -36,6 +36,7 @@ import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.ui.components.audioTrackLabel
 
 /** Player sheets: More + Queue. */
@@ -79,13 +80,23 @@ fun PlayerSheetHost(
     callbacks: PlayerSurfaceCallbacks,
     onDismiss: () -> Unit,
     onOpenDialog: (PlayerDialog) -> Unit,
+    onOpenQueue: (() -> Unit)? = null,
+    onSegments: (() -> Unit)? = null,
+    onSpeed: (() -> Unit)? = null,
+    onQuality: (() -> Unit)? = null,
 ) {
     if (sheet == null) return
     val context = LocalContext.current
     val queueAdded = stringResource(R.string.queue_item_added)
-    PlayerModalSheet(onDismiss = onDismiss) {
+    PlayerModalSheet(onDismiss = onDismiss, fullscreen = state.fullscreen && !state.mini) {
         when (sheet) {
             PlayerSheet.More -> MoreSheet(
+                onQueue = onOpenQueue,
+                onSegments = onSegments,
+                onLoop = onOpenQueue?.let { { callbacks.onLoop(); onDismiss() } },
+                loopMode = state.loopMode,
+                onSpeed = onSpeed,
+                onQuality = onQuality,
                 showPip = state.pipAvailable,
                 onResize = {
                     onDismiss()
@@ -153,8 +164,13 @@ fun PlayerSheetHost(
 @Composable
 internal fun PlayerModalSheet(
     onDismiss: () -> Unit,
+    fullscreen: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (fullscreen) {
+        FullscreenPlayerSheet(onDismiss, content)
+        return
+    }
     val maxHeight = PlayerUi.sheetMaxHeightDp(LocalConfiguration.current.screenHeightDp).dp
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -219,12 +235,19 @@ fun PlayerDialogHost(
             coverUrl = state.videoId?.let { VideoId.thumbnailUrl(it) },
             onChange = callbacks::onSubtitleStyle,
             onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
         )
     }
 }
 
 @Composable
 private fun MoreSheet(
+    onQueue: (() -> Unit)?,
+    onSegments: (() -> Unit)?,
+    onLoop: (() -> Unit)?,
+    loopMode: LoopMode,
+    onSpeed: (() -> Unit)?,
+    onQuality: (() -> Unit)?,
     showPip: Boolean,
     onResize: () -> Unit,
     onCast: () -> Unit,
@@ -243,11 +266,16 @@ private fun MoreSheet(
     ) {
         SheetTitle(stringResource(R.string.more_options))
         MoreRow(R.drawable.ic_resize, stringResource(R.string.resize_mode), onResize)
+        onQuality?.let { MoreRow(R.drawable.ic_settings, stringResource(R.string.player_info_quality), it) }
+        onSpeed?.let { MoreRow(R.drawable.ic_settings, stringResource(R.string.info_playback_speed), it) }
         MoreRow(R.drawable.ic_cast, stringResource(R.string.cast), onCast)
         if (showPip) MoreRow(R.drawable.ic_pip, stringResource(R.string.pip), onPip)
         MoreRow(R.drawable.ic_track, stringResource(R.string.audio_track), onAudio)
         MoreRow(R.drawable.ic_subtitles_on, stringResource(R.string.subtitle_style), onSubtitleStyle)
         MoreRow(R.drawable.ic_info, stringResource(R.string.info), onInfo)
+        onQueue?.let { MoreRow(R.drawable.ic_queue, stringResource(R.string.queue), it) }
+        onSegments?.let { MoreRow(R.drawable.ic_segment, stringResource(R.string.segments), it) }
+        onLoop?.let { MoreRow(PlayerUi.loopIcon(loopMode), stringResource(PlayerUi.loopLabelRes(loopMode)), it) }
         MoreRow(R.drawable.ic_download, stringResource(R.string.download), onDownload)
         MoreRow(R.drawable.ic_queue_add, stringResource(R.string.add_to_queue), onQueueAdd)
         MoreRow(R.drawable.ic_share, stringResource(R.string.share), onShare)

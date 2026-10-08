@@ -196,8 +196,6 @@ class DownloadSelectorTest {
             DownloadConfig(),
         ) as DownloadSelection.Failed
         assertEquals(DownloadUnavailableReason.NO_FILE_STREAMS, failed.reason)
-        assertTrue(failed.reason != DownloadUnavailableReason.LIVE)
-        assertTrue(failed.reason != DownloadUnavailableReason.PREMIERE_UNSTARTED)
     }
 
     @Test

@@ -14,9 +14,6 @@ class MmkvDownloadPrefs(
     override fun maxConnections(): Int = kv.decodeInt(CONNECTIONS, DownloadSettings.DEFAULT_CONNECTIONS)
         .coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
 
-    override fun chunkBytes(): Long = kv.decodeLong(CHUNK, DownloadSettings.CHUNK_BYTES)
-        .coerceAtLeast(256L * 1024L)
-
     override fun defaultQuality(): String = kv.decodeString(QUALITY, "1080p") ?: "1080p"
 
     override fun lastConfig(): DownloadConfig {
@@ -35,10 +32,6 @@ class MmkvDownloadPrefs(
             CONNECTIONS,
             value.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS),
         )
-    }
-
-    override fun setChunkBytes(value: Long) {
-        kv.encode(CHUNK, value.coerceAtLeast(256L * 1024L))
     }
 
     override fun setDefaultQuality(value: String) {

@@ -3,13 +3,7 @@
 package com.hhst.youtubelite.downloader.io
 
 import androidx.media3.common.MimeTypes
-import com.hhst.youtubelite.downloader.core.MediaCombo
 import com.hhst.youtubelite.downloader.core.MuxResult
-import com.hhst.youtubelite.downloader.io.ExtractedTrack
-import com.hhst.youtubelite.downloader.io.FileIntegrity
-import com.hhst.youtubelite.downloader.io.FreeSpace
-import com.hhst.youtubelite.downloader.io.MediaSampleIo
-import com.hhst.youtubelite.downloader.io.MediaFileIo
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,8 +61,8 @@ class DownloadFinalizerImplTest {
                 .setSampleMimeType(MimeTypes.VIDEO_H264)
                 .build(),
             listOf(
-                MediaCombo.Sample(0L, 0, byteArrayOf(1)),
-                MediaCombo.Sample(5_000_000L, 0, byteArrayOf(1)),
+                MediaSample(0L, 0, byteArrayOf(1)),
+                MediaSample(5_000_000L, 0, byteArrayOf(1)),
             ),
         )
         val audio = ExtractedTrack(
@@ -77,16 +71,16 @@ class DownloadFinalizerImplTest {
                 .setSampleMimeType(MimeTypes.AUDIO_AAC)
                 .build(),
             listOf(
-                MediaCombo.Sample(0L, 0, byteArrayOf(1)),
-                MediaCombo.Sample(1_000_000L, 0, byteArrayOf(1)),
+                MediaSample(0L, 0, byteArrayOf(1)),
+                MediaSample(1_000_000L, 0, byteArrayOf(1)),
             ),
         )
         assertEquals("av-desync", MediaSampleIo.verify(listOf(video, audio), audioOnly = false))
         val alignedAudio = ExtractedTrack(
             audio.format,
             listOf(
-                MediaCombo.Sample(0L, 0, byteArrayOf(1)),
-                MediaCombo.Sample(4_500_000L, 0, byteArrayOf(1)),
+                MediaSample(0L, 0, byteArrayOf(1)),
+                MediaSample(4_500_000L, 0, byteArrayOf(1)),
             ),
         )
         assertEquals(null, MediaSampleIo.verify(listOf(video, alignedAudio), audioOnly = false))

@@ -17,7 +17,7 @@ object YoutubeThumbnail {
     const val HOST = "i.ytimg.com"
     private const val CACHE_BYTES = 3 * 1024 * 1024
     /** Rejects a thumbnail body larger than this before decode. */
-    internal const val MAX_DOWNLOAD_BYTES = 512 * 1024
+    private const val MAX_DOWNLOAD_BYTES = 512 * 1024
 
     private val cache = object : LruCache<String, Bitmap>(CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount

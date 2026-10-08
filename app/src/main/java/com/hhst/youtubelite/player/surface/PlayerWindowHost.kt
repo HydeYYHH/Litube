@@ -6,9 +6,17 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.util.Rational
+import android.view.ViewTreeObserver
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.PipSupport
 import kotlin.math.roundToInt
@@ -132,16 +140,43 @@ class PlayerWindowHost(
             } else {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
-            WindowCompat.setDecorFitsSystemWindows(act.window, false)
-            WindowInsetsControllerCompat(act.window, act.window.decorView).apply {
-                systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                hide(WindowInsetsCompat.Type.systemBars())
-            }
         } else {
             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            WindowInsetsControllerCompat(act.window, act.window.decorView)
-                .show(WindowInsetsCompat.Type.systemBars())
+        }
+        refreshSystemBars(fullscreen)
+    }
+
+    /** Refresh after a dialog/chooser returns focus, without rotating again. */
+    fun refreshSystemBars(fullscreen: Boolean) {
+        val window = activity?.window ?: return
+        if (fullscreen) WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())
+            else show(WindowInsetsCompat.Type.systemBars())
         }
     }
+}
+
+/** Focus events, unlike player state, also change when a sheet or chooser closes. */
+@Composable
+internal fun PlayerWindowEffects(activity: Activity?, host: PlayerWindowHost, fullscreen: Boolean, width: Int, height: Int) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentFullscreen = rememberUpdatedState(fullscreen)
+    DisposableEffect(activity, lifecycleOwner, host) {
+        val decor = activity?.window?.decorView
+        val focus = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (focused) decor?.post { host.refreshSystemBars(currentFullscreen.value) }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) decor?.post { host.refreshSystemBars(currentFullscreen.value) }
+        }
+        decor?.viewTreeObserver?.addOnWindowFocusChangeListener(focus)
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            decor?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focus)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    LaunchedEffect(fullscreen, width, height, host) { host.applyImmersive(fullscreen, width, height) }
 }

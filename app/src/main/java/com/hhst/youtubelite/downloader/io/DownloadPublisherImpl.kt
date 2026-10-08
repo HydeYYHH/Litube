@@ -20,7 +20,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
 
-const val DOWNLOAD_FILE_PROVIDER_SUFFIX = ".download.fileprovider"
+private const val DOWNLOAD_FILE_PROVIDER_SUFFIX = ".download.fileprovider"
 
 interface PublishBackend {
     fun existingNames(): Set<String>

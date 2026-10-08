@@ -176,13 +176,13 @@ class QueueRepository(
      * canonical watch URL, bounded text, and a YouTube thumbnail host.
      */
     private fun sanitize(item: QueueItem): QueueItem? {
-        val id = VideoId.parse(item.url as String?) ?: VideoId.parse(item.videoId as String?)
+        val id = VideoId.parse(item.url) ?: VideoId.parse(item.videoId)
             ?: return null
         return QueueItem(
             videoId = id,
             url = VideoId.watchUrl(id),
-            title = (item.title as String?).orEmpty().trim().take(MAX_TITLE),
-            author = (item.author as String?)?.trim()?.take(MAX_AUTHOR)?.ifEmpty { null },
+            title = item.title.orEmpty().trim().take(MAX_TITLE),
+            author = item.author?.trim()?.take(MAX_AUTHOR)?.ifEmpty { null },
             thumbnailUrl = VideoId.thumbnailUrl(id),
         )
     }

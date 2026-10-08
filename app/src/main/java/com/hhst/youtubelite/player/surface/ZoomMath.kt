@@ -3,16 +3,14 @@ package com.hhst.youtubelite.player.surface
 import kotlin.math.abs
 
 /**
- * Fullscreen pinch-zoom math (no Android deps).
- *
- * Pinch-zoom math: scale 1×–5×, pan only while zoomed,
- * clamp so the video cannot leave the crop.
+ * Fullscreen pinch-zoom math (no Android deps): scale 1×–5×, pan only while
+ * zoomed, clamp so the video cannot leave the crop.
  */
 object ZoomMath {
-    const val MIN_SCALE = 1f
-    const val MAX_SCALE = 5f
+    private const val MIN_SCALE = 1f
+    private const val MAX_SCALE = 5f
     const val ZOOMED_SCALE = 1.01f
-    const val TRANSLATION_EPS = 5f
+    private const val TRANSLATION_EPS = 5f
 
     fun clampScale(scale: Float): Float = scale.coerceIn(MIN_SCALE, MAX_SCALE)
 

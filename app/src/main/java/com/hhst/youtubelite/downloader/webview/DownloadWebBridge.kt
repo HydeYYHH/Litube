@@ -44,8 +44,6 @@ class DownloadWebBridge(
 
     private var statusJob: Job? = null
 
-    fun pageGeneration(): Long = pageGeneration.get()
-
     fun bumpPage() {
         pageGeneration.incrementAndGet()
     }
@@ -174,7 +172,7 @@ class DownloadWebBridge(
             }.onFailure { Log.w(TAG, "status failed", it) }
             coordinator.observeVideo(videoId).collect { tasks ->
                 val json = DownloadWebStatus.json(DownloadUiMapper.video(videoId, tasks))
-                main.post { reply(json, replyProxy ?: this@DownloadWebBridge.reply) }
+                main.post { reply(json, replyProxy ?: reply) }
             }
         }
     }

@@ -21,13 +21,13 @@ object AutoFullscreen {
         else -> Band.OTHER
     }
 
-    fun physicalLandscape(degrees: Int): Boolean {
+    private fun physicalLandscape(degrees: Int): Boolean {
         if (degrees < 0) return false
         val d = degrees % 360
         return d in 60..120 || d in 240..300
     }
 
-    fun physicalPortrait(degrees: Int): Boolean {
+    private fun physicalPortrait(degrees: Int): Boolean {
         if (degrees < 0) return false
         val d = degrees % 360
         return d <= 30 || d >= 330 || d in 150..210

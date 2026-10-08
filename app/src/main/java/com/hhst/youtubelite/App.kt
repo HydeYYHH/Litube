@@ -10,7 +10,7 @@ import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.downloader.engine.DownloadNetworkRestore
 import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
 import com.hhst.youtubelite.downloader.engine.KoinDownloadWorkerFactory
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
+import com.hhst.youtubelite.downloader.engine.DownloadNotificationWatcher
 import com.hhst.youtubelite.extractor.EjsRuntimeProcess
 import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.player.datasource.PlayerDataSource

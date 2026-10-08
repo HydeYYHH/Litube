@@ -10,7 +10,6 @@ data class UniqueWorkRequest(
 )
 
 data class WorkSnapshot(
-    val uniqueName: String,
     val active: Boolean,
     val kind: DownloadWorkKind,
 )
@@ -30,7 +29,6 @@ interface WorkEnqueuePort {
 data class UidtJobRequest(
     val jobId: Int,
     val batchId: String,
-    val estimatedBytes: Long = 0L,
     val wifiOnly: Boolean = false,
 )
 

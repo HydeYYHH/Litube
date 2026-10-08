@@ -293,7 +293,7 @@ private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, sel
 
 /** Small caps-style section header used across the download surfaces. */
 @Composable
-internal fun SectionLabel(text: String) {
+private fun SectionLabel(text: String) {
     Text(
         text = text,
         fontSize = 12.sp,

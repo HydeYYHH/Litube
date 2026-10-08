@@ -74,8 +74,6 @@ class DownloadWebGuardTest {
         )
         assertTrue(decision is DownloadWebDecision.Error)
         assertEquals("too_many_items", (decision as DownloadWebDecision.Error).code)
-        assertTrue(json.contains("\"items\""))
-        assertEquals(501, Regex("videoId").findAll(json).count())
     }
 
     @Test
@@ -91,7 +89,6 @@ class DownloadWebGuardTest {
         )
         assertTrue(decision is DownloadWebDecision.Error)
         assertEquals("too_large", (decision as DownloadWebDecision.Error).code)
-        assertTrue(json.length > DownloadLimits.MAX_SNAPSHOT_BYTES)
     }
 
     @Test

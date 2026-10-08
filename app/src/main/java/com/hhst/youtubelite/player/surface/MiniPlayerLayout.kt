@@ -20,13 +20,13 @@ object MiniPlayerLayout {
     const val OUTER_MARGIN_DP = 12
     private const val MIN_BOTTOM_DOCK_DP = 56
     /** Gap between mini-player transport controls. */
-    const val CONTROL_GAP_DP = 18
+    private const val CONTROL_GAP_DP = 18
     const val CONTROL_SIDE_DP = 30
     const val CONTROL_PLAY_DP = 34
     const val TRANSITION_MS = 260
     /** Duration of the close-target exit animation. */
     const val DISMISS_MS = 240
-    const val POPUP_MAX_WIDTH_RATIO = 0.8f
+    private const val POPUP_MAX_WIDTH_RATIO = 0.8f
 
     data class Spec(
         val widthDp: Int,
@@ -35,7 +35,7 @@ object MiniPlayerLayout {
         val bottomMarginDp: Int,
     )
 
-    fun minWidthDpForScreen(screenWidthDp: Int): Int =
+    private fun minWidthDpForScreen(screenWidthDp: Int): Int =
         if (isCompactScreen(screenWidthDp)) COMPACT_MIN_WIDTH_DP else LARGE_MIN_WIDTH_DP
 
     fun clampWidthDp(screenWidthDp: Int, widthDp: Int): Int =
@@ -45,7 +45,7 @@ object MiniPlayerLayout {
             widthDp.coerceIn(LARGE_MIN_WIDTH_DP, LARGE_MAX_WIDTH_DP)
         }
 
-    fun computeHeightDp(widthDp: Int): Int = widthDp * 9 / 16
+    private fun computeHeightDp(widthDp: Int): Int = widthDp * 9 / 16
 
     /** First-enter width. */
     fun defaultWidthDp(screenWidthDp: Int): Int = minWidthDpForScreen(screenWidthDp)
@@ -82,7 +82,7 @@ object MiniPlayerLayout {
         return minOf(contentPx, cap)
     }
 
-    fun computeBottomMarginDp(outerMarginDp: Int, bottomInsetDp: Int): Int =
+    private fun computeBottomMarginDp(outerMarginDp: Int, bottomInsetDp: Int): Int =
         outerMarginDp + maxOf(bottomInsetDp, MIN_BOTTOM_DOCK_DP)
 
     fun computeSpec(screenWidthDp: Int, bottomInsetDp: Int, widthOverrideDp: Int): Spec {

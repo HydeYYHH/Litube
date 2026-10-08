@@ -32,6 +32,12 @@ interface PlayerHooks {
      * In-page player box (CSS px ≈ dp) so the native overlay can match it.
      */
     fun setPlayerLayout(topDp: Int, heightDp: Int, origin: PageOrigin = PageOrigin.HOST)
+    /**
+     * Richer variant of [setPlayerLayout] that also carries horizontal placement.
+     * The default keeps legacy implementations working with the vertical-only report.
+     */
+    fun setPlayerBounds(left: Int, top: Int, width: Int, height: Int, viewportWidth: Int,
+                        origin: PageOrigin = PageOrigin.HOST) = setPlayerLayout(top, height, origin)
     /** Synchronous, thread-safe query for the native layout's compact watch slot. */
     fun isPlayerCompact(origin: PageOrigin = PageOrigin.HOST): Boolean = false
 }
@@ -187,9 +193,7 @@ class Bridge(
         val item = runCatching {
             gson.fromJson(itemJson, QueueItemJson::class.java)
         }.getOrNull() ?: return null
-        // Same host gate as [play]: VideoId alone accepts any host
-        // (evil.com/watch?v=...), and this interface is exposed to every
-        // page the WebView may load.
+        // Same host gate as [play]; see [mediaIdOf].
         val id = mediaIdOf(item.url) ?: return null
         val title = item.title?.takeIf { it.isNotBlank() }
             ?: item.videoId?.takeIf { it.isNotBlank() }
@@ -234,6 +238,13 @@ class Bridge(
     fun setPlayerLayout(topDp: Int, heightDp: Int) {
         val origin = pageOrigin()
         main.post { playerHooks?.setPlayerLayout(topDp, heightDp, origin) }
+    }
+
+    @JavascriptInterface
+    fun setPlayerBounds(left: Int, top: Int, width: Int, height: Int, viewportWidth: Int) {
+        if (width <= 0 || height <= 0 || viewportWidth <= 0) return
+        val origin = pageOrigin()
+        main.post { playerHooks?.setPlayerBounds(left, top, width, height, viewportWidth, origin) }
     }
 
     @JavascriptInterface

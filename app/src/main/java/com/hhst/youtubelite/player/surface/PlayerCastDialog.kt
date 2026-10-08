@@ -35,7 +35,7 @@ import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
 
-/** Live Google Cast intro; the old chromecast/answer/3006766 article 404s. */
+/** Live Google Cast intro page. */
 private const val CAST_LEARN_URL = "https://support.google.com/googlecast/answer/6102923"
 
 @Composable

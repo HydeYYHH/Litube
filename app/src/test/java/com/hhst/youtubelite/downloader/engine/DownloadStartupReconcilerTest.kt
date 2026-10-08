@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.downloader.engine
 
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
 import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.NoOpResolver
 import com.hhst.youtubelite.downloader.core.NoOpTransport
@@ -10,9 +9,7 @@ import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.NoOpPublisher
 import com.hhst.youtubelite.downloader.core.request
-import com.hhst.youtubelite.downloader.engine.DownloadEngine
 import com.hhst.youtubelite.downloader.io.DownloadDirectories
-import com.hhst.youtubelite.downloader.notify.RecordingNotificationPort
 import com.hhst.youtubelite.downloader.ui.DownloadActions
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals

@@ -19,7 +19,7 @@ object GestureMath {
     /** Logical gesture zones for extension-pref gating. */
     enum class GestureZone { TAP, DOUBLE_TAP, LONG_PRESS, SEEK, BRIGHTNESS, VOLUME, FULLSCREEN_SWIPE }
 
-    const val SEEK_FULL_RANGE_MS = 120_000L
+    private const val SEEK_FULL_RANGE_MS = 120_000L
     const val DOUBLE_TAP_SEEK_MS = 10_000L
 
     /** Vertical swipe enters/exits fullscreen past this fraction of the height. */

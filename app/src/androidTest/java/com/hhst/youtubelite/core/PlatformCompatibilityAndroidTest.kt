@@ -20,7 +20,6 @@ import com.hhst.youtubelite.MainActivity
 import com.hhst.youtubelite.extractor.ExtractionTestActivity
 import com.hhst.youtubelite.player.service.PlaybackService
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
-import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -143,7 +142,6 @@ class PlatformCompatibilityAndroidTest {
                 val prefs = GlobalContext.get().get<ExtensionManager>()
                 model.refreshPipAvailability()
                 assertEquals(prefs.isEnabled(PreferenceKeys.ENABLE_PIP), model.uiState.value.pipAvailable)
-                assertEquals(true, Build.VERSION.SDK_INT >= 26)
             }
         }
     }

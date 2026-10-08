@@ -89,7 +89,7 @@ class DownloadBatchExecutor(
         val snap = repository.transact { snapshot(taskId) } ?: return
         if (!runnable(snap.task)) return
         if (needsFinalizeOnly(snap.task)) {
-            scheduler.enqueueFinalize(batchId, replace = false)
+            scheduler.enqueueFinalize(batchId)
             return
         }
         engine.runTransfer(taskId)
@@ -98,7 +98,7 @@ class DownloadBatchExecutor(
         if (needsFinalizeOnly(after.task) ||
             after.task.phase == DownloadPhase.WAITING_PROCESS
         ) {
-            scheduler.enqueueFinalize(batchId, replace = false)
+            scheduler.enqueueFinalize(batchId)
         }
     }
 
@@ -112,9 +112,7 @@ class DownloadBatchExecutor(
     }
 
     private fun needsFinalizeOnly(task: DownloadTask): Boolean =
-        task.phase == DownloadPhase.WAITING_PROCESS ||
-            task.phase == DownloadPhase.MERGE_VERIFY ||
-            task.phase == DownloadPhase.SAVE
+        workKindForPhase(task.phase) == DownloadWorkKind.FINALIZE
 
     private fun drainableTransfer(task: DownloadTask): Boolean =
         runnable(task) && task.status == DownloadStatus.QUEUED &&

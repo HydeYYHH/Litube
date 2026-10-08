@@ -33,8 +33,6 @@
 -keep class com.hhst.youtubelite.browser.Bridge$QueueItemJson { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.core.MmkvJsonCache$Entry { <init>(...); <fields>; }
 
-# Manifest meta-data class name is a string; R8 must not rename it.
--keep class com.hhst.youtubelite.cast.CastOptionsProvider { *; }
 -keep class com.hhst.youtubelite.downloader.engine.DownloadTransferWorker { *; }
 -keep class com.hhst.youtubelite.downloader.engine.DownloadFinalizeWorker { *; }
 -keep class com.hhst.youtubelite.downloader.engine.DownloadUidtJobService { *; }

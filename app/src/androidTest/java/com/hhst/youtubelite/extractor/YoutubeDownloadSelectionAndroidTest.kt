@@ -72,7 +72,7 @@ class YoutubeDownloadSelectionAndroidTest {
                     expectedBytes = length, mimeType = format.mimeType, requestPlan = requestPlan,
                     rangeModeName = request.rangeMode.name, methodName = request.method.name,
                     cookiePolicyName = request.cookiePolicy.name, client = request.client,
-                    headers = request.headers, postPulse = request.postPulse)
+                    headers = request.headers)
                 val dest = File(dir, "input-$index.mp4")
                 val chunks = mutableListOf<DownloadChunk>()
                 if (index == 0 && length > 65_536) {

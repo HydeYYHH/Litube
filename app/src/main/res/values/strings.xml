@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Litube</string>
     <string name="back_again_to_exit">Press back again to exit</string>
     <string name="navigate_back">Back</string>
@@ -265,9 +265,9 @@
     <string name="info_first_frame">First frame time</string>
     <string name="gallery_zoom">Zoom in</string>
     <string name="gallery_reset_zoom">Reset zoom</string>
-    <string name="web_downloaded">Downloaded</string>
-    <string name="web_chat">Live chat</string>
-    <string name="web_close_chat">Close live chat</string>
+    <string name="web_downloaded" tools:ignore="UnusedResources">Downloaded</string>
+    <string name="web_chat" tools:ignore="UnusedResources">Live chat</string>
+    <string name="web_close_chat" tools:ignore="UnusedResources">Close live chat</string>
     <string name="web_source_unavailable">Video source unavailable</string>
     <string name="info_state_idle">Idle</string>
     <string name="info_state_playing">Playing</string>

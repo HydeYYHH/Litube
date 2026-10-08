@@ -3,23 +3,39 @@ package com.hhst.youtubelite.extractor
 import com.google.common.util.concurrent.SettableFuture
 import android.app.Application
 import android.app.Service
-import android.content.*
-import android.os.*
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.Message
+import android.os.Messenger
+import android.os.IBinder
+import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.os.RemoteException
 import android.webkit.WebView
 import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
 import com.grack.nanojson.JsonObject
 import com.hhst.youtubelite.diagnostics.AppLog
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.*
+import org.schabi.newpipe.extractor.services.youtube.streams.ChallengeSolver
+import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
+import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 
 /** The fallback owns a separate browser process/data directory; terminating it cannot kill the account WebView. */
 internal object EjsRuntimeProcess {

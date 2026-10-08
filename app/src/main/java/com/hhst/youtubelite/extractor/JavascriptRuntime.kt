@@ -14,9 +14,9 @@ import androidx.javascriptengine.IsolateStartupParameters
 import androidx.javascriptengine.JavaScriptIsolate
 import androidx.javascriptengine.JavaScriptSandbox
 import com.google.gson.Gson
-import com.hhst.youtubelite.downloader.webview.AndroidWebViewMainGate
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.AndroidWebViewMainGate
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
@@ -237,6 +237,7 @@ internal class HiddenJavascriptRuntime(
         val ready = SettableFuture.create<Unit>()
         main.run {
             view = WebView(app).apply {
+                timers.attach(this)
                 settings.javaScriptEnabled = true
                 settings.blockNetworkLoads = true
                 settings.allowFileAccess = false

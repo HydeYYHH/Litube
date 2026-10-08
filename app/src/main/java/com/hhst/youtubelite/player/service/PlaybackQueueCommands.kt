@@ -11,11 +11,11 @@ import androidx.media3.common.util.UnstableApi
 @UnstableApi
 object PlaybackQueueCommands {
 
-    val NEXT = intArrayOf(
+    private val NEXT = intArrayOf(
         Player.COMMAND_SEEK_TO_NEXT,
         Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
     )
-    val PREVIOUS = intArrayOf(
+    private val PREVIOUS = intArrayOf(
         Player.COMMAND_SEEK_TO_PREVIOUS,
         Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
     )

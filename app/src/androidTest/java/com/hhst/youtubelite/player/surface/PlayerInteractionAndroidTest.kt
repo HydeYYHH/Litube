@@ -3,7 +3,7 @@ package com.hhst.youtubelite.player.surface
 import android.view.SurfaceView
 import android.os.Build
 import android.provider.Settings
-import com.hhst.youtubelite.downloader.android.DeviceEvidence
+import com.hhst.youtubelite.core.DeviceEvidence
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,7 +28,6 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
-import java.lang.reflect.Proxy
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.extractor.Extractor
@@ -40,15 +39,7 @@ import java.util.concurrent.atomic.AtomicLong
 class PlayerInteractionAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private fun actions(block: (String, Array<out Any?>?) -> Unit = { _, _ -> }) =
-        Proxy.newProxyInstance(PlayerSurfaceCallbacks::class.java.classLoader,
-            arrayOf(PlayerSurfaceCallbacks::class.java)) { proxy, method, args ->
-                when (method.name) {
-                    "equals" -> proxy === args?.get(0)
-                    "hashCode" -> System.identityHashCode(proxy)
-                    "toString" -> "TestPlayerActions"
-                    else -> { block(method.name, args); null }
-                }
-            } as PlayerSurfaceCallbacks
+        proxyActions("TestPlayerActions", block)
 
     @Test fun seekArrowsFollowDirectionAndKeepAccumulatedSeconds() {
         compose.mainClock.autoAdvance = false

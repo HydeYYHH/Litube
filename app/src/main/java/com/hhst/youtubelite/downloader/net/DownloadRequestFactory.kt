@@ -42,7 +42,6 @@ object DownloadRequestFactory {
             } ?: DownloadCookiePolicy.NONE,
             headers = source.headers,
             resourceIdentity = source.resourceIdentity.orEmpty(),
-            postPulse = source.postPulse,
             requestPlan = source.requestPlan,
         )
 

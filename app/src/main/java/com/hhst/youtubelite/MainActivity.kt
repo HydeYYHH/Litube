@@ -184,11 +184,13 @@ class MainActivity : ComponentActivity() {
         if (SystemClock.elapsedRealtime() < PipAutoEnter.legacySuppressUntil) return
         if (PipAutoEnter.isSuppressed()) return
         if (pipEligible()) {
-            runCatching { enterPictureInPictureMode(pipParams(autoEnter = false)) }
+            runCatching { enterPictureInPictureMode(pipParams()) }
         }
     }
 
     /** PiP enters/exits without a recreate (configChanges); push it to Compose. */
+    // The two-arg hook is the framework dispatch path; the one-arg form lacks the config.
+    @Suppress("DEPRECATION", "OverridingDeprecatedMember")
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration,
@@ -203,13 +205,9 @@ class MainActivity : ComponentActivity() {
         PipSupport.isSupported(this) && playerActive && playerPlaying && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun pipParams(autoEnter: Boolean): PictureInPictureParams {
+    private fun pipParams(): PictureInPictureParams {
         val (n, d) = PlayerUi.pipAspect(playerWidth, playerHeight)
-        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(n, d))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setAutoEnterEnabled(autoEnter)
-        }
-        return builder.build()
+        return PictureInPictureParams.Builder().setAspectRatio(Rational(n, d)).build()
     }
 
     private fun syncPipParams() {

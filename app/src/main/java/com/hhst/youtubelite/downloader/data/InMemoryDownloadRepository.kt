@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** JVM-safe store used by unit tests and as the coordinator's transactional model. */
+/** In-memory [DownloadRepository] for unit and instrumentation tests; production binds [RoomDownloadRepository]. */
 class InMemoryDownloadRepository : DownloadRepository {
     private val mutex = Mutex()
     private val snapshots = MutableStateFlow(DownloadStore())
@@ -58,8 +58,6 @@ private class MemorySession(
     override suspend fun insertBatch(batch: DownloadBatch) {
         store.batches[batch.id] = batch
     }
-
-    override suspend fun getBatch(id: String): DownloadBatch? = store.batches[id]
 
     override suspend fun insertTask(task: DownloadTask) {
         store.tasks[task.id] = task
@@ -125,9 +123,6 @@ private class MemorySession(
         store.chunks[chunk.id] = chunk
     }
 
-    override suspend fun chunksForComponent(componentId: String): List<DownloadChunk> =
-        store.chunks.values.filter { it.componentId == componentId }
-
     override suspend fun deleteUnverifiedChunks(componentId: String) {
         store.chunks.entries.removeAll { it.value.componentId == componentId && !it.value.verified }
     }
@@ -159,8 +154,6 @@ private class MemorySession(
         store.schedules.values.firstOrNull { it.taskId == taskId }
 
     override suspend fun allSchedules(): List<ScheduleRecord> = store.schedules.values.toList()
-
-    override suspend fun allPublish(): List<PublishRecord> = store.publishes.values.toList()
 
     override suspend fun snapshot(taskId: String): TaskSnapshot? = view.taskSnapshot(taskId)
 

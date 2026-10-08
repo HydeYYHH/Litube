@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.downloader.io
 
-import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import java.io.File
 
 /**
@@ -13,7 +12,7 @@ class DownloadDirectories(private val root: File) {
 
     fun workRoot(): File = root
 
-    fun taskDir(taskId: String): File = File(root, sanitize(taskId)).also { it.mkdirs() }
+    private fun taskDir(taskId: String): File = File(root, sanitize(taskId)).also { it.mkdirs() }
 
     fun componentFile(taskId: String, componentId: String): File =
         File(taskDir(taskId), "${sanitize(componentId)}.part")
@@ -29,8 +28,11 @@ class DownloadDirectories(private val root: File) {
     }
 
     companion object {
+        /** Root folder name for all download work under the cache dir. */
+        const val WORK_DIR = "download"
+
         fun underCache(cacheDir: File): DownloadDirectories =
-            DownloadDirectories(File(cacheDir, DownloadHttpClients.WORK_DIR))
+            DownloadDirectories(File(cacheDir, WORK_DIR))
 
         private fun sanitize(id: String): String =
             id.replace(Regex("""[\\/:*?"<>|]"""), "_").ifBlank { "id" }

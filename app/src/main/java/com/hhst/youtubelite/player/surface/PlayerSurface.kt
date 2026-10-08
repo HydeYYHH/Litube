@@ -9,10 +9,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -28,6 +32,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -93,6 +99,8 @@ fun PlayerSurface(
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var dialog by remember { mutableStateOf<PlayerDialog?>(null) }
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
+    var topBarHeightPx by remember { mutableIntStateOf(0) }
+    var bottomBarHeightPx by remember { mutableIntStateOf(0) }
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
     val fullscreenSwipe = LocalFullscreenSwipeHandle.current
@@ -107,7 +115,8 @@ fun PlayerSurface(
     val density = LocalDensity.current
     val layoutDir = LocalLayoutDirection.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val embeddedHeightDp = PlayerUi.embeddedHeightDp(state.pageHeightDp, screenWidthDp)
+    val embeddedBounds = PlayerUi.embeddedBounds(state, screenWidthDp)
+    val embeddedHeightDp = embeddedBounds.height
     val leftInsetDp = with(density) {
         WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
     }
@@ -120,7 +129,7 @@ fun PlayerSurface(
     // Embedded top in window space = WebView's inset top + the page player's
     // viewport-relative top (player-hook.js reports it): this overlay is a
     // child of the window root, one level above the inset-padded WebView.
-    val topDp = PlayerUi.playerTopOffsetDp(state.fullscreen, state.pageTopDp, topInsetDp)
+    val topDp = PlayerUi.playerTopOffsetDp(state.fullscreen, embeddedBounds.top, topInsetDp)
     val chromeLeft = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(leftInsetDp) else 0
     val chromeRight = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(rightInsetDp) else 0
     val hudTop = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(topInsetDp) else 0
@@ -210,19 +219,27 @@ fun PlayerSurface(
         onDispose { view.keepScreenOn = false }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .then(
                 when {
                     fillsHostWindow -> Modifier.fillMaxSize()
                     else -> Modifier
                         .padding(top = topDp.dp)
-                        .fillMaxWidth()
+                        .absoluteOffset(x = embeddedBounds.left.dp)
+                        .width(embeddedBounds.width.dp)
                         .height(embeddedHeightDp.dp)
                 },
             )
             .background(Color.Black),
     ) {
+        val compactChrome = PlayerUi.compactChrome(maxWidth.value - chromeLeft - chromeRight,
+            density.fontScale, state.casting || state.castDevices.isNotEmpty())
+        val chromeSizing = PlayerUi.chromeSizing(maxWidth.value - chromeLeft - chromeRight, maxHeight.value)
+        val compactBottom = compactBottomControls(state, maxWidth.value - chromeLeft - chromeRight,
+            chromeSizing.textSp) && maxHeight < 280.dp
+        val centerHeightDp = maxHeight.value - with(density) { (topBarHeightPx + bottomBarHeightPx).toDp().value }
+        val showChromeAuthor = maxHeight >= 280.dp || density.fontScale < 1.3f
         Box(
             Modifier
                 .fillMaxSize()
@@ -349,7 +366,10 @@ fun PlayerSurface(
                                 onCast = { dialog = PlayerDialog.Cast },
                                 onDismissMenu = { menu = null },
                                 callbacks = callbacks,
-                                modifier = Modifier.align(Alignment.TopCenter),
+                                showAuthor = showChromeAuthor,
+                                compactBottom = compactBottom,
+                                sizing = chromeSizing,
+                                modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { topBarHeightPx = it.height },
                             )
                             BottomBar(
                                 state = state,
@@ -362,7 +382,9 @@ fun PlayerSurface(
                                 onQuality = { menu = PlayerAnchorMenu.Quality },
                                 onDismissMenu = { menu = null },
                                 callbacks = callbacks,
-                                modifier = Modifier.align(Alignment.BottomCenter),
+                                compact = compactBottom,
+                                sizing = chromeSizing,
+                                modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomBarHeightPx = it.height },
                             )
                         }
                     }
@@ -373,6 +395,9 @@ fun PlayerSurface(
                         cuesState = subtitleCuesState,
                         showChrome = showChrome,
                         style = state.subtitleStyle,
+                        chromeBottomClearDp = PlayerUi.SUBTITLE_CHROME_CLEAR_DP +
+                            (with(density) { bottomBarHeightPx.toDp().value } -
+                                PlayerUi.TIME_BAR_HIT_DP - PlayerUi.BOTTOM_ROW_DP).coerceAtLeast(0f),
                     )
 
                     AnimatedVisibility(
@@ -380,13 +405,16 @@ fun PlayerSurface(
                             state.error == null && !pip,
                         enter = fadeIn(),
                         exit = fadeOut(),
-                        modifier = Modifier.align(Alignment.Center),
+                        modifier = Modifier.align(Alignment.Center)
+                            .offset { IntOffset(0, (topBarHeightPx - bottomBarHeightPx) / 2) },
                     ) {
                         CenterControls(
                             state = state,
                             onPlayPause = callbacks::onPlayPause,
                             onPrevious = callbacks::onPrevious,
                             onNext = callbacks::onNext,
+                            playSizeDp = centerHeightDp.coerceIn(48f, PlayerUi.CENTER_PLAY_DP.toFloat()).toInt(),
+                            iconSize = chromeSizing.iconDp,
                         )
                     }
 
@@ -450,6 +478,7 @@ fun PlayerSurface(
                         LockAffordance(
                             locked = state.locked,
                             onToggle = callbacks::onLockToggle,
+                            iconSize = chromeSizing.iconDp,
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .padding(start = 8.dp),
@@ -496,6 +525,10 @@ fun PlayerSurface(
             callbacks = callbacks,
             onDismiss = { sheet = null },
             onOpenDialog = { dialog = it },
+            onOpenQueue = if (compactChrome) { { sheet = PlayerSheet.Queue } } else null,
+            onSegments = if (compactChrome) { { sheet = null; menu = PlayerAnchorMenu.Segments } } else null,
+            onSpeed = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Speed } } else null,
+            onQuality = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Quality } } else null,
         )
         PlayerDialogHost(
             dialog = dialog,
@@ -518,6 +551,7 @@ private fun SubtitleCuesLayer(
     cuesState: State<List<String>>,
     showChrome: Boolean,
     style: SubtitleStyle,
+    chromeBottomClearDp: Float,
 ) {
     val cues = cuesState.value
     if (cues.isEmpty()) return
@@ -525,11 +559,8 @@ private fun SubtitleCuesLayer(
         Modifier
             .fillMaxSize()
             .padding(
-                vertical = if (showChrome) {
-                    PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp
-                } else {
-                    PlayerUi.SUBTITLE_CLEAR_DP.dp
-                },
+                top = if (showChrome) PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                bottom = if (showChrome) chromeBottomClearDp.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
             ),
     ) {
         SubtitleOverlay(

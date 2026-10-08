@@ -34,7 +34,6 @@ class DownloadResolverImpl(
 
     val lastPlan: DownloadPlan? get() = lastReadyPlan
     private var lastReadyPlan: DownloadPlan? = null
-    private var lastIdentities: List<String> = emptyList()
     private val sources = ConcurrentHashMap<String, List<DownloadComponentSource>>()
     private data class FallbackCatalog(val catalog: DownloadCatalog, val scope: String, val expires: Long)
     private val fallbackCatalogs = LinkedHashMap<String, FallbackCatalog>(16, .75f, true)
@@ -156,7 +155,7 @@ class DownloadResolverImpl(
             }
         }
         sources[task.id] = buildSources(task, plan)
-        val updates = buildUpdates(task, catalog, plan)
+        val updates = buildUpdates(task, plan)
         val previous = repository.transact { snapshot(task.id) }
         previous?.assets?.forEach { asset -> asset.components.forEach { saved ->
             val update = updates.firstOrNull { it.assetKind == asset.asset.kind && it.componentKind == saved.component.kind }
@@ -167,7 +166,6 @@ class DownloadResolverImpl(
                 coordinator.reportComponentNeedsRedownload(task.id, generation, old)
             }
         } }
-        lastIdentities = updates.mapNotNull { it.resourceIdentity }
         if (!coordinator.reportResolved(task.id, generation, updates)) {
             return if (task.userCancelled) DownloadResolveOutcome.Cancelled else DownloadResolveOutcome.Stale
         }
@@ -200,19 +198,17 @@ class DownloadResolverImpl(
                 failed.message
             } else failed.reason.name,
         )
-        return DownloadResolveOutcome.Failed(failed.reason.name, failed.message)
+        return DownloadResolveOutcome.Failed(failed.reason.name)
     }
 
     private fun buildUpdates(
         task: DownloadTask,
-        catalog: DownloadCatalog,
         plan: DownloadPlan,
     ): List<ResolvedComponentUpdate> {
         val updates = mutableListOf<ResolvedComponentUpdate>()
         val videoChoice = plan.video ?: plan.muxed
         if (videoChoice != null && !task.config.audioOnly) {
             val format = videoChoice.format
-            YoutubeDownloadRequestAdapter.adapt(task.videoId, format)
             val base = outputBase(task)
             updates += ResolvedComponentUpdate(
                 assetKind = AssetKind.VIDEO,
@@ -229,14 +225,11 @@ class DownloadResolverImpl(
         val audioChoice = plan.audio
         if (audioChoice != null) {
             val format = audioChoice.format
-            YoutubeDownloadRequestAdapter.adapt(task.videoId, format)
             val audioAsset = if (task.config.audioOnly) AssetKind.AUDIO else AssetKind.VIDEO
-            val componentKind =
-                if (task.config.audioOnly) InputComponentKind.AUDIO else InputComponentKind.AUDIO
             val base = outputBase(task)
             updates += ResolvedComponentUpdate(
                 assetKind = audioAsset,
-                componentKind = componentKind,
+                componentKind = InputComponentKind.AUDIO,
                 mimeType = format.mimeType.ifBlank { "audio/mp4" },
                 expectedBytes = audioChoice.expectedBytes,
                 container = format.container,
@@ -316,7 +309,6 @@ class DownloadResolverImpl(
             cookiePolicyName = plan.cookiePolicy.name,
             client = plan.client,
             headers = plan.headers,
-            postPulse = plan.postPulse,
             requestPlan = choice.format.requestPlan,
         )
     }
@@ -341,7 +333,6 @@ class DownloadResolverImpl(
             cookiePolicyName = plan.cookiePolicy.name,
             client = plan.client,
             headers = plan.headers,
-            postPulse = false,
             requestPlan = requestPlan,
         )
     }

@@ -1,7 +1,8 @@
 /**
  * Settings-page entries — about, downloads, extension — cloned from the
  * native settings action row; the return value is the report the native
- * side logs.
+ * side logs. Unlike the page scripts this file has no `__extension` guard:
+ * it is evaluated on demand and its return value is the report.
  */
 (() => {
   'use strict';

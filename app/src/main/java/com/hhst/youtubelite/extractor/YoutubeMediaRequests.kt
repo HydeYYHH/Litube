@@ -163,7 +163,7 @@ class YoutubeMediaRequests(
         // Range.NONE names the whole object. A player-added Range header is optional, so a 200
         // without Content-Range is that object and the caller skips to the requested offset.
         val wholeObject = response.code == 200 && query == null && cr == null && plan.range == RequestPlan.Range.NONE
-        if (count == 0L || count < -1 || (!wholeObject && (count > wanted || length > wanted))) throw IOException("MEDIA_RANGE_IGNORED")
+        if (count == 0L || (!wholeObject && (count > wanted || length > wanted))) throw IOException("MEDIA_RANGE_IGNORED")
         if (response.code == 200 && query == null && cr == null && plan.resourceLength > 0 && length != plan.resourceLength) throw IOException("MEDIA_OBJECT_CHANGED")
         if (!wholeObject && response.code == 200 && query == null && cr == null && (start != 0L || length < 0 || length > wanted)) throw IOException("MEDIA_RANGE_IGNORED")
         if (cr != null && length >= 0 && length != count) throw IOException("MEDIA_LENGTH_MISMATCH")

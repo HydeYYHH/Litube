@@ -10,8 +10,8 @@
   const MEDIA_HOLD_MS = 420;
   const MOVE_CANCEL_PX = 12;
   // Begin the same native task on the selected link, before navigation and
-  // watch-page rendering. No hover/visible-card prefetch or media download.
-  // Window capture runs before nav.js can stop the document's click handlers.
+  // watch-page rendering. Window capture runs before nav.js can stop the
+  // document's click handlers.
   window.addEventListener('click', event => {
     if (event.defaultPrevented || event.button !== 0) return;
     const link = event.target.closest && event.target.closest('a[href]');
@@ -165,23 +165,37 @@
     root.classList.toggle(COMPACT_CLASS, compact);
   }
 
+  let observedPlayer = null;
+  const layoutObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(ensure) : null;
+
   function reportLayout(b) {
     const root = document.documentElement;
     const compact = root && root.classList.contains(COMPACT_CLASS);
     try {
       const p = pagePlayer();
-      if (!p || typeof b.setPlayerLayout !== 'function') return;
+      if (!p || (typeof b.setPlayerBounds !== 'function' && typeof b.setPlayerLayout !== 'function')) return;
+      if (layoutObserver && observedPlayer !== p) {
+        layoutObserver.disconnect();
+        layoutObserver.observe(p);
+        observedPlayer = p;
+      }
       // Probe the original slot, including after rotation or a page re-render.
       // Never feed our collapsed height back into the native layout policy.
       if (compact) root.classList.remove(COMPACT_CLASS);
       const r = p.getBoundingClientRect();
-      const top = Math.round(r.top);
+      const viewport = window.visualViewport;
+      const viewportWidth = Math.round(viewport ? viewport.width : window.innerWidth);
+      const left = Math.round(r.left - (viewport ? viewport.offsetLeft : 0));
+      const top = Math.round(r.top - (viewport ? viewport.offsetTop : 0));
+      const width = Math.round(r.width);
       const height = Math.round(r.height);
       if (height <= 0) return;
-      const key = top + 'x' + height;
+      const key = [left, top, width, height, viewportWidth].join('x');
       if (key === lastLayoutKey) return;
       lastLayoutKey = key;
-      b.setPlayerLayout(top, height);
+      if (typeof b.setPlayerBounds === 'function' && width > 0 && viewportWidth > 0) {
+        b.setPlayerBounds(left, top, width, height, viewportWidth);
+      } else b.setPlayerLayout(top, height);
     } catch {} finally {
       if (compact) root.classList.add(COMPACT_CLASS);
     }
@@ -224,7 +238,7 @@
   }
 
   function sync(b) {
-    if (/^\/shorts(?:\/|$)/.test(location.pathname)) {
+    if (Lite.isShorts()) {
       hideNative(b);
       restorePagePlayer();
       skipAdIfPlaying();
@@ -777,6 +791,11 @@
     interceptMediaHold();
     interceptMediaMenu();
     window.addEventListener('resize', ensure);
+    window.addEventListener('scroll', ensure, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', ensure);
+      window.visualViewport.addEventListener('scroll', ensure);
+    }
     Lite.module('player', ensure);
   }
 

@@ -25,7 +25,7 @@ class SessionConfigurationIdentityTest {
             try {
                 YoutubeSessionProvider.pageRedirect("https://www.youtube.com/watch", target)
                 fail("Unexpected allowed redirect")
-            } catch (_: java.io.IOException) { }
+            } catch (_: IOException) { }
         }
     }
 

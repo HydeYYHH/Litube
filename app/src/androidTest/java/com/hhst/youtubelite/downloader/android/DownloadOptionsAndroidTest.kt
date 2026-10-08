@@ -15,6 +15,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import java.io.IOException
+import com.hhst.youtubelite.core.DeviceEvidence
 
 @OptIn(ExperimentalMaterial3Api::class)
 class DownloadOptionsAndroidTest {

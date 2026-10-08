@@ -81,6 +81,7 @@ internal fun SubtitleStyleDialog(
     coverUrl: String?,
     onChange: (SubtitleStyle) -> Unit,
     onDismiss: () -> Unit,
+    fullscreen: Boolean = false,
 ) {
     // onChange applies the style live AND persists it (MMKV), and a drag emits
     // one change per pixel. Keep a local draft for immediate preview, push to
@@ -105,7 +106,7 @@ internal fun SubtitleStyleDialog(
         activeTrackColor = PlayerUi.YtRed,
         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
     )
-    PlayerModalSheet(onDismiss = onDismiss) {
+    PlayerModalSheet(onDismiss = onDismiss, fullscreen = fullscreen) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())

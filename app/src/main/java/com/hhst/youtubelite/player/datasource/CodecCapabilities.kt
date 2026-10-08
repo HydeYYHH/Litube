@@ -20,7 +20,7 @@ import com.hhst.youtubelite.extractor.Format
 object CodecCapabilities {
 
     /** AV1 accepted only up to this height even with a hardware decoder. */
-    const val AV1_MAX_HEIGHT_PX = 1080
+    private const val AV1_MAX_HEIGHT_PX = 1080
 
     private val hardwareMimes = HashMap<String, Boolean>()
     private var scanned = false

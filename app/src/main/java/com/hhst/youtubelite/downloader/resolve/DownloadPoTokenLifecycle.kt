@@ -36,19 +36,18 @@ class DownloadPoTokenLifecycle(
                 val decisions = previousIdentities.map { previous ->
                     val format = DownloadResourceIdentity.matching(videoId, previous, catalog.formats)
                     val identity = format?.let { DownloadResourceIdentity.of(videoId, it) }
-                    ComponentRefreshDecision(previous, identity,
-                        identity == null || !DownloadResourceIdentity.proven(previous, identity))
+                    ComponentRefreshDecision(
+                        previous,
+                        identity == null || !DownloadResourceIdentity.proven(previous, identity),
+                    )
                 }
-                IdentityRefreshResult(videoId, 1, false, poToken != null, catalog, decisions)
+                IdentityRefreshResult(1, false, poToken != null, catalog, decisions)
             }
         } finally { synchronized(recoveries) { recovery.users-- } }
     }
-
-    companion object { const val MAX_ROUNDS = 1 }
 }
 
 data class IdentityRefreshResult(
-    val videoId: String,
     val round: Int,
     val exhausted: Boolean,
     val evictedPoToken: Boolean,
@@ -58,6 +57,5 @@ data class IdentityRefreshResult(
 
 data class ComponentRefreshDecision(
     val previousIdentity: String,
-    val refreshedIdentity: String?,
     val needsRedownload: Boolean,
 )

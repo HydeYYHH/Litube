@@ -28,7 +28,7 @@ import com.hhst.youtubelite.downloader.core.ScheduleRecord
 import com.hhst.youtubelite.downloader.core.TaskSnapshot
 
 internal object DownloadJson {
-    val gson: Gson = Gson()
+    private val gson: Gson = Gson()
 
     fun config(json: String): DownloadConfig =
         gson.fromJson(json, DownloadConfig::class.java) ?: DownloadConfig()

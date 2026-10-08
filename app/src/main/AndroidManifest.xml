@@ -9,8 +9,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Required by the Cast framework's merged manifest (route discovery);
-         declared here so the permission is intentional and auditable. -->
+    <!-- LAN Cast discovery and the local media proxy. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -169,8 +168,5 @@
                 tools:node="remove" />
         </provider>
 
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.hhst.youtubelite.cast.CastOptionsProvider" />
     </application>
 </manifest>

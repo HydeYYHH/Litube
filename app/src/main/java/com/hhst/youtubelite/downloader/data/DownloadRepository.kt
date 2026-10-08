@@ -31,7 +31,6 @@ interface DownloadSession {
     suspend fun saveSubmission(result: EnqueueResult)
 
     suspend fun insertBatch(batch: DownloadBatch)
-    suspend fun getBatch(id: String): DownloadBatch?
 
     suspend fun insertTask(task: DownloadTask)
     suspend fun updateTask(task: DownloadTask)
@@ -54,7 +53,6 @@ interface DownloadSession {
     suspend fun componentsForAsset(assetId: String): List<InputComponent>
 
     suspend fun insertChunk(chunk: DownloadChunk)
-    suspend fun chunksForComponent(componentId: String): List<DownloadChunk>
     suspend fun deleteUnverifiedChunks(componentId: String)
     suspend fun deleteChunks(componentId: String)
 
@@ -66,7 +64,6 @@ interface DownloadSession {
     suspend fun updateSchedule(record: ScheduleRecord)
     suspend fun scheduleForTask(taskId: String): ScheduleRecord?
     suspend fun allSchedules(): List<ScheduleRecord>
-    suspend fun allPublish(): List<PublishRecord>
 
     suspend fun snapshot(taskId: String): TaskSnapshot?
     suspend fun batchView(batchId: String): BatchView?

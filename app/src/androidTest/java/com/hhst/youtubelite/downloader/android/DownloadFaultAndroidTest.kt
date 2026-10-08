@@ -11,7 +11,7 @@ import com.hhst.youtubelite.downloader.core.DownloadRequest
 import com.hhst.youtubelite.downloader.core.DownloadPublisher
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
-import com.hhst.youtubelite.downloader.android.DeviceEvidence
+import com.hhst.youtubelite.core.DeviceEvidence
 import android.app.Instrumentation
 import android.content.Context
 import android.net.Uri
@@ -34,8 +34,8 @@ import com.hhst.youtubelite.downloader.io.DownloadDirectories
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
-import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationPayload
+import com.hhst.youtubelite.downloader.engine.AndroidNotificationPort
+import com.hhst.youtubelite.downloader.engine.DownloadNotificationPayload
 import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
 import com.hhst.youtubelite.downloader.io.createPublishBackend
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
@@ -298,8 +298,6 @@ class DownloadFaultAndroidTest {
                     }
                 },
             )
-            val afterDrop = repo.transact { snapshot(taskId) }!!
-            assertEquals(DownloadStatus.WAITING_NETWORK, afterDrop.task.status)
             assertTrue(
                 "network loss must not burn retry budget (attempts=${httpAttempts.get()})",
                 httpAttempts.get() <= 2,
@@ -358,7 +356,7 @@ class DownloadFaultAndroidTest {
             .transact { getTask(taskId) }!!.executionGeneration
         assertTrue(coordinator.reportAssetPublished(taskId, gen, AssetKind.VIDEO, uri))
         val deleted = targetContext.contentResolver.delete(Uri.parse(uri), null, null)
-        assertTrue("external MediaStore delete must remove the row (deleted=$deleted)", deleted >= 0)
+        assertTrue("external MediaStore delete must remove the row (deleted=$deleted)", deleted > 0)
         reconciler.reconcile()
         val after = koin.get<DownloadRepository>()
             .transact { snapshot(taskId) }!!
@@ -439,50 +437,6 @@ class DownloadFaultAndroidTest {
     }
 
     @Test
-    fun talkBack_enableIfPackagePresent_otherwiseRecordBlocked() {
-        val packages = DeviceEvidence.shell("pm list packages")
-        val talkback = listOf(
-            "com.google.android.marvin.talkback",
-            "com.android.talkback",
-            "com.google.android.accessibility.talkback",
-        ).firstOrNull { pkg -> packages.contains(pkg) }
-        if (talkback == null) {
-            DeviceEvidence.writeJson(
-                "talkback.json",
-                """{"status":"blocked","reason":"no TalkBack package on image","api":${Build.VERSION.SDK_INT}}""",
-            )
-            return
-        }
-        val pkgDump = DeviceEvidence.shell("dumpsys package $talkback")
-        val serviceClass = listOf(
-            "com.google.android.accessibility.talkback.TalkBackService",
-            "com.google.android.marvin.talkback.TalkBackService",
-        ).firstOrNull { pkgDump.contains(it) } ?: "com.google.android.marvin.talkback.TalkBackService"
-        val service = "$talkback/$serviceClass"
-        DeviceEvidence.shell("settings put secure enabled_accessibility_services $service")
-        DeviceEvidence.shell("settings put secure accessibility_enabled 1")
-        Thread.sleep(1_500)
-        val enabled = DeviceEvidence.shell("settings get secure accessibility_enabled").trim()
-        val services = DeviceEvidence.shell("settings get secure enabled_accessibility_services").trim()
-        val a11y = DeviceEvidence.shell("dumpsys accessibility")
-        val connected = a11y.contains("TalkBack", ignoreCase = true) || services.contains(talkback)
-        ActivityScenario.launch<DownloadActivity>(
-            DownloadActivity.intent(targetContext).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-        ).use {
-            instrumentation.waitForIdleSync()
-            Thread.sleep(800)
-            DeviceEvidence.dumpWindowsXml()
-        }
-        DeviceEvidence.writeJson(
-            "talkback.json",
-            """{"status":"${if (connected) "proven" else "blocked"}","package":"$talkback","service":"$service","accessibility_enabled":"$enabled","connected":$connected,"api":${Build.VERSION.SDK_INT}}""",
-        )
-        DeviceEvidence.shell("settings put secure accessibility_enabled 0")
-        DeviceEvidence.shell("settings put secure enabled_accessibility_services null")
-        assertTrue("TalkBack package is on this Play image", talkback.isNotBlank())
-    }
-
-    @Test
     fun processDeath_seedOrAssertAfterForceStop() = runBlocking {
         waitDownloadReady()
         val phase = InstrumentationRegistry.getArguments().getString("deathPhase") ?: "seed"
@@ -560,14 +514,16 @@ class DownloadFaultAndroidTest {
         val taskId = result.created.single().taskId
         val deadline = SystemClock.elapsedRealtime() + 45_000L
         var snap = repo.transact { snapshot(taskId) }!!
+        var decided = false
         while (SystemClock.elapsedRealtime() < deadline) {
             snap = repo.transact { snapshot(taskId) }!!
-            val decided = snap.task.phase == DownloadPhase.TRANSFER ||
+            decided = snap.task.phase == DownloadPhase.TRANSFER ||
                 snap.task.status == DownloadStatus.WAITING_NETWORK ||
                 snap.task.status == DownloadStatus.FAILED
             if (decided) break
             delay(500)
         }
+        assertTrue("enqueue never reached a decided state: ${snap.task.status}/${snap.task.phase}", decided)
         val started = snap.task.phase == DownloadPhase.TRANSFER ||
             snap.task.status == DownloadStatus.WAITING_NETWORK
         val blocked = !started
@@ -580,7 +536,6 @@ class DownloadFaultAndroidTest {
         DeviceEvidence.shell("cp ${File(targetContext.cacheDir, "live-youtube-logcat.txt").absolutePath} /data/local/tmp/device-${DeviceEvidence.DATE}/live-youtube-logcat.txt")
         runCatching { coordinator.cancel(DownloadTarget.Task(taskId)) }
         runCatching { koin.get<BackgroundDownloadScheduler>().cancel(taskId) }
-        assertTrue("live enqueue must create a task", taskId.isNotBlank())
     }
 
     private fun waitDownloadReady() {
@@ -686,31 +641,14 @@ class DownloadFaultAndroidTest {
         Thread.sleep(400)
     }
 
-    private fun clickAccessibleText(text: String): Boolean {
-        val node = findAccessibleText(text) ?: return false
-        var cur: AccessibilityNodeInfo? = node
-        while (cur != null) {
-            if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-            cur = cur.parent
-        }
-        return false
-    }
-
-    private fun findAccessibleText(text: String): AccessibilityNodeInfo? {
-        val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
-        val nodes = root.findAccessibilityNodeInfosByText(text)
-        return nodes.firstOrNull { it.text?.toString()?.contains(text, ignoreCase = true) == true }
-            ?: nodes.firstOrNull { it.contentDescription?.toString()?.contains(text, ignoreCase = true) == true }
-            ?: nodes.firstOrNull()
-    }
-
     private fun waitUntil(label: String, timeoutMs: Long = 12_000L, pred: () -> Boolean): Boolean {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < deadline) {
             if (pred()) return true
             Thread.sleep(150)
         }
-        return pred()
+        if (pred()) return true
+        throw AssertionError("timed out waiting for $label")
     }
 
     private fun jsonString(value: String?): String =

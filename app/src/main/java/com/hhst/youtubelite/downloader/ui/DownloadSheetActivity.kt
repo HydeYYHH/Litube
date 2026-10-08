@@ -64,7 +64,7 @@ class DownloadSheetActivity : ComponentActivity() {
                         duration = SnackbarDuration.Short,
                     )
                     if (outcome == SnackbarResult.ActionPerformed) {
-                        DownloadUi.openManager(this@DownloadSheetActivity, r.batchId, snack.taskId)
+                        DownloadUi.openManager(this@DownloadSheetActivity, r.batchId)
                     }
                     finish()
                 }

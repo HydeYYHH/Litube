@@ -9,7 +9,7 @@ import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.SinglePeriodTimeline
 import androidx.media3.exoplayer.upstream.Allocation
-import com.hhst.youtubelite.downloader.android.DeviceEvidence
+import com.hhst.youtubelite.core.DeviceEvidence
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -55,7 +55,7 @@ class YoutubeMediaRequestsTest {
         assertEquals("bytes=50-${50 + 10L * 1024 * 1024 - 1}", request.header("Range"))
         assertNull(request.header("Cookie"))
         current = false
-        assertThrows(java.io.IOException::class.java) { policy.build("https://rr.googlevideo.com/videoplayback", plan) }
+        assertThrows(IOException::class.java) { policy.build("https://rr.googlevideo.com/videoplayback", plan) }
     }
 
     @Test fun noCompatibilityRetryForRateLimitOrManifest() {
@@ -87,10 +87,10 @@ class YoutubeMediaRequestsTest {
             .body("media".toResponseBody()).build()
         response.use { assertEquals(YoutubeMediaRequests.Window(5, 200), policy.window(it, plan)) }
         response.newBuilder().header("Content-Range", "bytes 99-103/200").build().use {
-            assertThrows(java.io.IOException::class.java) { policy.window(it, plan) }
+            assertThrows(IOException::class.java) { policy.window(it, plan) }
         }
         response.newBuilder().header("Content-Range", "bytes 100-104/201").build().use {
-            assertThrows(java.io.IOException::class.java) { policy.window(it, plan) }
+            assertThrows(IOException::class.java) { policy.window(it, plan) }
         }
     }
 
@@ -113,9 +113,9 @@ class YoutubeMediaRequestsTest {
             val plan = RequestPlan(session(), ClientProfile.WEB, RequestPlan.Protocol.HTTPS, RequestPlan.Range.HEADER, false)
             val client = OkHttpClient.Builder().addInterceptor(policy.interceptor()).build()
             server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody("sign in"))
-            assertThrows(java.io.IOException::class.java) { client.newCall(policy.build(server.url("/videoplayback").toString(), plan, 0, 5)).execute() }
+            assertThrows(IOException::class.java) { client.newCall(policy.build(server.url("/videoplayback").toString(), plan, 0, 5)).execute() }
             server.enqueue(MockResponse().setHeader("Content-Type", "video/mp4").setBody("entire-file"))
-            assertThrows(java.io.IOException::class.java) { client.newCall(policy.build(server.url("/videoplayback").toString(), plan, 100, 5)).execute() }
+            assertThrows(IOException::class.java) { client.newCall(policy.build(server.url("/videoplayback").toString(), plan, 100, 5)).execute() }
             assertEquals(2, server.requestCount)
             client.dispatcher.executorService.shutdown()
         } finally { server.shutdown() }
@@ -207,7 +207,7 @@ class YoutubeMediaRequestsTest {
             call.execute().use { response ->
                 current.set(false)
                 val started = System.nanoTime()
-                assertThrows(java.io.IOException::class.java) { response.body!!.string() }
+                assertThrows(IOException::class.java) { response.body!!.string() }
                 assertTrue(call.isCanceled())
                 assertTrue(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(3))
             }
@@ -218,7 +218,7 @@ class YoutubeMediaRequestsTest {
     @Test fun expiredUrlIsRejectedBeforeAnHttpRequest() {
         val policy = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
         val plan = RequestPlan(session(), ClientProfile.WEB, RequestPlan.Protocol.HTTPS, RequestPlan.Range.QUERY, false, 100, 1)
-        val failure = assertThrows(java.io.IOException::class.java) { policy.build("https://rr.googlevideo.com/videoplayback", plan) }
+        val failure = assertThrows(IOException::class.java) { policy.build("https://rr.googlevideo.com/videoplayback", plan) }
         assertEquals("MEDIA_URL_EXPIRED", failure.message)
     }
 
@@ -226,6 +226,6 @@ class YoutubeMediaRequestsTest {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"SESSION_INDEX\":\"2\"});")
         assertEquals(2, YoutubeSessionProvider.accountIndex(config))
         config["SESSION_INDEX"] = "invalid"
-        assertThrows(java.io.IOException::class.java) { YoutubeSessionProvider.accountIndex(config) }
+        assertThrows(IOException::class.java) { YoutubeSessionProvider.accountIndex(config) }
     }
 }

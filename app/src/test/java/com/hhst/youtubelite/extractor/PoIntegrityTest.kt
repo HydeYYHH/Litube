@@ -6,11 +6,11 @@ import java.io.IOException
 
 class PoIntegrityTest {
     @Test fun twoFieldsAreSufficient() {
-        assertEquals(PoIntegrity("opaque", 3600, 0, null), parsePoIntegrity("[\"opaque\",3600]"))
+        assertEquals(PoIntegrity("opaque", 3600, 0), parsePoIntegrity("[\"opaque\",3600]"))
     }
     @Test fun optionalFieldsAndNulls() {
-        assertEquals(PoIntegrity("opaque", 3600, 60, "fallback"), parsePoIntegrity("[\"opaque\",3600,60,\"fallback\"]"))
-        assertEquals(PoIntegrity("opaque", 3600, 0, null), parsePoIntegrity("[\"opaque\",3600,null,null]"))
+        assertEquals(PoIntegrity("opaque", 3600, 60), parsePoIntegrity("[\"opaque\",3600,60,\"fallback\"]"))
+        assertEquals(PoIntegrity("opaque", 3600, 0), parsePoIntegrity("[\"opaque\",3600,null,null]"))
     }
     @Test fun incompleteOrExpiredReplyFailsExplicitly() {
         for (body in listOf("[]", "[\"opaque\"]", "[\"\",3600]", "[\"opaque\",0]", "{}")) {

@@ -5,4 +5,7 @@
     <color name="secondary">#606060</color>
     <color name="on_secondary">#FFFFFF</color>
     <color name="background">#FFFFFF</color>
+    <!-- Preserve the former Material window icon colors without its UI library. -->
+    <color name="window_icon_color">#1D1B20</color>
+    <color name="window_icon_variant">#49454F</color>
 </resources>

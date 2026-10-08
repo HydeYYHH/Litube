@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.downloader.resolve
 
+import com.hhst.youtubelite.downloader.net.DownloadBitrate
+
 import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
 import com.hhst.youtubelite.extractor.Format
@@ -308,7 +310,6 @@ object DownloadSelector {
         val durationSec = if (format.approxDurationMs > 0) format.approxDurationMs / 1000L else 0L
         return DownloadMediaChoice(
             format = format,
-            bitrateBps = DownloadBitrate.bitsPerSecond(format),
             expectedBytes = format.requestPlan?.resourceLength?.takeIf { it > 0 }
                 ?: DownloadBitrate.contentLengthFromUrl(format.url),
             estimatedBytes = DownloadBitrate.expectedBytes(format, durationSec),

@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.downloader.android
 
-import android.os.Build
-import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
@@ -21,8 +19,6 @@ import com.hhst.youtubelite.downloader.core.DownloadShareOnce
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Subtitle
-import java.io.File
-import java.io.FileInputStream
 
 internal class SeqIdFactory : IdFactory {
     private val counts = mutableMapOf<String, Int>()
@@ -123,11 +119,6 @@ internal fun sampleCatalog(): DownloadCatalog = DownloadCatalog(
 )
 
 internal data class SeededTasks(
-    val runningId: String,
-    val waitingId: String,
-    val completedId: String,
-    val missingId: String,
-    val attachmentsId: String,
     val runningBatchId: String,
 )
 
@@ -174,81 +165,7 @@ internal suspend fun DownloadAndroidHarness.seedList(): SeededTasks {
         AssetKind.SUBTITLE,
         "content://com.hhst.litube.debug.download.fileprovider/downloads/a.en.vtt",
     )
-    return SeededTasks(
-        runningId = runningId,
-        waitingId = waitingId,
-        completedId = completedId,
-        missingId = missingId,
-        attachmentsId = attachmentsId,
-        runningBatchId = running.batchId,
-    )
-}
-
-internal object DeviceEvidence {
-    const val DATE = "2026-09-17"
-
-    fun deviceDir(): File {
-        val dir = File("/data/local/tmp/device-$DATE")
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("mkdir -p ${dir.absolutePath}")
-            .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(java.io.ByteArrayOutputStream()) }
-        return dir
-    }
-
-    fun capture(fileName: String) {
-        val dest = File(deviceDir(), fileName).absolutePath
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("screencap -p $dest")
-            .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(java.io.ByteArrayOutputStream()) }
-    }
-
-    fun writeMeta() {
-        val sdk = Build.VERSION.SDK_INT
-        val release = Build.VERSION.RELEASE
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val local = File(ctx.cacheDir, "device-runtime.json")
-        local.writeText(
-            """{"api":$sdk,"release":"$release","date":"$DATE","product":"${Build.PRODUCT}","model":"${Build.MODEL}","device":"${Build.DEVICE}"}""",
-        )
-        deviceDir()
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("cp ${local.absolutePath} /data/local/tmp/device-$DATE/runtime-api$sdk.json")
-            .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(java.io.ByteArrayOutputStream()) }
-    }
-
-    fun captureScene(baseName: String) {
-        capture("$baseName-api${Build.VERSION.SDK_INT}.png")
-    }
-
-    fun dumpUi(fileName: String) {
-        val dest = "/data/local/tmp/$fileName"
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("uiautomator dump $dest")
-            .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(java.io.ByteArrayOutputStream()) }
-    }
-
-    fun shell(command: String): String {
-        val out = java.io.ByteArrayOutputStream()
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand(command)
-            .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(out) }
-        return out.toString(Charsets.UTF_8)
-    }
-
-    fun writeJson(fileName: String, json: String) {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        File(ctx.filesDir, fileName).writeText(json)
-        File(ctx.cacheDir, fileName).writeText(json)
-        val dest = File(deviceDir(), fileName)
-        runCatching { dest.writeText(json) }
-        val b64 = android.util.Base64.encodeToString(json.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
-        shell("base64 -d > ${dest.absolutePath} <<'LITUBEB64'\n$b64\nLITUBEB64")
-    }
-
-    fun dumpWindowsXml(): String {
-        shell("uiautomator dump --compressed /data/local/tmp/device-$DATE/uidump.xml")
-        return shell("cat /data/local/tmp/device-$DATE/uidump.xml")
-    }
+    return SeededTasks(runningBatchId = running.batchId)
 }
 
 internal fun resetOverlayState() {

@@ -19,13 +19,11 @@ object DownloadSettings {
 interface DownloadPrefs {
     fun wifiOnly(): Boolean = DownloadSettings.WIFI_ONLY_DEFAULT
     fun maxConnections(): Int = DownloadSettings.DEFAULT_CONNECTIONS
-    fun chunkBytes(): Long = DownloadSettings.CHUNK_BYTES
     fun defaultQuality(): String = "1080p"
     fun lastConfig(): DownloadConfig = DownloadConfig(videoQuality = defaultQuality())
 
     fun setWifiOnly(value: Boolean) {}
     fun setMaxConnections(value: Int) {}
-    fun setChunkBytes(value: Long) {}
     fun setDefaultQuality(value: String) {}
     fun setLastConfig(config: DownloadConfig) {}
 }

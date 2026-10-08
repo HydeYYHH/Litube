@@ -205,7 +205,7 @@ class DownloadTransportImpl(
         }
         val size = chunkBytes.coerceIn(1L, 10L * 1024 * 1024)
         var offset = 0L
-        var planned: Long = knownTotal
+        val planned: Long = knownTotal
         while (offset < planned) {
             coroutineContext.ensureActive()
             if (DownloadNetworkPolicy.waitingNetwork(wifiOnlyProvider(), network.current())) {

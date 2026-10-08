@@ -1,22 +1,24 @@
 package com.hhst.youtubelite.extractor
 
 import android.os.Bundle
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
+import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Explicitly invoked real-network first-read acceptance; follows the device's WebView account. */
 class YoutubeStreamReadAndroidTest {
-    @get:org.junit.Rule val activity = androidx.test.ext.junit.rules.ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
     @Test fun selectedMediaAndManifestsCanBeRead() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val ids = InstrumentationRegistry.getArguments().getString("videoIds").orEmpty()
@@ -61,7 +63,6 @@ class YoutubeStreamReadAndroidTest {
                 for (format in selected) read(id, format.url, requireNotNull(format.requestPlan), false)
                 for (manifest in stream.manifests.distinctBy { it.protocol }) read(id, manifest.url, manifest.requestPlan, true)
             }
-            File(instrumentation.targetContext.filesDir, "youtube-stream-read.json").writeText(Gson().toJson(records))
         } finally {
             File(instrumentation.targetContext.filesDir, "youtube-stream-read.json").writeText(Gson().toJson(records))
             File(instrumentation.targetContext.filesDir, "youtube-stream-diagnostics.txt").writeText(extractor.extractionDiagnostics())

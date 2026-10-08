@@ -1,19 +1,18 @@
-package com.hhst.youtubelite.downloader.core
+package com.hhst.youtubelite.downloader.resolve
 
+import com.hhst.youtubelite.downloader.core.DownloadConfig
+import com.hhst.youtubelite.downloader.core.AssetKind
+import com.hhst.youtubelite.downloader.core.DownloadHarness
+import com.hhst.youtubelite.downloader.core.InputComponentKind
+import com.hhst.youtubelite.downloader.core.DownloadPhase
+import com.hhst.youtubelite.downloader.core.DownloadResolveOutcome
+import com.hhst.youtubelite.downloader.core.DownloadStatus
+import com.hhst.youtubelite.downloader.core.ResolvedComponentUpdate
+import com.hhst.youtubelite.downloader.core.request
+import com.hhst.youtubelite.downloader.core.vid
 import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
-import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
-import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
-import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
-import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
-import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
-import com.hhst.youtubelite.downloader.resolve.PoTokenEvictor
 import com.hhst.youtubelite.downloader.ui.DownloadPresentation
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
-import com.hhst.youtubelite.downloader.resolve.TEST_VIDEO_ID
-import com.hhst.youtubelite.downloader.resolve.audioFormat
-import com.hhst.youtubelite.downloader.resolve.catalog
-import com.hhst.youtubelite.downloader.resolve.subtitle
-import com.hhst.youtubelite.downloader.resolve.videoFormat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -61,7 +60,7 @@ class DownloadResolverImplTest {
         val audioComp = video.components.first { it.component.kind == InputComponentKind.AUDIO }.component
         assertEquals("video/mp4", videoComp.mimeType)
         assertEquals("audio/mp4", audioComp.mimeType)
-        assertTrue(videoComp.expectedBytes != null && videoComp.expectedBytes!! > 0)
+        assertTrue(videoComp.expectedBytes != null && videoComp.expectedBytes > 0)
         assertTrue(audioComp.resourceIdentity!!.startsWith(DownloadResourceIdentity.PREFIX))
         assertFalse(audioComp.resourceIdentity!!.contains("expire"))
         val sub = snap.assets.first { it.asset.kind == AssetKind.SUBTITLE }
@@ -234,7 +233,7 @@ class DownloadResolverImplTest {
 
 private class ImmediateCatalog(
     private val catalog: DownloadCatalog,
-    private var refreshCatalog: DownloadCatalog = catalog,
+    private val refreshCatalog: DownloadCatalog = catalog,
 ) : DownloadCatalogSource {
     override suspend fun catalog(videoId: String) = catalog
     override suspend fun refresh(videoId: String) = refreshCatalog

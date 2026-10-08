@@ -1,0 +1,5 @@
+- Casting now uses an open-source Chromecast sender instead of the proprietary Google Cast SDK
+- Larger player controls: resolution, fullscreen, timestamps, and titles are easier to read and tap
+- Fullscreen sheets (More, queue, subtitle style) no longer bring back the system bars while open
+- Fixed WebView timers staying active while the app is idle (battery drain)
+- General stability and performance improvements

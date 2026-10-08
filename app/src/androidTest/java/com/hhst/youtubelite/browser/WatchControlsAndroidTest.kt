@@ -6,11 +6,6 @@ import androidx.activity.ComponentActivity
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewCompat
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
-import org.json.JSONObject
-import org.json.JSONTokener
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -21,27 +16,9 @@ class WatchControlsAndroidTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private var view: WebView? = null
 
-    private fun evaluate(source: String): JSONObject {
-        val latch = CountDownLatch(1)
-        val result = AtomicReference("{}")
-        instrumentation.runOnMainSync {
-            view!!.evaluateJavascript("JSON.stringify((()=>{$source})())") { result.set(it); latch.countDown() }
-        }
-        assertTrue(latch.await(5, TimeUnit.SECONDS))
-        return JSONObject(JSONTokener(result.get()).nextValue().toString())
-    }
-
-    private fun waitFor(source: String): JSONObject {
-        val deadline = System.currentTimeMillis() + 10_000
-        var state = JSONObject()
-        while (System.currentTimeMillis() < deadline) {
-            state = evaluate(source)
-            if (state.optBoolean("ready")) return state
-            Thread.sleep(100)
-        }
-        fail("Page condition not met: $state")
-        return state
-    }
+    private val probe get() = WebProbe { view!! }
+    private fun evaluate(source: String) = probe.evaluate(source)
+    private fun waitFor(source: String) = probe.waitFor(source)
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun fixture(body: String) {

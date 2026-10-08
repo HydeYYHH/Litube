@@ -95,7 +95,7 @@ object CastManifest {
                 // start the media timeline at a non-zero tfdt, and an implied
                 // t=0 desyncs receiver seek/period mapping. Zero stays omitted
                 // (the common VOD case) so existing manifests are unchanged.
-                val eptUs = if (index.length > 0) index.timesUs[0] else 0L
+                val eptUs = index.timesUs[0]
                 val firstTUs = if (eptUs != 0L) eptUs else null
                 append("<SegmentList timescale=\"1000000\"")
                 if (eptUs != 0L) append(" presentationTimeOffset=\"$eptUs\"")
@@ -143,7 +143,7 @@ object CastManifest {
         }
     }
 
-    internal fun streamUrl(proxyBase: String, token: String, generation: Long): String {
+    private fun streamUrl(proxyBase: String, token: String, generation: Long): String {
         val base = "$proxyBase/stream/$token"
         return if (generation > 0L) "$base?g=$generation" else base
     }

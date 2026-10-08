@@ -84,8 +84,7 @@ class DiskCache(
     private companion object {
         const val METADATA_KEY = "extractor:metadata:"
         const val STREAM_KEY = "extractor:stream:"
-        // Legacy storage prefix (the type was once called Segment): changing
-        // the value would silently drop every on-disk entry.
+        // Legacy on-disk key; renaming silently drops every stored entry.
         const val CHAPTERS_KEY = "extractor:segment:"
     }
 }

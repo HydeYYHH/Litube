@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Window theme before Compose; in-app styling is AppTheme. -->
-    <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Activities use ComponentActivity and Compose Material3. A framework
+         window theme avoids retaining the separate Material Views library. -->
+    <style name="Theme.App.Base" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.App" parent="Theme.App.Base">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/background</item>
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/on_primary</item>
-        <item name="colorSecondary">@color/secondary</item>
-        <item name="colorOnSecondary">@color/on_secondary</item>
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="colorOnSurface">@color/window_icon_color</item>
+        <item name="colorOnSurfaceVariant">@color/window_icon_variant</item>
+        <item name="colorControlNormal">@color/window_icon_control</item>
     </style>
 
     <style name="Theme.App.DownloadSheet" parent="Theme.App">

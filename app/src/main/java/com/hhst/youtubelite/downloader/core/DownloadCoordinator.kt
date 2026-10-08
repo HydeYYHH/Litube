@@ -499,7 +499,7 @@ class DownloadCoordinator(
                     skipped = true,
                 ),
             )
-            return TaskRef(live.id, videoId, owned = false)
+            return TaskRef(live.id, owned = false)
         }
         val taskId = ids.next("task")
         insertTask(
@@ -539,7 +539,7 @@ class DownloadCoordinator(
             ),
         )
         markSchedule(taskId, pending = true, reason = "ENQUEUE", effects)
-        return TaskRef(taskId, videoId, owned = true)
+        return TaskRef(taskId, owned = true)
     }
 
     private suspend fun DownloadSession.createAssets(
@@ -885,15 +885,13 @@ class DownloadCoordinator(
                         ),
                     )
                     val found = assetsForTask(op.taskId).firstOrNull { it.id == op.assetId }
-                    if (found != null && (found.publishedUri == op.uri || found.publishedUri == null || op.uri == found.publishedUri)) {
-                        if (found.publishedUri == op.uri) {
-                            updateAsset(
-                                found.copy(
-                                    publishedUri = null,
-                                    fileAvailability = FileAvailability.MISSING,
-                                ),
-                            )
-                        }
+                    if (found != null && found.publishedUri == op.uri) {
+                        updateAsset(
+                            found.copy(
+                                publishedUri = null,
+                                fileAvailability = FileAvailability.MISSING,
+                            ),
+                        )
                     }
                 } else {
                     updatePublish(

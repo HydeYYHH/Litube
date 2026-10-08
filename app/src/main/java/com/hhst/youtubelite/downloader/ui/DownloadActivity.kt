@@ -19,15 +19,11 @@ class DownloadActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val batchId = intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID)
-        val taskId = intent.getStringExtra(DownloadUi.EXTRA_TASK_ID)
-        val dest = intent.getStringExtra(DownloadUi.EXTRA_DEST)
         setContent {
             AppTheme {
                 DownloadManagerScreen(
                     viewModel = koinViewModel(),
                     initialBatchId = batchId,
-                    initialTaskId = taskId,
-                    initialDest = dest,
                     onClose = { finish() },
                 )
             }
@@ -55,11 +51,7 @@ class DownloadActivity : ComponentActivity() {
         fun intent(
             context: Context,
             batchId: String? = null,
-            taskId: String? = null,
-            dest: String? = null,
         ): Intent = Intent(context, DownloadActivity::class.java)
             .putExtra(DownloadUi.EXTRA_BATCH_ID, batchId)
-            .putExtra(DownloadUi.EXTRA_TASK_ID, taskId)
-            .putExtra(DownloadUi.EXTRA_DEST, dest)
     }
 }

@@ -16,13 +16,10 @@ class YoutubeDownloadRequestAdapterTest {
         val url = playbackUrl(137, client = "WEB")
         val plan = YoutubeDownloadRequestAdapter.adaptUrl(TEST_VIDEO_ID, url, 137)
         assertEquals(DownloadHttpMethod.GET, plan.method)
-        assertFalse(plan.postPulse)
         assertEquals(DownloadRangeMode.HTTP_HEADER, plan.rangeMode)
         assertEquals(DownloadCookiePolicy.NONE, plan.cookiePolicy)
         assertEquals(null, plan.client)
         assertEquals(null, plan.headers["Origin"])
-        assertEquals(DownloadHttpClients.WORK_DIR, plan.workingDirectory)
-        assertNotEquals("player", plan.workingDirectory)
     }
 
     @Test

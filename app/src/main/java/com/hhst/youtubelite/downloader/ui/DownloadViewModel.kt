@@ -117,10 +117,9 @@ class DownloadViewModel(
                 catalog = catalog,
                 config = config,
                 size = DownloadPresentation.sizeCopy(selection.plan),
-                qualities = DownloadPresentation.qualityOptions(catalog),
                 plan = selection.plan,
             )
-            is DownloadSelection.Failed -> PreviewState.Unavailable(selection.reason, selection.message, catalog)
+            is DownloadSelection.Failed -> PreviewState.Unavailable(selection.reason, selection.message)
         }
     }
 
@@ -183,21 +182,17 @@ class DownloadViewModel(
         downloadHttp?.dispatcher?.maxRequests = n
     }
 
-    fun setChunkBytes(value: Long) = prefs.setChunkBytes(value)
-
     sealed class PreviewState {
         data class Ready(
             val catalog: DownloadCatalog,
             val config: DownloadConfig,
             val size: SizeCopy,
-            val qualities: List<String>,
             val plan: DownloadPlan = DownloadPlan(),
         ) : PreviewState()
 
         data class Unavailable(
             val reason: DownloadUnavailableReason,
             val message: String,
-            val catalog: DownloadCatalog? = null,
-        ) : PreviewState()
+                ) : PreviewState()
     }
 }

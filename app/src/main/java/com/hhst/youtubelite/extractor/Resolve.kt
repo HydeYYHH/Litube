@@ -146,16 +146,6 @@ private fun Metadata.fillFrom(page: PlayerPage) {
     duration = runCatching { extractor.length }.getOrDefault(0L).coerceAtLeast(0L)
     thumbnailUrl = bestImageUrl(runCatching { extractor.thumbnails }.getOrDefault(emptyList()))
         ?: VideoId.thumbnailUrl(info.id)
-    likeCount = runCatching { extractor.likeCount }.getOrDefault(-1L)
-    dislikeCount = runCatching { extractor.dislikeCount }.getOrDefault(-1L)
-    uploadedAt = runCatching {
-        extractor.uploadDate?.instant?.toEpochMilli()
-    }.getOrNull()
-    uploaderUrl = runCatching { extractor.uploaderUrl }.getOrNull()
-    uploaderAvatarUrl = bestImageUrl(
-        runCatching { extractor.uploaderAvatars }.getOrDefault(emptyList()),
-    )
-    viewCount = runCatching { extractor.viewCount }.getOrDefault(-1L)
     isLive = runCatching {
         info.streamType == StreamType.LIVE_STREAM ||
             info.streamType == StreamType.AUDIO_LIVE_STREAM

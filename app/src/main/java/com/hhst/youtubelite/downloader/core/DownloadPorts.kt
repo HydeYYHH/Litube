@@ -13,7 +13,7 @@ interface DownloadResolver {
 
 sealed class DownloadResolveOutcome {
     data class Ready(val taskId: String, val generation: Long) : DownloadResolveOutcome()
-    data class Failed(val reason: String, val message: String) : DownloadResolveOutcome()
+    data class Failed(val reason: String) : DownloadResolveOutcome()
     data object Stale : DownloadResolveOutcome()
     data object Cancelled : DownloadResolveOutcome()
     data object Ignored : DownloadResolveOutcome()
@@ -35,7 +35,6 @@ data class DownloadComponentSource(
     val cookiePolicyName: String? = null,
     val client: String? = null,
     val headers: Map<String, String> = emptyMap(),
-    val postPulse: Boolean = false,
     @Transient val requestPlan: RequestPlan? = null,
 )
 

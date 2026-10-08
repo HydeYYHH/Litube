@@ -75,9 +75,9 @@ import com.hhst.youtubelite.downloader.core.DownloadShareParser
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.downloader.ui.DownloadUiStart
 import com.hhst.youtubelite.downloader.webview.DownloadWebBridge
-import com.hhst.youtubelite.downloader.webview.WebViewTimerHandle
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOwner
+import com.hhst.youtubelite.core.WebViewTimerHandle
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.WebViewTimerOwner
 import com.hhst.youtubelite.extension.Extension
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -93,6 +93,7 @@ import com.hhst.youtubelite.player.surface.PlayerCallbackBridge
 import com.hhst.youtubelite.player.surface.PlayerSurface
 import com.hhst.youtubelite.player.surface.PlayerSurfaceCallbacks
 import com.hhst.youtubelite.player.surface.PlayerUi
+import com.hhst.youtubelite.player.surface.PlayerWindowEffects
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import com.hhst.youtubelite.ui.about.AboutActivity
 import com.hhst.youtubelite.ui.extension.ExtensionScreen
@@ -516,13 +517,10 @@ fun BrowserScreen(
     }
     val onActiveChanged = rememberUpdatedState(onPlayerActiveChanged)
 
-    LaunchedEffect(playerState.fullscreen, playerState.videoWidth, playerState.videoHeight, windowHost) {
-        windowHost.applyImmersive(
-            playerState.fullscreen,
-            playerState.videoWidth,
-            playerState.videoHeight,
-        )
-    }
+    val immersive = playerState.fullscreen && playerState.visible && !playerState.mini && !inPip
+    PlayerWindowEffects(
+        activity, windowHost, immersive, playerState.videoWidth, playerState.videoHeight,
+    )
     LaunchedEffect(
         playerState.visible, playerState.mini, playerState.isPlaying,
         playerState.loading, playerState.casting,
@@ -544,7 +542,7 @@ fun BrowserScreen(
         }
     }
     LaunchedEffect(activity) {
-        activity?.let { playerViewModel.initializeCast(it) }
+        playerViewModel.initializeCast()
     }
     val pipState = rememberUpdatedState(inPip)
     DisposableEffect(activity, playerViewModel, lifecycleOwner) {
@@ -600,9 +598,10 @@ fun BrowserScreen(
         val bottomInsetDp = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp().value.toInt() }
         val availableWidthDp = (maxWidth.value.toInt() - leftInsetDp - rightInsetDp).coerceAtLeast(1)
         val availableHeightDp = (maxHeight.value.toInt() - topInsetDp - bottomInsetDp).coerceAtLeast(1)
+        val pageBounds = PlayerUi.embeddedBounds(playerState, availableWidthDp)
         val layoutMini = playerState.visible && !playerState.mini &&
             !playerState.fullscreen && !inPip && !PageKind.isShorts(playerState.url) &&
-            PlayerUi.useLandscapeMiniPlayer(availableWidthDp, availableHeightDp, playerState.pageHeightDp)
+            PlayerUi.useLandscapeMiniPlayer(availableWidthDp, availableHeightDp, pageBounds.height)
         SideEffect { playerViewModel.setCompactPlayer(layoutMini) }
         val layoutMiniState = rememberUpdatedState(layoutMini)
         val surfaceCallbacks = remember(playerCallbacks, playerViewModel) {
@@ -711,8 +710,10 @@ fun BrowserScreen(
                     mini = isMini,
                     fillsWindow = inPip || playerState.fullscreen,
                     fullscreenSwipeEnabled = !inPip,
-                    embeddedTopDp = PlayerUi.playerTopOffsetDp(false, playerState.pageTopDp, topInsetDp),
-                    embeddedHeightDp = PlayerUi.embeddedHeightDp(playerState.pageHeightDp, availableWidthDp),
+                    embeddedTopDp = PlayerUi.playerTopOffsetDp(false, pageBounds.top, topInsetDp),
+                    embeddedHeightDp = pageBounds.height,
+                    embeddedLeftDp = pageBounds.left,
+                    embeddedWidthDp = pageBounds.width,
                     topInsetDp = topInsetDp,
                     modifier = if (inPip || playerState.fullscreen) Modifier else Modifier.padding(start = leftInsetDp.dp, end = rightInsetDp.dp),
                 ) {

@@ -11,6 +11,10 @@
   const POLL_MS = 1000;
   const SPA_LAG_MS = 80;
   const ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+  const SHORTS_PATH_RE = /^\/shorts(?:\/|$)/;
+
+  /** True while the SPA route is a Shorts page; shared by every shorts-aware module. */
+  const isShorts = () => SHORTS_PATH_RE.test(location.pathname);
 
   const TEXT = {
     "download": {
@@ -1512,8 +1516,8 @@
   }
 
   window.Lite = {
-    text, bridge, prefs, id, isId, bar, chip, strip, icon, svg, fit, menuIcon, queueIcon,
-    module, retry, bridgeReady, wake,
+    text, bridge, prefs, id, isId, isShorts, bar, chip, strip, icon, svg, fit, menuIcon,
+    queueIcon, module, retry, bridgeReady, wake,
   };
   start();
 })();

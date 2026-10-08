@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -91,6 +91,8 @@ fun MiniPlayerWindow(
     fullscreenSwipeEnabled: Boolean = true,
     embeddedTopDp: Int = 0,
     embeddedHeightDp: Int = 0,
+    embeddedLeftDp: Int = 0,
+    embeddedWidthDp: Int = screenWidthDp,
     topInsetDp: Int = 0,
     content: @Composable () -> Unit,
 ) {
@@ -122,8 +124,8 @@ fun MiniPlayerWindow(
     // new grab during it must cancel the job, or the finish block yanks the
     // window back to the old dock point and persists that.
     var snapJob by remember { mutableStateOf<Job?>(null) }
-    // The window exits only after a release in the close target.
-    // then [onDismiss] tears the surface down (it leaves composition, so no
+    // The window exits only after a release in the close target; then
+    // [onDismiss] tears the surface down (it leaves composition, so no
     // drag/pinch/persist may run in between).
     var dismissing by remember { mutableStateOf(false) }
     var dragAccepted by remember { mutableStateOf(false) }
@@ -194,7 +196,8 @@ fun MiniPlayerWindow(
     }
 
     val fullscreenBounds = Rect(0f, 0f, parentSize.width.toFloat(), parentSize.height.toFloat())
-    val embeddedBounds = with(density) { Rect(0f, embeddedTopDp.dp.toPx(), parentSize.width.toFloat(),
+    val embeddedBounds = with(density) { Rect(embeddedLeftDp.dp.toPx(), embeddedTopDp.dp.toPx(),
+        (embeddedLeftDp + embeddedWidthDp).dp.toPx(),
         embeddedTopDp.dp.toPx() + embeddedHeightDp.dp.toPx()) }
     val target = if (mini) Rect(restX + dragX, restY + dragY, restX + dragX + widthPx, restY + dragY + heightPx)
         else if (fillsWindow) fullscreenBounds else embeddedBounds
@@ -362,7 +365,7 @@ fun MiniPlayerWindow(
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(Brush.verticalGradient(
                         listOf(shade.copy(alpha = 0.56f), shade.copy(alpha = 0.72f)))))
-                Box(Modifier.zIndex(2f).offset { IntOffset(closeBounds.left.roundToInt(), closeBounds.top.roundToInt()) }
+                Box(Modifier.zIndex(2f).absoluteOffset { IntOffset(closeBounds.left.roundToInt(), closeBounds.top.roundToInt()) }
                     .size(96.dp, 72.dp), contentAlignment = Alignment.Center) {
                     Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.close_player),
                         tint = Color.White.copy(alpha = if (closeArmed) 1f else 0.95f),
@@ -376,7 +379,7 @@ fun MiniPlayerWindow(
                 Box(
                     modifier = Modifier
                         .graphicsLayer { alpha = dismissAlpha; scaleX = dismissScale; scaleY = dismissScale }
-                        .offset {
+                        .absoluteOffset {
                             IntOffset(viewport.left.roundToInt(), viewport.top.roundToInt())
                         }
                         .size(with(density) { viewport.width.coerceAtLeast(1f).toDp() }, with(density) { viewport.height.coerceAtLeast(1f).toDp() })

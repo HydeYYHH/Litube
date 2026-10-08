@@ -142,18 +142,10 @@ class DownloadStartupReconciler(
             if (task.status == DownloadStatus.WAITING_SYSTEM || sched.reason == ScheduleReasons.SYSTEM) {
                 continue
             }
-            val kind = if (
-                task.phase == DownloadPhase.WAITING_PROCESS ||
-                task.phase == DownloadPhase.MERGE_VERIFY ||
-                task.phase == DownloadPhase.SAVE
-            ) {
-                DownloadWorkKind.FINALIZE
-            } else {
-                DownloadWorkKind.TRANSFER
-            }
+            val kind = workKindForPhase(task.phase)
             if (!seenBatches.add("$batchId:${kind.name}")) continue
             if (scheduler.systemHasWork(batchId, kind)) {
-                scheduler.noteRestored(batchId, kind)
+                scheduler.noteRestored(batchId)
                 continue
             }
             if (sched.pending &&

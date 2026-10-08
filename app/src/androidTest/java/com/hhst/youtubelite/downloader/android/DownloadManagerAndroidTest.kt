@@ -3,7 +3,7 @@ package com.hhst.youtubelite.downloader.android
 import android.content.pm.ActivityInfo
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
-import com.hhst.youtubelite.downloader.android.DeviceEvidence
+import com.hhst.youtubelite.core.DeviceEvidence
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -32,7 +32,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.ui.DownloadManagerScreen
 import com.hhst.youtubelite.downloader.ui.DownloadItemRow
-import com.hhst.youtubelite.downloader.ui.DownloadTokens
 import com.hhst.youtubelite.ui.theme.AppTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -68,9 +67,7 @@ class DownloadManagerAndroidTest {
                 DownloadManagerScreen(
                     viewModel = harness.viewModel,
                     initialBatchId = null,
-                    initialTaskId = null,
-                    initialDest = null,
-                    onClose = {},
+                                                            onClose = {},
                 )
             }
         }
@@ -82,8 +79,6 @@ class DownloadManagerAndroidTest {
         composeRule.onNodeWithText(all).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithText(inProgress).assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithText(completed).assertHeightIsAtLeast(48.dp)
-        assertEquals(16, DownloadTokens.PAGE_INSET_DP)
-        assertEquals(48, DownloadTokens.MIN_TOUCH_DP)
 
         composeRule.onNodeWithText("Running clip").assertIsDisplayed()
         composeRule.onNodeWithText("Completed clip").assertIsDisplayed()
@@ -132,7 +127,6 @@ class DownloadManagerAndroidTest {
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
             .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         composeRule.waitUntil(3_000) { composeRule.onAllNodes(isPopup()).fetchSemanticsNodes().isEmpty() }
-        composeRule.onNode(isPopup()).assertDoesNotExist()
         composeRule.onAllNodesWithContentDescription(more)[0].performClick()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_delete)).performClick()
         composeRule.onNode(isDialog()).assertExists()
@@ -195,9 +189,7 @@ class DownloadManagerAndroidTest {
                     DownloadManagerScreen(
                         viewModel = harness.viewModel,
                         initialBatchId = null,
-                        initialTaskId = null,
-                        initialDest = null,
-                        onClose = {},
+                                                                        onClose = {},
                     )
                 }
             }
@@ -217,7 +209,7 @@ class DownloadManagerAndroidTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
                 AppTheme(darkTheme = false, dynamicColor = false) {
                     androidx.compose.foundation.layout.Box(Modifier.width(320.dp)) {
-                        DownloadManagerScreen(harness.viewModel, null, null, null, {})
+                        DownloadManagerScreen(harness.viewModel, null, {})
                     }
                 }
             }
@@ -262,16 +254,14 @@ class DownloadManagerAndroidTest {
                 DownloadManagerScreen(
                     viewModel = harness.viewModel,
                     initialBatchId = null,
-                    initialTaskId = null,
-                    initialDest = null,
-                    onClose = {},
+                                                            onClose = {},
                 )
             }
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_filter_all)).assertIsDisplayed()
         composeRule.onNodeWithText("Waiting clip").assertIsDisplayed()
-        DeviceEvidence.captureScene("05-resume-after-network")
+        DeviceEvidence.captureScene("landscape-filters")
         composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 }

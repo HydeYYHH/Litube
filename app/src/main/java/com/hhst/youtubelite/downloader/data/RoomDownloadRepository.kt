@@ -2,10 +2,8 @@ package com.hhst.youtubelite.downloader.data
 
 import androidx.room.InvalidationTracker
 import androidx.room.withTransaction
-import com.hhst.youtubelite.downloader.core.AssetSnapshot
 import com.hhst.youtubelite.downloader.core.BatchStatsCalculator
 import com.hhst.youtubelite.downloader.core.BatchView
-import com.hhst.youtubelite.downloader.core.ComponentSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadAsset
 import com.hhst.youtubelite.downloader.core.DownloadBatch
 import com.hhst.youtubelite.downloader.core.DownloadChunk
@@ -86,8 +84,6 @@ private class RoomSession(
         dao.insertBatch(batch.toEntity())
     }
 
-    override suspend fun getBatch(id: String): DownloadBatch? = dao.getBatch(id)?.toDomain()
-
     override suspend fun insertTask(task: DownloadTask) {
         dao.insertTask(task.toEntity())
     }
@@ -145,9 +141,6 @@ private class RoomSession(
         dao.insertChunk(chunk.toEntity())
     }
 
-    override suspend fun chunksForComponent(componentId: String): List<DownloadChunk> =
-        dao.chunksForComponent(componentId).map { it.toDomain() }
-
     override suspend fun deleteUnverifiedChunks(componentId: String) {
         dao.deleteUnverifiedChunks(componentId)
     }
@@ -181,32 +174,8 @@ private class RoomSession(
     override suspend fun allSchedules(): List<ScheduleRecord> =
         dao.allSchedules().map { it.toDomain() }
 
-    override suspend fun allPublish(): List<PublishRecord> =
-        dao.allPublish().map { it.toDomain() }
-
-    override suspend fun snapshot(taskId: String): TaskSnapshot? {
-        val task = dao.getTask(taskId)?.toDomain() ?: return null
-        val assets = dao.assetsForTask(taskId).map { entity ->
-            val asset = entity.toDomain()
-            val components = dao.componentsForAsset(asset.id).map { component ->
-                ComponentSnapshot(
-                    component = component.toDomain(),
-                    chunks = dao.chunksForComponent(component.id).map { it.toDomain() },
-                )
-            }
-            AssetSnapshot(
-                asset = asset,
-                components = components,
-                publish = dao.publishForAsset(asset.id)?.toDomain(),
-            )
-        }
-        return TaskSnapshot(
-            task = task,
-            assets = assets,
-            schedule = dao.scheduleForTask(taskId)?.toDomain(),
-            batchId = dao.itemsForTask(taskId).firstOrNull()?.batchId,
-        )
-    }
+    override suspend fun snapshot(taskId: String): TaskSnapshot? =
+        taskStore(taskId).taskSnapshot(taskId)
 
     override suspend fun batchView(batchId: String): BatchView? {
         val batch = dao.getBatch(batchId)?.toDomain() ?: return null
@@ -215,6 +184,28 @@ private class RoomSession(
             snapshot(item.taskId)?.let { ItemSnapshot(item, it) }
         }
         return BatchView(batch, snaps, BatchStatsCalculator.compute(snaps))
+    }
+
+    /** Per-task entity slice assembled through the shared [DownloadStore] mappings. */
+    private suspend fun taskStore(taskId: String): DownloadStore {
+        val task = dao.getTask(taskId) ?: return DownloadStore()
+        val items = dao.itemsForTask(taskId)
+        val assets = dao.assetsForTask(taskId)
+        val components = assets.flatMap { dao.componentsForAsset(it.id) }
+        val chunks = components.flatMap { dao.chunksForComponent(it.id) }
+        val publishes = assets.mapNotNull { dao.publishForAsset(it.id) }
+        val batches = items.mapNotNull { dao.getBatch(it.batchId) }
+        return storeFromEntities(
+            batches = batches,
+            submissions = emptyList(),
+            tasks = listOf(task),
+            items = items,
+            assets = assets,
+            components = components,
+            chunks = chunks,
+            publishes = publishes,
+            schedules = listOfNotNull(dao.scheduleForTask(taskId)),
+        )
     }
 
     override suspend fun downloads(filter: DownloadFilter): List<TaskSnapshot> {

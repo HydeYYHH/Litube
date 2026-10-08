@@ -9,7 +9,6 @@ import com.hhst.youtubelite.downloader.core.PublishRequest
 import com.hhst.youtubelite.downloader.core.PublishResult
 import com.hhst.youtubelite.downloader.core.RemoveMode
 import com.hhst.youtubelite.downloader.core.request
-import com.hhst.youtubelite.downloader.io.FreeSpace
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -359,7 +359,7 @@ private fun SegmentsDropdown(
 }
 
 @Composable
-private fun SegmentPreviewDialog(
+internal fun SegmentPreviewDialog(
     title: String,
     timeLabel: String,
     thumbnailUrl: String?,
@@ -371,21 +371,24 @@ private fun SegmentPreviewDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column {
-                YoutubeThumb(
-                    url = thumbnailUrl,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentDescription = stringResource(R.string.thumbnail),
-                )
-                Text(
-                    text = title,
-                    modifier = Modifier.padding(top = 12.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = SettingsTokens.TitleSize.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+                // Reserve timestamp space before measuring the scrollable preview.
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    YoutubeThumb(
+                        url = thumbnailUrl,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentDescription = stringResource(R.string.thumbnail),
+                    )
+                    Text(
+                        text = title,
+                        modifier = Modifier.padding(top = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = SettingsTokens.TitleSize.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 Text(
                     text = timeLabel,
                     modifier = Modifier.padding(top = 4.dp),
@@ -407,15 +410,15 @@ private fun SegmentPreviewDialog(
     )
 }
 
-/** Measured label widths, memoized across menus (bounded LRU) so reopening a
- *  menu — or a 4 Hz recomposition while one is open — never re-measures text
- *  on the main thread. */
 /** Below this count every label is measured; above it, only the longest few. */
 private const val MEASURE_SAMPLE_CAP = 48
 
 /** How many longest-by-character-count labels are measured for huge lists. */
 private const val MEASURE_SAMPLE = 24
 
+/** Measured label widths, memoized across menus (bounded LRU) so reopening a
+ *  menu — or a 4 Hz recomposition while one is open — never re-measures text
+ *  on the main thread. */
 private val labelWidthCache = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>): Boolean =
         size > 128

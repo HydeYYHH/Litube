@@ -57,7 +57,7 @@ data class InjectReport(
             }
         }
 
-        internal fun unwrapJsString(raw: String): String {
+        private fun unwrapJsString(raw: String): String {
             if (raw.length < 2 || raw.first() != '"' || raw.last() != '"') {
                 return raw
             }

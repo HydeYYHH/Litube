@@ -179,7 +179,7 @@ object DownloadWebGuard {
             itemsField.isJsonArray -> itemsField.asJsonArray.mapNotNull { el ->
                 if (!el.isJsonObject) return@mapNotNull null
                 item(el.asJsonObject)
-            }.orEmpty()
+            }
             else -> return null
         }
         return DownloadWebMessage(

@@ -90,7 +90,7 @@ class DownloadPresentationTest {
     fun size_exactEstimateUnknown() {
         val exactFormat = videoFormat(720, clen = 1_000_000)
         val exact = DownloadPresentation.sizeCopy(
-            DownloadPlan(video = DownloadMediaChoice(exactFormat, 1, 1_000_000, "id")),
+            DownloadPlan(video = DownloadMediaChoice(exactFormat, 1_000_000, "id")),
         )
         assertEquals(SizeKind.EXACT, exact.kind)
         assertEquals(1_000_000L, exact.bytes)
@@ -106,7 +106,6 @@ class DownloadPresentationTest {
             DownloadPlan(
                 video = DownloadMediaChoice(
                     estimatedFormat,
-                    5_000_000,
                     expectedBytes = 3_000_000,
                     resourceIdentity = "e",
                 ),
@@ -116,25 +115,6 @@ class DownloadPresentationTest {
 
         val unknown = DownloadPresentation.sizeCopy(DownloadPlan())
         assertEquals(SizeKind.UNKNOWN, unknown.kind)
-    }
-
-    @Test
-    fun watchPageBadge_notForPartialOrAttachmentsOnly() {
-        assertFalse(
-            DownloadPresentation.watchPageDownloaded(
-                listOf(AssetKind.SUBTITLE to true, AssetKind.COVER to true),
-            ),
-        )
-        assertFalse(
-            DownloadPresentation.watchPageDownloaded(
-                listOf(AssetKind.VIDEO to true, AssetKind.SUBTITLE to false),
-            ),
-        )
-        assertTrue(
-            DownloadPresentation.watchPageDownloaded(
-                listOf(AssetKind.VIDEO to true, AssetKind.SUBTITLE to true),
-            ),
-        )
     }
 
     @Test

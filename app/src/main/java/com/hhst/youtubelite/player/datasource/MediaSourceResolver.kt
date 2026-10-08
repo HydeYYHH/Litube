@@ -129,6 +129,7 @@ class MediaSourceResolver(
             )?.let { return it }
         }
 
+        // 4. HLS.
         stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
             // Keep every named rendition. Stripping them down to one merged
             // file leaves the audio menu with only Default.
@@ -288,7 +289,7 @@ class MediaSourceResolver(
         ).maxByOrNull { it.height }
             ?: throw IllegalStateException("No playable live stream")
         return Resolved(
-            withSubtitles(uncachedProgressive(best.url, best.mimeType.ifBlank { null }, meta), subtitles),
+            withSubtitles(progressive(best.url, best.mimeType.ifBlank { null }, meta, dataSources.ytLiveProgressive), subtitles),
             best, null,
         )
     }
@@ -318,7 +319,7 @@ class MediaSourceResolver(
         if (format.hasDashRanges) {
             syntheticDash(DashManifestFactory.build(format, durationMs), meta, listOf(format))
         } else {
-            progressive(format.url, format.mimeType.ifBlank { null }, meta, format)
+            progressive(format.url, format.mimeType.ifBlank { null }, meta, dataSources.formats(listOfNotNull(format), dash = false))
         }
 
     private fun pickMuxed(
@@ -360,27 +361,16 @@ class MediaSourceResolver(
             dataSources.manifest(plan),
         ).createMediaSource(MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build())
 
-    private fun progressive(url: String, mimeType: String? = null, meta: MediaMetadata, format: Format? = null): MediaSource {
-        val builder = MediaItem.fromUri(url).buildUpon()
-        if (mimeType != null) builder.setMimeType(mimeType)
-        builder.setMediaMetadata(meta)
-        return ProgressiveMediaSource.Factory(dataSources.formats(listOfNotNull(format), dash = false))
-            .setContinueLoadingCheckIntervalBytes(
-                PlayerDataSource.PROGRESSIVE_LOAD_INTERVAL_BYTES,
-            )
-            .createMediaSource(builder.build())
-    }
-
-    /** Same as [progressive] but bypassing the VOD cache (live fallbacks). */
-    private fun uncachedProgressive(
+    private fun progressive(
         url: String,
-        mimeType: String?,
+        mimeType: String? = null,
         meta: MediaMetadata,
+        factory: DataSource.Factory,
     ): MediaSource {
         val builder = MediaItem.fromUri(url).buildUpon()
         if (mimeType != null) builder.setMimeType(mimeType)
         builder.setMediaMetadata(meta)
-        return ProgressiveMediaSource.Factory(dataSources.ytLiveProgressive)
+        return ProgressiveMediaSource.Factory(factory)
             .setContinueLoadingCheckIntervalBytes(
                 PlayerDataSource.PROGRESSIVE_LOAD_INTERVAL_BYTES,
             )

@@ -31,10 +31,10 @@ import com.hhst.youtubelite.downloader.net.DownloadHttpClients
 import com.hhst.youtubelite.downloader.net.DownloadTransportImpl
 import com.hhst.youtubelite.downloader.net.ForbiddenRecovery
 import com.hhst.youtubelite.downloader.net.WebViewCookies
-import com.hhst.youtubelite.downloader.notify.AndroidNotificationPort
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationPort
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationWatcher
+import com.hhst.youtubelite.downloader.engine.AndroidNotificationPort
+import com.hhst.youtubelite.downloader.engine.DownloadNotificationController
+import com.hhst.youtubelite.downloader.engine.DownloadNotificationPort
+import com.hhst.youtubelite.downloader.engine.DownloadNotificationWatcher
 import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
 import com.hhst.youtubelite.downloader.io.createPublishBackend
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
@@ -42,8 +42,8 @@ import com.hhst.youtubelite.downloader.resolve.DownloadPoTokenLifecycle
 import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.SharedExtractorCatalogSource
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
-import com.hhst.youtubelite.downloader.webview.AndroidWebViewTimerClock
-import com.hhst.youtubelite.downloader.webview.WebViewTimerOccupancy
+import com.hhst.youtubelite.core.AndroidWebViewTimerClock
+import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.downloader.engine.AndroidUidtJobPort
 import com.hhst.youtubelite.downloader.engine.AndroidWorkEnqueuePort
 import com.hhst.youtubelite.downloader.engine.BackgroundDownloadScheduler

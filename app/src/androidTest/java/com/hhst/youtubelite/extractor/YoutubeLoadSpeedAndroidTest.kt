@@ -1,44 +1,45 @@
 package com.hhst.youtubelite.extractor
 
 import android.os.Bundle
-import com.hhst.youtubelite.player.engine.defaultLoadControl
-import com.hhst.youtubelite.player.datasource.StreamSelection
-import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import android.os.SystemClock
-import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
+import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
-import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
-import org.junit.Test
-import org.koin.core.context.GlobalContext
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
+import com.hhst.youtubelite.player.datasource.StreamSelection
+import com.hhst.youtubelite.player.engine.defaultLoadControl
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Rule
+import org.junit.Test
+import org.koin.core.context.GlobalContext
+import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
 /** Same-account native extraction through first decoded frame, with immediate cache replays. */
 @UnstableApi
 class YoutubeLoadSpeedAndroidTest {
-    @get:org.junit.Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
+    @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
 
     @Test fun extractionAndFirstFrame() = runBlocking(Dispatchers.IO) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

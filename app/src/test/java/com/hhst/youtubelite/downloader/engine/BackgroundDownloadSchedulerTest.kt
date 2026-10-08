@@ -9,7 +9,6 @@ import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.request
 import com.hhst.youtubelite.downloader.data.InMemoryDownloadRepository
-import com.hhst.youtubelite.downloader.notify.RecordingNotificationPort
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,7 +17,6 @@ import org.junit.Test
 
 internal class FakeWorkEnqueuePort : WorkEnqueuePort {
     val enqueued = mutableListOf<UniqueWorkRequest>()
-    val cancelled = mutableListOf<String>()
     val states = mutableMapOf<String, WorkSnapshot>()
 
     override fun enqueueUnique(request: UniqueWorkRequest): EnqueueOutcome {
@@ -27,13 +25,12 @@ internal class FakeWorkEnqueuePort : WorkEnqueuePort {
             return EnqueueOutcome.ALREADY_PRESENT
         }
         enqueued += request
-        states[request.uniqueName] = WorkSnapshot(request.uniqueName, active = true, kind = request.kind)
+        states[request.uniqueName] = WorkSnapshot(active = true, kind = request.kind)
         return if (existing?.active == true) EnqueueOutcome.REPLACED else EnqueueOutcome.CREATED
     }
 
     override fun cancelUnique(name: String) {
-        cancelled += name
-        states[name] = WorkSnapshot(name, active = false, kind = states[name]?.kind ?: DownloadWorkKind.TRANSFER)
+        states[name] = WorkSnapshot(active = false, kind = states[name]?.kind ?: DownloadWorkKind.TRANSFER)
     }
 
     override fun state(name: String): WorkSnapshot? = states[name]
@@ -41,9 +38,8 @@ internal class FakeWorkEnqueuePort : WorkEnqueuePort {
 
 internal class FakeUidtJobPort : UidtJobPort {
     val registered = mutableListOf<UidtJobRequest>()
-    val cancelled = mutableListOf<Int>()
     val active = mutableSetOf<Int>()
-    var restoredIds = mutableSetOf<Int>()
+    val restoredIds = mutableSetOf<Int>()
 
     override fun register(request: UidtJobRequest, legalUserInteraction: Boolean): UidtRegisterResult {
         if (!legalUserInteraction) return UidtRegisterResult.RejectedNoUserInteraction
@@ -57,7 +53,6 @@ internal class FakeUidtJobPort : UidtJobPort {
     }
 
     override fun cancel(jobId: Int) {
-        cancelled += jobId
         active.remove(jobId)
     }
 
@@ -103,7 +98,7 @@ class BackgroundDownloadSchedulerTest {
         assertEquals(DownloadWorkNames.transfer(batchId), transfer.uniqueName)
         assertTrue(transfer.requiresNetwork)
         assertEquals(0, h.uidt.registered.size)
-        h.scheduler.enqueueFinalize(batchId, replace = false)
+        h.scheduler.enqueueFinalize(batchId)
         val finalize = h.work.enqueued.single { it.kind == DownloadWorkKind.FINALIZE }
         assertFalse(finalize.requiresNetwork)
     }
@@ -158,7 +153,7 @@ class BackgroundDownloadSchedulerTest {
         val batch34 = h34.wired.enqueue(request("a"), "s2").batchId
         val jobId = h34.uidt.registered.single().jobId
         h34.uidt.restoredIds += jobId
-        h34.scheduler.noteRestored(batch34, DownloadWorkKind.TRANSFER)
+        h34.scheduler.noteRestored(batch34)
         assertEquals(1, h34.uidt.registered.size)
     }
 

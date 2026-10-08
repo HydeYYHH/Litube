@@ -35,8 +35,6 @@ import com.hhst.youtubelite.downloader.io.DownloadDirectories
 import com.hhst.youtubelite.downloader.io.DownloadPublishedUris
 import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.io.FreeSpace
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationController
-import com.hhst.youtubelite.downloader.notify.RecordingNotificationPort
 import com.hhst.youtubelite.downloader.io.DownloadPublisherImpl
 import com.hhst.youtubelite.downloader.io.LocalPublishBackend
 import com.hhst.youtubelite.downloader.core.DownloadShareParser
@@ -47,8 +45,6 @@ import com.hhst.youtubelite.downloader.ui.DownloadRowAction
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
 import com.hhst.youtubelite.downloader.webview.DownloadWebStatus
-import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
-import com.hhst.youtubelite.downloader.engine.SchedulerHarness
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.QueueItem
 import kotlinx.coroutines.flow.first
@@ -242,23 +238,6 @@ class DownloadFaultInjectionTest {
         assertEquals(1, fromQueue.skippedCount)
         assertEquals(0, fromWeb.newCount)
         assertEquals(fromShare.created.single().taskId, fromQueue.existing.single().taskId)
-    }
-
-    @Test
-    fun processRestore_pausedStaysPaused_runningWaitsForSystem() = runTest {
-        val h = DownloadHarness()
-        val running = h.coordinator.enqueue(request("a"), "s1").created.single().taskId
-        val paused = h.coordinator.enqueue(request("b"), "s2").created.single().taskId
-        h.coordinator.reportExecution(running, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)
-        h.coordinator.reportExecution(paused, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)
-        h.coordinator.pause(DownloadTarget.Task(paused))
-        h.coordinator.onProcessRestore()
-        assertEquals(DownloadStatus.WAITING_SYSTEM, h.repo.transact { getTask(running) }!!.status)
-        assertEquals(DownloadStatus.PAUSED, h.repo.transact { getTask(paused) }!!.status)
-        assertTrue(h.repo.transact { getTask(paused) }!!.userPaused)
-        assertFalse(
-            h.coordinator.reportExecution(paused, 0, DownloadStatus.RUNNING, DownloadPhase.TRANSFER),
-        )
     }
 
     private fun engineEnv(

@@ -247,8 +247,7 @@ data class CastSource(
  * ExoPlayer-backed engine:
  *
  * - DASH-first assembly via [MediaSourceResolver]; muxed fallback on adaptive
- *   failure with a 30-minute per-video quarantine; 403 recovery by
- *   re-extraction (two rounds) and client demotion/exclusion.
+ *   failure; 403 recovery by re-extraction and client demotion/exclusion.
  * - `AdaptiveTrackSelection`, capped at the start height for each new video's
  *   first chunks (no tunnelling); audio focus, wake mode,
  *   noisy-pause.
@@ -314,7 +313,7 @@ class PlaybackEngine(
     private var backupAttempted = false
 
     @Volatile private var muxedFallbackActive = false
-    /** Client excluded by the 403 last resort (e.g. "IOS"); one round per video. */
+    /** Audio format of the attached source; the match key for cast switching and track recovery. */
     private var lastAudioFormat: Format? = null
     /** Video formats of the current adaptive manifest; empty when non-adaptive. */
     private var adaptiveVideoPool: List<Format> = emptyList()
@@ -573,7 +572,6 @@ class PlaybackEngine(
         lightRefreshAttempts = 0
         backupAttempted = false
         muxedFallbackActive = false
-        cache.invalidate(fallbackKey(videoId))
         playJob = scope.launch {
             loadInternal(videoId, reExtract = true, requestUrl = _snapshot.value.url)
         }
@@ -619,7 +617,7 @@ class PlaybackEngine(
             coroutineContext.ensureActive()
             if (!stillCurrent(generation)) return
 
-            muxedFallbackActive = shouldUseMuxedFallback(videoId)
+            muxedFallbackActive = false
             val source = withContext(Dispatchers.IO) { resolveSource(stream, metadata) }
             coroutineContext.ensureActive()
             if (!stillCurrent(generation)) return
@@ -1469,7 +1467,7 @@ class PlaybackEngine(
             // short video with nothing to advance to just replays.
             LoopMode.QUEUE_NEXT, LoopMode.QUEUE_RANDOM -> {
                 if (localDivergedFromReceiver()) return
-                if (duration in 1 until SAFE_ZONE_MS && !navNextAvailable) {
+                if (duration in 1 until PlaybackProgress.SAFE_ZONE_MS && !navNextAvailable) {
                     replayFromStart(p)
                     return
                 }
@@ -1551,9 +1549,6 @@ class PlaybackEngine(
             if (muxedViable) {
                 val position = player.currentPosition
                 muxedFallbackActive = true
-                if (reason == RecoveryReason.HTTP_403 && videoId != null) {
-                    cache.put(fallbackKey(videoId), System.currentTimeMillis().toString(), PREF_TTL_MS)
-                }
                 rebuildAtCurrentPosition(stream, metadata, forceMuxed = true, startMs = position, reloadCast = true)
                 return
             }
@@ -1829,18 +1824,9 @@ class PlaybackEngine(
         if (!prefs.isEnabled(PreferenceKeys.REMEMBER_LAST_POSITION)) return 0L
         val point = cache.get(progressKey(videoId), ResumePoint::class.java) ?: return 0L
         val durationMs = durationSec * 1000
-        return if (point.positionMs > SAFE_ZONE_MS &&
-            (durationMs <= 0 || point.positionMs < durationMs - SAFE_ZONE_MS)
+        return if (point.positionMs > PlaybackProgress.SAFE_ZONE_MS &&
+            (durationMs <= 0 || point.positionMs < durationMs - PlaybackProgress.SAFE_ZONE_MS)
         ) point.positionMs else 0L
-    }
-
-    private fun shouldUseMuxedFallback(videoId: String): Boolean {
-        val raw = cache.get(fallbackKey(videoId), String::class.java)?.toLongOrNull() ?: return false
-        if (System.currentTimeMillis() - raw > FALLBACK_QUARANTINE_MS) {
-            cache.invalidate(fallbackKey(videoId))
-            return false
-        }
-        return true
     }
 
     private fun publish() {
@@ -1913,11 +1899,9 @@ class PlaybackEngine(
 
     companion object {
         private const val TAG = "PlaybackEngine"
-        private const val SAFE_ZONE_MS = 5_000L
         private const val TICK_MS = 250L
         private const val CAST_MAX_HEIGHT = 1080
         private val PROGRESS_TTL_MS = TimeUnit.DAYS.toMillis(3)
-        private const val FALLBACK_QUARANTINE_MS = 30L * 60 * 1000
         private const val MAX_REEXTRACT_ATTEMPTS = 1
         private const val MAX_LIGHT_REFRESH_ATTEMPTS = 1
         private const val KEY_SPEED = "player:speed"
@@ -1927,7 +1911,6 @@ class PlaybackEngine(
         private const val KEY_SUBTITLE_OFF = "player:subtitle_off"
         private const val KEY_AUDIO_TRACK = "player:audio_language"
         private fun progressKey(videoId: String) = "player:progress:$videoId"
-        private fun fallbackKey(videoId: String) = "player:fallback:$videoId"
     }
 }
 

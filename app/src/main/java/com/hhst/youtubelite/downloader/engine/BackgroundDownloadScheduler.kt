@@ -11,8 +11,6 @@ import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.DownloadTask
 import com.hhst.youtubelite.downloader.core.ScheduleRecord
 import com.hhst.youtubelite.downloader.data.DownloadRepository
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationPayload
-import com.hhst.youtubelite.downloader.notify.DownloadNotificationPort
 
 /**
  * Maps coordinator schedule/cancel onto WorkManager (API 26–33 transfer +
@@ -39,13 +37,9 @@ class BackgroundDownloadScheduler(
         val kind: DownloadWorkKind,
         val backend: String,
         val outcome: String,
-        val uniqueName: String,
-        val jobId: Int? = null,
-        val requiresNetwork: Boolean,
     )
 
     val plans = mutableListOf<Plan>()
-    val restored = mutableListOf<String>()
 
     override suspend fun schedule(taskId: String) {
         scheduleInternal(taskId, repair = false)
@@ -80,8 +74,7 @@ class BackgroundDownloadScheduler(
         return kind == DownloadWorkKind.TRANSFER && uidt.isActive(jobId)
     }
 
-    fun noteRestored(batchId: String, kind: DownloadWorkKind) {
-        restored += "$batchId:${kind.name}"
+    fun noteRestored(batchId: String) {
         notifications.notifyPrompt(batchId)
     }
 
@@ -99,7 +92,7 @@ class BackgroundDownloadScheduler(
         val batchId = ctx.batchId
         notifications.notifyPrompt(batchId)
         if (kind == DownloadWorkKind.FINALIZE) {
-            enqueueFinalize(batchId, replace = !repair)
+            enqueueFinalize(batchId)
             bind(ctx.taskIds, DownloadWorkNames.finalize(batchId), backend = "wm", kind = kind)
             return
         }
@@ -107,7 +100,6 @@ class BackgroundDownloadScheduler(
         if (api >= 34) {
             scheduleUidt(ctx, reason, repair)
         } else {
-            if (reason == ScheduleReasons.SYSTEM && !ScheduleReasons.isUserInitiated(reason)) return
             enqueueTransfer(batchId, replace = !repair)
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
         }
@@ -117,8 +109,8 @@ class BackgroundDownloadScheduler(
         val batchId = ctx.batchId
         val jobId = ctx.schedule?.systemJobId ?: DownloadWorkNames.uidtJobId(batchId)
         if (uidt.isActive(jobId)) {
-            noteRestored(batchId, DownloadWorkKind.TRANSFER)
-            plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "restored", "", jobId, true)
+            noteRestored(batchId)
+            plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "restored")
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), jobId, "uidt", DownloadWorkKind.TRANSFER)
             return
         }
@@ -138,15 +130,15 @@ class BackgroundDownloadScheduler(
             legalUserInteraction = true,
         )) {
             is UidtRegisterResult.Created -> {
-                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "created", "", result.jobId, true)
+                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "created")
                 bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), result.jobId, "uidt", DownloadWorkKind.TRANSFER)
             }
             is UidtRegisterResult.Restored -> {
-                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "restored", "", result.jobId, true)
+                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "restored")
                 bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), result.jobId, "uidt", DownloadWorkKind.TRANSFER)
             }
             UidtRegisterResult.RejectedNoUserInteraction -> {
-                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "rejected", "", jobId, true)
+                plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "rejected")
             }
         }
     }
@@ -157,7 +149,7 @@ class BackgroundDownloadScheduler(
         if (existing?.active == true) {
             // Batch-scoped unique work: per-task scheduling must never REPLACE
             // its own running worker mid-flight.
-            plans += Plan(batchId, DownloadWorkKind.TRANSFER, "wm", "already-present", name, null, true)
+            plans += Plan(batchId, DownloadWorkKind.TRANSFER, "wm", "already-present")
             return
         }
         val outcome = work.enqueueUnique(
@@ -175,17 +167,14 @@ class BackgroundDownloadScheduler(
             DownloadWorkKind.TRANSFER,
             "wm",
             outcome.name.lowercase().replace('_', '-'),
-            name,
-            null,
-            true,
         )
     }
 
-    fun enqueueFinalize(batchId: String, replace: Boolean = false) {
+    fun enqueueFinalize(batchId: String) {
         val name = DownloadWorkNames.finalize(batchId)
         val existing = work.state(name)
         if (existing?.active == true) {
-            plans += Plan(batchId, DownloadWorkKind.FINALIZE, "wm", "already-present", name, null, false)
+            plans += Plan(batchId, DownloadWorkKind.FINALIZE, "wm", "already-present")
             return
         }
         val outcome = work.enqueueUnique(
@@ -203,9 +192,6 @@ class BackgroundDownloadScheduler(
             DownloadWorkKind.FINALIZE,
             "wm",
             outcome.name.lowercase().replace('_', '-'),
-            name,
-            null,
-            false,
         )
     }
 
@@ -227,15 +213,7 @@ class BackgroundDownloadScheduler(
         }
     }
 
-    private fun neededKind(task: DownloadTask): DownloadWorkKind =
-        if (task.phase == DownloadPhase.WAITING_PROCESS ||
-            task.phase == DownloadPhase.MERGE_VERIFY ||
-            task.phase == DownloadPhase.SAVE
-        ) {
-            DownloadWorkKind.FINALIZE
-        } else {
-            DownloadWorkKind.TRANSFER
-        }
+    private fun neededKind(task: DownloadTask): DownloadWorkKind = workKindForPhase(task.phase)
 
     private suspend fun liveTaskIds(batchId: String): List<String> =
         coordinator().ownedTaskIds(batchId).filter { id ->

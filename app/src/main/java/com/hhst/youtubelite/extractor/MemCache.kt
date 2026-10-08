@@ -7,9 +7,7 @@ import android.util.LruCache
  *
  * Entries carry an absolute expiry; writes through the [Cache] interface use
  * the shared [CacheTtl], while [LayeredCache] promotions inherit the disk
- * entry's remaining lifetime. Without inheritance the mem copy would outlive
- * the disk entry and keep serving expired googlevideo URLs, which 403 on the
- * player.
+ * entry's remaining lifetime (see there for why).
  */
 class MemCache(
     maxEntries: Int = DEFAULT_MAX,

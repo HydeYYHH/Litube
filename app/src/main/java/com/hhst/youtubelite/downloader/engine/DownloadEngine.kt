@@ -165,7 +165,7 @@ class DownloadEngine(
                 PublishPhase.IN_PROGRESS,
                 tempFiles = listOf(publishSource.path),
             )
-            val mime = asset.asset.mimeType ?: mimeFor(kind, publishSource)
+            val mime = asset.asset.mimeType ?: mimeFor(kind)
             val name = asset.asset.outputName ?: DownloadFileNames.sanitize(
                 current.task.title,
                 DownloadFileNames.extensionOf(publishSource.name, if (kind == AssetKind.AUDIO) "m4a" else "mp4"),
@@ -298,7 +298,7 @@ class DownloadEngine(
             task.status != DownloadStatus.FAILED && task.phase != DownloadPhase.COMPLETE
     }
 
-    private fun mimeFor(kind: AssetKind, file: File): String = when (kind) {
+    private fun mimeFor(kind: AssetKind): String = when (kind) {
         AssetKind.VIDEO -> "video/mp4"
         AssetKind.AUDIO -> "audio/mp4"
         AssetKind.SUBTITLE -> "text/vtt"

@@ -35,8 +35,6 @@ data class YoutubeDownloadRequestPlan(
     val cookiePolicy: DownloadCookiePolicy,
     val headers: Map<String, String>,
     val resourceIdentity: String,
-    val workingDirectory: String = DownloadHttpClients.WORK_DIR,
-    val postPulse: Boolean = false,
     @Transient val requestPlan: RequestPlan? = null,
 )
 
@@ -71,9 +69,8 @@ object YoutubeDownloadRequestAdapter {
  * Media3 `player/` SimpleCache directory.
  */
 object DownloadHttpClients {
-    const val WORK_DIR = "download"
-    const val MAX_REQUESTS = DownloadSettings.DEFAULT_CONNECTIONS
-    const val MAX_REQUESTS_PER_HOST = 2
+    private const val MAX_REQUESTS = DownloadSettings.DEFAULT_CONNECTIONS
+    private const val MAX_REQUESTS_PER_HOST = 2
 
     fun create(
         maxRequests: Int = MAX_REQUESTS,

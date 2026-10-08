@@ -315,7 +315,7 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
 }
 
 @Composable
-internal fun actionLabel(action: DownloadRowAction): String = stringResource(
+private fun actionLabel(action: DownloadRowAction): String = stringResource(
     when (action) {
         DownloadRowAction.PAUSE -> R.string.action_pause
         DownloadRowAction.RESUME -> R.string.download_resume
@@ -340,7 +340,7 @@ private fun failureCopy(reason: String): String = when {
     else -> reason
 }
 
-internal fun actionIcon(action: DownloadRowAction): Int = when (action) {
+private fun actionIcon(action: DownloadRowAction): Int = when (action) {
     DownloadRowAction.PAUSE -> R.drawable.ic_pause
     DownloadRowAction.RESUME -> R.drawable.ic_play
     DownloadRowAction.RETRY, DownloadRowAction.REDOWNLOAD -> R.drawable.ic_replay

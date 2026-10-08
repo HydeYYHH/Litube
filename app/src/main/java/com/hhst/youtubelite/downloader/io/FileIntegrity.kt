@@ -52,7 +52,7 @@ object FileIntegrity {
         val inputSum = inputs.sumOf { it.length().coerceAtLeast(0L) }
         var extra = 0L
         if (includeMux) extra += inputSum
-        if (includePublishCopy) extra += if (includeMux) inputSum else inputSum
+        if (includePublishCopy) extra += inputSum
         return extra
     }
 

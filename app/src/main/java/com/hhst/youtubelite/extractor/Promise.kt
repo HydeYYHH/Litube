@@ -44,9 +44,6 @@ class Promise<T>(
     var elapsedMs: Long = -1L
         private set
 
-    val error: Throwable?
-        get() = failure.get()
-
     val success: Boolean
         get() = done && failure.get() == null
 

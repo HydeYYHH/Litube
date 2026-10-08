@@ -1,16 +1,14 @@
 package com.hhst.youtubelite.downloader.ui
 
-import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.CompletionKind
 import com.hhst.youtubelite.downloader.core.DownloadFilter
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.downloader.core.FileAvailability
-import com.hhst.youtubelite.downloader.resolve.DownloadBitrate
+import com.hhst.youtubelite.downloader.net.DownloadBitrate
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadPlan
-import com.hhst.youtubelite.downloader.resolve.DownloadUnavailableReason
 import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
 import com.hhst.youtubelite.downloader.resolve.DownloadSelector
 import com.hhst.youtubelite.extractor.Format
@@ -53,13 +51,11 @@ enum class DownloadRowAction {
     DELETE,
 }
 
-enum class SnackbarKind { STARTED, NO_NEW_TASKS, REJECTED }
+enum class SnackbarKind { STARTED, NO_NEW_TASKS }
 
 data class DownloadSnackbar(
     val kind: SnackbarKind,
     val batchId: String? = null,
-    val taskId: String? = null,
-    val message: String? = null,
 )
 
 object DownloadPresentation {
@@ -127,13 +123,6 @@ object DownloadPresentation {
         return SizeCopy(if (exact) SizeKind.EXACT else SizeKind.ESTIMATE, total)
     }
 
-    fun sizeCopy(progressBytes: Long, expectedBytes: Long?): SizeCopy =
-        if (expectedBytes == null || expectedBytes <= 0L) {
-            SizeCopy(SizeKind.UNKNOWN, progressBytes.takeIf { it > 0L })
-        } else {
-            SizeCopy(SizeKind.ESTIMATE, expectedBytes)
-        }
-
     fun formatBytes(bytes: Long): String {
         val kb = 1024.0
         val mb = kb * 1024
@@ -146,7 +135,7 @@ object DownloadPresentation {
         }
     }
 
-    fun downloadableVideos(catalog: DownloadCatalog): List<Format> =
+    private fun downloadableVideos(catalog: DownloadCatalog): List<Format> =
         catalog.formats
             .filter { (it.videoOnly || StreamSelection.isMuxed(it)) && it.height > 0 &&
                 DownloadSelector.isFileStream(it) && DownloadCodecs.videoEnabled(it) &&
@@ -155,7 +144,7 @@ object DownloadPresentation {
                  else DownloadCodecs.comboEnabled(it, null, false)) }
             .sortedWith(compareByDescending<Format> { it.height }.thenByDescending { it.fps }.thenByDescending { it.videoOnly })
 
-    fun qualityLabel(format: Format): String = "${format.height}p" + if (format.fps > 30) format.fps.toString() else ""
+    private fun qualityLabel(format: Format): String = "${format.height}p" + if (format.fps > 30) format.fps.toString() else ""
 
     fun qualityOptions(catalog: DownloadCatalog): List<String> = downloadableVideos(catalog).map(::qualityLabel).distinct()
 
@@ -242,15 +231,8 @@ object DownloadPresentation {
             DownloadSnackbar(
                 SnackbarKind.STARTED,
                 batchId = result.batchId,
-                taskId = result.created.firstOrNull()?.taskId,
             )
         }
-
-    fun watchPageDownloaded(assets: List<Pair<AssetKind, Boolean>>): Boolean {
-        val media = assets.filter { it.first == AssetKind.VIDEO || it.first == AssetKind.AUDIO }
-        if (media.isEmpty()) return false
-        return assets.isNotEmpty() && assets.all { it.second }
-    }
 
     fun fileMissing(
         phase: DownloadPhase,
@@ -260,5 +242,4 @@ object DownloadPresentation {
         completion != CompletionKind.NONE &&
         availability != FileAvailability.EXISTS
 
-    fun reasonCopy(reason: DownloadUnavailableReason): String = reason.name
 }

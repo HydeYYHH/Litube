@@ -27,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -199,7 +198,7 @@ private fun DoubleTapSeekOverlay(state: GestureUi.DoubleTapSeek, modifier: Modif
     }
 }
 
-/** Long-press speed banner: steady label, flowing arrows, and no bouncing play icon. */
+/** Long-press speed banner: steady label and flowing arrows. */
 @Composable
 private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     val animate = animationsEnabled()
@@ -298,8 +297,8 @@ fun SponsorCountdownCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Presence is gated by the caller (countdown != null), so only a fade-in
-    // is required; the composable is not in the tree when the card hides.
+    // Presence is gated by the caller (countdown != null): the composable
+    // simply leaves the tree when the card hides.
     Row(
         modifier = modifier
             .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
