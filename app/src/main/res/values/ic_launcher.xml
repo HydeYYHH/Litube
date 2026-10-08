@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Share the bitmap within each density, preserving the original scaling.
+    <!-- Share the bitmap within each density.
          API 26+ still resolves ic_launcher / ic_launcher_round to adaptive icons. -->
-    <item name="ic_launcher" type="mipmap">@mipmap/ic_launcher_image</item>
-    <item name="ic_launcher_round" type="mipmap">@mipmap/ic_launcher_image</item>
-    <item name="ic_launcher_foreground" type="mipmap">@mipmap/ic_launcher_image</item>
+    <item name="ic_launcher_round" type="mipmap">@mipmap/ic_launcher</item>
 </resources>

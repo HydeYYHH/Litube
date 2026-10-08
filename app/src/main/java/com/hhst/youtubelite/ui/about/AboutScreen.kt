@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.ui.about
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +25,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -46,7 +49,8 @@ fun AboutScreen(label: String, version: String, onClose: () -> Unit, busy: Boole
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = SettingsTokens.PageInset),
                 verticalArrangement = Arrangement.spacedBy(SettingsTokens.GroupGap)) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(painterResource(R.mipmap.ic_launcher_foreground), label, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.onSurface)
+                    Image(painterResource(R.drawable.ic_launcher_monochrome), label, Modifier.size(72.dp), contentScale = ContentScale.None,
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface))
                     Text(label, style = MaterialTheme.typography.titleLarge)
                     Text(version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
