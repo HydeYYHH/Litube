@@ -97,6 +97,7 @@ import com.hhst.youtubelite.player.surface.PlayerWindowEffects
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import com.hhst.youtubelite.ui.about.AboutActivity
 import com.hhst.youtubelite.ui.extension.ExtensionScreen
+import com.hhst.youtubelite.ui.extension.SettingsDataScreen
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -132,6 +133,7 @@ fun BrowserScreen(
     val presentationId = if (hosts[uiState.activeId] != null) uiState.activeId else displayedTabId
     SideEffect { if (hosts[uiState.activeId] != null) displayedTabId = uiState.activeId }
     var showExtension by remember { mutableStateOf(false) }
+    var showSettingsData by remember { mutableStateOf(false) }
     // PiP flips without a recreate; the activity pushes it through [inPipFlow].
     var inPip by remember { mutableStateOf(inPipFlow?.value == true) }
     LaunchedEffect(inPipFlow) {
@@ -334,7 +336,7 @@ fun BrowserScreen(
                     releaseTimers()
                     // "Visible" not "playing": pausing an already-paused player is harmless.
                     val playerVisible = playerViewModel.uiState.value.visible
-                    if (playerVisible && !pausedInPip &&
+                    if (playerVisible && !pausedInPip && !playerViewModel.audioOnlyBackground &&
                         !extensionManager.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)
                     ) {
                         playerViewModel.pauseForBackground()
@@ -345,7 +347,7 @@ fun BrowserScreen(
                 Lifecycle.Event.ON_STOP -> {
                     val stoppedInPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
                     val playerVisible = playerViewModel.uiState.value.visible
-                    if (playerVisible && !stoppedInPip &&
+                    if (playerVisible && !stoppedInPip && !playerViewModel.audioOnlyBackground &&
                         !extensionManager.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)
                     ) {
                         playerViewModel.pauseForBackground()
@@ -406,7 +408,13 @@ fun BrowserScreen(
     }
 
     // Always consume Back. Same path as the player overlay back button.
-    BackHandler(enabled = !showExtension) { handleBack() }
+    BackHandler(enabled = !showExtension && !showSettingsData) { handleBack() }
+
+    val pageBack = rememberUpdatedState(handleBack)
+    DisposableEffect(viewModel) {
+        viewModel.onPageBack = { pageBack.value() }
+        onDispose { viewModel.onPageBack = null }
+    }
 
     // Mini-player close drops the suspended watch tab; restore revives it.
     DisposableEffect(playerViewModel, viewModel) {
@@ -475,6 +483,11 @@ fun BrowserScreen(
         playerState.visible,
         playerState.mini,
     ) {
+        // A restored audio session can open its watch tab before the first
+        // home-page effect runs. Ignore that old snapshot instead of shrinking
+        // the restored video into the mini-player.
+        val currentBrowser = viewModel.uiState.value
+        if (uiState.activeId != currentBrowser.activeId || uiState.url != currentBrowser.url) return@LaunchedEffect
         if (PageKind.isShorts(uiState.url)) {
             playerViewModel.onShortsOpened()
             return@LaunchedEffect
@@ -732,12 +745,26 @@ fun BrowserScreen(
                 ExtensionScreen(
                     onClose = { showExtension = false },
                     onNavigate = { id ->
+                        if (id == Extension.NAV_DATA) {
+                            showExtension = false
+                            showSettingsData = true
+                        }
                         if (id == Extension.NAV_DOWNLOADS) {
                             showExtension = false
                             DownloadUi.openManager(context)
                         }
                     },
                 )
+            }
+        }
+
+        if (showSettingsData && !inPip) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+            ) {
+                SettingsDataScreen(onClose = { showSettingsData = false })
             }
         }
 

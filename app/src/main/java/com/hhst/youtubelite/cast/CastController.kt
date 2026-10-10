@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.cast
 
+import com.hhst.youtubelite.diagnostics.*
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -66,6 +68,7 @@ class CastController(
     private val endpoints = linkedMapOf<String, Endpoint>()
     private var selectedId: String? = null
     private var sessionGeneration = 0L
+    private var diagnosticTrace: CastDiagnosticTrace? = null
     private val configureGen = AtomicLong()
     private val configureLock = Any()
     @Volatile private var proxyConfiguredVideoId: String? = null
@@ -90,12 +93,14 @@ class CastController(
         val active = discoveryUserEnabled || chromecastActive
         if (active == discovering) return
         discovering = active
+        AppLog.event(AppLog.Category.CAST, "discovery_state", mapOf("active" to active))
         if (active) {
             endpoints.clear()
             publishRoutes()
             discovery.start { name, host, port ->
                 val id = "$host:$port"
                 endpoints[id] = Endpoint(name, host, port)
+                AppLog.event(AppLog.Category.CAST, "device_resolved", mapOf("device_name" to name, "host" to host, "port" to port))
                 publishRoutes()
             }
         } else discovery.stop()
@@ -109,6 +114,7 @@ class CastController(
         val endpoint = endpoints[id] ?: return
         endSession()
         val generation = ++sessionGeneration
+        val trace = CastDiagnosticTrace().also { diagnosticTrace = it }
         selectedId = id
         var connected = false
         lateinit var session: CastV2Session
@@ -116,6 +122,7 @@ class CastController(
             override fun onConnected() { main.post {
                 if (generation != sessionGeneration) return@post
                 connected = true
+                trace.phase("session_connected")
                 currentSession = session
                 castPlayer = CastRemotePlayer(session)
                 _state.update { it.copy(chromecastSession = true, deviceName = endpoint.name) }
@@ -125,8 +132,8 @@ class CastController(
             override fun onMediaStatus(raw: String?, position: Long, duration: Long, idleReason: String?) { main.post {
                 if (generation == sessionGeneration) castPlayer?.status(raw, position, duration, idleReason)
             } }
-            override fun onLaunchError(reason: String) = failed()
-            override fun onChannelError(reason: String) = failed()
+            override fun onLaunchError(reason: String) { trace.error("receiver_launch_failed", null); failed() }
+            override fun onChannelError(reason: String) { trace.error("channel_failed", null); failed() }
             override fun onLoadFailed(type: String) { main.post {
                 if (generation == sessionGeneration && !loadingUpgrade) finishSession(true, connected)
             } }
@@ -138,6 +145,7 @@ class CastController(
             } }
         }
         session = sessionFactory(endpoint.host, endpoint.port, listener)
+        session.setDiagnostics(trace)
         currentSession = session
         publishRoutes()
         session.start()
@@ -220,12 +228,14 @@ class CastController(
                 proxy = it
             }
         }.onFailure {
-            Log.w(TAG, "createProxy failed", it)
+            AppLog.event(AppLog.Category.CAST, "proxy_start_failed", failure = it, context = diagnosticTrace?.context)
             proxy = null
         }.getOrNull()
     }
 
     private fun configureProxy(p: LocalStreamProxy, source: CastSource): Boolean {
+        diagnosticTrace?.video(source.videoId, configureGen.get())
+        p.diagnosticContext = diagnosticTrace?.context ?: DiagnosticContext(videoId = source.videoId)
         val generation = p.allocateGeneration()
         val manifest = CastManifest.build(
             video = source.video,

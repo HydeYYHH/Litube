@@ -44,7 +44,7 @@ sealed class DownloadWebDecision {
 }
 
 /**
- * Web-bridge security: HTTPS YouTube hosts, main frame, generation match,
+ * Web-bridge security: HTTPS media hosts, main frame, generation match,
  * snapshot limits with no silent truncate, and no mutation commands.
  */
 object DownloadWebGuard {

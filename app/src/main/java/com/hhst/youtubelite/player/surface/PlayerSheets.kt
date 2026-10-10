@@ -38,6 +38,8 @@ import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.ui.components.audioTrackLabel
+import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
+import com.hhst.youtubelite.ui.theme.YoutubeStyle
 
 /** Player sheets: More + Queue. */
 sealed interface PlayerSheet {
@@ -176,13 +178,12 @@ internal fun PlayerModalSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = YoutubeStyle.SheetShape,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-            )
+            YoutubeSheetHandle()
         },
     ) {
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight), content = content)
@@ -288,10 +289,10 @@ private fun SheetTitle(text: String) {
         text = text,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 16.dp),
-        textAlign = TextAlign.Center,
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        textAlign = TextAlign.Start,
         fontSize = SettingsTokens.TitleSize.sp,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface,
     )
 }
@@ -301,7 +302,7 @@ private fun MoreRow(icon: Int, label: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = SettingsTokens.RowHeight)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -309,7 +310,7 @@ private fun MoreRow(icon: Int, label: String, onClick: () -> Unit) {
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .padding(end = 16.dp)
                 .size(24.dp),
@@ -319,12 +320,6 @@ private fun MoreRow(icon: Int, label: String, onClick: () -> Unit) {
             fontSize = SettingsTokens.BodySize.sp,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp),
         )
     }
 }

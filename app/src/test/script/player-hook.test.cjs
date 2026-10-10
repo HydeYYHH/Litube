@@ -9,6 +9,8 @@ function page(href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', withNavigation
   const documentListeners = [];
   const windowListeners = [];
   const bridgeEvents = [];
+  const timers = new Map();
+  let nextTimer = 1;
   let layout = null;
   const classes = new Set();
   const styles = new Map();
@@ -43,7 +45,8 @@ function page(href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', withNavigation
     },
     lite: { play() { layout = null; }, setPlayerLayout(top, height) { layout = [top, height]; }, setPageHasPlaylist() {},
       prepare() { bridgeEvents.push('prepare'); }, openTab() { bridgeEvents.push('open'); } },
-    setTimeout() {}, clearTimeout() {}, setInterval() { return 1; },
+    setTimeout(fn) { const id = nextTimer++; timers.set(id, fn); return id; },
+    clearTimeout(id) { timers.delete(id); }, setInterval() { return 1; },
     requestAnimationFrame: (fn) => fn(),
     addEventListener(name, handler, capture) { windowListeners.push({ name, handler, capture }); },
     MutationObserver: class { observe() {} },
@@ -73,8 +76,101 @@ function page(href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', withNavigation
       if (event.stopped) break;
     }
   }
-  return { context, player, classes, styles, layout: () => layout, click, bridgeEvents };
+  return { context, player, classes, styles, layout: () => layout, click, bridgeEvents,
+    flushTimers() { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()); } };
 }
+
+function historyPlayer() {
+  const fixture = page();
+  const events = new Map(), videoEvents = new Map(), calls = [];
+  let state = -1;
+  const video = { muted: false, pause: () => calls.push('element-pause'),
+    addEventListener: (name, fn) => videoEvents.set(name, fn),
+    removeEventListener: name => videoEvents.delete(name) };
+  Object.assign(fixture.player, {
+    querySelector: () => video,
+    addEventListener: (name, fn) => events.set(name, fn),
+    removeEventListener: name => events.delete(name),
+    mute: () => calls.push('mute'), unMute: () => calls.push('unmute'),
+    getPlayerState: () => state,
+    getCurrentTime: () => 23,
+    getVideoData: () => ({ video_id: fixture.context.Lite.id() }),
+    setPlaybackQualityRange: (a, b) => calls.push(['quality', a, b]),
+    seekTo: time => calls.push(['seek', time]),
+    playVideo: () => calls.push('play'),
+    pauseVideo: () => { calls.push('pause'); state = 2; },
+  });
+  fixture.context.__syncPlayerCompact();
+  return { ...fixture, video, calls, events, videoEvents,
+    buffering() { state = 3; },
+    playing() { state = 1; events.get('onStateChange')?.({ data: 1 }); calls.push('youtube-history'); } };
+}
+
+test('muted web player can emit its history transition before native takeover pauses it', () => {
+  const f = historyPlayer();
+  assert.equal(f.video.muted, true);
+  assert.equal(f.calls.includes('pause'), false);
+  assert.equal(f.calls.includes('element-pause'), false);
+  assert.deepEqual(f.calls.find(c => Array.isArray(c) && c[0] === 'seek'), ['seek', 23]);
+  f.playing();
+  f.context.__syncPlayerCompact();
+  assert.equal(f.calls.includes('pause'), false);
+  f.flushTimers();
+  assert.ok(f.calls.indexOf('youtube-history') < f.calls.indexOf('pause'));
+  assert.equal(f.calls.filter(c => c === 'play').length, 1);
+  assert.equal(f.calls.filter(c => c === 'pause').length, 1);
+});
+
+test('startup seek buffering is not preempted by an earlier PLAYING callback', () => {
+  const f = historyPlayer(); f.playing(); f.buffering(); f.flushTimers();
+  assert.equal(f.calls.includes('pause'), false);
+  f.playing(); f.flushTimers();
+  assert.equal(f.calls.filter(c => c === 'pause').length, 1);
+});
+
+test('ad playback does not consume the content history bootstrap', () => {
+  const f = historyPlayer();
+  let ad = true;
+  f.player.classList.contains = name => ad && name === 'ad-showing';
+  f.context.location.href = 'https://m.youtube.com/watch?v=bbbbbbbbbbb';
+  f.context.__syncPlayerCompact();
+  assert.equal(f.calls.filter(c => c === 'play').length, 1);
+  ad = false; f.context.__syncPlayerCompact();
+  assert.equal(f.calls.filter(c => c === 'play').length, 2);
+});
+
+test('pending watch pause cannot pause or mute a reused Shorts player', () => {
+  const f = historyPlayer(); f.playing();
+  f.context.location.href = 'https://m.youtube.com/shorts/aaaaaaaaaaa';
+  f.context.__syncPlayerCompact(); f.flushTimers();
+  assert.equal(f.video.muted, false);
+  assert.equal(f.calls.includes('pause'), false);
+  assert.equal(f.events.has('onStateChange'), false);
+  assert.equal(f.videoEvents.has('playing'), false);
+});
+
+test('SPA replacement arms history once for the next watch video', () => {
+  const f = historyPlayer(); f.playing(); f.flushTimers();
+  f.context.location.href = 'https://m.youtube.com/watch?v=bbbbbbbbbbb';
+  f.context.__syncPlayerCompact();
+  assert.equal(f.calls.filter(c => c === 'play').length, 2);
+  f.playing(); f.flushTimers();
+  assert.equal(f.calls.filter(c => c === 'pause').length, 2);
+});
+
+test('cold controller waits for metadata and bootstraps a non-zero history seek', () => {
+  const f = historyPlayer();
+  let duration = 0;
+  f.player.getDuration = () => duration;
+  f.player.getCurrentTime = () => 0;
+  f.context.location.href = 'https://m.youtube.com/watch?v=bbbbbbbbbbb';
+  f.context.__syncPlayerCompact();
+  assert.equal(f.calls.filter(c => c === 'play').length, 1);
+  duration = 19;
+  f.context.__syncPlayerCompact();
+  assert.deepEqual(f.calls.filter(c => Array.isArray(c) && c[0] === 'seek').at(-1), ['seek', 1]);
+  assert.equal(f.calls.filter(c => c === 'play').length, 2);
+});
 
 test('home navigation prepares the selected video before document capture stops propagation', () => {
   const fixture = page('https://m.youtube.com/', true);

@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player
 
 import com.google.gson.Gson
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extractor.VideoId
@@ -162,7 +163,7 @@ class QueueRepository(
             runCatching {
                 val type = object : TypeToken<List<QueueItem?>>() {}.type
                 gson.fromJson<List<QueueItem?>>(itemsJson, type).orEmpty()
-            }.getOrNull().orEmpty()
+            }.onFailure { AppLog.event(AppLog.Category.STORAGE, "queue_cache_corrupt", failure = it) }.getOrNull().orEmpty()
                 .mapNotNull { raw -> raw?.let(::sanitize) }
                 .distinctBy { it.videoId }
                 .map { it.copy(title = it.title.ifBlank { it.videoId }) }
@@ -173,7 +174,7 @@ class QueueRepository(
 
     /**
      * Page JS and persisted cache are untrusted: keep a real video id, a
-     * canonical watch URL, bounded text, and a YouTube thumbnail host.
+     * canonical watch URL, bounded text, and an allowed thumbnail host.
      */
     private fun sanitize(item: QueueItem): QueueItem? {
         val id = VideoId.parse(item.url) ?: VideoId.parse(item.videoId)
@@ -189,6 +190,7 @@ class QueueRepository(
 
     private fun save() {
         val s = _state.value
+        AppLog.event(AppLog.Category.PLAYER, "queue_changed", mapOf("enabled" to s.enabled, "item_count" to s.items.size))
         cache.put(KEY_ITEMS, gson.toJson(s.items), TTL_MS)
         cache.put(KEY_ENABLED, s.enabled.toString(), TTL_MS)
     }

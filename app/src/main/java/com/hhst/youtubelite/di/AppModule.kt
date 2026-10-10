@@ -7,6 +7,7 @@ import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.room.Room
 import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
+import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.core.PipSupport
 import com.hhst.youtubelite.core.JsonCache
@@ -94,7 +95,7 @@ import org.koin.dsl.module
 /** Application-scoped Koin module. */
 val appModule = module {
     single {
-        OkHttpClient.Builder()
+        DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)

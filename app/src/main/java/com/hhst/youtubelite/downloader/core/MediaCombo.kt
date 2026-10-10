@@ -23,7 +23,7 @@ object MediaCombo {
     )
 
     fun matrix(provenAvcAac: Boolean, provenAacM4a: Boolean): List<Entry> = listOf(
-        // Minimum acceptance combo (YouTube itag 18 / 137+140).
+        // Minimum acceptance combo (itag 18 / 137+140).
         Entry("MP4", MimeTypes.VIDEO_H264, MimeTypes.AUDIO_AAC,
             if (provenAvcAac) Status.ENABLED else Status.GATED),
         // Audio-only MP4 (m4a) via Mp4Muxer AAC track.
@@ -31,13 +31,13 @@ object MediaCombo {
             if (provenAacM4a) Status.ENABLED else Status.GATED),
         // Muxer-listed; pending extract/mux/playback proof.
         Entry("MP4", MimeTypes.VIDEO_H265, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; YouTube VP9 is usually WEBM, not MP4.
+        // Muxer-listed; VP9 is usually WEBM, not MP4.
         Entry("MP4", MimeTypes.VIDEO_VP9, MimeTypes.AUDIO_AAC, Status.GATED),
         // Muxer-listed; playback still hardware-gated.
         Entry("MP4", MimeTypes.VIDEO_AV1, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; not a YouTube adaptive download target.
+        // Muxer-listed; not an adaptive download target.
         Entry("MP4", MimeTypes.VIDEO_DOLBY_VISION, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; YouTube Opus is typically WEBM audio.
+        // Muxer-listed; Opus is typically WEBM audio.
         Entry("MP4", MimeTypes.VIDEO_H264, MimeTypes.AUDIO_OPUS, Status.GATED),
     )
 }

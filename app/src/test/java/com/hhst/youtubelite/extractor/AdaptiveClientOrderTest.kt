@@ -41,4 +41,41 @@ class AdaptiveClientOrderTest {
         policy.succeeded(context, ClientProfile.WEB_CREATOR)
         assertEquals(defaults, policy.order(context, defaults))
     }
+
+    @Test fun actualMediaRefusalOverridesAnExtractionWinnerWithoutDroppingAnyClient() {
+        val policy = AdaptiveClientOrder { 0L }
+        val context = context()
+        policy.succeeded(context, ClientProfile.WEB_SAFARI)
+        policy.mediaForbidden("video", "account-route", ClientProfile.WEB_SAFARI)
+        val order = policy.forVideo("video", "account-route").order(context, defaults)
+        assertEquals(listOf(ClientProfile.VISIONOS, ClientProfile.WEB, ClientProfile.WEB_SAFARI), order)
+        assertEquals(defaults.toSet(), order.toSet())
+    }
+
+    @Test fun refusalSurvivesTheSameVideosRefreshButNeverLeaksToAnotherVideoOrIdentity() {
+        val policy = AdaptiveClientOrder { 0L }
+        policy.mediaForbidden("video", "account-route", ClientProfile.WEB_SAFARI)
+        val refreshed = context("new-extraction-generation")
+        assertEquals(ClientProfile.VISIONOS, policy.forVideo("video", "account-route").order(refreshed, defaults).first())
+        assertEquals(defaults, policy.forVideo("other-video", "account-route").order(refreshed, defaults))
+        assertEquals(defaults, policy.forVideo("video", "other-account-or-route").order(refreshed, defaults))
+    }
+
+    @Test fun refusalExpiresAndCannotIntroduceAnIneligibleClient() {
+        var now = 0L
+        val policy = AdaptiveClientOrder { now }
+        policy.mediaForbidden("video", "identity", ClientProfile.WEB_SAFARI)
+        policy.mediaForbidden("video", "identity", ClientProfile.WEB_CREATOR)
+        val scoped = policy.forVideo("video", "identity")
+        assertEquals(ClientProfile.VISIONOS, scoped.order(context(), defaults).first())
+        now = 30_000
+        assertEquals(defaults, scoped.order(context(), defaults))
+    }
+
+    @Test fun boundedRefusalMemoryEvictsOldestEvidence() {
+        val policy = AdaptiveClientOrder { 0L }
+        repeat(65) { policy.mediaForbidden("video-$it", "identity", ClientProfile.WEB_SAFARI) }
+        assertEquals(defaults, policy.forVideo("video-0", "identity").order(context(), defaults))
+        assertEquals(ClientProfile.VISIONOS, policy.forVideo("video-64", "identity").order(context(), defaults).first())
+    }
 }

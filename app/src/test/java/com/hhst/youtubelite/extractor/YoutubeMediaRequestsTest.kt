@@ -72,6 +72,49 @@ class YoutubeMediaRequestsTest {
         } finally { server.shutdown() }
     }
 
+    @Test fun child403KeepsThePlanActuallyUsedInsteadOfAPrefetchedClient() {
+        val server = MockWebServer()
+        server.start()
+        val policy = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
+        val actual = RequestPlan(session(), ClientProfile.VISIONOS, RequestPlan.Protocol.HLS, RequestPlan.Range.NONE, false)
+        val prefetched = RequestPlan(session(), ClientProfile.WEB_SAFARI, RequestPlan.Protocol.HLS, RequestPlan.Range.NONE, false)
+        val client = OkHttpClient.Builder().addInterceptor(policy.interceptor()).build()
+        try {
+            val url = server.url("/videoplayback/itag/95/segment.ts").toString()
+            policy.register(url, prefetched)
+            server.enqueue(MockResponse().setResponseCode(403))
+            client.newCall(policy.build(url, actual)).execute().use { assertEquals(403, it.code) }
+            assertSame(actual, policy.plan("$url?range=0-10&rn=2"))
+            assertEquals(1, server.requestCount)
+        } finally {
+            client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
+            server.shutdown()
+        }
+    }
+
+    @Test fun staleOrUnplannedRequestsCannotInventAClientBinding() {
+        val server = MockWebServer()
+        server.start()
+        var current = true
+        val policy = YoutubeMediaRequests({ current }, ExtractionDiagnostics())
+        val plan = RequestPlan(session(), ClientProfile.WEB, RequestPlan.Protocol.HLS, RequestPlan.Range.NONE, false)
+        val client = OkHttpClient.Builder().addInterceptor(policy.interceptor()).build()
+        try {
+            val url = server.url("/unknown.ts").toString()
+            val stale = policy.build(url, plan)
+            current = false
+            assertThrows(IOException::class.java) { client.newCall(stale).execute() }
+            assertNull(policy.plan(url))
+            assertEquals(0, server.requestCount)
+            server.enqueue(MockResponse().setResponseCode(403))
+            client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { assertEquals(403, it.code) }
+            assertNull(policy.plan(url))
+        } finally {
+            client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
+            server.shutdown()
+        }
+    }
+
     @Test fun configurationParserHandlesBracesInsideStringsAndMergesSets() {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"EVENT_ID\":\"{value}\"});ytcfg.set({\"SESSION_INDEX\":2});")
         assertEquals("{value}", config.getString("EVENT_ID"))

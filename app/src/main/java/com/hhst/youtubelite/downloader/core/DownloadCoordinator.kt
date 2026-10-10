@@ -1,6 +1,11 @@
 package com.hhst.youtubelite.downloader.core
 
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
+import kotlin.coroutines.coroutineContext
+
 import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.DownloadSession
 import com.hhst.youtubelite.extractor.VideoId
@@ -14,8 +19,10 @@ class DownloadCoordinator(
     private val ids: IdFactory = UuidIdFactory,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
-    private fun log(event: String, fields: Map<String, Any?>, critical: Boolean = false) =
-        AppLog.event(AppLog.Category.DOWNLOADER, event, fields, critical = critical)
+    private suspend fun log(event: String, fields: Map<String, Any?>, critical: Boolean = false) =
+        AppLog.event(AppLog.Category.DOWNLOADER, event, fields, critical = critical,
+            context = coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(
+                taskId = fields["task"] as? String, generation = (fields["generation"] as? Number)?.toLong()))
 
     fun observeDownloads(filter: DownloadFilter = DownloadFilter()): Flow<List<TaskSnapshot>> =
         repository.observeDownloads(filter)
@@ -101,28 +108,28 @@ class DownloadCoordinator(
     }
 
     suspend fun pause(target: DownloadTarget) {
-        log("pause", mapOf("target" to target))
+        log("pause", targetFields(target))
         val effects = SideEffects()
         repository.transact { pauseTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun resume(target: DownloadTarget) {
-        log("resume", mapOf("target" to target))
+        log("resume", targetFields(target))
         val effects = SideEffects()
         repository.transact { resumeTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun cancel(target: DownloadTarget) {
-        log("cancel", mapOf("target" to target))
+        log("cancel", targetFields(target))
         val effects = SideEffects()
         repository.transact { cancelTarget(target, effects) }
         applyEffects(effects)
     }
 
     suspend fun retryFailed(target: DownloadTarget) {
-        log("retryFailed", mapOf("target" to target))
+        log("retryFailed", targetFields(target))
         val effects = SideEffects()
         repository.transact { retryTarget(target, effects) }
         applyEffects(effects)
@@ -146,6 +153,12 @@ class DownloadCoordinator(
         )
     }
 
+    private fun targetFields(target: DownloadTarget): Map<String, Any?> = when (target) {
+        is DownloadTarget.Task -> mapOf("target_type" to "task", "task" to target.taskId)
+        is DownloadTarget.Item -> mapOf("target_type" to "item", "item_id" to target.itemId)
+        is DownloadTarget.Batch -> mapOf("target_type" to "batch", "batch_id" to target.batchId)
+    }
+
     suspend fun remove(target: DownloadTarget, mode: RemoveMode) {
         val effects = SideEffects()
         repository.transact { removeTarget(target, mode, effects) }
@@ -162,6 +175,10 @@ class DownloadCoordinator(
         val task = getTask(taskId) ?: return@transact false
         when (DownloadStateMachine.acceptBackground(task, generation, status)) {
             BackgroundDecision.APPLY -> {
+                AppLog.snapshot(AppLog.Category.DOWNLOADER,
+                    coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(videoId = task.videoId, taskId = taskId, generation = generation),
+                    mapOf("phase" to (phase ?: task.phase), "status" to status, "user_paused" to task.userPaused,
+                        "user_cancelled" to task.userCancelled, "pending_requests" to DiagnosticNetwork.pending(coroutineContext[DiagnosticCoroutineContext]?.diagnostic)))
                 if (task.status != status || (phase != null && task.phase != phase) || (errorMessage != null && task.errorMessage != errorMessage))
                     log("state", mapOf("task" to taskId, "generation" to generation, "status" to status, "phase" to phase, "error" to errorMessage), status == DownloadStatus.FAILED)
                 updateTask(
@@ -633,8 +650,8 @@ class DownloadCoordinator(
         taskIds(target, ownedOnly = true).forEach { taskId ->
             val task = getTask(taskId) ?: return@forEach
             if (task.removed || task.userCancelled || task.status == DownloadStatus.CANCELLED) return@forEach
-            // Explicit user resume also covers system waits (WAITING_SYSTEM)
-            // and network waits — not just user pauses.
+            // An explicit user resume covers system waits (WAITING_SYSTEM)
+            // and network waits, in addition to user pauses.
             val resumable = task.userPaused ||
                 task.status == DownloadStatus.PAUSED ||
                 task.status == DownloadStatus.PAUSING ||

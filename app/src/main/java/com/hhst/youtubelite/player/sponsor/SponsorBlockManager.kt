@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.sponsor
 
 import android.util.Log
+import com.hhst.youtubelite.diagnostics.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -25,8 +26,7 @@ private const val TAG = "SponsorBlockManager"
  * SponsorBlock client: fetches skip segments and reports them to the engine.
  *
  * API: `https://sponsor.ajay.app/api/skipSegments/<sha256(videoId)[0..4)>`
- * with categories driven by extension prefs (`skip_sponsors`, `skip_self_promo`,
- * `skip_poi_highlight`).
+ * with categories driven by extension prefs.
  */
 class SponsorBlockManager(
     private val http: OkHttpClient,
@@ -52,11 +52,7 @@ class SponsorBlockManager(
 
     init {
         prefs.addOnChangedListener { key ->
-            if (key == "*" ||
-                key == PreferenceKeys.SKIP_SPONSORS ||
-                key == PreferenceKeys.SKIP_SELF_PROMO ||
-                key == PreferenceKeys.SKIP_POI_HIGHLIGHT
-            ) {
+            if (key == "*" || CATEGORY_PREFS.any { it.first == key }) {
                 applyEnabledCategories()
             }
         }
@@ -72,7 +68,7 @@ class SponsorBlockManager(
     private val currentCall = AtomicReference<Call?>()
 
     /** Fetches segments for [videoId]; no-op when every category is disabled. */
-    fun load(videoId: String) {
+    fun load(videoId: String, diagnosticContext: DiagnosticContext? = null) {
         val id = VideoId.parse(videoId) ?: return
         val requestId = requestSeq.incrementAndGet()
         currentCall.getAndSet(null)?.cancel()
@@ -88,26 +84,26 @@ class SponsorBlockManager(
             return
         }
         scope.launch {
+            val context = (diagnosticContext ?: DiagnosticContext(videoId = id)).child(requestId.toString())
+            val operation = AppLog.operation(AppLog.Category.PLAYER, "sponsorblock", context, mapOf("categories" to categories))
             // null = fetch failed: for the SAME video keep the working segments
             // (a transient 5xx must not kill skipping for the rest of it); for
             // a new video segments were already cleared above.
-            val fetched = runCatching { fetch(id, categories) }
-                .onFailure { Log.w(TAG, "sponsorblock fetch failed", it) }
+            val fetched = runCatching { fetch(id, categories, context) }
+                .onFailure { operation.finish(if (requestId != requestSeq.get()) DiagnosticOutcome.SUPERSEDED else DiagnosticOutcome.FAILURE, "fetch_failed", it) }
                 .getOrNull()
-            if (requestId != requestSeq.get()) return@launch // superseded
+            if (requestId != requestSeq.get()) { operation.finish(DiagnosticOutcome.SUPERSEDED, "video_replaced"); return@launch }
             if (fetched != null) {
                 segments = fetched
                 segmentsVideoId = id
             }
             onSegmentsLoaded?.invoke(segments)
+            operation.finish(DiagnosticOutcome.SUCCESS, fields = mapOf("segment_count" to segments.size))
         }
     }
 
-    private fun enabledCategories(): List<String> = buildList {
-        if (prefs.isEnabled(PreferenceKeys.SKIP_SPONSORS)) add("sponsor")
-        if (prefs.isEnabled(PreferenceKeys.SKIP_SELF_PROMO)) add("selfpromo")
-        if (prefs.isEnabled(PreferenceKeys.SKIP_POI_HIGHLIGHT)) add("poi_highlight")
-    }
+    private fun enabledCategories(): List<String> =
+        CATEGORY_PREFS.filter { prefs.isEnabled(it.first) }.map { it.second }
 
     /** Drop categories the user just disabled; refetch if a category was enabled. */
     private fun applyEnabledCategories() {
@@ -128,16 +124,17 @@ class SponsorBlockManager(
         load(id)
     }
 
-    private fun fetch(videoId: String, categories: List<String>): List<Segment> {
+    private fun fetch(videoId: String, categories: List<String>, diagnostic: DiagnosticContext): List<Segment> {
         val prefix = sha256(videoId).substring(0, 4)
         val categoryParam = URLEncoder.encode(
             categories.joinToString(",", "[", "]") { "\"$it\"" },
             Charsets.UTF_8.name(),
         )
         val request = Request.Builder()
-            .url("https://sponsor.ajay.app/api/skipSegments/$prefix?service=YouTube&categories=$categoryParam")
+            .url("https://sponsor.ajay.app/api/skipSegments/$prefix?service=YouTube&categories=$categoryParam&actionType=skip&actionType=poi")
+            .tag(DiagnosticNetwork.Policy::class.java, DiagnosticNetwork.Policy(setOf(404)))
             .build()
-        val call = http.newCall(request)
+        val call = http.newCall(DiagnosticNetwork.tag(request, diagnostic))
         currentCall.set(call)
         call.execute().use { response ->
             val body = response.body?.string()
@@ -147,6 +144,18 @@ class SponsorBlockManager(
     }
 
     companion object {
+        private val CATEGORY_PREFS = listOf(
+            PreferenceKeys.SKIP_SPONSORS to "sponsor",
+            PreferenceKeys.SKIP_SELF_PROMO to "selfpromo",
+            PreferenceKeys.SKIP_INTERACTION to "interaction",
+            PreferenceKeys.SKIP_INTRO to "intro",
+            PreferenceKeys.SKIP_OUTRO to "outro",
+            PreferenceKeys.SKIP_PREVIEW to "preview",
+            PreferenceKeys.SKIP_MUSIC_OFFTOPIC to "music_offtopic",
+            PreferenceKeys.SKIP_FILLER to "filler",
+            PreferenceKeys.SKIP_POI_HIGHLIGHT to "poi_highlight",
+        )
+
         /**
          * 404 is a valid empty result. 2xx is parsed. Timeout / 5xx return
          * null so [load] keeps working segments for the same video.
@@ -174,6 +183,8 @@ object SponsorBlockParser {
     fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> {
         val responses: List<SponsorBlockResponse> =
             runCatching { gson.fromJson<List<SponsorBlockResponse>>(json, type) }
+                .onFailure { AppLog.event(AppLog.Category.PLAYER, "sponsorblock_parse_failed", failure = it,
+                    context = DiagnosticContext(videoId = videoId)) }
                 .getOrNull() ?: return emptyList()
         return responses
             .filter { it.videoID == videoId }

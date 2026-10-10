@@ -53,7 +53,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Open YouTube links in-app. autoVerify=false is explicit: this
+            <!-- Open watch links in-app. autoVerify=false is explicit: this
                  app does not own the domains, so no App Link verification. -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />

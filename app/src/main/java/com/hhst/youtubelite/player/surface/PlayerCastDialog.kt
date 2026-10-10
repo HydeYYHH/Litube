@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,14 +64,14 @@ internal fun CastDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = {
             Text(
                 text = stringResource(R.string.cast),
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Normal,
+                fontWeight = FontWeight.Medium,
             )
         },
         text = {
@@ -193,13 +193,12 @@ internal fun CastDialog(
                     }
                     Row {
                         TextButton(onClick = onShareLink) {
-                            Text(stringResource(R.string.share), color = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(R.string.share))
                         }
                         if (state.castLinkUrl != null) {
                             TextButton(onClick = onCloseLink) {
                                 Text(
                                     stringResource(R.string.cast_link_close),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -209,7 +208,7 @@ internal fun CastDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.close))
             }
         },
     )
@@ -230,7 +229,6 @@ private fun LearnAboutCastingLink(modifier: Modifier = Modifier) {
     ) {
         Text(
             stringResource(R.string.cast_learn_casting),
-            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

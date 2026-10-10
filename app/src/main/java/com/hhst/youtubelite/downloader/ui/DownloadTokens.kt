@@ -6,7 +6,7 @@ import com.hhst.youtubelite.ui.theme.SettingsTokens
 /** Shared spacing, sizing and touch targets for download components. */
 object DownloadTokens {
     const val ROW_ACTION_WIDTH_DP = 40
-    const val SHEET_CORNER_DP = 28
+    const val SHEET_CORNER_DP = 16
     const val TITLE_MAX_LINES = 2
     const val THUMB_ASPECT_W = 16
     const val THUMB_ASPECT_H = 9

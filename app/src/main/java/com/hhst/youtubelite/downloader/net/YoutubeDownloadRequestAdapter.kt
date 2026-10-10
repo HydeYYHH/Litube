@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.net
 
 import com.hhst.youtubelite.core.Constants
+import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.downloader.core.DownloadSettings
 import com.hhst.youtubelite.extractor.Format
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
@@ -81,7 +82,7 @@ object DownloadHttpClients {
             this.maxRequests = connections
             this.maxRequestsPerHost = maxRequestsPerHost.coerceAtLeast(1)
         }
-        return OkHttpClient.Builder()
+        return DiagnosticNetwork.install(OkHttpClient.Builder())
             .dispatcher(dispatcher)
             .cache(null)
             .connectTimeout(20, TimeUnit.SECONDS)

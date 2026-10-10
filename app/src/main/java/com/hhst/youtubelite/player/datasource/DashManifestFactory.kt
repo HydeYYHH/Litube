@@ -6,7 +6,7 @@ import com.hhst.youtubelite.extractor.Format
 /**
  * Builds synthetic DASH MPDs from [Format]s' byte-range info.
  *
- * YouTube adaptive streams support range requests; wrapping them in a synthetic
+ * Adaptive streams support range requests; wrapping them in a synthetic
  * DASH manifest lets ExoPlayer use its DASH pipeline (adaptive buffering, seek
  * via `SegmentBase` index) without fetching a remote manifest.
  *
@@ -14,7 +14,7 @@ import com.hhst.youtubelite.extractor.Format
  * manifest with a representation per format so quality switching is a track
  * selection, not a media-source rebuild.
  *
- * Format reference: `YoutubeProgressiveDashManifestCreator` in NewPipe.
+ * Format reference: NewPipe's progressive DASH manifest creator.
  */
 object DashManifestFactory {
 

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.cast
 
+import com.hhst.youtubelite.diagnostics.*
+
 import android.content.Context
 import android.view.View
 import com.hhst.youtubelite.R
@@ -30,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * LAN HTTP proxy: DASH manifest + YouTube byte-range segments for Chromecast / dash.js.
+ * LAN HTTP proxy: DASH manifest and byte-range segments for Chromecast / dash.js.
  */
 @UnstableApi
 class LocalStreamProxy(
@@ -41,6 +43,7 @@ class LocalStreamProxy(
     private val advertisedHost: String,
     private val mediaRequests: YoutubeMediaRequests? = null,
 ) : NanoHTTPD(advertisedHost, port) {
+    @Volatile var diagnosticContext = DiagnosticContext(castSessionId = java.util.UUID.randomUUID().toString())
 
     fun interface UrlRefresher {
         fun refreshUrl(token: String, videoId: String?, itag: Int?): String?
@@ -59,6 +62,7 @@ class LocalStreamProxy(
         val publishedVideoId: String? = null,
         val itag: Int? = null,
         val requestPlan: RequestPlan? = null,
+        val diagnostic: DiagnosticContext = DiagnosticContext(),
     )
 
     private val httpClient = http
@@ -86,7 +90,7 @@ class LocalStreamProxy(
     @Volatile private var videoTitle: String? = null
     @Volatile private var currentVideoId: String? = null
     @Volatile private var lastLinkPeerSeenMs = 0L
-    /** Unlisted path prefix so LAN clients need the shared URL, not just the port. */
+    /** Unlisted path prefix. LAN clients must have the shared URL; the port alone is not sufficient. */
     private val accessKey = UUID.randomUUID().toString().replace("-", "")
 
     fun isLinkPeerConnected(): Boolean {
@@ -128,6 +132,7 @@ class LocalStreamProxy(
                 publishedVideoId = videoId,
                 itag = videoItag,
                 requestPlan = videoRequestPlan,
+                diagnostic = diagnosticContext.copy(videoId = videoId, generation = configId),
             )
         }
         if (!audioUrl.isNullOrBlank() && audio != null) {
@@ -141,6 +146,7 @@ class LocalStreamProxy(
                 publishedVideoId = videoId,
                 itag = audioItag,
                 requestPlan = audioRequestPlan,
+                diagnostic = diagnosticContext.copy(videoId = videoId, generation = configId),
             )
         }
         this.videoTitle = videoTitle
@@ -189,11 +195,12 @@ class LocalStreamProxy(
     }
 
     private fun fetchSidx(info: StreamInfo, start: Long, length: Long): ChunkIndex? {
-        val source = (info.requestPlan?.let { plan ->
+        val operation = AppLog.operation(AppLog.Category.CAST, "sidx", info.diagnostic.child(), mapOf("itag" to info.itag, "range_start" to start, "length" to length))
+        val source = DiagnosticDataSource((info.requestPlan?.let { plan ->
             YoutubeHttpDataSource.Factory(httpClient, plan.userAgent)
                 .setMediaRequests(mediaRequests, mediaRequests?.plan(info.youtubeUrl) ?: plan)
                 .setRangeParameterEnabled(true)
-        } ?: dataSourceFactory).createDataSource()
+        } ?: dataSourceFactory).createDataSource(), operation.context, category = AppLog.Category.CAST)
         return try {
             val spec = DataSpec.Builder()
                 .setUri(info.youtubeUrl.toUri())
@@ -202,9 +209,9 @@ class LocalStreamProxy(
                 .build()
             source.open(spec)
             val bytes = readFully(source, length.coerceAtMost(SIDX_READ_CAP_BYTES).toInt())
-            SidxParser.parse(bytes, start)
+            SidxParser.parse(bytes, start).also { operation.finish(if (it != null) DiagnosticOutcome.SUCCESS else DiagnosticOutcome.FAILURE, if (it != null) "parsed" else "sidx_unavailable") }
         } catch (t: Throwable) {
-            Log.w(TAG, "fetchSidx failed", t)
+            operation.finish(DiagnosticOutcome.FAILURE, "sidx_failed", t)
             null
         } finally {
             runCatching { source.close() }
@@ -212,6 +219,7 @@ class LocalStreamProxy(
     }
 
     override fun serve(session: IHTTPSession): Response {
+        AppLog.detail(AppLog.Category.CAST, "proxy_request", mapOf("method" to session.method.name), diagnosticContext)
         val raw = session.uri ?: return text(Response.Status.NOT_FOUND, "Not found")
         val prefix = "/$accessKey"
         if (!raw.startsWith(prefix)) return text(Response.Status.FORBIDDEN, "Forbidden")
@@ -219,7 +227,7 @@ class LocalStreamProxy(
         if (session.method == Method.OPTIONS) {
             return corsPreflight(header(session, "user-agent"))
         }
-        // NanoHTTPD would still write a body for HEAD unless we hand it an
+        // NanoHTTPD would still write a body for HEAD unless handed an
         // empty stream. Keep GET's status, mime, Content-Length and CORS
         // headers so HEAD describes the same resource.
         if (session.method == Method.HEAD) {
@@ -258,7 +266,7 @@ class LocalStreamProxy(
         var xml = manifestXml ?: return text(Response.Status.NOT_FOUND, "No manifest")
         val vid = currentVideoId
         if (!vid.isNullOrBlank()) {
-            // Hex-encode: XML comments must not contain "--", and YouTube ids
+            // Hex-encode: XML comments must not contain "--", and video ids
             // legitimately can. The receiver only compares the marker for
             // equality (player.html probeManifest), so the encoding is
             // transparent there.
@@ -367,7 +375,7 @@ class LocalStreamProxy(
         val chunkStart = rangeStart
         val totalCap = if (info.contentLength > 0) info.contentLength - 1 else Long.MAX_VALUE
         // Open-ended requests ("bytes=X-" or no Range at all) get a chunk end of
-        // our choosing; a known total caps it at the last byte of the stream.
+        // the proxy's choosing; a known total caps it at the last byte of the stream.
         val openEnded = !fromSeg && requestLength == LENGTH_UNSET
         // A known total caps every request at the last byte of the stream: a
         // stale segment index must not promise bytes the upstream will never
@@ -441,7 +449,7 @@ class LocalStreamProxy(
                                     catch (_: Throwable) { text(Response.Status.FORBIDDEN, "Recovery exhausted") }
                                 }
                             }
-                            Log.w(TAG, "stream retry failed", t)
+                            AppLog.event(AppLog.Category.CAST, "proxy_retry_failed", mapOf("itag" to info.itag, "range_start" to chunkStart), t, context = info.diagnostic)
                             text(Response.Status.INTERNAL_ERROR, "Proxy error")
                         }
                     }
@@ -478,7 +486,7 @@ class LocalStreamProxy(
                     catch (_: Throwable) { text(Response.Status.FORBIDDEN, "Recovery exhausted") }
                 }
             }
-            Log.w(TAG, "stream fetch failed", t)
+            AppLog.event(AppLog.Category.CAST, "proxy_fetch_failed", mapOf("itag" to info.itag, "range_start" to chunkStart), t, context = info.diagnostic)
             text(Response.Status.INTERNAL_ERROR, "Proxy error")
         }
     }
@@ -509,11 +517,11 @@ class LocalStreamProxy(
             .setUri(info.youtubeUrl.toUri())
             .setPosition(chunkStart)
         if (!upstreamUnbounded) specBuilder.setLength(servedLength)
-        val source = (info.requestPlan?.let { plan ->
+        val source = DiagnosticDataSource((info.requestPlan?.let { plan ->
             YoutubeHttpDataSource.Factory(httpClient, plan.userAgent)
                 .setMediaRequests(mediaRequests, mediaRequests?.plan(info.youtubeUrl) ?: plan)
                 .setRangeParameterEnabled(true)
-        } ?: dataSourceFactory).createDataSource()
+        } ?: dataSourceFactory).createDataSource(), info.diagnostic, category = AppLog.Category.CAST)
         val resolved = source.open(specBuilder.build())
         if (upstreamUnbounded) {
             if (resolved == 0L) {
@@ -613,7 +621,7 @@ class LocalStreamProxy(
     private fun text(status: Response.Status, body: String): Response =
         newFixedLengthResponse(status, "text/plain", body)
 
-    private fun readFully(source: YoutubeHttpDataSource, max: Int): ByteArray {
+    private fun readFully(source: androidx.media3.datasource.DataSource, max: Int): ByteArray {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(8192)
         var total = 0
@@ -630,7 +638,7 @@ class LocalStreamProxy(
     }
 
     private class DataSourceStream(
-        private val source: YoutubeHttpDataSource,
+        private val source: androidx.media3.datasource.DataSource,
         private val length: Long,
     ) : InputStream() {
         private var remaining = length
@@ -709,9 +717,9 @@ class LocalStreamProxy(
             requestGeneration != null && requestGeneration == configId
 
         /**
-         * Chromecast receivers stall on large 200 OK bodies, so they stay on
-         * the small default chunk. Browser link-cast needs bigger slices —
-         * 256 KiB round-trips through the phone underrun ("play, stall, play").
+         * Cast receivers stall on large 200 OK bodies, so they keep the small
+         * default chunk. Browser link-cast uses larger slices; 256 KiB
+         * round-trips through the phone cause playback underruns.
          */
         internal fun chunkMaxBytes(ua: String?): Int =
             if (isReceiverUa(ua)) DEFAULT_CHUNK else LINK_PEER_CHUNK
@@ -777,10 +785,9 @@ class LocalStreamProxy(
         }
 
         /**
-         * LAN IPv4 for bind, or null when no usable LAN address exists. There
-         * is deliberately NO loopback fallback: a 127.0.0.1-advertised URL is
-         * unreachable from the receiver, so the caller (CastController)
-         * refuses link-cast instead of handing out a dead URL.
+         * LAN IPv4 used for bind, or null when no usable LAN address exists.
+         * Loopback is not a fallback: a 127.0.0.1 URL is unreachable from the
+         * receiver, so the caller refuses link-cast instead of advertising it.
          */
         fun resolveBindHost(context: Context): String? =
             detectLanIp(context).takeIf { it != LOOPBACK }

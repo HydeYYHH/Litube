@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,13 +20,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
@@ -178,10 +179,10 @@ internal fun QueueSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.Center)
-                    .padding(horizontal = 40.dp),
-                textAlign = TextAlign.Center,
+                    .padding(start = 8.dp, end = 48.dp),
+                textAlign = TextAlign.Start,
                 fontSize = SettingsTokens.TitleSize.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Icon(
@@ -190,10 +191,10 @@ internal fun QueueSheet(
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .size(36.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onClose)
-                    .padding(7.dp),
+                    .padding(12.dp),
             )
         }
         Row(
@@ -235,23 +236,17 @@ internal fun QueueSheet(
             Switch(
                 checked = enabled,
                 onCheckedChange = onEnabled,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = PlayerUi.YtRed,
-                    checkedThumbColor = Color.White,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
-                ),
             )
         }
         if (confirmClear) {
             AlertDialog(
                 onDismissRequest = { confirmClear = false },
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 title = {
                     Text(
                         stringResource(R.string.clear_queue),
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.Medium,
                     )
                 },
                 text = {
@@ -270,7 +265,7 @@ internal fun QueueSheet(
                 },
                 dismissButton = {
                     TextButton(onClick = { confirmClear = false }) {
-                        Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )
@@ -378,112 +373,118 @@ private fun DraggableQueueRow(
     // leaves the up unconsumed and the inner clickable sees a tap. Guard on
     // drag-end recency instead of relying on consumption semantics.
     var lastDragEndAt by remember { mutableLongStateOf(0L) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .onSizeChanged { rowHeightPx = it.height.toFloat().coerceAtLeast(1f) }
-            .background(if (dragging) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
-            .pointerInput(item.videoId) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = {
-                        dragging = true
-                        dragRemainderPx = 0f
-                        onDragStarted()
-                    },
-                    onDragEnd = {
-                        dragging = false
-                        lastDragEndAt = SystemClock.uptimeMillis()
-                        onDragEnd()
-                    },
-                    onDragCancel = {
-                        dragging = false
-                        lastDragEndAt = SystemClock.uptimeMillis()
-                        onDragEnd()
-                    },
-                ) { change, amount ->
-                    change.consume()
-                    // Pointer Y in the list's item-offset space: the row's
-                    // viewport offset plus the local hit position. Feeds the
-                    // sheet's edge auto-scroll loop.
-                    val rowInfo = listState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.key == item.videoId }
-                    onDragPointer(
-                        if (rowInfo != null) rowInfo.offset + change.position.y else Float.NaN,
-                    )
-                    dragRemainderPx += amount.y
-                    val rows = (dragRemainderPx / rowHeightPx).toInt()
-                    if (rows != 0) {
-                        dragRemainderPx -= rows * rowHeightPx
-                        onDrag(rows)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val thumbnailWidth = (maxWidth * .24f).coerceIn(72.dp, 112.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { rowHeightPx = it.height.toFloat().coerceAtLeast(1f) }
+                .background(when {
+                    dragging -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    current -> MaterialTheme.colorScheme.surfaceVariant
+                    else -> Color.Transparent
+                })
+                .pointerInput(item.videoId) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            dragging = true
+                            dragRemainderPx = 0f
+                            onDragStarted()
+                        },
+                        onDragEnd = {
+                            dragging = false
+                            lastDragEndAt = SystemClock.uptimeMillis()
+                            onDragEnd()
+                        },
+                        onDragCancel = {
+                            dragging = false
+                            lastDragEndAt = SystemClock.uptimeMillis()
+                            onDragEnd()
+                        },
+                    ) { change, amount ->
+                        change.consume()
+                        // Pointer Y in the list's item-offset space: the row's
+                        // viewport offset plus the local hit position. Feeds the
+                        // sheet's edge auto-scroll loop.
+                        val rowInfo = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.key == item.videoId }
+                        onDragPointer(
+                            if (rowInfo != null) rowInfo.offset + change.position.y else Float.NaN,
+                        )
+                        dragRemainderPx += amount.y
+                        val rows = (dragRemainderPx / rowHeightPx).toInt()
+                        if (rows != 0) {
+                            dragRemainderPx -= rows * rowHeightPx
+                            onDrag(rows)
+                        }
                     }
                 }
-            }
-            .clickable(onClick = {
-                if (SystemClock.uptimeMillis() - lastDragEndAt >= GestureMath.TAP_SUPPRESS_MS) onItem()
-            })
-            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        QueueThumbnail(item.thumbnailUrl)
-        Column(Modifier.weight(1f)) {
-            if (current) {
+                .clickable(onClick = {
+                    if (SystemClock.uptimeMillis() - lastDragEndAt >= GestureMath.TAP_SUPPRESS_MS) onItem()
+                })
+                .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            QueueThumbnail(item.thumbnailUrl, thumbnailWidth)
+            Column(Modifier.weight(1f)) {
+                if (current) {
+                    Text(
+                        text = stringResource(R.string.queue_now_playing),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = PlayerUi.YtRed,
+                    )
+                }
                 Text(
-                    text = stringResource(R.string.queue_now_playing),
-                    fontSize = 10.sp,
+                    text = item.title.ifBlank { item.videoId },
                     fontWeight = FontWeight.Normal,
-                    color = PlayerUi.YtRed,
-                    letterSpacing = 0.8.sp,
-                )
-            }
-            Text(
-                text = item.title.ifBlank { item.videoId },
-                fontWeight = FontWeight.Normal,
-                color = if (current) PlayerUi.YtRed else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            item.author?.let {
-                Text(
-                    it,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                item.author?.let {
+                    Text(
+                        it,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            Icon(
+                painter = painterResource(R.drawable.ic_download),
+                contentDescription = stringResource(R.string.download),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDownload)
+                    .padding(8.dp),
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_close),
+                contentDescription = stringResource(R.string.queue_remove),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onRemove)
+                    .padding(8.dp),
+            )
         }
-        Icon(
-            painter = painterResource(R.drawable.ic_download),
-            contentDescription = stringResource(R.string.download),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onDownload)
-                .padding(6.dp),
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_close),
-            contentDescription = stringResource(R.string.queue_remove),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onRemove)
-                .padding(6.dp),
-        )
     }
 }
 
 /** Small async thumbnail; falls back to a play icon. */
 @Composable
-private fun QueueThumbnail(url: String?) {
+private fun QueueThumbnail(url: String?, width: Dp) {
     YoutubeThumb(
         url = url,
         modifier = Modifier
-            .size(width = 64.dp, height = 36.dp)
-            .clip(RoundedCornerShape(4.dp)),
+            .size(width = width, height = width * 9f / 16f)
+            .clip(RoundedCornerShape(8.dp)),
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_play),

@@ -1,12 +1,14 @@
 package com.hhst.youtubelite.extension
 
 import android.util.Log
+import com.hhst.youtubelite.diagnostics.AppLog
 
 /** MMKV-backed toggle store under the `preferences:` prefix. */
 class ExtensionManager(private val store: PrefStore) {
 
     init {
         seedDefaults()
+        AppLog.registerSnapshot("controlled_settings") { allPreferences() + mapOf("haptic_strength" to hapticStrength()) }
     }
 
     private val listeners = mutableListOf<(String) -> Unit>()
@@ -27,7 +29,7 @@ class ExtensionManager(private val store: PrefStore) {
         val toCall = synchronized(listeners) { listeners.toList() }
         toCall.forEach {
             runCatching { it(key) }
-                .onFailure { Log.w(TAG, "preference listener failed key=$key", it) }
+                .onFailure { AppLog.event(AppLog.Category.EXTENSION, "preference_listener_failed", mapOf("key" to key.takeIf { it in PreferenceKeys.DEFAULTS || it == "*" }), it) }
         }
     }
 
@@ -43,6 +45,7 @@ class ExtensionManager(private val store: PrefStore) {
         val previous = if (store.contains(pref)) store.getBool(pref, default) else default
         store.putBool(pref, enabled)
         if (previous != enabled) {
+            if (key in PreferenceKeys.DEFAULTS) AppLog.event(AppLog.Category.EXTENSION, "preference_changed", mapOf("key" to key, "before" to previous, "after" to enabled))
             bumpVersion()
             notifyChanged(key)
         }
@@ -60,6 +63,7 @@ class ExtensionManager(private val store: PrefStore) {
             store.putBool(pref, value)
         }
         if (changedKeys.isNotEmpty()) {
+            AppLog.event(AppLog.Category.EXTENSION, "preferences_reset", mapOf("changed_keys" to changedKeys, "changed_count" to changedKeys.size))
             bumpVersion()
             notifyChanged("*")
         }
@@ -68,12 +72,36 @@ class ExtensionManager(private val store: PrefStore) {
     fun allPreferences(): Map<String, Boolean> =
         PreferenceKeys.DEFAULTS.keys.associateWith { isEnabled(it) }
 
+    fun importPreferences(values: Map<String, Boolean>, haptic: Int?) {
+        val changedKeys = mutableListOf<String>()
+        if (haptic != null) {
+            val next = haptic.coerceIn(0, 100)
+            if (next != hapticStrength()) changedKeys += PreferenceKeys.HAPTIC_STRENGTH
+            store.putLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), next.toLong())
+        }
+        for ((key, value) in values) {
+            if (key !in PreferenceKeys.DEFAULTS) continue
+            val pref = prefKey(key)
+            if (!store.contains(pref) || store.getBool(pref, value) != value) {
+                changedKeys += key
+            }
+            store.putBool(pref, value)
+        }
+        if (changedKeys.isNotEmpty()) {
+            AppLog.event(AppLog.Category.EXTENSION, "preferences_imported", mapOf("changed_keys" to changedKeys, "changed_count" to changedKeys.size))
+            bumpVersion()
+            notifyChanged("*")
+        }
+    }
+
     fun hapticStrength(): Int = store.getLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), 30L).coerceIn(0, 100).toInt()
 
     fun setHapticStrength(value: Int) {
         val next = value.coerceIn(0, 100)
         if (next == hapticStrength()) return
+        val previous = hapticStrength()
         store.putLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), next.toLong())
+        AppLog.event(AppLog.Category.EXTENSION, "preference_changed", mapOf("key" to PreferenceKeys.HAPTIC_STRENGTH, "before" to previous, "after" to next))
         bumpVersion()
         notifyChanged(PreferenceKeys.HAPTIC_STRENGTH)
     }

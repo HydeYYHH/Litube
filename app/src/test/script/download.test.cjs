@@ -320,14 +320,15 @@ test('watch page injects download, queue, and open with before the native chip, 
   );
 });
 
-test('entries carry the native chip svg with the own glyph and the localized label', () => {
+test('entries own one glyph and an accessible localized button without native renderers', () => {
   const { row } = page();
   const download = row.querySelector('#downloadButton');
   assert.equal(download.querySelector('path').attrs.d.startsWith('M480-320'), true);
-  // Icon-only entries: the label lives in aria-labels, the text hosts are
-  // blanked so no template residue (like counts) survives.
+  // Icon-only entries never import native text or view-model lifecycle.
   assert.equal(download.getAttribute('aria-label'), 'Download');
-  assert.equal(download.querySelector('.ytSpecButtonShapeNextButtonTextContent').textContent, '');
+  assert.equal(download.querySelector('.ytSpecButtonShapeNextButtonTextContent'), null);
+  assert.equal(download.querySelector('button').getAttribute('aria-label'), 'Download');
+  assert.equal(download.querySelector('button-view-model,c3-icon'), null);
   assert.equal(row.querySelector('#queueButton').getAttribute('aria-label'), 'Add to queue');
   assert.equal(row.querySelector('#openWithButton').getAttribute('aria-label'), 'Open with');
   // Squeezing bars collapse entries below icon size, overlapping glyphs.
@@ -342,15 +343,14 @@ test('stable rows are not rewritten: repeated passes keep the same nodes', () =>
   assert.deepEqual([...row.children], before);
 });
 
-test('a chip without a template svg grows the glyph into the icon host', () => {
+test('entries render before the native chip SVG hydrates', () => {
   const { row } = page({ withSvg: false });
   assert.deepEqual(
     ids(row),
     ['img', 'ytm-subscribe-button-renderer',
       'downloadButton', 'queueButton', 'openWithButton', 'button-view-model'],
   );
-  const host = row.querySelector('#downloadButton')
-    .querySelector('.ytSpecButtonShapeNextIcon');
+  const host = row.querySelector('#downloadButton').querySelector('button');
   assert.equal(host.querySelector('path').attrs.d.startsWith('M480-320'), true);
 });
 
@@ -389,7 +389,7 @@ test('live pages swap the three entries for the chat entry', () => {
   );
 });
 
-test('a bar with only nested hosts clones the dislike entry and follows it', () => {
+test('a bar with only vote renderers keeps them intact and inserts independent actions after dislike', () => {
   const { row, dislike } = page({ nestedOnly: true });
   assert.deepEqual(ids(row), [
     'img', 'like-button-view-model', 'dislike-button-view-model',
@@ -399,13 +399,13 @@ test('a bar with only nested hosts clones the dislike entry and follows it', () 
   assert.equal(glyph.attrs.d.startsWith('M480-320'), true);
   assert.equal(row.querySelector('#downloadButton').querySelector('c3-icon'), null);
   assert.ok(dislike.querySelector('c3-icon').shadowRoot.querySelector('svg'));
-  // The dislike entry's rolling digits are blanked; the label is aria-only.
+  // Native rolling digits never enter the independent actions.
   const download = row.querySelector('#downloadButton');
   assert.equal(download.getAttribute('aria-label'), 'Download');
-  assert.equal(download.querySelector('.ytAttributedStringHost').textContent, '');
+  assert.equal(download.querySelector('.ytAttributedStringHost'), null);
 });
 
-test('cloned actions remove the injected vote label without changing the original dislike', () => {
+test('independent actions never copy vote labels or change the original dislike', () => {
   const { row, dislike } = page({ nestedOnly: true, withVoteCount: true });
   assert.equal(dislike.querySelector('[data-lite-vote-count]').textContent, '128');
   for (const id of ['downloadButton', 'queueButton', 'openWithButton']) {
@@ -414,15 +414,15 @@ test('cloned actions remove the injected vote label without changing the origina
   }
 });
 
-test('a c3-icon is replaced in its slot without leaving a blank icon beside the glyph', () => {
+test('native c3-icon hydration cannot replace or duplicate independent action glyphs', () => {
   for (const c3State of ['loading', 'ready']) {
     const { context, row, chip } = page({ c3State });
     for (const id of ['downloadButton', 'queueButton', 'openWithButton']) {
       const entry = row.querySelector('#' + id);
-      const slot = entry.querySelector('.ytSpecButtonShapeNextIcon');
+      const slot = entry.querySelector('button');
       assert.equal(slot.children.length, 1);
       assert.equal(entry.querySelector('c3-icon'), null);
-      assert.equal(slot.children[0].querySelectorAll('svg').length, 1);
+      assert.equal(slot.children[0].tagName, 'SVG');
       assert.equal(entry.querySelectorAll('svg').length, 1);
     }
     // The native source keeps its own lifecycle; a late render there must

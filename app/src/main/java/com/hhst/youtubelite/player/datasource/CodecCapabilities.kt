@@ -7,7 +7,7 @@ import com.hhst.youtubelite.extractor.Format
 /**
  * Device decoder capabilities applied to the format pool before selection.
  *
- * YouTube's highest-bitrate formats increasingly use AV1 (itags 398–401);
+ * The highest-bitrate formats increasingly use AV1 (itags 398–401);
  * most mid-range devices have no AV1 hardware decoder, and Media3's software
  * fallback (libgav1) drops frames well below real-time at 1080p60. An
  * undecodable pick is worse than a lower-resolution one, so AV1 is kept only

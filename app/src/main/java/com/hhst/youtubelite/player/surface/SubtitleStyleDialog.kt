@@ -27,13 +27,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
+import com.hhst.youtubelite.ui.components.YoutubeSlider as Slider
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.ui.theme.YoutubeStyle
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 /** Coalescing window for style pushes while the user drags a control. */
@@ -102,8 +102,8 @@ internal fun SubtitleStyleDialog(
         onDispose { onChange(draft) }
     }
     val sliderColors = SliderDefaults.colors(
-        thumbColor = PlayerUi.YtRed,
-        activeTrackColor = PlayerUi.YtRed,
+        thumbColor = YoutubeStyle.Action,
+        activeTrackColor = YoutubeStyle.Action,
         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
     )
     PlayerModalSheet(onDismiss = onDismiss, fullscreen = fullscreen) {
@@ -118,9 +118,9 @@ internal fun SubtitleStyleDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 fontSize = SettingsTokens.TitleSize.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             SubtitlePositionPreview(
@@ -134,7 +134,7 @@ internal fun SubtitleStyleDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 6.dp, bottom = 4.dp),
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -169,12 +169,6 @@ internal fun SubtitleStyleDialog(
                 Switch(
                     checked = draft.bold,
                     onCheckedChange = { checked -> edit { it.copy(bold = checked) } },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = PlayerUi.YtRed,
-                        checkedThumbColor = Color.White,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        uncheckedBorderColor = MaterialTheme.colorScheme.outline,
-                    ),
                 )
             }
             ColorPicker(
@@ -189,10 +183,10 @@ internal fun SubtitleStyleDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = { push(SubtitleStyle()) }) {
-                    Text(stringResource(R.string.reset), color = PlayerUi.YtRed)
+                    Text(stringResource(R.string.reset))
                 }
                 TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.close))
                 }
             }
         }
@@ -464,7 +458,7 @@ private fun HueBar(
     }
 }
 
-/** Label + equal-width chips; the selected chip is red-highlighted. */
+/** Label and filled selection chips. */
 @Composable
 private fun <T> StyleOptionRow(
     label: String,
@@ -497,17 +491,18 @@ private fun <T> StyleOptionRow(
                         )
                     },
                     modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = PlayerUi.YtRed.copy(alpha = 0.16f),
-                        selectedLabelColor = PlayerUi.YtRed,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedContainerColor = MaterialTheme.colorScheme.onSurface,
+                        selectedLabelColor = MaterialTheme.colorScheme.surface,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        labelColor = MaterialTheme.colorScheme.onSurface,
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = isSelected,
                         borderColor = Color.Transparent,
-                        selectedBorderColor = PlayerUi.YtRed.copy(alpha = 0.4f),
+                        selectedBorderColor = Color.Transparent,
                     ),
                 )
             }

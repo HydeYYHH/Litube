@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.core
 
 import android.util.Log
+import com.hhst.youtubelite.diagnostics.AppLog
 import com.google.gson.Gson
 import com.tencent.mmkv.MMKV
 
@@ -24,20 +25,21 @@ class MmkvJsonCache(
             if (entry.until <= System.currentTimeMillis()) {
                 // Expired entries must actually go — progress keys would
                 // otherwise accumulate one dead entry per watched video.
-                Log.d(TAG, "expired key=$key")
+                AppLog.detail(AppLog.Category.STORAGE, "cache_expired", mapOf("namespace" to key.substringBefore(':').take(32)))
                 kv.removeValueForKey(key)
                 return null
             }
             gson.fromJson(entry.json, type)?.let { it to entry.until }
         } catch (e: RuntimeException) {
-            Log.w(TAG, "decode failed key=$key type=${type.simpleName}", e)
+            AppLog.event(AppLog.Category.STORAGE, "cache_corrupt", mapOf("namespace" to key.substringBefore(':').take(32), "value_type" to type.simpleName), e)
             null
         }
     }
 
     override fun put(key: String, value: Any, ttlMs: Long) {
         val entry = Entry(System.currentTimeMillis() + ttlMs, gson.toJson(value))
-        kv.encode(key, gson.toJson(entry))
+        if (!kv.encode(key, gson.toJson(entry))) AppLog.event(AppLog.Category.STORAGE, "cache_write_failed",
+            mapOf("namespace" to key.substringBefore(':').take(32), "cache_file_bytes" to kv.actualSize()), critical = true)
     }
 
     override fun invalidate(key: String) {

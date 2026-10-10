@@ -27,7 +27,7 @@ object StreamSelection {
                 // Then highest not exceeding target.
                 best.firstOrNull { it.height <= targetHeight }?.let { return it }
                 // All above the target: take the smallest step up, not the
-                // pool's top — YouTube never jumps a "360p" pick to 1080p.
+                // pool's top — a 360p pick never jumps to 1080p.
                 best.lastOrNull { it.height > targetHeight }?.let { return it }
             }
         }
@@ -43,10 +43,11 @@ object StreamSelection {
     fun selectAudio(formats: List<Format>, preferredKey: String? = null): Format? {
         if (formats.isEmpty()) return null
         if (preferredKey != null) {
-            formats.firstOrNull { AudioTrackIdentity.matches(it, preferredKey) }
+            val matching = formats.filter { AudioTrackIdentity.matches(it, preferredKey) }
+            matching.filter(AudioTrackIdentity::isOriginal).ifEmpty { matching }.maxByOrNull { it.bitrate }
                 ?.let { return it }
         }
-        val original = formats.filter { it.audioTrackOriginal }
+        val original = formats.filter(AudioTrackIdentity::isOriginal)
         return (original.ifEmpty { formats }).maxByOrNull { it.bitrate }
     }
 

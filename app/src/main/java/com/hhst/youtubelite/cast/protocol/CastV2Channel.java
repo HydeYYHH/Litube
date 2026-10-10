@@ -2,6 +2,8 @@
 // Copyright (c) 2020-present yuliskov. See assets/licenses/newtube-MIT.txt.
 package com.hhst.youtubelite.cast.protocol;
 
+import com.hhst.youtubelite.diagnostics.CastDiagnosticTrace;
+
 import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
@@ -49,6 +51,8 @@ import org.json.JSONObject;
  * event; late messages after the terminal state are dropped silently.</p>
  */
 public class CastV2Channel {
+    private volatile CastDiagnosticTrace mDiagnostics = new CastDiagnosticTrace();
+    public void setDiagnostics(CastDiagnosticTrace diagnostics) { mDiagnostics = diagnostics; }
     public interface Authenticator {
         void authenticate(SSLSocket socket, InputStream input, OutputStream output) throws Exception;
     }
@@ -70,7 +74,7 @@ public class CastV2Channel {
 
     private static final String TAG = CastV2Channel.class.getSimpleName();
 
-    /** Our sender id on every message; receivers address replies to it. */
+    /** Sender id on every outbound message; receivers address replies to it. */
     public static final String SENDER_ID = "sender-0";
     /** The platform receiver - the always-on destination for receiver-namespace commands. */
     public static final String RECEIVER_ID = "receiver-0";
@@ -78,7 +82,7 @@ public class CastV2Channel {
     public static final String NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection";
     public static final String NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat";
 
-    /** Chromecasts answer within a LAN RTT; a longer wait just stalls the picker on a dead IP. */
+    /** Cast receivers answer within one LAN round trip. A longer timeout only delays the picker for an unreachable address. */
     private static final int CONNECT_TIMEOUT_MS = 7_000;
     private static final long HEARTBEAT_INTERVAL_MS = 5_000;
     /** No inbound traffic for this long = the receiver is gone (3 missed heartbeat rounds). */
@@ -98,7 +102,7 @@ public class CastV2Channel {
         return thread;
     });
 
-    /** Destinations we sent CONNECT to; CLOSE goes to each of them on teardown. */
+    /** Destinations that received CONNECT; CLOSE goes to each of them on teardown. */
     private final Set<String> mConnectedDestinations = ConcurrentHashMap.newKeySet();
 
     /** Terminal-state latch: set by exactly one of fail()/doClose(); gates all callbacks + sends. */
@@ -148,15 +152,19 @@ public class CastV2Channel {
             return;
         }
         try {
+            mDiagnostics.phase("channel_connect_started");
             SSLSocket socket = (SSLSocket) provisionalSocketFactory().createSocket();
             mSocket = socket;
             socket.setSoTimeout(CONNECT_TIMEOUT_MS);
             socket.connect(new InetSocketAddress(mHost, mPort), CONNECT_TIMEOUT_MS);
+            mDiagnostics.phase("channel_tls_started");
             socket.startHandshake();
             mSocket = socket;
             mIn = new BufferedInputStream(socket.getInputStream());
             mOut = new BufferedOutputStream(socket.getOutputStream());
+            mDiagnostics.phase("device_auth_started");
             mAuthenticator.authenticate(socket, mIn, mOut);
+            mDiagnostics.phase("device_auth_succeeded");
             socket.setSoTimeout(0);
             mLastInboundMs = SystemClock.elapsedRealtime();
             mOpened = true;
@@ -169,11 +177,12 @@ public class CastV2Channel {
             mHeartbeat = mWriter.scheduleWithFixedDelay(this::heartbeatTick,
                     HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS);
 
-            Log.d(TAG, "Channel open to " + mHost + ":" + mPort);
+            mDiagnostics.phase("channel_opened");
             if (!mTerminated.get()) {
                 dispatch(mListener::onOpened);
             }
         } catch (Exception e) {
+            mDiagnostics.error("channel_connect_or_auth_failed", e);
             fail("Connect to " + mHost + ":" + mPort + " failed: " + e);
         }
     }
@@ -229,6 +238,7 @@ public class CastV2Channel {
             CastMessageCodec.writeFramed(out, CastMessage.utf8(sourceId, destinationId, namespace, jsonPayload));
             out.flush();
         } catch (Exception e) {
+            mDiagnostics.error("channel_send_failed", e);
             fail("Send failed: " + e);
         }
     }
@@ -256,12 +266,13 @@ public class CastV2Channel {
         } catch (Exception e) {
             // Socket teardown from close() lands here as an exception - only report real deaths.
             if (!mTerminated.get()) {
+                mDiagnostics.error("channel_read_failed", e);
                 fail("Read failed: " + e);
             }
         }
     }
 
-    /** Answer inbound PING with PONG (some receivers probe the sender); PONGs just count as traffic. */
+    /** Reply to an inbound PING with PONG. Some receivers probe the sender. An inbound PONG only counts as traffic. */
     private void handleHeartbeat(CastMessage message) {
         try {
             JSONObject payload = new JSONObject(message.getPayloadUtf8() != null ? message.getPayloadUtf8() : "{}");
@@ -269,16 +280,17 @@ public class CastV2Channel {
                 send(SENDER_ID, message.getSourceId(), NS_HEARTBEAT, "{\"type\":\"PONG\"}");
             }
         } catch (Exception e) {
-            Log.d(TAG, "Ignoring malformed heartbeat: " + e);
+            mDiagnostics.error("heartbeat_malformed", e);
         }
     }
 
-    /** Writer thread, every 5s: liveness check first, then our own PING. */
+    /** Writer thread, every 5s: liveness check first, then an outbound PING. */
     private void heartbeatTick() {
         if (mTerminated.get()) {
             return;
         }
         if (SystemClock.elapsedRealtime() - mLastInboundMs > HEARTBEAT_TIMEOUT_MS) {
+            mDiagnostics.error("heartbeat_timeout", null);
             fail("Heartbeat timeout (no traffic for " + HEARTBEAT_TIMEOUT_MS + "ms)");
             return;
         }
@@ -327,7 +339,7 @@ public class CastV2Channel {
         if (!mTerminated.compareAndSet(false, true)) {
             return;
         }
-        Log.e(TAG, "Channel error: " + reason);
+        mDiagnostics.error("channel_failed", null);
         dispatch(() -> mListener.onError(reason));
         teardown();
     }
@@ -356,12 +368,11 @@ public class CastV2Channel {
     // Helpers
     // ---------------------------------------------------------------------------------
 
-    /** Queue on the writer; a rejected task after shutdown just means we're already terminated. */
+    /** Queue on the writer. Rejection after shutdown means the channel has already terminated. */
     private void execute(Runnable task) {
         try {
             mWriter.execute(task);
         } catch (RejectedExecutionException e) {
-            Log.d(TAG, "Channel already shut down, dropping task");
         }
     }
 
@@ -370,7 +381,7 @@ public class CastV2Channel {
         try {
             callback.run();
         } catch (Exception e) {
-            Log.e(TAG, "Listener callback failed: " + e);
+            mDiagnostics.error("channel_listener_failed", e);
         }
     }
 }

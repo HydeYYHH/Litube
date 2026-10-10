@@ -10,9 +10,9 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.TimeUnit
 
-/** Live extraction against YouTube; opt-in via YTL_NETWORK_TESTS=1.
+/** Live extraction against the media host; opt-in via YTL_NETWORK_TESTS=1.
  *
- * These tests hit real YouTube endpoints, which block datacenter/VPN egress
+ * These tests hit real media endpoints, which block datacenter/VPN egress
  * in ways a connectivity probe cannot see (NewPipe then fails on consent
  * pages or redirect loops). They are skipped unless explicitly enabled so a
  * hostile network cannot fail an otherwise-green CI run.

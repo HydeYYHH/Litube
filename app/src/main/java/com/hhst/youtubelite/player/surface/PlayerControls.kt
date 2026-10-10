@@ -32,7 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -51,6 +51,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -123,7 +124,7 @@ fun PlayerIconButton(
     }
 }
 
-/** Top: back + title/author + queue / segments / CC / loop / cast / more. */
+/** Top: back + title/author + queue / segments / loop / cast / CC / settings. */
 @Composable
 fun TopBar(
     state: PlayerUiState,
@@ -149,7 +150,7 @@ fun TopBar(
             state.casting || state.castDevices.isNotEmpty())
         Row(
             modifier = Modifier.fillMaxWidth()
-                .padding(start = 2.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
+                .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PlayerIconButton(
@@ -205,6 +206,26 @@ fun TopBar(
                         }
                     }
                 }
+                if (!compact) {
+                    PlayerIconButton(
+                        icon = PlayerUi.loopIcon(state.loopMode),
+                        contentDescription = loopDescription(state.loopMode),
+                        onClick = onLoop,
+                        iconSize = sizing.iconDp,
+                        tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
+                    )
+                    // Show the cast control only when a route exists or a session is
+                    // active. Users without a receiver do not get a permanent button.
+                    if (state.casting || state.castDevices.isNotEmpty()) {
+                        PlayerIconButton(
+                            icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
+                            contentDescription = stringResource(R.string.cast),
+                            onClick = onCast,
+                            iconSize = sizing.iconDp,
+                            tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
+                        )
+                    }
+                }
                 Box {
                     PlayerIconButton(
                         icon = if (state.subtitleEnabled) {
@@ -214,6 +235,7 @@ fun TopBar(
                         },
                         contentDescription = stringResource(R.string.subtitles),
                         onClick = onSubtitle,
+                        modifier = Modifier.width(40.dp),
                         iconSize = sizing.iconDp,
                         onLongClick = onSubtitleStyle,
                         tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
@@ -232,32 +254,13 @@ fun TopBar(
                         )
                     }
                 }
-                if (!compact) {
-                    PlayerIconButton(
-                        icon = PlayerUi.loopIcon(state.loopMode),
-                        contentDescription = loopDescription(state.loopMode),
-                        onClick = onLoop,
-                        iconSize = sizing.iconDp,
-                        tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
-                    )
-                    // Cast shortcut: only once a route exists or a session is live —
-                    // a permanent cast button is noise for device-less users.
-                    if (state.casting || state.castDevices.isNotEmpty()) {
-                        PlayerIconButton(
-                            icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
-                            contentDescription = stringResource(R.string.cast),
-                            onClick = onCast,
-                            iconSize = sizing.iconDp,
-                            tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
-                        )
-                    }
-                }
                 Box {
                     PlayerIconButton(
-                        icon = R.drawable.ic_more,
+                        icon = R.drawable.ic_settings,
                         contentDescription = stringResource(R.string.more_options),
                         onClick = onMore,
-                        iconSize = sizing.iconDp,
+                        modifier = Modifier.width(40.dp),
+                        iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
                     )
                     val overflowMenu = (compact && menu == PlayerAnchorMenu.Segments) ||
                         (compactBottom && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality))
@@ -284,6 +287,8 @@ fun CenterControls(
     onPrevious: () -> Unit = {},
     onNext: () -> Unit = {},
     iconSize: Int = PlayerUi.CHROME_ICON_DP,
+    skipSizeDp: Int = 48,
+    gapDp: Int = 12,
 ) {
     Row(
         modifier = modifier,
@@ -295,17 +300,17 @@ fun CenterControls(
             contentDescription = stringResource(R.string.action_previous),
             onClick = onPrevious,
             enabled = state.hasPrevious,
-            modifier = Modifier.size(PlayerUi.CENTER_SKIP_DP.dp),
+            modifier = Modifier.size(skipSizeDp.dp),
             iconSize = iconSize,
         )
         Box(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = gapDp.dp)
                 .size(playSizeDp.dp)
                 .clip(CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = false, radius = 40.dp),
+                    indication = ripple(bounded = false, radius = (playSizeDp / 2).dp),
                     onClick = onPlayPause,
                 ),
             contentAlignment = Alignment.Center,
@@ -314,7 +319,7 @@ fun CenterControls(
                 CircularProgressIndicator(
                     color = Color.White,
                     strokeWidth = 3.dp,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(minOf(36, playSizeDp - 16).dp),
                 )
             } else {
                 val replay = state.ended && !state.isPlaying
@@ -334,7 +339,7 @@ fun CenterControls(
                         },
                     ),
                     tint = Color.White,
-                    modifier = Modifier.size(minOf(iconSize + 24, playSizeDp - 16).dp),
+                    modifier = Modifier.size((playSizeDp * 0.65f).dp),
                 )
             }
         }
@@ -343,7 +348,7 @@ fun CenterControls(
             contentDescription = stringResource(R.string.action_next),
             onClick = onNext,
             enabled = state.hasNext,
-            modifier = Modifier.size(PlayerUi.CENTER_SKIP_DP.dp),
+            modifier = Modifier.size(skipSizeDp.dp),
             iconSize = iconSize,
         )
     }
@@ -383,14 +388,19 @@ fun BottomBar(
             onSeek = onSeek,
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
             onCommit = { callbacks?.onTimeBarCommit() },
-            modifier = Modifier.offset(y = PlayerUi.TIME_BAR_OVERLAP_DP.dp),
+            // Keep the 48 dp seek target while sharing its lower half with the
+            // controls row. The visible track sits at the boundary of the row.
+            modifier = Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height / 2) { placeable.place(0, 0) }
+            },
         )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val wraps = !compact && compactBottomControls(state, maxWidth.value, sizing.textSp)
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(Modifier.heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp).align(Alignment.CenterVertically),
@@ -456,11 +466,11 @@ internal fun compactBottomControls(state: PlayerUiState, widthDp: Float,
     // Width probe: widen every digit to '8' (the widest) so the reservation covers any time value.
     val sample = if (state.isLive) "88:88:88" else PlayerUi.formatTime(state.durationMs)
         .map { if (it.isDigit()) '8' else it }.joinToString("").let { if (it.length < 5) "88:88" else it }
-    val speedWidth = maxOf(48f, width(PlayerUi.speedLabel(state.speed)) + 20)
+    val speedWidth = maxOf(48f, width(PlayerUi.speedLabel(state.speed)) + 12)
     val quality = PlayerUi.qualityButtonLabel(state.qualityLabel, state.activeQuality,
         stringResource(R.string.player_quality_auto), state.videoHeight)
-    val qualityWidth = maxOf(48f, width(quality) + 20)
-    return width("$sample / $duration") + speedWidth + qualityWidth + 48 + 24 > widthDp
+    val qualityWidth = maxOf(48f, width(quality) + 12)
+    return width("$sample / $duration") + speedWidth + qualityWidth + 48 + 16 > widthDp
 }
 
 /** Position / duration text, isolated so position ticks stay inside this leaf. */
@@ -536,7 +546,7 @@ private fun ChromeTextButton(
                 indication = ripple(bounded = true),
                 onClick = onClick,
             )
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

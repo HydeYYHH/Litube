@@ -5,10 +5,14 @@ import android.os.Looper
 import android.webkit.JavascriptInterface
 import com.google.gson.Gson
 import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
+import com.hhst.youtubelite.diagnostics.DiagnosticJsEvents
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.gallery.GalleryImages
+import com.hhst.youtubelite.ui.theme.YoutubeAppearance
 import java.util.concurrent.atomic.AtomicLong
 
 /** Player operations callable from injected page scripts. */
@@ -88,6 +92,7 @@ class Bridge(
     private val onShortsAutoplayBlocked: (String, String) -> Unit = { _, _ -> },
     private val isActive: () -> Boolean = { true },
     private val onGallery: (List<String>, Int) -> Unit = { _, _ -> },
+    private val onGoBack: () -> Unit = {},
 ) {
     /** Minimal shape the page's add-to-queue payload must have. */
     data class QueueItemJson(
@@ -99,10 +104,26 @@ class Bridge(
     )
     private val main = Handler(Looper.getMainLooper())
     private val documentGeneration = AtomicLong(0L)
+    @Volatile private var documentContext = DiagnosticContext(tabId = tabId, documentGeneration = 0)
+    fun diagnosticContext(): DiagnosticContext = documentContext
 
     /** Full document load (onPageStarted): stale callbacks from the previous document drop. */
     fun onDocumentStarted() {
+        AppLog.endContext(documentContext)
         documentGeneration.incrementAndGet()
+        documentContext = DiagnosticContext(tabId = tabId, documentGeneration = documentGeneration.get())
+    }
+
+    /** Only first-party, bounded event codes and typed safe fields cross this boundary. */
+    @JavascriptInterface fun diagnosticEvent(json: String?) {
+        val captured = documentContext
+        val report = DiagnosticJsEvents.parse(json, captured.documentGeneration ?: 0) ?: return
+        main.post {
+            if (captured != documentContext) {
+                AppLog.detail(AppLog.Category.BROWSER, "bridge_stale_document", mapOf("reason" to "document_replaced"), captured)
+            } else AppLog.event(AppLog.Category.BROWSER, "js.${report.code}", report.fields,
+                critical = report.failed, context = captured.copy(videoId = report.videoId))
+        }
     }
 
     fun pageOrigin(): PageOrigin = PageOrigin(tabId, documentGeneration.get())
@@ -115,9 +136,10 @@ class Bridge(
     @JavascriptInterface fun shortsAudioReady(url: String?) {
         if (url == null || !UrlPolicy.isAllowedUrl(url) || !PageKind.isShorts(url)) return
         val origin = pageOrigin()
+        val context = documentContext.copy(videoId = VideoId.parse(url))
         main.post { if (origin == pageOrigin() && isActive())
             AppLog.event(AppLog.Category.PLAYER,
-                "shorts_audio_ready", mapOf("tab" to tabId, "source_webview" to inheritShorts())) }
+                "shorts_audio_ready", mapOf("tab" to tabId, "source_webview" to inheritShorts()), context = context) }
     }
     @JavascriptInterface fun gallery(json: String?, index: Int) {
         if (json == null || json.length > 32768) return
@@ -135,6 +157,12 @@ class Bridge(
         if (!UrlPolicy.isAllowedUrl(url)) return
         if (PageKind.of(url) == "unknown") return
         main.post { onOpenTab(url) }
+    }
+
+    @JavascriptInterface
+    fun goBack() {
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin() && isActive()) onGoBack() }
     }
 
     @JavascriptInterface
@@ -161,6 +189,13 @@ class Bridge(
     @JavascriptInterface
     fun getPreferences(): String = gson.toJson(extensionManager.allPreferences())
 
+    @JavascriptInterface
+    fun setPageAppearance(url: String?, dark: Boolean) {
+        if (url == null || !UrlPolicy.shouldInject(url)) return
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin() && isActive()) YoutubeAppearance.update(dark) }
+    }
+
     // -- queue (media-item menu in player-hook.js) --
 
     @JavascriptInterface
@@ -172,6 +207,8 @@ class Bridge(
 
     @JavascriptInterface
     fun reportQueueAddFailed() {
+        val context = documentContext
+        AppLog.event(AppLog.Category.BROWSER, "bridge_queue_failed", mapOf("reason" to "invalid_or_missing_item"), critical = true, context = context)
         main.post { onAddToQueue?.invoke(null) }
     }
 
@@ -187,7 +224,7 @@ class Bridge(
         main.post { onShowMediaItemMenu?.invoke(item) }
     }
 
-    /** Watch URL + a title (falls back to the video id) is enough to queue. */
+    /** Requires a watch URL. Uses the provided title, otherwise the video id. */
     private fun parseQueueItem(itemJson: String?): QueueItemJson? {
         if (itemJson.isNullOrBlank()) return null
         val item = runCatching {
@@ -225,7 +262,13 @@ class Bridge(
     fun play(url: String?) {
         if (url == null || PageKind.isShorts(url) || mediaIdOf(url) == null) return
         val origin = pageOrigin()
-        main.post { if (origin == pageOrigin() && canPlay()) playerHooks?.playVideo(url, origin) }
+        val context = documentContext.copy(videoId = mediaIdOf(url))
+        main.post {
+            val operation = AppLog.operation(AppLog.Category.BROWSER, "bridge_play", context.child())
+            if (origin != pageOrigin() || !canPlay()) operation.finish(DiagnosticOutcome.SUPERSEDED, "stale_or_inactive_document")
+            else try { playerHooks?.playVideo(url, origin); operation.finish(DiagnosticOutcome.SUCCESS) }
+            catch (failure: Throwable) { operation.finish(DiagnosticOutcome.FAILURE, "bridge_dispatch_failed", failure); throw failure }
+        }
     }
 
     @JavascriptInterface

@@ -8,6 +8,30 @@ import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 class AdaptiveClientOrder(private val clock: () -> Long = System::currentTimeMillis) : ClientOrderPolicy {
     private data class Preferred(val profile: ClientProfile, val expires: Long)
     private val preferred = LinkedHashMap<String, Preferred>(16, .75f, true)
+    private data class Refused(val videoId: String, val identity: String, val profile: ClientProfile)
+    private val refused = LinkedHashMap<Refused, Long>()
+
+    /** A real media 403 changes order for this video only; every eligible fallback remains. */
+    @Synchronized
+    fun mediaForbidden(videoId: String, identity: String, profile: ClientProfile) {
+        refused.entries.removeAll { it.value <= clock() }
+        refused[Refused(videoId, identity, profile)] = clock() + 30_000
+        while (refused.size > 64) refused.remove(refused.keys.first())
+    }
+
+    /** Identity excludes extraction generations, so a deliberate refresh keeps its own evidence. */
+    fun forVideo(videoId: String, identity: String): ClientOrderPolicy = object : ClientOrderPolicy {
+        override fun order(context: ExtractionContext, defaults: List<ClientProfile>): List<ClientProfile> =
+            synchronized(this@AdaptiveClientOrder) {
+                refused.entries.removeAll { it.value <= clock() }
+                val ordered = this@AdaptiveClientOrder.order(context, defaults)
+                val (deferred, available) = ordered.partition { Refused(videoId, identity, it) in refused }
+                available + deferred
+            }
+
+        override fun succeeded(context: ExtractionContext, profile: ClientProfile) =
+            this@AdaptiveClientOrder.succeeded(context, profile)
+    }
 
     private fun scope(context: ExtractionContext) =
         "${context.session.scope()}:${context.catalog}:${context.live}:${context.playbackPriority}:${context.demand.cacheKey()}"

@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
+import android.os.Bundle
+import com.google.gson.Gson
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.C
@@ -20,6 +22,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleExtractor
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Metadata
@@ -39,6 +42,7 @@ class MediaSourceResolver(
     /** Player bandwidth estimate for the HLS start-variant order; null keeps the manifest order. */
     private val startupBandwidth: (() -> Long)? = null,
     private val startupVideoSupport: ((MediaFormat) -> Int)? = null,
+    private val diagnosticContext: DiagnosticContext? = null,
 ) {
     @Volatile private var startupParameters: (() -> TrackSelectionParameters)? = null
 
@@ -58,11 +62,13 @@ class MediaSourceResolver(
         val videoFormats: List<Format> = emptyList(),
     )
 
-    /** MediaItem metadata so the session player exposes title/author to the system media card. */
+    /** MediaItem metadata so the session player exposes title/author/artwork to the system media card. */
     private fun sessionMetadata(m: Metadata): MediaMetadata =
         MediaMetadata.Builder()
             .setTitle(m.title)
             .setArtist(m.author)
+            .setArtworkUri(m.thumbnailUrl?.toUri())
+            .setExtras(diagnosticContext?.let { diagnostic -> Bundle().apply { putString("litube.diagnostic_context", Gson().toJson(diagnostic)) } })
             .build()
 
     /**
@@ -77,7 +83,13 @@ class MediaSourceResolver(
         forceMuxed: Boolean = false,
         subtitleKey: String? = null,
         excludeClient: String? = null,
+        diagnosticContext: DiagnosticContext? = null,
     ): Resolved {
+        if (diagnosticContext != null) {
+            val scoped = MediaSourceResolver(dataSources.withDiagnostics(diagnosticContext), startupBandwidth, startupVideoSupport, diagnosticContext)
+            startupParameters?.let(scoped::configureStartupTrackSelection)
+            return scoped.resolve(stream, metadata, preferredQuality, audioTrackKey, forceMuxed, subtitleKey, excludeClient)
+        }
         val meta = sessionMetadata(metadata)
         if (metadata.isLive) return resolveLive(stream, subtitleKey, meta)
 
@@ -147,6 +159,7 @@ class MediaSourceResolver(
                 }
             }
             val factory = HlsMediaSource.Factory(dataSources.vodHls(stream.hlsRequestPlan))
+                .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
                 .setAllowChunklessPreparation(true)
                 .setPlaylistParserFactory(startupBandwidth?.let { StartupHlsPlaylistParserFactory(parsers, it, preferredQuality, select) } ?: parsers)
             val video = factory.createMediaSource(
@@ -187,10 +200,10 @@ class MediaSourceResolver(
         }
 
         // 8. Audio-only. ANDROID_VR remains excluded unless allowVr is true.
-        val audioOnly = StreamSelection.preferPlayable(
+        val audioOnly = StreamSelection.selectAudio(StreamSelection.preferPlayable(
             formats.filter { it.audioOnly },
             allowVr,
-        ).maxByOrNull { it.bitrate }
+        ), audioTrackKey)
         if (audioOnly != null) {
             return Resolved(
                 withSubtitles(singleFormatSource(audioOnly, durationMs, meta), subtitles),
@@ -266,6 +279,7 @@ class MediaSourceResolver(
                 DefaultDashChunkSource.Factory(dataSources.manifest(stream.dashRequestPlan)),
                 dataSources.manifest(stream.dashRequestPlan),
             ).setManifestParser(YoutubeDashLiveManifestParser())
+                .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
             return Resolved(
                 withSubtitles(factory.createMediaSource(liveItem(url)), subtitles),
                 null, null,
@@ -273,6 +287,7 @@ class MediaSourceResolver(
         }
         stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
             val factory = HlsMediaSource.Factory(dataSources.manifest(stream.hlsRequestPlan))
+                .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
                 .setAllowChunklessPreparation(true)
             return Resolved(
                 withSubtitles(factory.createMediaSource(liveItem(url)), subtitles),
@@ -352,14 +367,15 @@ class MediaSourceResolver(
         return DashMediaSource.Factory(
             DefaultDashChunkSource.Factory(dataSources.formats(formats)),
             DataSource.Factory { DataSchemeDataSource() },
-        ).createMediaSource(item)
+        ).setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy()).createMediaSource(item)
     }
 
     private fun dashSource(url: String, meta: MediaMetadata, plan: RequestPlan?): MediaSource =
         DashMediaSource.Factory(
             DefaultDashChunkSource.Factory(dataSources.manifest(plan)),
             dataSources.manifest(plan),
-        ).createMediaSource(MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build())
+        ).setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
+            .createMediaSource(MediaItem.fromUri(url).buildUpon().setMediaMetadata(meta).build())
 
     private fun progressive(
         url: String,
@@ -371,6 +387,7 @@ class MediaSourceResolver(
         if (mimeType != null) builder.setMimeType(mimeType)
         builder.setMediaMetadata(meta)
         return ProgressiveMediaSource.Factory(factory)
+            .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
             .setContinueLoadingCheckIntervalBytes(
                 PlayerDataSource.PROGRESSIVE_LOAD_INTERVAL_BYTES,
             )

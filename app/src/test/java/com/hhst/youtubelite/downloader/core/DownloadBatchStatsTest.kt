@@ -10,6 +10,35 @@ import org.junit.Test
 class DownloadBatchStatsTest {
 
     @Test
+    fun removingOwnedVideoImmediatelyUpdatesBatchItemsAndTotals() = runTest {
+        val h = DownloadHarness()
+        val batch = h.coordinator.enqueueBatch(BatchSnapshot(BatchSource.PLAYLIST, "Delete test",
+            listOf(request("a"), request("b"))), BatchSelection(setOf(0, 1)), "delete")
+        val removedItem = h.coordinator.observeBatch(batch.batchId).first()!!.items.first().item
+        h.coordinator.remove(DownloadTarget.Item(removedItem.id), RemoveMode.RECORD_ONLY)
+        val remaining = h.coordinator.observeBatch(batch.batchId).first()!!
+        assertEquals(listOf(batch.created[1].taskId), remaining.items.map { it.task.task.id })
+        assertEquals(1, remaining.stats.total)
+        assertTrue(h.repo.transact { getTask(removedItem.taskId) }!!.removed)
+        h.coordinator.remove(DownloadTarget.Batch(batch.batchId), RemoveMode.RECORD_ONLY)
+        assertTrue(h.coordinator.observeBatch(batch.batchId).first()!!.items.isEmpty())
+        assertEquals(0, h.coordinator.observeBatch(batch.batchId).first()!!.stats.total)
+    }
+
+    @Test
+    fun removingReferenceOnlyHidesThatBatchRowAndKeepsTheOwnedTask() = runTest {
+        val h = DownloadHarness()
+        val original = h.coordinator.enqueue(request("a"), "original")
+        val batch = h.coordinator.enqueueBatch(BatchSnapshot(BatchSource.PLAYLIST, "Reference",
+            listOf(request("a"))), BatchSelection(setOf(0)), "reference")
+        val reference = h.coordinator.observeBatch(batch.batchId).first()!!.items.single().item
+        h.coordinator.remove(DownloadTarget.Item(reference.id), RemoveMode.RECORD_AND_FILES)
+        assertTrue(h.coordinator.observeBatch(batch.batchId).first()!!.items.isEmpty())
+        assertEquals(1, h.coordinator.observeBatch(original.batchId).first()!!.stats.total)
+        assertFalse(h.repo.transact { getTask(reference.taskId) }!!.removed)
+    }
+
+    @Test
     fun stats_splitCompletedFailedCancelledSkipped() = runTest {
         val h = DownloadHarness()
         val existing = h.coordinator.enqueue(request("skip"), "s0")

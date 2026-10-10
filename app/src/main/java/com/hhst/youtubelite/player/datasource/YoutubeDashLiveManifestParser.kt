@@ -10,11 +10,11 @@ import androidx.media3.exoplayer.dash.manifest.ServiceDescriptionElement
 import androidx.media3.exoplayer.dash.manifest.UtcTimingElement
 
 /**
- * Compatibility with YouTube live DASH manifests. Those dynamic MPDs advertise
+ * Compatibility with live DASH manifests. Those dynamic MPDs advertise
  * a real `availabilityStartTime`, but the segment timeline is already relative
  * to the live edge. Media3 then computes the seek window from the epoch and
  * clamps live playback incorrectly. Setting AST to zero keeps the window
- * relative to the listed periods. This matches current YouTube live DASH and
+ * relative to the listed periods. This matches current live DASH and
  * is not a general DASH rule.
  */
 @UnstableApi

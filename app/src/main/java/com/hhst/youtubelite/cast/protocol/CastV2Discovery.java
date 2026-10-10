@@ -2,6 +2,9 @@
 // Copyright (c) 2020-present yuliskov. See assets/licenses/newtube-MIT.txt.
 package com.hhst.youtubelite.cast.protocol;
 
+import com.hhst.youtubelite.diagnostics.AppLog;
+import java.util.Collections;
+
 import android.content.Context;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
@@ -21,7 +24,7 @@ import java.util.Set;
 
 /**
  * mDNS discovery of Google Cast receivers ({@code _googlecast._tcp}) via the platform
- * {@link NsdManager} - deliberately no Play Services, keeping the Cast v2 stack self-contained.
+ * {@link NsdManager}. Play Services is not used, so the Cast v2 stack stays self-contained.
  * API mirrors other platform discovery: start/stop, device
  * callbacks on the MAIN thread, results stream in incrementally.
  *
@@ -86,7 +89,7 @@ public class CastV2Discovery {
 
         NsdManager nsdManager = (NsdManager) mContext.getSystemService(Context.NSD_SERVICE);
         if (nsdManager == null) {
-            Log.e(TAG, "NsdManager unavailable");
+            AppLog.event(AppLog.Category.CAST, "discovery_unavailable", Collections.emptyMap(), null, true);
             return;
         }
         mNsdManager = nsdManager;
@@ -94,22 +97,22 @@ public class CastV2Discovery {
         NsdManager.DiscoveryListener discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "mDNS discovery failed to start: " + errorCode);
+                AppLog.event(AppLog.Category.CAST, "discovery_start_failed", Collections.singletonMap("error_code", errorCode), null, true);
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "mDNS discovery failed to stop: " + errorCode);
+                AppLog.event(AppLog.Category.CAST, "discovery_stop_failed", Collections.singletonMap("error_code", errorCode), null, true);
             }
 
             @Override
             public void onDiscoveryStarted(String serviceType) {
-                Log.d(TAG, "mDNS discovery started");
+                AppLog.event(AppLog.Category.CAST, "discovery_started");
             }
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
-                Log.d(TAG, "mDNS discovery stopped");
+                AppLog.event(AppLog.Category.CAST, "discovery_stopped");
             }
 
             @Override
@@ -130,7 +133,7 @@ public class CastV2Discovery {
             nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
         } catch (Exception e) {
             // SecurityException without local-network access; also covers rare binder failures.
-            Log.e(TAG, "discoverServices failed: " + e);
+            AppLog.event(AppLog.Category.CAST, "discovery_failed", Collections.emptyMap(), e);
             mDiscoveryListener = null;
         }
     }
@@ -187,7 +190,7 @@ public class CastV2Discovery {
             nsdManager.resolveService(next, new NsdManager.ResolveListener() {
                 @Override
                 public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                    Log.d(TAG, "Resolve failed (" + errorCode + ") for " + serviceInfo.getServiceName());
+                    AppLog.event(AppLog.Category.CAST, "device_resolve_failed", Collections.singletonMap("error_code", errorCode), null, true);
                     resolveNext(generation);
                 }
 
@@ -198,7 +201,7 @@ public class CastV2Discovery {
                 }
             });
         } catch (Exception e) {
-            Log.e(TAG, "resolveService failed: " + e);
+            AppLog.event(AppLog.Category.CAST, "device_resolve_failed", Collections.emptyMap(), e);
             resolveNext(generation);
         }
     }
@@ -224,7 +227,7 @@ public class CastV2Discovery {
         // even accept a LOAD, but cannot render the video DASH. Dropping in discovery keeps the
         // Listener contract untouched.
         if (!hasVideoOut(attribute(serviceInfo, TXT_CAPABILITIES))) {
-            Log.d(TAG, "hiding audio-only device " + name);
+            AppLog.detail(AppLog.Category.CAST, "device_filtered", Collections.singletonMap("reason", "audio_only"));
             return;
         }
         Listener listener = mListener;
@@ -263,7 +266,7 @@ public class CastV2Discovery {
      * Does the {@code ca} TXT capabilities bitmask claim VIDEO_OUT (bit 0)?
      *
      * <p>Fails OPEN: a missing or unparseable {@code ca} counts as video-capable - hiding a real
-     * TV whose TXT record we couldn't read is far worse than listing a soundbar.</p>
+     * TV whose TXT record could not be read is far worse than listing a soundbar.</p>
      */
     static boolean hasVideoOut(@Nullable byte[] caValue) {
         if (caValue == null || caValue.length == 0) {

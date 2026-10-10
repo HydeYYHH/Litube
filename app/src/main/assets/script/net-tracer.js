@@ -2,6 +2,7 @@
   'use strict';
   if (window.__netTracer) return;
   window.__netTracer = true;
+  const generation = window.Bridge?.currentDocumentGeneration?.();
 
   const SLOW = 500;
   const MAX_URL = 512;
@@ -31,13 +32,9 @@
     if (noise(record.url, record.src)) return;
     try {
       if (window.NetTrace && typeof window.NetTrace.onRequestLogged === 'function') {
-        window.NetTrace.onRequestLogged(JSON.stringify(record));
+        window.NetTrace.onRequestLogged(JSON.stringify({ ...record, generation }));
       }
     } catch {}
-    const tag = record.ms >= SLOW ? 'slow' : 'ok';
-    const line = `[net-tracer:${tag}] ${record.method} ${record.ms}ms #${record.status} ${record.src} ${clip(record.url)}`;
-    if (record.ms >= SLOW) console.warn(line);
-    else console.debug(line);
   }
 
   function now() {

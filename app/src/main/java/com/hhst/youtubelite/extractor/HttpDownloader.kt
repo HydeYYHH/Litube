@@ -8,7 +8,7 @@ import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 
-/** Generic legacy transport. Explicit YouTube extraction uses its own immutable host context. */
+/** Generic legacy transport. Explicit media extraction uses its own immutable host context. */
 class HttpDownloader(
     private val client: OkHttpClient,
 ) : Downloader() {

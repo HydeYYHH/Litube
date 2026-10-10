@@ -17,6 +17,12 @@ object PreferenceKeys {
 
     const val SKIP_SPONSORS = "skip_sponsors"
     const val SKIP_SELF_PROMO = "skip_self_promo"
+    const val SKIP_INTERACTION = "skip_interaction"
+    const val SKIP_INTRO = "skip_intro"
+    const val SKIP_OUTRO = "skip_outro"
+    const val SKIP_PREVIEW = "skip_preview"
+    const val SKIP_MUSIC_OFFTOPIC = "skip_music_offtopic"
+    const val SKIP_FILLER = "skip_filler"
     const val SKIP_POI_HIGHLIGHT = "skip_poi_highlight"
     const val SPONSOR_COUNTDOWN = "sponsor_countdown"
 
@@ -63,6 +69,12 @@ object PreferenceKeys {
         ENABLE_HIDE_SHORTS to false,
         SKIP_SPONSORS to true,
         SKIP_SELF_PROMO to true,
+        SKIP_INTERACTION to true,
+        SKIP_INTRO to true,
+        SKIP_OUTRO to true,
+        SKIP_PREVIEW to true,
+        SKIP_MUSIC_OFFTOPIC to true,
+        SKIP_FILLER to true,
         SKIP_POI_HIGHLIGHT to true,
         SPONSOR_COUNTDOWN to true,
         REMEMBER_LAST_POSITION to true,

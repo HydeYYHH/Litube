@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.ui.theme.YoutubeStyle
 import com.hhst.youtubelite.browser.Bridge
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.extractor.VideoId
@@ -49,9 +49,9 @@ fun MediaItemMenuDialog(
     val shareUrl = videoId?.let(VideoId::watchUrl) ?: item.url
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = AlertDialogDefaults.shape,
-            color = AlertDialogDefaults.containerColor,
-            tonalElevation = AlertDialogDefaults.TonalElevation,
+            shape = YoutubeStyle.MenuShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 0.dp,
         ) {
             Column(Modifier.padding(16.dp)) {
                 Box(Modifier.fillMaxWidth()) {
@@ -81,7 +81,7 @@ fun MediaItemMenuDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp),
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         fontSize = SettingsTokens.TitleSize.sp,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,

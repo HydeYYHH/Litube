@@ -81,17 +81,6 @@
     button.setAttribute('data-downloaded', done ? '1' : '0');
   }
 
-  /** Entries are icon-only: the like template's count and rolling digits
-   *  must not survive as stray glyphs; the label lives in aria-labels. */
-  function blankText(button) {
-    for (const node of button.querySelectorAll('[data-lite-vote-count]')) node.remove();
-    for (const node of button.querySelectorAll(
-      '.ytSpecButtonShapeNextButtonTextContent, .ytAttributedStringHost, ' +
-        '.yt-core-attributed-string, #text')) {
-      if (node.textContent !== '') node.textContent = '';
-    }
-  }
-
   function onHostMessage(event) {
     let detail = event && (event.data || event.detail);
     if (typeof detail === 'string') {
@@ -152,21 +141,27 @@
     { id: 'chatButton', icon: ICONS.chat, label: () => Lite.text('chat'), click: toggleChat },
   ];
 
-  /** Builds one entry from the row's chip; null while the chip carries
-   *  no svg yet, and the scheduler retries. */
+  /** Own plain DOM: cloned page view-models upgrade asynchronously and
+   *  can re-render with empty data or retained vote labels. Reuse only styling. */
   function build(chip, def) {
-    const button = chip.cloneNode(true);
+    const button = document.createElement('div');
+    button.className = chip.className;
     button.id = def.id;
     button.setAttribute('data-injected', 'entry');
-    Lite.strip(button);
-    blankText(button);
+    button.style.cssText = 'display:flex;align-items:center;flex:0 0 auto;margin-inline-end:8px;' +
+      'background:transparent!important;box-shadow:none!important;filter:none!important;';
     const label = def.label();
     button.setAttribute('aria-label', label);
-    const inner = button.querySelector('button, a');
-    if (inner && inner.getAttribute('aria-label') !== label) {
-      inner.setAttribute('aria-label', label);
-    }
-    if (!Lite.icon(button, def.icon)) return null;
+    const inner = document.createElement('button');
+    inner.type = 'button';
+    inner.className = chip.querySelector('button, a')?.className || '';
+    inner.setAttribute('aria-label', label);
+    inner.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;' +
+      'box-sizing:border-box;width:40px;min-width:40px;height:36px;padding:6px 8px;border:0;' +
+      'border-radius:18px;color:var(--yt-spec-text-primary,currentColor);' +
+      'background:transparent!important;box-shadow:none!important;filter:none!important;cursor:pointer;';
+    inner.appendChild(Lite.svg(def.icon));
+    button.appendChild(inner);
     Lite.fit(button);
     button.addEventListener('click', (event) => {
       event.preventDefault();
@@ -182,12 +177,15 @@
    *  free chip until dislike exists. Returns the number freshly built,
    *  or false when a chip carried no svg yet. */
   function place(row, chip, defs) {
-    let anchor = row.querySelector('dislike-button-view-model') || chip;
+    const voteAnchor = row.querySelector('dislike-button-view-model') ||
+      Array.from(row.querySelectorAll('ytm-toggle-button-renderer,ytm-slim-toggle-button-renderer'))
+        .filter(node => !node.closest('[data-injected]'))[1];
+    let anchor = voteAnchor || chip;
     while (anchor && anchor.parentElement !== row) {
       anchor = anchor.parentElement;
     }
     if (!anchor) return false;
-    const after = anchor !== chip;
+    const after = !!voteAnchor || anchor !== chip;
     const nodes = [];
     let built = 0;
     for (const def of defs) {

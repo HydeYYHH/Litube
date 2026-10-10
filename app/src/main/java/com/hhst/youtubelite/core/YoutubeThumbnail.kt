@@ -8,12 +8,18 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import androidx.core.net.toUri
+import com.hhst.youtubelite.diagnostics.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 /**
- * Fetches YouTube video thumbnails. Page JS and notifications must not be
+ * Fetches video thumbnails. Page JS and notifications must not be
  * allowed to point this at arbitrary HTTPS hosts.
  */
 object YoutubeThumbnail {
+    private val http by lazy { DiagnosticNetwork.install(OkHttpClient.Builder()).followRedirects(false).followSslRedirects(false)
+        .connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS).build() }
     const val HOST = "i.ytimg.com"
     private const val CACHE_BYTES = 3 * 1024 * 1024
     /** Rejects a thumbnail body larger than this before decode. */
@@ -36,26 +42,29 @@ object YoutubeThumbnail {
         if (url.isNullOrBlank()) return null
         cached(url)?.let { return it }
         if (!isAllowed(url)) return null
-        var conn: HttpURLConnection? = null
+        val diagnostic = DiagnosticContext(videoId = url.toUri().pathSegments.getOrNull(1)?.takeIf { Regex("[A-Za-z0-9_-]{11}").matches(it) })
+        AppLog.detail(AppLog.Category.GALLERY, "thumbnail.start", DiagnosticRedaction.resource(url), diagnostic)
+        var reason = "unknown"
+        var success = false
         return try {
-            conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                // Bounded so a hung fetch cannot pin the calling IO coroutine
-                // (or the notification art task) longer than a playback beat.
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                instanceFollowRedirects = false
-                connect()
+            http.newCall(DiagnosticNetwork.tag(Request.Builder().url(url).build(), diagnostic)).execute().use { conn ->
+                reason = "http_${conn.code}"
+                if (conn.code != 200) return null
+                val declared = conn.header("Content-Length")?.toLongOrNull() ?: -1
+                reason = "body_limit"
+                if (declared > MAX_DOWNLOAD_BYTES) return null
+                val bytes = conn.body?.byteStream()?.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return null
+                reason = "decode_failed"
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also { cache.put(url, it); success = true }
             }
-            if (conn.responseCode != HttpURLConnection.HTTP_OK) return null
-            val declared = conn.getHeaderField("Content-Length")?.toLongOrNull() ?: -1
-            if (declared > MAX_DOWNLOAD_BYTES) return null
-            val bytes = conn.inputStream.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return null
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                ?.also { cache.put(url, it) }
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            reason = "transport_failed"
+            AppLog.event(AppLog.Category.GALLERY, "thumbnail.failed", mapOf("reason" to reason), failure, context = diagnostic)
             null
         } finally {
-            conn?.disconnect()
+            if (success) AppLog.detail(AppLog.Category.GALLERY, "thumbnail.end", mapOf("outcome" to "SUCCESS"), diagnostic)
+            else AppLog.event(AppLog.Category.GALLERY, "thumbnail.end", mapOf("outcome" to "FAILURE", "reason" to reason), critical = true, context = diagnostic)
+            AppLog.endContext(diagnostic)
         }
     }
 

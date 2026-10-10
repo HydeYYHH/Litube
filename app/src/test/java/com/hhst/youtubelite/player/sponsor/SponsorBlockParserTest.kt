@@ -50,4 +50,15 @@ class SponsorBlockParserTest {
         val json = """[{"videoID":"abc12345678","segments":[{"category":"sponsor","segment":[1.0]}]}]"""
         assertTrue(SponsorBlockParser.parse(json, "abc12345678").isEmpty())
     }
+
+    @Test
+    fun parse_musicOfftopic_keepsCategory() {
+        val json =
+            """[{"videoID":"cF1Na4AIecM","segments":[{"category":"music_offtopic","segment":[0.0,51.5]}]}]"""
+        val segments = SponsorBlockParser.parse(json, "cF1Na4AIecM")
+        assertEquals(1, segments.size)
+        assertEquals(0L, segments[0].startMs)
+        assertEquals(51_500L, segments[0].endMs)
+        assertEquals("music_offtopic", segments[0].category)
+    }
 }

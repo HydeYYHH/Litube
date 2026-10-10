@@ -30,20 +30,32 @@ class PlaybackPerformanceMonitor(private val emit: (String, String, Map<String, 
         graceUntil = now + 3000; windowAt = null; lowWindows = 0; fps = null; samples.clear(); lastFrameAt = now
     }
     fun reset(now: Long) {
-        anomalies.keys.toList().forEach { transition(it, false, now) }
+        abandon("superseded")
         bufferAt = null; buffers.clear(); bufferDuration = 0; lastRendered = 0
         stabilize(now)
+    }
+    private fun abandon(reason: String) {
+        anomalies.keys.toList().forEach { emit(it, "abandoned", mapOf("reason" to reason)) }
+        anomalies.clear()
     }
     fun sample(now: Long, rendered: Int, dropped: Int, expected: Float?, eligible: Boolean, buffering: Boolean) {
         if (buffering && bufferAt == null) { bufferAt = now; buffers.addLast(now) }
         if (!buffering) bufferAt = null
         while (buffers.isNotEmpty() && now - buffers.first() > 60_000) buffers.removeFirst()
         bufferDuration = bufferAt?.let { now - it } ?: 0
-        transition("long_buffer", buffering && bufferDuration > 5000, now, mapOf("duration_ms" to bufferDuration))
-        transition("frequent_buffer", buffers.size >= 3, now, mapOf("count" to buffers.size))
+        if (!buffering && !eligible) {
+            listOf("long_buffer", "frequent_buffer").forEach {
+                if (anomalies.remove(it) != null) emit(it, "abandoned", mapOf("reason" to "ineligible"))
+            }
+        } else {
+            transition("long_buffer", buffering && bufferDuration > 5000, now, mapOf("duration_ms" to bufferDuration))
+            transition("frequent_buffer", buffers.size >= 3, now, mapOf("count" to buffers.size))
+        }
         if (!eligible || buffering || now < graceUntil) {
             windowAt = null; lowWindows = 0; fps = null; samples.clear(); lastFrameAt = now; lastRendered = rendered
-            listOf("low_fps", "dropped_frames", "render_stall").forEach { transition(it, false, now) }
+            listOf("low_fps", "dropped_frames", "render_stall").forEach {
+                if (anomalies.remove(it) != null) emit(it, "abandoned", mapOf("reason" to "ineligible"))
+            }
             return
         }
         if (samples.lastOrNull()?.rendered?.let { rendered < it } == true) samples.clear()

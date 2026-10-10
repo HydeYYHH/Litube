@@ -383,6 +383,7 @@ class PlayerViewModelTest {
         override fun attachCastPlayer(delegate: Player?): Boolean = false
         override fun setQueueNavigation(hasNext: Boolean, hasPrevious: Boolean) = Unit
         override fun cancelSponsorSkip() = Unit
+        override fun skipSponsorNow() = Unit
         override fun skipSponsorChipSegment() = Unit
     }
 }

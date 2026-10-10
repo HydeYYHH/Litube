@@ -20,14 +20,21 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.diagnostics.*
+import kotlin.coroutines.coroutineContext
 
 class RoomDownloadRepository(
     private val db: DownloaderDatabase,
 ) : DownloadRepository {
     private val dao = db.downloads()
 
-    override suspend fun <T> transact(block: suspend DownloadSession.() -> T): T =
+    override suspend fun <T> transact(block: suspend DownloadSession.() -> T): T = try {
         db.withTransaction { RoomSession(dao).block() }
+    } catch (failure: Throwable) {
+        if (failure !is kotlinx.coroutines.CancellationException) AppLog.event(AppLog.Category.STORAGE, "database_transaction_failed",
+            mapOf("database" to "downloads"), failure, context = coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
+        throw failure
+    }
 
     override fun observeDownloads(filter: DownloadFilter): Flow<List<TaskSnapshot>> =
         callbackFlow {
@@ -181,7 +188,7 @@ private class RoomSession(
         val batch = dao.getBatch(batchId)?.toDomain() ?: return null
         val items = dao.itemsForBatch(batchId).map { it.toDomain() }
         val snaps = items.mapNotNull { item ->
-            snapshot(item.taskId)?.let { ItemSnapshot(item, it) }
+            snapshot(item.taskId)?.takeUnless { it.task.removed }?.let { ItemSnapshot(item, it) }
         }
         return BatchView(batch, snaps, BatchStatsCalculator.compute(snaps))
     }

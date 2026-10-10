@@ -10,6 +10,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Pure player-UI helpers (layout tokens, labels, back-step).
@@ -21,7 +22,6 @@ object PlayerUi {
     val Icon = Color.White.copy(alpha = 0.92f)
     val Unplayed = Color(0x99FFFFFF)
     val Buffered = Color.White
-    /** Gesture hint background: #CC000000, 12 dp corners. */
     val HintBg = Color(0xCC000000)
     private val Author = Color.White.copy(alpha = 0.7f)
     /** Top/bottom chrome scrim. */
@@ -40,15 +40,14 @@ object PlayerUi {
     const val TIME_BAR_OVERLAP_DP = 2
     const val GRADIENT_DP = 100
     const val TOP_ACTION_DP = 48
-    const val CHROME_ICON_DP = 28
-    private const val WIDE_CHROME_ICON_DP = 32
-    const val CHROME_TEXT_SP = 15
+    const val CHROME_ICON_DP = 24
+    const val CHROME_TEXT_SP = 13
     const val TITLE_PADDING_DP = 6
     const val CENTER_PLAY_DP = 80
     const val CENTER_SKIP_DP = 56
     const val BOTTOM_ROW_DP = 48
     const val HINT_TEXT_SP = 12
-    /** Fallback embedded top: YouTube masthead height in page space (the window offset adds the system-bar inset). */
+    /** Fallback embedded top: page-header height in page space (the window offset adds the system-bar inset). */
     private const val EMBEDDED_TOP_MARGIN_DP = 48
     /** Fullscreen chrome / lock: keep clear of rounded corners and cutouts. */
     private const val FULLSCREEN_SIDE_DP = 16
@@ -73,7 +72,6 @@ object PlayerUi {
         platformStyle = PlatformTextStyle(includeFontPadding = false),
     )
 
-    /** Secondary player metadata. */
     val AuthorStyle = TextStyle(
         color = Author,
         fontSize = 13.sp,
@@ -91,19 +89,27 @@ object PlayerUi {
     fun compactChrome(widthDp: Float, fontScale: Float, hasCast: Boolean): Boolean =
         widthDp < TOP_ACTION_DP * (if (hasCast) 7 else 6) + 24 + 128 * fontScale
 
-    data class ChromeSizing(val iconDp: Int, val textSp: Int)
+    data class ChromeSizing(
+        val iconDp: Int,
+        val textSp: Int,
+        val playDp: Int = 56,
+        val skipDp: Int = 48,
+        val centerGapDp: Int = 12,
+    )
 
     val CompactChromeSizing = ChromeSizing(CHROME_ICON_DP, CHROME_TEXT_SP)
-    private val WideChromeSizing = ChromeSizing(WIDE_CHROME_ICON_DP, 16)
-
-    /** Keep text and icons proportional to the actual space available for the player. */
-    fun chromeSizing(widthDp: Float, heightDp: Float): ChromeSizing =
-        if (widthDp >= 600 && heightDp >= 280) WideChromeSizing else CompactChromeSizing
+    /** Scale the visuals to the player slot, including split windows and embedded tablet players.
+     * Touch targets remain at least 48 dp and text still follows the system font scale. */
+    fun chromeSizing(widthDp: Float, heightDp: Float): ChromeSizing {
+        val room = minOf((widthDp - 320f) / 520f, (heightDp - 180f) / 300f).coerceIn(0f, 1f)
+        fun between(small: Int, large: Int) = (small + (large - small) * room).roundToInt()
+        return ChromeSizing(between(24, 32), between(13, 16), between(56, CENTER_PLAY_DP),
+            between(48, CENTER_SKIP_DP), (widthDp * .08f).roundToInt().coerceIn(12, 84))
+    }
 
     /**
      * Same order for the overlay back button and system Back. The mini-player
-     * is deliberately absent: Back drives the browser underneath it while the
-     * mini-player keeps playing.
+     * is omitted: Back navigates the browser underneath it, and playback continues.
      */
     fun nextBackStep(locked: Boolean, fullscreen: Boolean): BackStep = when {
         locked -> BackStep.Unlock
@@ -240,8 +246,12 @@ object PlayerUi {
         progressFraction(bufferedPositionMs, durationMs)
 
     /** Inclusive start, exclusive visual end on the 0..1 bar. Null if not drawable. */
-    fun segmentRange(startMs: Long, endMs: Long, durationMs: Long): Pair<Float, Float>? {
+    fun segmentRange(startMs: Long, endMs: Long, durationMs: Long, point: Boolean = false): Pair<Float, Float>? {
         if (durationMs <= 0L) return null
+        if (point && startMs == endMs && startMs in 0L..durationMs) {
+            val position = startMs.toFloat() / durationMs
+            return position to position
+        }
         val start = (startMs.toFloat() / durationMs).coerceIn(0f, 1f)
         val end = (endMs.toFloat() / durationMs).coerceIn(0f, 1f)
         if (end <= start) return null
@@ -256,7 +266,8 @@ object PlayerUi {
         "outro" -> Color(0xFF0202ED)
         "preview" -> Color(0xFF008FD6)
         "music_offtopic" -> Color(0xFFFF9900)
-        "poi_highlight" -> Color(0xFFFF00BF)
+        "filler" -> Color(0xFF7300FF)
+        "poi_highlight" -> Color(0xFFFF1684)
         else -> Color(0xFFAAAAAA)
     }
 
@@ -283,6 +294,7 @@ object PlayerUi {
         "interaction" -> R.string.segment_interaction
         "preview" -> R.string.segment_preview
         "music_offtopic" -> R.string.segment_music_offtopic
+        "filler" -> R.string.skip_sponsors_filler
         else -> R.string.segments
     }
 

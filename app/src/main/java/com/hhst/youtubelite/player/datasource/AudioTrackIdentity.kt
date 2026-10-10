@@ -13,15 +13,40 @@ data class AudioTrackChoice(
 )
 
 /**
- * Concrete audio identity: YouTube track id when present, otherwise
- * locale tag + type. Old language-only prefs (`en`) still match.
+ * Concrete audio identity: track id when present, otherwise
+ * locale tag + type, then display name. Old language-only prefs (`en`) still match.
  */
 object AudioTrackIdentity {
+    fun isOriginal(format: Format): Boolean = format.audioTrackOriginal ||
+        format.audioTrackType.equals("original", ignoreCase = true)
+
+    /** HLS may declare Original only in NAME, rather than its DEFAULT flag. */
+    fun originalRenditionKey(entries: List<Pair<String?, String?>>, formats: List<Format> = emptyList()): String? {
+        entries.firstOrNull { (_, label) ->
+            label?.contains(Regex("\\boriginal\\b|原始|原聲|原声|オリジナル|오리지널", RegexOption.IGNORE_CASE)) == true
+        }?.let { return renditionKey(it.first, it.second) }
+        val originals = formats.filter(::isOriginal)
+        entries.firstOrNull { (_, label) ->
+            !label.isNullOrBlank() && originals.any { it.audioTrackName.equals(label, ignoreCase = true) }
+        }?.let { return renditionKey(it.first, it.second) }
+        // A language alone cannot distinguish an original from audio description.
+        val candidates = entries.filter { (language, _) ->
+            language != null && originals.any { it.audioLocale?.let { locale -> localeMatches(locale, language) } == true }
+        }.distinct()
+        return candidates.singleOrNull()?.let { renditionKey(it.first, it.second) }
+    }
+
     fun key(format: Format): String {
         format.audioTrackId?.takeIf { it.isNotBlank() }?.let { return "id:$it" }
         val locale = format.audioLocale.orEmpty()
         val type = format.audioTrackType.orEmpty()
-        if (locale.isNotBlank() || type.isNotBlank()) return "loc:$locale|$type"
+        if (locale.isNotBlank()) return "loc:$locale|$type"
+        // Some extraction clients supply a display name without an id/locale.
+        // Those are still distinct, selectable tracks, not anonymous Default.
+        format.audioTrackName?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            return if (type.isBlank()) "name:$it" else "name:$it|$type"
+        }
+        if (type.isNotBlank()) return "loc:|$type"
         return ""
     }
 
@@ -29,7 +54,7 @@ object AudioTrackIdentity {
         if (trackKey.isBlank()) return false
         if (key(format) == trackKey) return true
         val locale = format.audioLocale ?: return false
-        if (trackKey.startsWith("id:")) return false
+        if (trackKey.startsWith("id:") || trackKey.startsWith("name:")) return false
         if (trackKey.startsWith("loc:")) {
             val rest = trackKey.removePrefix("loc:")
             val sep = rest.indexOf('|')

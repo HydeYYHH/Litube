@@ -23,9 +23,9 @@ object CastAudioSelection {
         }
         val aacMatching = matching.filter(isAac)
         val aacAll = dash.filter(isAac)
-        return aacMatching.maxByOrNull { it.bitrate }
-            ?: aacAll.maxByOrNull { it.bitrate }
-            ?: matching.maxByOrNull { it.bitrate }
-            ?: dash.maxByOrNull { it.bitrate }
+        return StreamSelection.selectAudio(aacMatching)
+            ?: StreamSelection.selectAudio(aacAll)
+            ?: StreamSelection.selectAudio(matching)
+            ?: StreamSelection.selectAudio(dash)
     }
 }

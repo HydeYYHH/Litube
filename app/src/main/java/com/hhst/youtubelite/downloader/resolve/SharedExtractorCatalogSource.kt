@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.downloader.resolve
 
 import com.hhst.youtubelite.extractor.Extractor
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
+import kotlin.coroutines.coroutineContext
 
 /**
  * Shared [Extractor] access for downloads. [catalog] joins the in-flight parse
@@ -15,12 +17,12 @@ class SharedExtractorCatalogSource(
 ) : DownloadCatalogSource {
     override fun scope(): String = extractor.recoveryScope()
     override suspend fun catalog(videoId: String): DownloadCatalog {
-        val (metadata, stream) = extractor.awaitMedia(videoId)
+        val (metadata, stream) = extractor.awaitMedia(videoId, coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
         return DownloadCatalog.from(metadata, stream)
     }
 
     override suspend fun refresh(videoId: String): DownloadCatalog {
-        val (metadata, stream) = extractor.awaitFreshMedia(videoId)
+        val (metadata, stream) = extractor.awaitFreshMedia(videoId, coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
         return DownloadCatalog.from(metadata, stream)
     }
 }

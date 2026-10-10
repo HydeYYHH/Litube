@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.gallery
 
+import com.hhst.youtubelite.diagnostics.*
+
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -30,8 +32,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,12 +73,14 @@ class GalleryActivity : ComponentActivity() {
         val image = pendingSave; pendingSave = null
         val uri = result.data?.data
         if (result.resultCode == RESULT_OK && image != null && uri != null) lifecycleScope.launch {
+            val operation = AppLog.operation(AppLog.Category.GALLERY, "image_save")
             val success = withContext(Dispatchers.IO) { runCatching {
                 contentResolver.openOutputStream(uri)?.use { output -> image.inputStream().use { it.copyTo(output) } }
                     ?: error("No output stream")
-            }.isSuccess }
+            }.onFailure { operation.finish(DiagnosticOutcome.FAILURE, "image_save_failed", it) }.isSuccess }
+            if (success) operation.finish(DiagnosticOutcome.SUCCESS, fields = mapOf("bytes" to image.length()))
             Toast.makeText(this@GalleryActivity, if (success) R.string.gallery_saved else R.string.gallery_failed, Toast.LENGTH_SHORT).show()
-        }
+        } else AppLog.event(AppLog.Category.GALLERY, "image_save_cancelled", mapOf("outcome" to "CANCELLED"))
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
@@ -113,6 +117,7 @@ class GalleryActivity : ComponentActivity() {
                         addCategory(Intent.CATEGORY_OPENABLE); type = image.mime
                         putExtra(Intent.EXTRA_TITLE, "LiTube-${System.currentTimeMillis()}.${image.extension}")
                     }) }.onFailure {
+                        AppLog.event(AppLog.Category.GALLERY, "image_save_picker_failed", failure = it)
                         pendingSave = null
                         Toast.makeText(this@GalleryActivity, R.string.gallery_failed, Toast.LENGTH_SHORT).show()
                     }
@@ -121,6 +126,7 @@ class GalleryActivity : ComponentActivity() {
                     val image = current ?: return@IconButton
                     busy = true
                     scope.launch {
+                        val operation = AppLog.operation(AppLog.Category.GALLERY, "image_share")
                         runCatching {
                             val shared = withContext(Dispatchers.IO) {
                                 File(image.file.parentFile, "share-${System.currentTimeMillis()}.${image.extension}").also { image.file.copyTo(it) }
@@ -131,7 +137,8 @@ class GalleryActivity : ComponentActivity() {
                                 clipData = ClipData.newRawUri("image", uri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }, getString(R.string.share)))
-                        }.onFailure { Toast.makeText(this@GalleryActivity, R.string.gallery_failed, Toast.LENGTH_SHORT).show() }
+                            operation.finish(DiagnosticOutcome.SUCCESS, "chooser_launched")
+                        }.onFailure { operation.finish(DiagnosticOutcome.FAILURE, "image_share_failed", it); Toast.makeText(this@GalleryActivity, R.string.gallery_failed, Toast.LENGTH_SHORT).show() }
                         busy = false
                     }
                 }) { Icon(painterResource(R.drawable.ic_share), stringResource(R.string.share)) }

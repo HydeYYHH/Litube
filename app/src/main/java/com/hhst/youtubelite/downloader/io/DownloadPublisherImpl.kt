@@ -19,6 +19,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
 
 private const val DOWNLOAD_FILE_PROVIDER_SUFFIX = ".download.fileprovider"
 
@@ -90,6 +92,8 @@ class DownloadPublisherImpl(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (t: Throwable) {
+            AppLog.event(AppLog.Category.DOWNLOADER, "publish_io_failed", mapOf("phase" to "publish", "source_bytes" to request.source.length()),
+                t, context = coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
             // The half-written target stays registered: the retry reconciles
             // (verify → complete, or delete → recreate) instead of duplicating.
             if (FileIntegrity.isNoSpace(t)) PublishResult.Failed("ENOSPC")
@@ -306,6 +310,7 @@ class MediaStorePublishBackend(
             val rows = resolver.delete(Uri.parse(uri), null, null)
             if (rows >= 0) DeleteResult.OK else DeleteResult.fail("delete-failed")
         } catch (t: Throwable) {
+            AppLog.event(AppLog.Category.STORAGE, "published_file_delete_failed", failure = t)
             DeleteResult.fail(t.message ?: "delete-failed")
         }
     }

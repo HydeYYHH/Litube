@@ -50,6 +50,8 @@ interface PlayerPlaybackActions {
     fun onMiniRestore()
     /** User cancelled the sponsor pre-skip countdown. */
     fun onSponsorSkipCancel()
+    /** User tapped the countdown card: skip the pending segment now. */
+    fun onSponsorSkipNow()
     /** Manual skip via the chip while inside a suppressed segment. */
     fun onSponsorChipSkip()
     /**

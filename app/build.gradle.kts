@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,6 +7,16 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// File-content providers make the fingerprint respond to source changes with configuration caching.
+val diagnosticDigest = MessageDigest.getInstance("SHA-256")
+listOf(fileTree("src/main"), fileTree("../external/NewPipeExtractor/extractor/src/main"),
+    files("build.gradle.kts", "proguard-rules.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts").asFileTree)
+    .flatMap { it.files }.sortedBy { it.invariantSeparatorsPath }.forEach { source ->
+        diagnosticDigest.update(source.relativeTo(rootDir).invariantSeparatorsPath.toByteArray())
+        diagnosticDigest.update(providers.fileContents(layout.projectDirectory.file(source.relativeTo(projectDir).path)).asBytes.get())
+    }
+val diagnosticBuildId = diagnosticDigest.digest().take(12).joinToString("") { "%02x".format(it) }
 
 android {
     namespace = "com.hhst.youtubelite"
@@ -17,6 +28,8 @@ android {
         targetSdk = 36
         versionCode = 301
         versionName = "3.0.1"
+        buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
+        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};NewPipe=${libs.newpipe.extractor.get().version}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +83,17 @@ android {
         includeInBundle = false
     }
 }
+
+val diagnosticMappingDir = layout.buildDirectory.dir("outputs/diagnostic-mappings/$diagnosticBuildId")
+tasks.register<Copy>("archiveReleaseDiagnostics") {
+    val destination = diagnosticMappingDir.get().asFile
+    val identity = diagnosticBuildId
+    dependsOn("minifyReleaseWithR8")
+    from(layout.buildDirectory.dir("outputs/mapping/release"))
+    into(diagnosticMappingDir)
+    doLast { destination.resolve("build-id.txt").writeText(identity + "\n") }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy("archiveReleaseDiagnostics") }
 
 kotlin {
     compilerOptions {
@@ -127,6 +151,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core.ktx)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
 }

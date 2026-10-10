@@ -2,7 +2,7 @@ package com.hhst.youtubelite.extractor
 
 import com.hhst.youtubelite.core.YoutubeThumbnail
 
-/** Parses bare 11-char ids and common YouTube watch / shorts / youtu.be URLs. */
+/** Parses bare 11-char ids and common watch, shorts, and short-link URLs. */
 object VideoId {
     private val fromUrl = Regex(
         """(?:v=|=v/|/v/|/u/\w/|embed/|watch\?v=|shorts/|live/|youtu\.be/)([a-zA-Z0-9_-]{11})""",
@@ -19,7 +19,7 @@ object VideoId {
 
     fun watchUrl(videoId: String): String = "https://www.youtube.com/watch?v=$videoId"
 
-    // Host single-sourced with YoutubeThumbnail: if one side changed without
+    // Host single-sourced with the thumbnail helper: if one side changed without
     // the other, every thumbnail fetch would silently fail its allowlist.
     fun thumbnailUrl(videoId: String): String =
         "https://${YoutubeThumbnail.HOST}/vi/$videoId/hqdefault.jpg"
@@ -54,7 +54,7 @@ object VideoId {
     private val hashTParam = Regex("""[#&]t=([^&]+)""")
 
     /**
-     * YouTube `t=` forms: `90`, `90s`, `1m30s`, `1h2m3s`.
+     * `t=` forms: `90`, `90s`, `1m30s`, `1h2m3s`.
      * Matches player-hook.js `parseTime` (seconds unit may omit the `s`).
      */
     private fun parseYoutubeTimeSeconds(text: String): Long? {

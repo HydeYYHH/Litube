@@ -1,5 +1,11 @@
 package com.hhst.youtubelite.downloader.engine
 
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
+import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
+
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.AssetSnapshot
@@ -52,14 +58,18 @@ class DownloadEngine(
     suspend fun runFinalize(taskId: String) = run(taskId, EngineStage.FINALIZE)
 
     suspend fun run(taskId: String, stage: EngineStage) {
-        val started = System.nanoTime()
-        AppLog.event(AppLog.Category.DOWNLOADER, "execution_start", mapOf("task" to taskId, "stage" to stage))
+        val initial = repository.transact { snapshot(taskId) }
+        val context = DiagnosticContext(taskId = taskId, videoId = initial?.task?.videoId, generation = initial?.task?.executionGeneration)
+        val operation = AppLog.operation(AppLog.Category.DOWNLOADER, "execution", context, mapOf("stage" to stage))
+        var failure: Throwable? = null
+        var cancelledByCoroutine = false
         try {
-            execute(taskId, stage)
+            withContext(DiagnosticCoroutineContext(context)) { execute(taskId, stage) }
         } catch (cancelled: CancellationException) {
+            cancelledByCoroutine = true
             throw cancelled
         } catch (t: Throwable) {
-            AppLog.event(AppLog.Category.DOWNLOADER, "execution_failed", mapOf("task" to taskId, "stage" to stage), t)
+            failure = t
             val snap = repository.transact { snapshot(taskId) } ?: return
             coordinator.reportExecution(
                 taskId,
@@ -68,7 +78,20 @@ class DownloadEngine(
                 errorMessage = t.message,
             )
         } finally {
-            AppLog.event(AppLog.Category.DOWNLOADER, "execution_finished", mapOf("task" to taskId, "stage" to stage, "duration_ms" to (System.nanoTime() - started) / 1_000_000))
+            withContext(NonCancellable) {
+                val latest = runCatching { repository.transact { snapshot(taskId) } }.getOrNull()?.task
+                val outcome = when {
+                    latest?.userPaused == true -> DiagnosticOutcome.DEFERRED
+                    latest == null || latest.userCancelled || latest.removed -> DiagnosticOutcome.CANCELLED
+                    latest.executionGeneration != context.generation -> DiagnosticOutcome.SUPERSEDED
+                    cancelledByCoroutine -> DiagnosticOutcome.CANCELLED
+                    failure != null || latest.status == DownloadStatus.FAILED -> DiagnosticOutcome.FAILURE
+                    latest.phase == DownloadPhase.COMPLETE -> DiagnosticOutcome.SUCCESS
+                    else -> DiagnosticOutcome.DEFERRED
+                }
+                operation.finish(outcome, latest?.status?.name ?: "task_missing", failure,
+                    mapOf("phase" to latest?.phase, "status" to latest?.status))
+            }
         }
     }
 
@@ -166,11 +189,14 @@ class DownloadEngine(
                 tempFiles = listOf(publishSource.path),
             )
             val mime = asset.asset.mimeType ?: mimeFor(kind)
+            val publishing = AppLog.operation(AppLog.Category.DOWNLOADER, "publish_file",
+                (coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(taskId = taskId, generation = gen)).child(),
+                mapOf("asset" to kind, "mime" to mime, "source_bytes" to publishSource.length(), "available_storage_bytes" to publishSource.parentFile?.usableSpace))
             val name = asset.asset.outputName ?: DownloadFileNames.sanitize(
                 current.task.title,
                 DownloadFileNames.extensionOf(publishSource.name, if (kind == AssetKind.AUDIO) "m4a" else "mp4"),
             )
-            val published = publisher.publish(
+            val published = try { publisher.publish(
                 PublishRequest(
                     publishId = asset.publish?.id ?: asset.asset.id,
                     assetId = asset.asset.id,
@@ -189,9 +215,13 @@ class DownloadEngine(
                         )
                     },
                 ),
-            )
+            ) } catch (failure: Throwable) {
+                publishing.finish(if (failure is CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE,
+                    "publish_exception", failure); throw failure
+            }
             when (published) {
                 is PublishResult.Published -> {
+                    publishing.finish(DiagnosticOutcome.SUCCESS, "published")
                     // A stale generation must keep its inputs: the row that
                     // would own the published file no longer accepts it.
                     val accepted = coordinator.reportAssetPublished(taskId, gen, kind, published.uri)
@@ -200,8 +230,11 @@ class DownloadEngine(
                         if (publishSource !in files) publishSource.delete()
                     }
                 }
-                PublishResult.Interrupted -> return
-                is PublishResult.Failed -> coordinator.reportAssetFailed(taskId, gen, kind, published.reason)
+                PublishResult.Interrupted -> { publishing.finish(DiagnosticOutcome.CANCELLED, "interrupted"); return }
+                is PublishResult.Failed -> {
+                    publishing.finish(DiagnosticOutcome.FAILURE, published.reason)
+                    coordinator.reportAssetFailed(taskId, gen, kind, published.reason)
+                }
             }
         }
     }
@@ -258,14 +291,23 @@ class DownloadEngine(
             return null
         }
         val output = directories.muxFile(taskId, kind.name, audioOnly)
-        return when (val muxed = finalizer.muxAndVerify(files, output, audioOnly)) {
-            is MuxResult.Ok -> output
-            MuxResult.Interrupted -> null
+        val merging = AppLog.operation(AppLog.Category.DOWNLOADER, "merge_verify",
+            (coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(taskId = taskId, generation = generation)).child(),
+            mapOf("asset" to kind, "input_count" to files.size, "input_bytes" to files.sumOf { it.length() }, "available_storage_bytes" to output.parentFile?.usableSpace))
+        val muxed = try { finalizer.muxAndVerify(files, output, audioOnly) } catch (failure: Throwable) {
+            merging.finish(if (failure is CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE,
+                "merge_exception", failure); throw failure
+        }
+        return when (muxed) {
+            is MuxResult.Ok -> { merging.finish(DiagnosticOutcome.SUCCESS, "verified", fields = mapOf("output_bytes" to output.length())); output }
+            MuxResult.Interrupted -> { merging.finish(DiagnosticOutcome.CANCELLED, "interrupted"); null }
             is MuxResult.Gated -> {
+                merging.finish(DiagnosticOutcome.DEFERRED, muxed.reason)
                 coordinator.reportAssetFailed(taskId, generation, kind, muxed.reason)
                 null
             }
             is MuxResult.Failed -> {
+                merging.finish(DiagnosticOutcome.FAILURE, muxed.reason)
                 coordinator.reportAssetFailed(taskId, generation, kind, muxed.reason)
                 null
             }

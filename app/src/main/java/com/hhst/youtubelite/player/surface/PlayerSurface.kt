@@ -149,9 +149,9 @@ fun PlayerSurface(
     }
     LaunchedEffect(state.mini) {
         if (state.mini) {
-            // Queue is a legal surface in mini (MiniPlayerChrome has its own
-            // queue button); everything else (More included) would linger
-            // over the docked player.
+            // Queue remains available in the mini player; MiniPlayerChrome has its
+            // own queue button. Other sheets, including More, stay closed so they
+            // do not cover the docked player.
             if (sheet != PlayerSheet.Queue) sheet = null
             dialog = null
             menu = null
@@ -395,9 +395,8 @@ fun PlayerSurface(
                         cuesState = subtitleCuesState,
                         showChrome = showChrome,
                         style = state.subtitleStyle,
-                        chromeBottomClearDp = PlayerUi.SUBTITLE_CHROME_CLEAR_DP +
-                            (with(density) { bottomBarHeightPx.toDp().value } -
-                                PlayerUi.TIME_BAR_HIT_DP - PlayerUi.BOTTOM_ROW_DP).coerceAtLeast(0f),
+                        chromeBottomClearDp = maxOf(PlayerUi.SUBTITLE_CHROME_CLEAR_DP.toFloat(),
+                            with(density) { bottomBarHeightPx.toDp().value } + 8f),
                     )
 
                     AnimatedVisibility(
@@ -405,16 +404,17 @@ fun PlayerSurface(
                             state.error == null && !pip,
                         enter = fadeIn(),
                         exit = fadeOut(),
-                        modifier = Modifier.align(Alignment.Center)
-                            .offset { IntOffset(0, (topBarHeightPx - bottomBarHeightPx) / 2) },
+                        modifier = Modifier.align(Alignment.Center),
                     ) {
                         CenterControls(
                             state = state,
                             onPlayPause = callbacks::onPlayPause,
                             onPrevious = callbacks::onPrevious,
                             onNext = callbacks::onNext,
-                            playSizeDp = centerHeightDp.coerceIn(48f, PlayerUi.CENTER_PLAY_DP.toFloat()).toInt(),
+                            playSizeDp = centerHeightDp.coerceIn(48f, chromeSizing.playDp.toFloat()).toInt(),
                             iconSize = chromeSizing.iconDp,
+                            skipSizeDp = minOf(chromeSizing.skipDp, centerHeightDp.coerceAtLeast(48f).toInt()),
+                            gapDp = chromeSizing.centerGapDp,
                         )
                     }
 
@@ -436,6 +436,7 @@ fun PlayerSurface(
                     if (!pip && countdown != null) {
                         SponsorCountdownCard(
                             seconds = countdown,
+                            onSkipNow = callbacks::onSponsorSkipNow,
                             onCancel = callbacks::onSponsorSkipCancel,
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)

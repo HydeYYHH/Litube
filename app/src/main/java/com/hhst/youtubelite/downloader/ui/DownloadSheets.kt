@@ -18,8 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
+import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.YoutubeCheckbox as Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,14 +27,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
+import com.hhst.youtubelite.ui.components.YoutubeRadioButton as RadioButton
 import androidx.compose.material3.SheetState
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
+import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
+import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadConfig
@@ -81,7 +79,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Batch rows have no per-video catalog, so the subtitle picker offers common
- * YouTube language codes. Language-only keys keep the selector's fallback
+ * language codes. Language-only keys keep the selector's fallback
  * (human captions first); per-track precision stays on the single-video sheet.
  */
 private val BatchSubtitleLanguages =
@@ -240,7 +238,8 @@ fun SingleVideoConfirmSheet(
         }
     }
     if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { YoutubeSheetHandle() },
         tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
     picker?.let { kind ->
         val options = when (kind) { "quality" -> qualities.map { it to it }; "audio" -> audioOptions; else -> subOptions }
@@ -276,7 +275,7 @@ private fun SelectionRow(name: String, selected: String, enabled: Boolean, onCli
 private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, selected: String,
     onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
-        containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp,
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 options.forEach { (key, label) ->
@@ -291,14 +290,13 @@ private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, sel
         }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
-/** Small caps-style section header used across the download surfaces. */
+/** Section heading shared by the download sheets. */
 @Composable
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        fontSize = 12.sp,
-        letterSpacing = 0.8.sp,
-        fontWeight = FontWeight.Normal,
+        fontSize = SettingsTokens.BodySize.sp,
+        fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
     )
@@ -310,7 +308,7 @@ private fun SheetIdentity(title: String, author: String) {
         text = title,
         maxLines = DownloadTokens.TITLE_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         fontSize = SettingsTokens.TitleSize.sp,
         lineHeight = SettingsTokens.TitleLine.sp,
         color = MaterialTheme.colorScheme.onSurface,
@@ -327,22 +325,11 @@ private fun SheetIdentity(title: String, author: String) {
     }
 }
 
-/** Video / Audio picker: one modern M3 segmented control, not two loose chips. */
 @Composable
 private fun MediaToggle(audioOnly: Boolean, onChange: (Boolean) -> Unit) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        SegmentedButton(
-            selected = !audioOnly,
-            onClick = { onChange(false) },
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            label = { Text(stringResource(R.string.download_video)) },
-        )
-        SegmentedButton(
-            selected = audioOnly,
-            onClick = { onChange(true) },
-            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            label = { Text(stringResource(R.string.download_audio)) },
-        )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        DownloadFilterChip(!audioOnly, stringResource(R.string.download_video)) { onChange(false) }
+        DownloadFilterChip(audioOnly, stringResource(R.string.download_audio)) { onChange(true) }
     }
 }
 
@@ -512,7 +499,7 @@ fun BatchConfirmSheet(
         ) {
             Text(
                 snapshot.name,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
                 fontSize = SettingsTokens.TitleSize.sp,
                 lineHeight = SettingsTokens.TitleLine.sp,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -630,7 +617,8 @@ fun BatchConfirmSheet(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            dragHandle = { YoutubeSheetHandle() },
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner),
         ) {

@@ -1,7 +1,10 @@
 package com.hhst.youtubelite.core
 
+import com.hhst.youtubelite.diagnostics.AppLog
+
 import android.app.Activity
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.os.Build
 import android.os.SystemClock
 import android.util.Rational
@@ -70,16 +73,16 @@ object PipAutoEnter {
     var lastRequestedAutoEnter: Boolean = false
         private set
 
-    fun apply(activity: Activity, autoEnter: Boolean, aspect: Rational? = null) {
+    fun apply(activity: Activity, autoEnter: Boolean, aspect: Rational? = null, actions: List<RemoteAction>? = null) {
         // While an overlay holds suppress, MainActivity.syncPipParams still
         // calls apply(false). Keep lastEligible as the unsuppressed desire.
         if (!isSuppressed()) {
             lastEligible = autoEnter
         }
-        pushParams(activity, autoEnter, aspect)
+        pushParams(activity, autoEnter, aspect, actions)
     }
 
-    private fun pushParams(activity: Activity, autoEnter: Boolean, aspect: Rational? = null) {
+    private fun pushParams(activity: Activity, autoEnter: Boolean, aspect: Rational? = null, actions: List<RemoteAction>? = null) {
         if (!PipSupport.isSupported(activity)) {
             lastRequestedAutoEnter = false
             lastPushError = null
@@ -87,12 +90,14 @@ object PipAutoEnter {
         }
         val builder = PictureInPictureParams.Builder()
         if (aspect != null) builder.setAspectRatio(aspect)
+        if (actions != null) builder.setActions(actions)
         val enable = autoEnter && !isSuppressed()
         lastRequestedAutoEnter = enable
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(enable)
         }
         val result = runCatching { activity.setPictureInPictureParams(builder.build()) }
+        result.onFailure { AppLog.event(AppLog.Category.APP, "pip_params_failed", mapOf("auto_enter" to enable), it) }
         lastPushError = result.exceptionOrNull()?.let { it.javaClass.simpleName + ": " + it.message }
     }
 

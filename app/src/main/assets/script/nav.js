@@ -57,7 +57,7 @@
   function openTab(url) {
     const bridge = window.Bridge;
     if (!bridge || typeof bridge.openTab !== 'function') return;
-    // YouTube may push a transient hash (e.g. #searching) on the source page
+    // The page may push a transient hash (e.g. #searching) on the source page
     // before cross-tab navigation; strip it so back lands on a clean page.
     cleanSourceHash();
     bridge.openTab(url);
@@ -82,6 +82,27 @@
   // merging would couple script injection order.
   const originalPushState = history.pushState;
   const originalReplaceState = history.replaceState;
+  const originalBack = history.back;
+  const originalGo = history.go;
+
+  // Each native tab has its own WebView history. The page header calls
+  // history.back(), but a newly opened tab has no entry for its source page.
+  // The host walks local history or pops the tab, matching system Back.
+  function nativeBack() {
+    const bridge = window.Bridge;
+    if (!bridge || typeof bridge.goBack !== 'function') return false;
+    bridge.goBack();
+    return true;
+  }
+
+  history.back = function () {
+    if (!nativeBack()) return originalBack.apply(this, arguments);
+  };
+
+  history.go = function (delta) {
+    if (Number(delta) === -1 && nativeBack()) return;
+    return originalGo.apply(this, arguments);
+  };
 
   // Opens [url] in a new tab unless it matches [location.href]'s kind.
   // Returns true when routed cross-tab, false to let navigation proceed in-page.
@@ -91,7 +112,8 @@
     const path = new URL(nextUrl).pathname;
     if (/^\/signin(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(path)) return false;
     const nextKind = kind(nextUrl);
-    if (nextKind === 'shorts' && window.Bridge?.shouldInheritShorts?.()) return false;
+    const bridge = window.Bridge;
+    if (nextKind === 'shorts' && bridge && typeof bridge.shouldInheritShorts === 'function' && bridge.shouldInheritShorts()) return false;
     if (nextKind === 'unknown' || nextKind === kind(location.href)) return false;
     openTab(nextUrl);
     return true;
@@ -117,9 +139,10 @@
       let href;
       // Bottom-bar internals are Polymer data; guard the read so a
       // reshaped object never breaks clicks.
-      const endpoint = nav?.data?.navigationEndpoint;
+      const endpoint = nav && nav.data && nav.data.navigationEndpoint;
       if (endpoint) {
-        href = endpoint.commandMetadata?.webCommandMetadata?.url;
+        const metadata = endpoint.commandMetadata;
+        href = metadata && metadata.webCommandMetadata && metadata.webCommandMetadata.url;
       } else if (anchor && anchor.href) {
         href = anchor.getAttribute('href');
       } else if (logo) {

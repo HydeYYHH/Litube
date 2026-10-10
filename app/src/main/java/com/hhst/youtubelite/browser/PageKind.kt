@@ -4,7 +4,7 @@ import com.hhst.youtubelite.core.Constants
 import java.net.URI
 import java.util.Locale
 
-/** Maps YouTube URLs to routing kinds. */
+/** Maps watch URLs to routing kinds. */
 object PageKind {
 
     /** Bottom-nav surfaces; each reuses one tab. */
@@ -45,7 +45,7 @@ object PageKind {
         if (lowerHost == "youtu.be") {
             return if (segments.isEmpty()) "unknown" else Constants.PAGE_WATCH
         }
-        // Any youtube.com host or subdomain (aligned with UrlPolicy / nav.js).
+        // Any first-party host or subdomain (aligned with UrlPolicy / nav.js).
         if (!isYoutubeHost(lowerHost)) return "unknown"
         if (segments.isEmpty()) return Constants.PAGE_HOME
 

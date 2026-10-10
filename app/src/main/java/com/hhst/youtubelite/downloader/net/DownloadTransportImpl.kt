@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.downloader.net
 
+import com.hhst.youtubelite.diagnostics.*
+
 import androidx.annotation.OptIn as Media3OptIn
 import androidx.media3.common.util.UnstableApi
 import com.hhst.youtubelite.downloader.core.DownloadChunk
@@ -87,6 +89,8 @@ class DownloadTransportImpl(
         onProgress: suspend (DownloadChunk, Long?) -> Boolean,
         onChunk: suspend (DownloadChunk) -> Boolean,
     ): TransferResult {
+        val diagnostic = coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(taskId = taskId)
+        AppLog.event(AppLog.Category.DOWNLOADER, "component_transfer", mapOf("component" to component.id, "kind" to component.kind, "expected_bytes" to source.expectedBytes), context = diagnostic)
         dest.parentFile?.mkdirs()
         var current = source
         var plan = DownloadRequestFactory.fromSource(current)
@@ -136,6 +140,7 @@ class DownloadTransportImpl(
                 is TransferResult.Cancelled, is TransferResult.WaitingNetwork,
                 -> return result
                 is TransferResult.Failed -> {
+                    AppLog.event(AppLog.Category.DOWNLOADER, "transfer_retry_decision", mapOf("reason" to result.reason, "attempt" to retries, "identity_rounds" to identityRounds), context = diagnostic, level = DiagnosticLevel.WARN)
                     when {
                         result.reason.startsWith("403") || result.reason in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED") -> {
                             val recovered = if (identityRounds == 0) {
@@ -328,7 +333,8 @@ class DownloadTransportImpl(
         componentId: String,
         onProgress: suspend (DownloadChunk, Long?) -> Boolean,
     ): WriteOutcome {
-        val call = client.newCall(request)
+        val diagnostic = coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(taskId = taskId)
+        val call = client.newCall(DiagnosticNetwork.tag(request, diagnostic))
         calls[taskId] = call
         val cancellation = coroutineContext[Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) {
             if (it != null) call.cancel()

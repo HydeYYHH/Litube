@@ -136,6 +136,14 @@ class SponsorSkipController(
         countdownSec = null
     }
 
+    fun skipPending(): Long? {
+        val target = pending?.endMs
+        pending?.let { suppressed += it }
+        pending = null
+        countdownSec = null
+        return target
+    }
+
     /** A deliberate seek: landing inside a segment opts out of skipping it. */
     fun onUserSeek(posMs: Long, segments: List<Segment>) {
         segmentAt(posMs, segments)?.let { suppressed += it }

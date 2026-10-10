@@ -4,6 +4,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.downloader.net.DownloadRangeParser
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -21,9 +23,10 @@ import java.io.IOException
 class YoutubeMediaRequests(
     private val current: (YoutubeSession) -> Boolean,
     private val diagnostics: ExtractionDiagnostics,
+    private val invalidationReason: (YoutubeSession) -> String? = { "unknown" },
 ) {
     // Issued CDN URLs survive page-configuration refreshes; only account or route changes end a read.
-    constructor(sessions: YoutubeSessionProvider, diagnostics: ExtractionDiagnostics) : this(sessions::isMediaCurrent, diagnostics)
+    constructor(sessions: YoutubeSessionProvider, diagnostics: ExtractionDiagnostics) : this(sessions::isMediaCurrent, diagnostics, sessions::mediaInvalidationReason)
     private val plans = LinkedHashMap<String, RequestPlan>(128, .75f, true)
     private val post = LinkedHashSet<String>()
     private val cancellation = Executors.newSingleThreadScheduledExecutor {
@@ -36,6 +39,7 @@ class YoutubeMediaRequests(
     }
     @Synchronized fun plan(url: String): RequestPlan? = plans[normalized(url)]
     fun isCurrent(plan: RequestPlan): Boolean = current(plan.session)
+    fun invalidationReason(plan: RequestPlan): String = invalidationReason(plan.session) ?: "unknown"
     private fun normalized(url: String) = url.toHttpUrl().newBuilder().removeAllQueryParameters("range").removeAllQueryParameters("rn").build().toString()
 
     fun build(url: String, plan: RequestPlan, position: Long = 0, length: Long = -1,
@@ -69,7 +73,19 @@ class YoutubeMediaRequests(
     fun interceptor() = Interceptor { chain ->
         val initial = chain.request()
         val plan = initial.tag(RequestPlan::class.java) ?: plan(initial.url.toString()) ?: return@Interceptor chain.proceed(initial)
-        if (!current(plan.session)) throw IOException("MEDIA_SESSION_CHANGED")
+        val context = initial.tag(DiagnosticContext::class.java)
+        val reported = AtomicBoolean()
+        fun sessionChanged(): IOException {
+            if (reported.compareAndSet(false, true)) AppLog.event(
+                AppLog.Category.EXTRACTOR, "media_session_invalidated",
+                mapOf("reason" to invalidationReason(plan), "client" to plan.profile.name, "protocol" to plan.protocol.name),
+                critical = true, context = context)
+            return IOException("MEDIA_SESSION_CHANGED")
+        }
+        if (!current(plan.session)) throw sessionChanged()
+        // HLS/DASH children inherit the answer's plan but were never catalog URLs.
+        // Bind the plan actually used, so a later media refusal cannot blame a prefetched client.
+        register(initial.url.toString(), plan)
         var request = initial.newBuilder().removeHeader("Authorization").removeHeader("Cookie")
             .header("User-Agent", plan.userAgent).apply {
                 plan.headers.forEach { (k, v) -> header(k, v) }
@@ -80,7 +96,7 @@ class YoutubeMediaRequests(
         fun exchange(first: Request): Response {
             request = first
             while (true) {
-                if (!current(plan.session)) throw IOException("MEDIA_SESSION_CHANGED")
+                if (!current(plan.session)) throw sessionChanged()
                 val response = chain.proceed(request)
                 if (response.code !in setOf(301, 302, 303, 307, 308)) return response
                 var target = response.header("Location")?.let { response.request.url.resolve(it) }
@@ -101,7 +117,7 @@ class YoutubeMediaRequests(
             if (response.isSuccessful) synchronized(this) { post.add(normalized(initial.url.toString())) }
             diagnostics.event("media", plan.profile.name, "GET_POST_COMPATIBILITY", (System.nanoTime() - started) / 1_000_000, response.code)
         }
-        if (!current(plan.session)) { response.close(); throw IOException("MEDIA_SESSION_CHANGED") }
+        if (!current(plan.session)) { response.close(); throw sessionChanged() }
         diagnostics.event("media", plan.profile.name, plan.protocol.name, (System.nanoTime() - started) / 1_000_000, response.code)
         val mediaType = response.header("Content-Type").orEmpty().lowercase()
         if (response.isSuccessful && (mediaType.startsWith("text/html") || mediaType.startsWith("application/json"))) {
@@ -112,18 +128,18 @@ class YoutubeMediaRequests(
         val body = response.body ?: return@Interceptor response
         val changed = AtomicBoolean()
         val abort = cancellation.scheduleAtFixedRate({
-            if (!current(plan.session)) { changed.set(true); chain.call().cancel() }
+            if (!current(plan.session)) { sessionChanged(); changed.set(true); chain.call().cancel() }
         }, 100, 100, TimeUnit.MILLISECONDS)
         val guarded = object : ResponseBody() {
             private val input = object : ForwardingSource(body.source()) {
                 private var received = 0L
                 override fun read(sink: Buffer, byteCount: Long): Long {
-                    if (changed.get()) throw IOException("MEDIA_SESSION_CHANGED")
+                    if (changed.get()) throw sessionChanged()
                     val count = try { super.read(sink, byteCount) } catch (failure: IOException) {
-                        if (changed.get()) throw IOException("MEDIA_SESSION_CHANGED", failure)
+                        if (changed.get()) throw sessionChanged().apply { initCause(failure) }
                         throw failure
                     }
-                    if (changed.get()) throw IOException("MEDIA_SESSION_CHANGED")
+                    if (changed.get()) throw sessionChanged()
                     if (count < 0 && window.expectedBytes >= 0 && received != window.expectedBytes) throw IOException("MEDIA_EARLY_EOF")
                     if (count > 0) {
                         if (received == 0L) diagnostics.event("read", plan.profile.name, "FIRST_BYTES", (System.nanoTime() - started) / 1_000_000, response.code)

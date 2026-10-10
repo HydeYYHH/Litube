@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">在后台听音频</string>
     <string name="back_again_to_exit">再按一次退出</string>
     <string name="navigate_back">返回</string>
     <string name="extension">扩展</string>
@@ -37,6 +38,17 @@
     <string name="reset_all_settings">重置所有设置</string>
     <string name="reset_extension_title">重置扩展</string>
     <string name="reset_extension_message">将所有扩展设置恢复为默认值？</string>
+    <string name="settings_backup_restore">备份与恢复</string>
+    <string name="settings_export">导出设置</string>
+    <string name="settings_export_summary">将当前设置保存为 JSON 文件</string>
+    <string name="settings_import">导入设置</string>
+    <string name="settings_import_summary">从备份文件恢复设置</string>
+    <string name="settings_import_confirm_title">导入设置？</string>
+    <string name="settings_import_confirm_message">当前设置将被备份文件覆盖。</string>
+    <string name="settings_export_done">设置已导出</string>
+    <string name="settings_export_failed">设置文件保存失败</string>
+    <string name="settings_import_done">设置已导入</string>
+    <string name="settings_import_failed">设置文件无效</string>
     <string name="confirm">确认</string>
     <string name="cancel">取消</string>
     <string name="more_options">更多</string>

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.service
 
+import com.hhst.youtubelite.diagnostics.*
+
 import android.app.Notification
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -79,7 +81,10 @@ class PlaybackService : Service() {
     private var lastShowAsPlaying = false
     private val commandListeners = CopyOnWriteArrayList<Player.Listener>()
 
-    override fun onBind(intent: Intent?): IBinder? = LocalBinder()
+    override fun onBind(intent: Intent?): IBinder? {
+        AppLog.event(AppLog.Category.APP, "playback_service_bound")
+        return LocalBinder()
+    }
 
     inner class LocalBinder : Binder() {
         fun getService(): PlaybackService = this@PlaybackService
@@ -88,6 +93,7 @@ class PlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         destroyed = false
+        AppLog.event(AppLog.Category.APP, "playback_service_created")
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -105,6 +111,8 @@ class PlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppLog.event(AppLog.Category.APP, "playback_service_command", mapOf("start_id" to startId, "flags" to flags,
+            "action" to intent?.action?.takeIf { it in setOf(ACTION_PLAY_PAUSE, ACTION_PREVIOUS, ACTION_NEXT, ACTION_CANCELLED) }))
         if (session == null) startForegroundSafely(placeholderNotification())
         if (intent?.action != null) {
             when (intent.action) {
@@ -381,7 +389,7 @@ class PlaybackService : Service() {
             // service on a collision course with the system's
             // ForegroundServiceDidNotStartInTime check: exit now instead of
             // only logging the failure.
-            Log.w(TAG, "startForeground failed", e)
+            AppLog.event(AppLog.Category.APP, "foreground_service_failed", mapOf("service" to "playback"), e)
             stopSelf()
         }
     }
@@ -428,6 +436,7 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        AppLog.event(AppLog.Category.APP, "playback_service_destroyed")
         destroyed = true
         mainHandler.removeCallbacksAndMessages(null)
         executor.shutdownNow()
@@ -453,7 +462,7 @@ class PlaybackService : Service() {
         private const val ACTION_PREVIOUS = "com.hhst.youtubelite.action.PREVIOUS"
         private const val ACTION_NEXT = "com.hhst.youtubelite.action.NEXT"
         private const val ACTION_CANCELLED = "com.hhst.youtubelite.action.CANCELLED"
-        private const val NOTIFICATION_ART_PX = 128
+        private const val NOTIFICATION_ART_PX = 256
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(

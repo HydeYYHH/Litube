@@ -25,14 +25,17 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.hls.HlsDataSourceFactory
 import androidx.media3.exoplayer.hls.DefaultHlsDataSourceFactory
 import com.hhst.youtubelite.extractor.hexString
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticDataSource
 
 /** Shared plan execution with independent Media3 byte cache and live connections. */
 class PlayerDataSource private constructor(
-    /** YouTube DASH factory, cached. */
+    /** DASH factory, cached. */
     val ytDash: DataSource.Factory,
-    /** YouTube progressive factory, cached. */
+    /** Progressive factory, cached. */
     val ytProgressive: DataSource.Factory,
-    /** YouTube progressive factory, UNCACHED: live streams
+    /** Progressive factory, UNCACHED: live streams
      *  must not write into (or replay from) the VOD LRU under the same cache key. */
     val ytLiveProgressive: DataSource.Factory,
     /** Planned HTTP factory for live manifests/chunks; never cached. */
@@ -41,6 +44,15 @@ class PlayerDataSource private constructor(
     private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
     private val hlsFactory: ((RequestPlan) -> HlsDataSourceFactory)? = null,
 ) {
+    fun withDiagnostics(context: DiagnosticContext): PlayerDataSource {
+        fun scoped(factory: DataSource.Factory) = DataSource.Factory { DiagnosticDataSource(factory.createDataSource(), context) }
+        return PlayerDataSource(scoped(ytDash), scoped(ytProgressive), scoped(ytLiveProgressive), scoped(live),
+            manifestFactory = { scoped(manifest(it)) },
+            formatFactory = { formats, dash, cached -> scoped(this.formats(formats, dash, cached)) },
+            hlsFactory = { plan -> val original = vodHls(plan); HlsDataSourceFactory { type ->
+                DiagnosticDataSource(original.createDataSource(type), context, type)
+            } })
+    }
     fun manifest(plan: RequestPlan?): DataSource.Factory =
         if (plan != null) manifestFactory?.invoke(plan) ?: live else live
     fun formats(formats: List<Format>, dash: Boolean = true, cached: Boolean = true): DataSource.Factory =
@@ -110,7 +122,7 @@ class PlayerDataSource private constructor(
                     HlsDataSourceFactory { type ->
                         if (type == C.DATA_TYPE_MANIFEST) playlist.createDataSource()
                         else if (type == C.DATA_TYPE_MEDIA || type == C.DATA_TYPE_MEDIA_INITIALIZATION) {
-                            SessionCheckedDataSource(media.createDataSource(), plan, current)
+                            SessionCheckedDataSource(media.createDataSource(), plan, current) { plans?.invalidationReason(plan) ?: "unknown" }
                         } else upstream.createDataSource()
                     }
                 },
@@ -173,9 +185,14 @@ private class SessionCheckedDataSource(
     private val inner: DataSource,
     private val plan: RequestPlan,
     private val current: () -> Boolean,
+    private val invalidationReason: () -> String,
 ) : DataSource by inner {
     private var nextCheck = 0L
+    private var context: DiagnosticContext? = null
+    private var reported = false
     override fun open(dataSpec: DataSpec): Long {
+        context = dataSpec.customData as? DiagnosticContext
+        reported = false
         if (plan.expiresAtMillis <= System.currentTimeMillis()) throw IOException("MEDIA_URL_EXPIRED")
         nextCheck = 0L
         checkSession()
@@ -188,7 +205,15 @@ private class SessionCheckedDataSource(
     private fun checkSession() {
         val now = SystemClock.elapsedRealtime()
         if (now >= nextCheck) {
-            if (!current()) throw IOException("MEDIA_SESSION_CHANGED")
+            if (!current()) {
+                if (!reported) {
+                    reported = true
+                    AppLog.event(AppLog.Category.PLAYER,
+                        "media_session_invalidated", mapOf("reason" to invalidationReason(), "phase" to "cached_media_read", "client" to plan.profile.name),
+                        critical = true, context = context)
+                }
+                throw IOException("MEDIA_SESSION_CHANGED")
+            }
             nextCheck = now + 100
         }
     }

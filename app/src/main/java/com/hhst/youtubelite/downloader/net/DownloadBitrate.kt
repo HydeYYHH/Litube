@@ -9,7 +9,7 @@ import com.hhst.youtubelite.extractor.Format
  * is not changed here.
  */
 object DownloadBitrate {
-    /** Audio values below this are treated as kb/s; YouTube audio bps is ≥ ~30 kb/s * 1000. */
+    /** Audio values below this are treated as kb/s; audio bitrates are at least about 30 kb/s * 1000. */
     private const val AUDIO_KBPS_CEILING = 2048L
 
     fun bitsPerSecond(format: Format): Long {

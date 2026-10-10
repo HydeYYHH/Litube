@@ -290,10 +290,11 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
     }
 }
 
-/** Sponsor pre-skip countdown card: "N s → skip" with a cancel button. */
+/** Sponsor pre-skip countdown card: "N s" tap-to-skip body with a cancel chip. */
 @Composable
 fun SponsorCountdownCard(
     seconds: Int,
+    onSkipNow: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -302,7 +303,7 @@ fun SponsorCountdownCard(
     Row(
         modifier = modifier
             .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
-            .clickable(onClick = onCancel)
+            .clickable(onClick = onSkipNow)
             .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -319,6 +320,7 @@ fun SponsorCountdownCard(
             fontWeight = FontWeight.Medium,
             modifier = Modifier
                 .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                .clickable(onClick = onCancel)
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }

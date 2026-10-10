@@ -582,6 +582,10 @@ class PlayerViewModel(
     private fun stopAndHide(pausePlayback: Boolean = true) {
         playbackRequestSeq++
         autoEnteredFullscreen = false
+        if (audioOnlyBackground) {
+            audioOnlyBackground = false
+            engine.setAudioOnly(false)
+        }
         _uiState.update {
             it.copy(visible = false, fullscreen = false, locked = false, mini = false)
         }
@@ -827,7 +831,7 @@ class PlayerViewModel(
 
     /**
      * Navigation availability: local queue (enabled + non-empty) wins over the
-     * YouTube playlist in the watch page; WebView back is the previous-only
+     * page playlist in the watch page; WebView back is the previous-only
      * fallback.
      */
     private fun queueNavAvailability(): QueueNav {
@@ -1029,12 +1033,14 @@ class PlayerViewModel(
 
     override fun onCloseCastLink() = cast.stopLink()
 
-    /** User cancelled the pre-skip countdown card. */
     override fun onSponsorSkipCancel() {
         engine.cancelSponsorSkip()
     }
 
-    /** Manual skip via the chip (suppressed segment). */
+    override fun onSponsorSkipNow() {
+        engine.skipSponsorNow()
+    }
+
     override fun onSponsorChipSkip() {
         engine.skipSponsorChipSegment()
     }
@@ -1133,7 +1139,7 @@ class PlayerViewModel(
 
     private fun onPlaybackEnded() {
         // Auto-advance honors the same priority as manual skip (queue first,
-        // then the YouTube playlist), never WebView back. The queue does NOT
+        // then the page playlist), never WebView back. The queue does NOT
         // wrap here: at the tail playback simply ends;
         // only the manual next button wraps.
         val queueContext = queueActive()
@@ -1188,6 +1194,26 @@ class PlayerViewModel(
 
     fun pauseForBackground() = engine.pauseLocal()
 
+    /** Explicit PiP headphone action; applies to this background session only. */
+    var audioOnlyBackground: Boolean = false
+        private set
+
+    fun playAudioOnlyInBackground() {
+        audioOnlyBackground = true
+        autoEnteredFullscreen = false
+        _uiState.update { it.copy(fullscreen = false, locked = false) }
+        engine.setAudioOnly(true)
+        engine.setVideoVisible(false)
+    }
+
+    fun returnFromAudioOnlyBackground() {
+        if (!audioOnlyBackground) return
+        audioOnlyBackground = false
+        _uiState.update { it.copy(mini = false, controlsVisible = true) }
+        engine.setAudioOnly(false)
+        engine.setVideoVisible(_uiState.value.visible)
+    }
+
     /**
      * Double-back exit. With background play enabled this mirrors the official
      * app: only the surface hides, playback (local or cast) continues and the
@@ -1235,7 +1261,7 @@ class PlayerViewModel(
 
         /**
          * Pure priority rules behind [queueNavAvailability]: the local queue
-         * wins over the YouTube page playlist, and the watch page's back
+         * wins over the page playlist, and the watch page's back
          * history is a previous-only fallback. Static so the rules stay
          * unit-testable.
          */

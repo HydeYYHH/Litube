@@ -11,6 +11,7 @@ import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.DownloadTask
 import com.hhst.youtubelite.downloader.core.ScheduleRecord
 import com.hhst.youtubelite.downloader.data.DownloadRepository
+import com.hhst.youtubelite.diagnostics.*
 
 /**
  * Maps coordinator schedule/cancel onto WorkManager (API 26–33 transfer +
@@ -89,6 +90,10 @@ class BackgroundDownloadScheduler(
             if (repair) return
         }
         val kind = neededKind(task)
+        AppLog.event(AppLog.Category.DOWNLOADER, "schedule_decision", mapOf("phase" to task.phase,
+            "status" to task.status, "work_kind" to kind, "reason" to reason, "repair" to repair,
+            "api" to sdk(), "wifi_only" to prefs.wifiOnly()), context = DiagnosticContext(videoId = task.videoId,
+                taskId = task.id, generation = task.executionGeneration))
         val batchId = ctx.batchId
         notifications.notifyPrompt(batchId)
         if (kind == DownloadWorkKind.FINALIZE) {
@@ -203,6 +208,8 @@ class BackgroundDownloadScheduler(
         kind: DownloadWorkKind,
     ) {
         taskIds.forEach { id ->
+            AppLog.event(AppLog.Category.DOWNLOADER, "work_bound", mapOf("backend" to backend,
+                "work_kind" to kind, "job_id" to jobId), context = DiagnosticContext(taskId = id))
             coordinator().bindSystemWork(
                 taskId = id,
                 uniqueWorkName = uniqueName,

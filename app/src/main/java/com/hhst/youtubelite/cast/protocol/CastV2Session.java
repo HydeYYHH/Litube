@@ -2,6 +2,8 @@
 // Copyright (c) 2020-present yuliskov. See assets/licenses/newtube-MIT.txt.
 package com.hhst.youtubelite.cast.protocol;
 
+import com.hhst.youtubelite.diagnostics.CastDiagnosticTrace;
+
 import androidx.annotation.Nullable;
 
 import android.util.Log;
@@ -41,6 +43,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@code onLaunchError}, {@code onChannelError} or {@code onClosed}.</p>
  */
 public class CastV2Session {
+    private CastDiagnosticTrace mDiagnostics = new CastDiagnosticTrace();
+    public void setDiagnostics(CastDiagnosticTrace diagnostics) { mDiagnostics = diagnostics; mChannel.setDiagnostics(diagnostics); }
 
     public interface Listener {
         /** App launched and its transport connected - load()/transport commands are live now. */
@@ -58,7 +62,7 @@ public class CastV2Session {
         /** The underlying channel died (socket error, heartbeat timeout). Terminal. */
         void onChannelError(String reason);
 
-        /** Session ended without error: local close() or the receiver closed our connection. Terminal. */
+        /** Session ended without error: local close() or the receiver closed the connection. Terminal. */
         void onClosed();
 
         /**
@@ -78,7 +82,7 @@ public class CastV2Session {
     static final String NS_RECEIVER = "urn:x-cast:com.google.cast.receiver";
     static final String NS_MEDIA = "urn:x-cast:com.google.cast.media";
 
-    /** LAUNCH to first RECEIVER_STATUS with our app; the DMR cold-starts in a few seconds. */
+    /** LAUNCH to first RECEIVER_STATUS that lists this app; the DMR cold-starts in a few seconds. */
     private static final long LAUNCH_TIMEOUT_MS = 15_000;
     /** LOAD with no MEDIA_STATUS answer in this long = the receiver refused the stream. */
     private static final long LOAD_TIMEOUT_MS = 15_000;
@@ -117,6 +121,7 @@ public class CastV2Session {
         mAppId = appId;
         mListener = listener;
         mChannel = new CastV2Channel(host, port, new ChannelListener(), authenticator);
+        mChannel.setDiagnostics(mDiagnostics);
     }
 
     /** Convenience constructor: session against the Default Media Receiver. */
@@ -130,6 +135,7 @@ public class CastV2Session {
 
     /** Open the channel and launch the app. Call once; {@code onConnected} or a terminal error follows. */
     public void start() {
+        mDiagnostics.phase("receiver_start_requested");
         mChannel.open();
         schedule(() -> {
             if (!mConnectedNotified) {
@@ -140,8 +146,8 @@ public class CastV2Session {
     }
 
     /**
-     * Tear the session down. Sends a best-effort receiver STOP for our app session first - we own
-     * the Default Media Receiver app, so leaving it up after disconnect would strand the TV on an
+     * Tear the session down. Sends a best-effort receiver STOP for this app session first. This
+     * sender owns the Default Media Receiver app, so leaving it up after disconnect would strand the TV on an
      * idle splash screen.
      */
     public void close() {
@@ -202,6 +208,7 @@ public class CastV2Session {
             load.put("requestId", requestId);
             schedule(() -> {
                 if (mLoadPending && mLoadRequestId == requestId) {
+                    mDiagnostics.response("LOAD_TIMEOUT", requestId);
                     mLoadPending = false;
                     dispatch(() -> mListener.onLoadFailed("LOAD_TIMEOUT"));
                 }
@@ -209,9 +216,10 @@ public class CastV2Session {
             load.put("media", media);
             load.put("autoplay", true);
             load.put("currentTime", startPositionMs / 1000d);
+            mDiagnostics.request("LOAD", requestId);
             mChannel.send(CastV2Channel.SENDER_ID, transportId, NS_MEDIA, load.toString());
         } catch (JSONException e) {
-            Log.e(TAG, "LOAD build failed: " + e);
+            mDiagnostics.error("load_build_failed", e);
         }
     }
 
@@ -253,9 +261,10 @@ public class CastV2Session {
             JSONObject json = new JSONObject();
             filler.fill(json);
             json.put("requestId", mRequestId.getAndIncrement());
+            mDiagnostics.request(json.optString("type"), json.optInt("requestId"));
             mChannel.send(CastV2Channel.SENDER_ID, CastV2Channel.RECEIVER_ID, NS_RECEIVER, json.toString());
         } catch (JSONException e) {
-            Log.e(TAG, "Receiver command build failed: " + e);
+            mDiagnostics.error("receiver_command_build_failed", e);
         }
     }
 
@@ -264,8 +273,7 @@ public class CastV2Session {
         String transportId = mTransportId;
         int mediaSessionId = mMediaSessionId;
         if (transportId == null || mediaSessionId < 0) {
-            Log.e(TAG, type + " ignored: no media session yet (transport=" + transportId
-                    + ", mediaSession=" + mediaSessionId + ")");
+            mDiagnostics.phase("command_deferred_no_media_session");
             return;
         }
         try {
@@ -276,14 +284,16 @@ public class CastV2Session {
             if (extra != null) {
                 extra.fill(json);
             }
+            mDiagnostics.request(type, json.optInt("requestId"));
             mChannel.send(CastV2Channel.SENDER_ID, transportId, NS_MEDIA, json.toString());
         } catch (JSONException e) {
-            Log.e(TAG, type + " build failed: " + e);
+            mDiagnostics.error("media_command_build_failed", e);
         }
     }
 
     /** Media-namespace GET_STATUS - the position poll (see class javadoc). */
     private void pollMediaStatus() {
+        mDiagnostics.sample();
         String transportId = mTransportId;
         if (transportId == null || mMediaSessionId < 0 || !mChannel.isOpen()) {
             return;
@@ -295,7 +305,7 @@ public class CastV2Session {
             json.put("requestId", mRequestId.getAndIncrement());
             mChannel.send(CastV2Channel.SENDER_ID, transportId, NS_MEDIA, json.toString());
         } catch (JSONException e) {
-            Log.e(TAG, "GET_STATUS build failed: " + e);
+            mDiagnostics.error("status_build_failed", e);
         }
     }
 
@@ -323,10 +333,11 @@ public class CastV2Session {
             try {
                 payload = new JSONObject(payloadUtf8);
             } catch (JSONException e) {
-                Log.d(TAG, "Non-JSON payload on " + message.getNamespace() + " - ignored");
+                mDiagnostics.error("protocol_response_malformed", e);
                 return;
             }
             String type = payload.optString("type");
+            if (!"RECEIVER_STATUS".equals(type) && !"MEDIA_STATUS".equals(type)) mDiagnostics.response(type, payload.optInt("requestId", 0));
             switch (message.getNamespace()) {
                 case NS_RECEIVER:
                     handleReceiverMessage(type, payload);
@@ -367,20 +378,21 @@ public class CastV2Session {
             return;
         }
         // Both the LAUNCH response and unsolicited broadcasts arrive as RECEIVER_STATUS; requestId
-        // matching is pointless here - the app entry is what we want, wherever it shows up.
+        // matching does not apply here. The app entry is the signal, wherever it appears.
         AppSession app = findApp(payload, mAppId);
+        if (app != null) mDiagnostics.response(type, payload.optInt("requestId", 0));
         if (app != null && mTransportId == null) {
             mSessionId = app.sessionId;
             mTransportId = app.transportId;
             mChannel.connect(app.transportId);
             mConnectedNotified = true;
-            Log.d(TAG, "App " + mAppId + " up: session=" + app.sessionId + ", transport=" + app.transportId);
+            mDiagnostics.phase("receiver_app_ready");
             dispatch(mListener::onConnected);
             // Start the position poll now; it no-ops until a mediaSessionId exists.
             scheduleAtFixedDelay(this::pollMediaStatus, MEDIA_POLL_INTERVAL_MS);
         } else if (app == null && mConnectedNotified && payload.optJSONObject("status") != null) {
-            // A status without our app entry (the "applications" array shrank or vanished) =
-            // someone/something stopped the app on the receiver. Graceful end, not an error.
+            // A status whose applications array no longer contains this app means
+            // the receiver stopped it. Close the session; this is not a transport error.
             terminate(mListener::onClosed);
             mChannel.close();
         }
@@ -402,6 +414,7 @@ public class CastV2Session {
                 if (media != null && media.has("contentId") && (mContentUrl == null || !mContentUrl.equals(media.optString("contentId")))) return;
                 if (mLoadPending && requestId == 0 && (media == null || !media.has("contentId"))) return;
                 mLoadPending = false;
+                mDiagnostics.response(type, requestId != 0 ? requestId : mLoadRequestId);
                 mPlaying = "PLAYING".equals(status.playerState);
                 if (status.mediaSessionId >= 0) {
                     mMediaSessionId = status.mediaSessionId;
@@ -414,13 +427,11 @@ public class CastV2Session {
                 // Not a channel death, but the integrator must know playback never started. The
                 // IDLE status keeps position/overlay consumers unstuck; onLoadFailed carries the
                 // actual failure signal (the session manager's auto-fallback hangs off it).
-                Log.e(TAG, "Receiver rejected LOAD: " + type);
                 if (payload.optInt("requestId", mLoadRequestId) != mLoadRequestId) return;
                 mLoadPending = false;
                 dispatch(() -> mListener.onLoadFailed(type));
                 break;
             case "INVALID_REQUEST":
-                Log.e(TAG, "INVALID_REQUEST from receiver: " + payload.optString("reason"));
                 break;
             default:
                 break;
@@ -445,8 +456,8 @@ public class CastV2Session {
     /**
      * Find an app entry by appId in a RECEIVER_STATUS payload
      * ({@code {"type":"RECEIVER_STATUS","status":{"applications":[{...}]}}}) and return its ids.
-     * Null when the app isn't in the status (not launched yet / already stopped) or has no
-     * transportId yet (still starting).
+     * Returns null when the app is absent from the status (not launched or already
+     * stopped) or has no transportId yet (still starting).
      */
     @Nullable
     static AppSession findApp(JSONObject receiverStatusPayload, String appId) {
@@ -494,6 +505,7 @@ public class CastV2Session {
     /** Fire a terminal callback exactly once and stop the scheduler. */
     private void terminate(Runnable terminalCallback) {
         if (mTerminated.compareAndSet(false, true)) {
+            mDiagnostics.finish();
             dispatch(terminalCallback);
             mScheduler.shutdown();
         }
@@ -503,7 +515,7 @@ public class CastV2Session {
         try {
             callback.run();
         } catch (Exception e) {
-            Log.e(TAG, "Listener callback failed: " + e);
+            mDiagnostics.error("session_listener_failed", e);
         }
     }
 }

@@ -40,7 +40,7 @@ internal object DeviceEvidence {
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand(command)
             .use { pfd -> FileInputStream(pfd.fileDescriptor).copyTo(out) }
-        return out.toString(Charsets.UTF_8)
+        return out.toString(Charsets.UTF_8.name())
     }
 
     fun writeJson(fileName: String, json: String) {

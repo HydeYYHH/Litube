@@ -78,7 +78,7 @@
       if (template.closest('.cairo-settings')) button.classList.add('cairo-settings');
       button.appendChild(categoryBlock.cloneNode(true));
     }
-    // Cloned ID references would label our action with the original title.
+    // Cloned ID references would label this action with the original title.
     for (const node of [button, ...button.querySelectorAll('[id], [aria-labelledby], [aria-describedby], [aria-expanded]')]) {
       node.removeAttribute('id');
       node.removeAttribute('aria-labelledby');

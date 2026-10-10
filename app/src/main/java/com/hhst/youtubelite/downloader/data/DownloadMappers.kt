@@ -303,7 +303,7 @@ internal data class DownloadStore(
         val batch = batches[batchId] ?: return null
         val batchItems = items.values.filter { it.batchId == batchId }.sortedBy { it.position }
         val snaps = batchItems.mapNotNull { item ->
-            taskSnapshot(item.taskId)?.let { ItemSnapshot(item, it) }
+            taskSnapshot(item.taskId)?.takeUnless { it.task.removed }?.let { ItemSnapshot(item, it) }
         }
         return BatchView(batch, snaps, BatchStatsCalculator.compute(snaps))
     }

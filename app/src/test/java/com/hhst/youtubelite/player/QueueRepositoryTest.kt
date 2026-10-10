@@ -9,7 +9,7 @@ import org.junit.Test
 
 class QueueRepositoryTest {
 
-    /** Real YouTube ids are 11 chars; pad so [VideoId.parse] accepts fixtures. */
+    /** Real video ids are 11 chars; pad so [VideoId.parse] accepts fixtures. */
     private fun vid(raw: String) = raw.padEnd(11, 'x').take(11)
 
     private fun item(id: String): QueueItem {

@@ -2,6 +2,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+test('page Back delegates to the native tab stack while other history operations stay local', () => {
+  const calls = [], history = {
+    pushState() {}, replaceState() {},
+    back() { calls.push('web-back'); },
+    go(delta) { calls.push(['web-go', delta]); }
+  };
+  const context = { URL, location: { href: 'https://m.youtube.com/account', hash: '' },
+    history, document: { addEventListener() {} }, Bridge: { goBack() { calls.push('tab-back'); } } };
+  context.window = context;
+  const script = fs.readFileSync('app/src/main/assets/script/nav.js', 'utf8');
+  vm.runInNewContext(script, context);
+  vm.runInNewContext(script, context);
+  history.back(); history.go(-1); history.go('-1');
+  history.go(1); history.go(0); history.go(-2);
+  assert.deepEqual(calls, ['tab-back', 'tab-back', 'tab-back', ['web-go', 1], ['web-go', 0], ['web-go', -2]]);
+  delete context.Bridge;
+  history.back(); history.go(-1);
+  assert.deepEqual(calls.slice(-2), ['web-back', ['web-go', -1]]);
+});
 test('sign-in links and history routes stay in their originating document', () => {
   const opened = [], changes = [], handlers = {};
   const context = { URL, location: { href: 'https://m.youtube.com/watch?v=abc', hash: '' },

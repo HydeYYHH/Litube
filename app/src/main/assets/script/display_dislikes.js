@@ -14,6 +14,7 @@
   let showLikes = false;
   let likesValue = 0;
   let dislikesValue = 0;
+  let votesLoaded = false;
   let previousState = STATE_NEUTRAL;
   let activeVideoId = null;
   let initToken = 0;
@@ -83,7 +84,7 @@
       return document.querySelector("#segmented-like-button") ?? firstChild.children[0] ?? null;
     }
     if (isMobile && !isShorts()) return buttons.querySelector("like-button-view-model") ??
-      Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[0] ?? null;
+      Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer,ytm-slim-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[0] ?? null;
     return buttons.querySelector("like-button-view-model") ?? firstChild;
   }
 
@@ -96,7 +97,7 @@
         return document.querySelector("#segmented-dislike-button") ?? firstChild.children[1] ?? null;
       }
       if (isMobile && !isShorts()) return buttons.querySelector("dislike-button-view-model") ??
-        Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[1] ?? null;
+        Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer,ytm-slim-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[1] ?? null;
       return buttons.querySelector("dislike-button-view-model") ?? buttons.children[1] ?? null;
     } catch {
       return null;
@@ -105,35 +106,70 @@
 
   // Find-or-create the count text node inside a like/dislike button.
   const countControls = new WeakMap();
+  const originalStyles = new WeakMap();
+  function hideNativeLabels(inner, saved) {
+    for (const node of inner.querySelectorAll(
+      '.ytSpecButtonShapeNextButtonTextContent,.yt-spec-button-shape-next__button-text-content,' +
+      '.button-renderer-text,yt-formatted-string,span[role="text"]')) {
+      if (node.closest('svg,c3-icon,yt-icon,animated-icon,lottie-component') ||
+          node.querySelector('svg,c3-icon,yt-icon,animated-icon,lottie-component,button')) continue;
+      if (!saved.labels.some(label => label.node === node)) saved.labels.push({ node, display: node.style.display });
+      if (node.style.display !== 'none') node.style.display = 'none';
+    }
+  }
   function getCountTextContainer(button, create = true) {
     if (!button) return null;
     const owned = button.querySelector('[data-lite-vote-count]');
-    if (owned) return owned;
-    for (const existing of button.querySelectorAll(".button-renderer-text,#text,yt-formatted-string,span[role='text']")) {
-      // A reused text wrapper can also own the glyph; only edit plain labels.
-      if (!existing.closest('svg,c3-icon,animated-icon,lottie-component') &&
-          !existing.querySelector('svg,c3-icon,yt-icon,animated-icon,lottie-component,button')) return existing;
+    if (owned) {
+      const saved = countControls.get(owned), inner = button.querySelector('button');
+      if (saved && inner) {
+        hideNativeLabels(inner, saved);
+        fitCountControls(button, owned, saved);
+      }
+      return owned;
     }
     if (!create) return null;
-    // Desktop segmented renderer hides the text; create it inside the button.
     const inner = button.querySelector("button");
     if (!inner) return null;
+    // The page hydrates its attributed and animated labels after the button exists.
+    // Never replace their textContent: a provisional #text can own the icon too.
     const textSpan = document.createElement("span");
     textSpan.setAttribute('data-lite-vote-count', '');
     textSpan.style.marginInlineStart = "6px";
-    inner.appendChild(textSpan);
-    countControls.set(textSpan, { inner, width: inner.style.width, minWidth: inner.style.minWidth });
-    inner.style.width = "auto";
-    inner.style.minWidth = "48px";
+    const content = inner.querySelector('.ytSpecButtonShapeNextContent,.yt-spec-button-shape-next__content') || inner;
+    content.appendChild(textSpan);
+    const saved = { styles: [], labels: [] };
+    countControls.set(textSpan, saved);
+    hideNativeLabels(inner, saved);
+    fitCountControls(button, textSpan, saved);
     return textSpan;
+  }
+
+  function fitCountControls(button, count, saved) {
+    if (!isShorts()) {
+      // Hydration can restore a fixed width after the count was added. Keep
+      // every content wrapper in sync, including max-width and the 100% flex child.
+      for (let node = count.parentElement; node && button.contains(node); node = node.parentElement) {
+        if (!originalStyles.has(node)) originalStyles.set(node,
+          { node, width: node.style.width, minWidth: node.style.minWidth, maxWidth: node.style.maxWidth, flex: node.style.flex });
+        if (!saved.styles.some(style => style.node === node)) saved.styles.push(originalStyles.get(node));
+        for (const [key, value] of Object.entries({ width: 'auto', minWidth: 'max-content', maxWidth: 'none', flex: '0 0 auto' })) {
+          if (node.style[key] !== value) node.style[key] = value;
+        }
+        if (node === button) break;
+      }
+    }
   }
 
   function restoreCount(container, original) {
     if (!container) return;
     const saved = countControls.get(container);
     if (saved) {
-      saved.inner.style.width = saved.width;
-      saved.inner.style.minWidth = saved.minWidth;
+      saved.styles.forEach(({ node, width, minWidth, maxWidth, flex }) => {
+        node.style.width = width; node.style.minWidth = minWidth; node.style.maxWidth = maxWidth; node.style.flex = flex;
+        originalStyles.delete(node);
+      });
+      saved.labels.forEach(({ node, display }) => { node.style.display = display; });
       container.remove();
       countControls.delete(container);
     } else if (original !== null) container.textContent = original;
@@ -149,8 +185,8 @@
     dislikeOriginalText = null;
   }
 
-  // Own copy on purpose: /clip pages resolve through meta tags, which the
-  // shared Lite.id() does not handle (see the history-hook note below).
+  // Separate implementation: /clip pages resolve through meta tags, which
+  // Lite.id() does not handle. See the history-hook note below.
   function getVideoId() {
     const url = new URL(window.location.href);
     let id = null;
@@ -227,7 +263,7 @@
       navigator.language ||
       "en";
     // Unlike the compact dislike count, this pref's whole point is the exact
-    // number (YouTube only ever rounds); group digits in the page locale.
+    // number (the compact count only rounds); group digits in the page locale.
     if (!exactFormatter || exactFormatterLocale !== locale) {
       exactFormatterLocale = locale;
       exactFormatter = new Intl.NumberFormat(locale, { useGrouping: true });
@@ -240,7 +276,7 @@
   }
 
   function applyLikeCount() {
-    if (!showLikes) return;
+    if (!showLikes || !votesLoaded) return;
     const container = getLikeTextContainer();
     if (!container) return;
     if (likeOriginalText === null) likeOriginalText = container.textContent || "";
@@ -264,7 +300,7 @@
   }
 
   function applyDislikeCount() {
-    if (!dislikesEnabled) return;
+    if (!dislikesEnabled || !votesLoaded) return;
     const container = getDislikeTextContainer();
     if (!container) return;
     if (dislikeOriginalText === null) dislikeOriginalText = container.textContent || "";
@@ -276,10 +312,11 @@
   }
 
   function scheduleApplyDislikeCount() {
-    if (!dislikesEnabled || applyFrameId) return;
+    if (!anyEnabled() || applyFrameId) return;
     applyFrameId = requestAnimationFrame(() => {
       applyFrameId = 0;
       applyDislikeCount();
+      applyLikeCount();
     });
   }
 
@@ -324,7 +361,7 @@
     const now = Date.now();
     if (now - lastVoteFire < 350) return;
     lastVoteFire = now;
-    if (!anyEnabled() || !canOptimisticallyUpdate()) return;
+    if (!anyEnabled() || !votesLoaded || !canOptimisticallyUpdate()) return;
 
     if (action === "like") {
       if (previousState === STATE_LIKED) {
@@ -372,6 +409,7 @@
     if (!likeButton || !dislikeButton) return false;
 
     if (likeButton !== lastLikeButton) {
+      restoreCount(lastLikeButton?.querySelector('[data-lite-vote-count]'), null);
       if (lastLikeButton && lastLikeHandler) {
         lastLikeButton.removeEventListener("click", lastLikeHandler);
       }
@@ -381,14 +419,15 @@
     }
 
     if (dislikeButton !== lastDislikeButton) {
+      restoreCount(lastDislikeButton?.querySelector('[data-lite-vote-count]'), null);
       if (lastDislikeButton && lastDislikeHandler) {
         lastDislikeButton.removeEventListener("click", lastDislikeHandler);
       }
       lastDislikeHandler = () => applyAction("dislike");
       dislikeButton.addEventListener("click", lastDislikeHandler);
       lastDislikeButton = dislikeButton;
-      observeDislikeButton(dislikeButton);
     }
+    observeDislikeButton(dislikeButton);
 
     return true;
   }
@@ -400,20 +439,24 @@
     }
 
     activeDislikeObserver = new MutationObserver(() => {
-      if (!dislikesEnabled) return;
+      if (!anyEnabled()) return;
       scheduleApplyDislikeCount();
     });
     activeDislikeObserver.observe(dislikeButton, {
       childList: true,
       subtree: true,
       characterData: true,
+      attributes: true, attributeFilter: ['style', 'class'],
     });
+    activeDislikeObserver.observe(lastLikeButton, { childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: ['style', 'class'] });
   }
 
   function fetchVotes(videoId, token) {
     if (!anyEnabled()) return;
     const cached = votesCache.get(videoId);
     if (cached) {
+      votesLoaded = true;
       likesValue = cached.likes;
       dislikesValue = cached.dislikes;
       previousState = readVoteState();
@@ -424,6 +467,7 @@
     // No stale counts next to the new video while the fetch is in flight.
     likesValue = 0;
     dislikesValue = 0;
+    votesLoaded = false;
     clearDislikeCount();
     clearLikeCount();
     // Bounded so a hung RYD request cannot leave stale zeros forever.
@@ -440,6 +484,7 @@
         if (!anyEnabled() || !json || token !== initToken || videoId !== activeVideoId) return;
         likesValue = json.likes ?? 0;
         dislikesValue = json.dislikes ?? 0;
+        votesLoaded = true;
         if (votesCache.size >= 64) {
           votesCache.delete(votesCache.keys().next().value);
         }
@@ -473,6 +518,7 @@
     initToken += 1;
     likesValue = 0;
     dislikesValue = 0;
+    votesLoaded = false;
     previousState = STATE_NEUTRAL;
     activeVideoId = null;
     resetBindings();
@@ -532,15 +578,17 @@
 
   function scheduleInitialize() {
     if (!anyEnabled()) return;
-    // Same video with buttons already bound: nothing to do.
+    // Refresh owned counts when the page hydrates the bound renderers.
     if (getVideoId() === activeVideoId && lastLikeButton?.isConnected && lastDislikeButton?.isConnected &&
         lastLikeButton === getLikeButton() && lastDislikeButton === getDislikeButton()) {
+      scheduleApplyDislikeCount();
       return;
     }
     initToken += 1;
     // New video: no stale counts from the previous one.
     likesValue = 0;
     dislikesValue = 0;
+    votesLoaded = false;
     clearDislikeCount();
     clearLikeCount();
     resetBindings();
@@ -607,6 +655,9 @@
   );
 
   window.__displayDislikes = { syncPreferences };
+
+  // Hydration and SPA updates can replace either renderer without navigation.
+  Lite.module('votes', () => { scheduleInitialize(); return true; });
 
   Lite.bridgeReady(() => {
     if (typeof window.Bridge?.getPreferences !== "function") return false;

@@ -50,7 +50,7 @@ public final class CastMessage {
         mPayloadBinary = payloadBinary;
     }
 
-    /** The message shape we actually send: a UTF-8 JSON payload. */
+    /** The message shape actually sent: a UTF-8 JSON payload. */
     public static CastMessage utf8(String sourceId, String destinationId, String namespace, String payloadUtf8) {
         return new CastMessage(PROTOCOL_VERSION_CASTV2_1_0, sourceId, destinationId, namespace,
                 PAYLOAD_TYPE_STRING, payloadUtf8, null);

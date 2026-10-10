@@ -29,4 +29,20 @@ class DiagnosticFilesTest {
         assertFalse(redacted.contains("/data/user"))
         assertEquals("[redacted]", DiagnosticRedaction.field("accessToken", "secret"))
     }
+    @Test fun ipv6AddressesAndPrivatePathsRemainCorrelatableWithoutDisclosure() {
+        val raw = "receiver [fe80::1234:abcd%wlan0] and 192.168.1.8 /data/user/0/pkg/private"
+        val redacted = DiagnosticRedaction.text(raw)
+        assertFalse(redacted.contains("fe80")); assertFalse(redacted.contains("wlan0"))
+        assertFalse(redacted.contains("192.168")); assertFalse(redacted.contains("/data/user"))
+        assertEquals(redacted, DiagnosticRedaction.text(raw))
+    }
+    @Test fun oversizedLegacySegmentsAreReportedAsPartialInsteadOfSilentlyTruncated() {
+        temp.newFile("legacy-events.jsonl").writeText("{}\n".repeat(800_000))
+        DiagnosticFiles(temp.root).use { files ->
+            val snapshot = files.snapshot { false }
+            assertEquals(1, snapshot.second)
+            assertTrue(files.snapshotTruncatedBytes > 0)
+            assertTrue(snapshot.first.values.single().toByteArray().size <= 2 * 1024 * 1024)
+        }
+    }
 }

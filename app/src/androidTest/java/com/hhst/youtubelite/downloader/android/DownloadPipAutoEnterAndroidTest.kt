@@ -38,7 +38,7 @@ import org.koin.core.context.GlobalContext
  * [PipAutoEnter.suppress], then restore from [PreferenceKeys.ENABLE_PIP].
  *
  * Player eligibility is applied through the real [PipAutoEnter] host (no live
- * YouTube stream). Skipped below API 31 where setAutoEnterEnabled does not exist.
+ * media stream). Skipped below API 31 where setAutoEnterEnabled does not exist.
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadPipAutoEnterAndroidTest {

@@ -231,8 +231,14 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
      * different network route does, because those can invalidate the issued URL or its audience.
      */
     fun isMediaCurrent(session: YoutubeSession): Boolean =
-        session.networkGeneration == networkGeneration.get() &&
-            mediaCookies.matches(session.cookies(ORIGIN), CookieManager.getInstance().getCookie(ORIGIN).orEmpty())
+        mediaInvalidationReason(session) == null
+
+    /** A safe reason code, never a cookie, account identifier or network address. */
+    fun mediaInvalidationReason(session: YoutubeSession): String? = when {
+        session.networkGeneration != networkGeneration.get() -> "network_route_changed"
+        !mediaCookies.matches(session.cookies(ORIGIN), CookieManager.getInstance().getCookie(ORIGIN).orEmpty()) -> "account_cookie_changed"
+        else -> null
+    }
 
     fun scopeHint(): String {
         val cookies = CookieManager.getInstance().getCookie(ORIGIN).orEmpty()

@@ -35,8 +35,8 @@ import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
  * recomposing the caller's tree.
  *
  * The 48 dp hit area stays centered for the finger, but the visible track is
- * drawn [VISUAL_BOTTOM_PAD_DP] above the canvas bottom: BottomBar stacks its
- * controls row below this canvas, so the track sits just above the row's text.
+ * drawn halfway down the hit canvas. BottomBar overlaps the controls row with
+ * the lower half, keeping the track close to the labels without a tall spacer.
  */
 @Composable
 fun PlayerTimeBar(
@@ -105,7 +105,7 @@ fun PlayerTimeBar(
         val buffered = PlayerUi.bufferedFraction(bufferedPositionState.value, durationMs)
 
         val thickness = PlayerUi.TIME_BAR_THICKNESS_DP.dp.toPx()
-        val centerY = size.height - VISUAL_BOTTOM_PAD_DP.dp.toPx() - thickness / 2f
+        val centerY = size.height / 2f
         val y = centerY - thickness / 2f
         val barSize = Size(size.width, thickness)
 
@@ -122,12 +122,17 @@ fun PlayerTimeBar(
         )
         // Markers last so they stay visible over played and unplayed regions.
         segments.forEach { segment ->
-            val range = PlayerUi.segmentRange(segment.startMs, segment.endMs, durationMs) ?: return@forEach
-            val startX = size.width * range.first
+            val range = PlayerUi.segmentRange(segment.startMs, segment.endMs, durationMs,
+                point = segment.category == "poi_highlight") ?: return@forEach
+            val point = range.first == range.second
+            val width = (if (point) 4.dp.toPx() else
+                (size.width * (range.second - range.first)).coerceAtLeast(2f)).coerceAtMost(size.width)
+            val startX = (size.width * range.first - if (point) width / 2f else 0f)
+                .coerceIn(0f, (size.width - width).coerceAtLeast(0f))
             drawRect(
                 PlayerUi.segmentColor(segment.category),
                 topLeft = Offset(startX, y),
-                size = Size((size.width * range.second - startX).coerceAtLeast(2f), thickness),
+                size = Size(width, thickness),
             )
         }
         val thumbR = if (dragging) 7.dp.toPx() else 5.dp.toPx()
@@ -138,9 +143,3 @@ fun PlayerTimeBar(
         )
     }
 }
-
-/**
- * Bottom clearance of the visible track inside the 48 dp hit canvas: 10 dp
- * keeps the 2 dp track clear of the BottomBar row's text baseline.
- */
-private const val VISUAL_BOTTOM_PAD_DP = 10

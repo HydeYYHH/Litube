@@ -10,7 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * Fetches the original (untranslated) video title via YouTube's locale-agnostic
+ * Fetches the original (untranslated) video title via the locale-agnostic
  * oEmbed endpoint.
  */
 class OEmbedTitleFetcher(

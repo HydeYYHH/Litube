@@ -9,6 +9,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
 // Specify container roles too: Material defaults otherwise reintroduce purple
 // on dialogs, menus and selected controls in the neutral app palette.
@@ -31,7 +32,7 @@ private val LightColorScheme = lightColorScheme(
     onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceTint = LightPrimary,
+    surfaceTint = Color.Transparent,
     surfaceDim = LightSurfaceVariant,
     surfaceBright = LightBackground,
     surfaceContainerLowest = LightBackground,
@@ -66,13 +67,13 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = DarkOnSurface,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceTint = DarkPrimary,
+    surfaceTint = Color.Transparent,
     surfaceDim = DarkBackground,
     surfaceBright = DarkSurfaceVariant,
     surfaceContainerLowest = DarkBackground,
-    surfaceContainerLow = DarkSurface,
-    surfaceContainer = DarkSurfaceVariant,
-    surfaceContainerHigh = DarkSurface,
+    surfaceContainerLow = Color(0xFF212121),
+    surfaceContainer = Color(0xFF212121),
+    surfaceContainerHigh = Color(0xFF212121),
     surfaceContainerHighest = DarkSurfaceVariant,
     inverseSurface = LightSurface,
     inverseOnSurface = LightOnSurface,
@@ -88,7 +89,7 @@ private val DarkColorScheme = darkColorScheme(
  */
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = YoutubeAppearance.dark ?: isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -108,6 +109,7 @@ fun AppTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
+        shapes = YoutubeStyle.Shapes,
         content = content,
     )
 }

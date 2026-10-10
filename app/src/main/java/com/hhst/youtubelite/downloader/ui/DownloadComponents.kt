@@ -25,7 +25,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.hhst.youtubelite.ui.components.YoutubeLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -145,7 +145,7 @@ fun DownloadItemRow(
             .fillMaxWidth()
             .heightIn(min = DownloadTokens.MinTouch)
             .clickable(onClick = onOpen)
-            .padding(horizontal = DownloadTokens.PageInset, vertical = 10.dp),
+            .padding(horizontal = DownloadTokens.PageInset, vertical = 8.dp),
     ) {
         val stacked = maxWidth < 320.dp || LocalDensity.current.fontScale > 1.3f
         Column {
@@ -155,7 +155,7 @@ fun DownloadItemRow(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = item.title,
-                        minLines = DownloadTokens.TITLE_MAX_LINES,
+                        minLines = 1,
                         maxLines = DownloadTokens.TITLE_MAX_LINES,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Normal,
@@ -220,7 +220,8 @@ fun DownloadItemRow(
                         onDismissRequest = { moreExpanded = false },
                         modifier = Modifier.widthIn(min = 200.dp, max = 280.dp).heightIn(max = 360.dp),
                         shape = RoundedCornerShape(12.dp),
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shadowElevation = 4.dp,
                         tonalElevation = 0.dp,
                     ) {
                         actions.forEach { action ->
@@ -229,7 +230,7 @@ fun DownloadItemRow(
                                 text = { Text(label) },
                                 leadingIcon = {
                                     Icon(painterResource(actionIcon(action)), contentDescription = null,
-                                        modifier = Modifier.size(DownloadTokens.Icon))
+                                        modifier = Modifier.size(DownloadTokens.Icon), tint = MaterialTheme.colorScheme.onSurface)
                                 },
                                 onClick = {
                                     moreExpanded = false
@@ -266,7 +267,7 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
     Column(Modifier.fillMaxWidth()) {
         val meta = listOf(kind, quality, size).filter { it.isNotBlank() }.joinToString(" · ")
         // Preserve normal row height across status changes; stacked rows grow with their text.
-        if (!stacked || meta.isNotBlank()) Text(
+        if (stacked && meta.isNotBlank()) Text(
             text = meta,
             minLines = 1,
             maxLines = 1,
@@ -276,7 +277,7 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
             lineHeight = 16.sp,
         )
         Text(
-            text = phaseText,
+            text = if (stacked) phaseText else listOf(meta, phaseText).filter { it.isNotBlank() }.joinToString(" · "),
             minLines = 1,
             maxLines = if (stacked) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis,
@@ -294,14 +295,14 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
             lineHeight = 16.sp,
         )
-        Box(Modifier.fillMaxWidth().padding(top = 6.dp).height(4.dp)) {
+        Box(Modifier.fillMaxWidth().padding(top = 6.dp).height(2.dp)) {
             if (DownloadPresentation.isActivePhase(item.phase) &&
                 item.status != DownloadStatus.FAILED && item.status != DownloadStatus.CANCELLED &&
                 (item.status == DownloadStatus.RUNNING || item.progressBytes > 0L)) {
                 val fraction = if (item.phase == DownloadPhase.TRANSFER) {
                     DownloadPresentation.progressFraction(item.progressBytes, item.expectedBytes)
                 } else null
-                val barModifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                val barModifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp))
                 if (fraction != null) {
                     LinearProgressIndicator(progress = { fraction }, modifier = barModifier,
                         trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f))

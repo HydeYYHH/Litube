@@ -68,7 +68,7 @@
   function warnSelectorMiss(group) {
     if (warnedGroups.has(group)) return;
     warnedGroups.add(group);
-    console.warn('[player-hook] selector group no longer matches: ' + group);
+    if (window.__litubeDiagnostic) window.__litubeDiagnostic('selector_missing', 'selector_missing', 'player-hook');
   }
 
   // -- in-page player suppression --
@@ -78,28 +78,90 @@
       document.querySelector('.html5-video-player');
   }
 
+  let suppressedPlayer = null;
+
+  function releaseSuppressedPlayer() {
+    const entry = suppressedPlayer;
+    suppressedPlayer = null;
+    if (!entry) return;
+    clearTimeout(entry.pauseTimer);
+    entry.player.removeEventListener?.('onStateChange', entry.onState);
+    entry.video?.removeEventListener?.('playing', entry.onPlaying);
+  }
+
   function suppressPagePlayer() {
     try {
       const p = pagePlayer();
       if (!p) return;
-      // Native playback streams its own URLs: pause, mute, and hide so the
-      // page player cannot race the audio focus.
       const v = p.querySelector('video');
-      if (v) {
-        v.muted = true;
-        v.pause && v.pause();
+      const id = Lite.id();
+      if (!suppressedPlayer || suppressedPlayer.player !== p ||
+          suppressedPlayer.video !== v || suppressedPlayer.id !== id) {
+        releaseSuppressedPlayer();
+        const entry = { player: p, video: v, id, requested: false, pauseTimer: null };
+        // Allow the PLAYING transition to initialize watch tracking before pausing.
+        const pause = () => {
+          if (entry !== suppressedPlayer || Lite.isShorts() || Lite.id() !== entry.id) return;
+          if (typeof p.playVideo === 'function' && !entry.requested) return;
+          if (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting')) return;
+          if (entry.pauseTimer != null) return;
+          entry.pauseTimer = setTimeout(() => {
+            entry.pauseTimer = null;
+            if (entry !== suppressedPlayer || Lite.isShorts() || Lite.id() !== entry.id) return;
+            // A startup seek can put the controller back into BUFFERING after
+            // PLAYING. Let the post-seek PLAYING transition run its tracking.
+            if (typeof p.getPlayerState === 'function' && p.getPlayerState() !== 1) return;
+            if (v?.paused === true) return;
+            if (typeof p.pauseVideo === 'function') p.pauseVideo();
+            else v?.pause?.();
+          // The controller can announce PLAYING before the media clock and
+          // tracking callbacks start. Leave a short muted startup window.
+          }, 250);
+        };
+        entry.onState = event => { if ((event?.data ?? event) === 1) pause(); };
+        entry.onPlaying = pause;
+        suppressedPlayer = entry;
+        p.addEventListener?.('onStateChange', entry.onState);
+        v?.addEventListener?.('playing', entry.onPlaying);
       }
+      if (v) v.muted = true;
+      p.mute?.();
       p.style.visibility = 'hidden';
       p.style.pointerEvents = 'none';
+      const entry = suppressedPlayer;
+      const dataId = p.getVideoData?.()?.video_id;
+      if (dataId && dataId !== id) return; // SPA controller still has the previous item.
+      if (p.getPlayerState?.() === 1) entry.onPlaying();
+      if (!entry.requested && typeof p.playVideo === 'function') {
+        if (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting')) return;
+        const duration = Number(p.getDuration?.());
+        if (Number.isFinite(duration) && duration <= 0 && !p.getVideoData?.()?.isLive) return;
+        p.setPlaybackQualityRange?.('tiny', 'tiny');
+        // Preserve the resume point; seek ahead only to initialize watch tracking.
+        const resume = Math.max(0, Number(p.getCurrentTime?.()) || 0);
+        clearTimeout(entry.pauseTimer);
+        entry.pauseTimer = null;
+        p.seekTo?.(Math.max(resume, duration > 0 ? Math.min(1, duration / 2) : 0), true);
+        entry.requested = true;
+        p.playVideo();
+      }
     } catch {}
   }
 
   function restorePagePlayer() {
+    const entry = suppressedPlayer;
+    releaseSuppressedPlayer();
     try {
       const p = pagePlayer();
       if (!p) return;
       p.style.visibility = '';
       p.style.pointerEvents = '';
+      if (entry?.requested && entry.player === p) p.setPlaybackQualityRange?.('default', 'default');
+      if (Lite.isShorts()) {
+        p.unMute?.();
+        const v = p.querySelector('video');
+        if (v) v.muted = false;
+      }
     } catch {}
   }
 
@@ -116,7 +178,7 @@
     } catch {}
   }
 
-  // A drag over the watch content must not reach YouTube's fullscreen
+  // A drag over the watch content must not reach the page player's fullscreen
   // gesture logic on the suppressed page player; taps and scrolling need
   // no JS events. The scheduler re-runs this after every re-render.
   const GESTURE_TRAP = 'gestureTrap';
@@ -180,7 +242,7 @@
         observedPlayer = p;
       }
       // Probe the original slot, including after rotation or a page re-render.
-      // Never feed our collapsed height back into the native layout policy.
+      // Never feed the collapsed height back into the native layout policy.
       if (compact) root.classList.remove(COMPACT_CLASS);
       const r = p.getBoundingClientRect();
       const viewport = window.visualViewport;
@@ -303,7 +365,7 @@
     }, true);
   }
 
-  // -- YouTube playlist navigation --
+  // -- playlist navigation --
 
   function playlistData() {
     try {
@@ -347,7 +409,7 @@
     try {
       const url = JSON.parse(jsonUrl);
       if (typeof url === 'string' && /^https?:/.test(url)) {
-        // Full page load: an SPA hop would need YouTube's router state
+        // Full page load: an SPA hop would need the page router state
         // replayed; a reload re-runs the document-start hooks.
         location.href = url;
         return true;
@@ -356,7 +418,7 @@
     return false;
   }
 
-  // Host → page: navigate the YouTube playlist relatively.
+  // Host → page: navigate the playlist relatively.
   window.__playlistNav = function (dir) {
     const jsonUrl = playlistEntryUrl(dir);
     if (goToEntryUrl(jsonUrl)) return 'navigating';
@@ -754,7 +816,7 @@
     return (target && target.closest && target.closest('[data-injected="queue-item"]')) || null;
   }
 
-  /** ⋮ on a media card → YouTube sheet → inject Add to queue as the first row. */
+  /** ⋮ on a media card opens the page sheet; inject Add to queue as the first row. */
   function interceptMediaMenu() {
     document.addEventListener('click', (event) => {
       if (queueItemFromPath(event)) return;

@@ -19,6 +19,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import kotlin.coroutines.coroutineContext
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
 
 /**
  * Media3 1.10.0 sample mux. Enabled combos: AVC+AAC MP4 and AAC M4A.
@@ -51,6 +53,9 @@ class DownloadFinalizerImpl(
                 val active = coroutineContext
                 runCatching { muxLocked(inputs, output, audioOnly) { active.ensureActive() } }
                     .getOrElse { error ->
+                        if (error !is CancellationException) AppLog.event(AppLog.Category.DOWNLOADER, "merge_io_failed",
+                            mapOf("phase" to "merge_verify", "input_count" to inputs.size, "input_bytes" to inputs.sumOf { it.length() }),
+                            error, context = active[DiagnosticCoroutineContext]?.diagnostic)
                         output.delete()
                         when {
                             error is CancellationException -> MuxResult.Interrupted

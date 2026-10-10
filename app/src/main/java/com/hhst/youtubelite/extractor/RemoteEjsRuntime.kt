@@ -22,6 +22,9 @@ import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
 import com.grack.nanojson.JsonObject
 import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
+import com.google.gson.Gson
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import java.io.File
@@ -60,6 +63,7 @@ internal object EjsRuntimeProcess {
 
 private const val OPEN = 1
 private const val EVALUATE = 2
+private const val DIAGNOSTIC_FLUSH = 3
 
 internal class RemoteEjsRuntime(private val app: Context, private val userAgent: String) : JavascriptRuntime {
     private var remote: Messenger? = null
@@ -69,6 +73,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
     @Volatile private var servicePid = 0
     @Volatile private var closed = false
     private var actualVersion = "webview-process"
+    private val diagnosticPeer = "youtube_ejs-" + java.util.UUID.randomUUID().toString().take(8)
     override val version: String get() = actualVersion
     private val replies = Messenger(object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(message: Message) {
@@ -81,6 +86,8 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         }
     })
     private fun died() {
+        AppLog.unregisterRemoteFlush(diagnosticPeer)
+        AppLog.event(AppLog.Category.EXTRACTOR, "ejs_service_died", mapOf("pending" to pending.size), critical = true)
         pending.values.forEach { it.setException(IOException("JS_SERVICE_DIED")) }
     }
     private fun transport(context: ExtractionContext): Messenger {
@@ -113,6 +120,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
                     val service = await(connected, 5_000, startup) { }
                     actualVersion = request(service, OPEN, Bundle().apply { putString("ua", userAgent) }, 5_000, startup, false)
                     remote = service
+                    AppLog.registerRemoteFlush(diagnosticPeer, ::flushDiagnostics)
                     return service
                 } catch (failure: IOException) {
                     if (attempt == 2 || generateSequence<Throwable>(failure) { it.cause }
@@ -136,6 +144,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         pending[id] = future
         data.putLong("id", id)
         data.putLong("timeout", minOf(timeoutMs, context.remainingMillis()))
+        ExtractionDiagnostics.diagnosticContext(context)?.let { data.putString("diagnostic_context", Gson().toJson(it)) }
         try {
             remote.send(Message.obtain().apply { what = kind; replyTo = replies; this.data = data })
             return await(future, timeoutMs, context) { if (closeOnFailure) close() }
@@ -154,7 +163,19 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
     @Synchronized override fun close() {
         if (closed) return
         closed = true
+        AppLog.unregisterRemoteFlush(diagnosticPeer)
         stopHost()
+    }
+    private fun flushDiagnostics(timeoutMs: Long): Boolean {
+        val service = remote ?: return false
+        if (timeoutMs <= 0 || closed) return false
+        val id = ids.incrementAndGet(); val result = SettableFuture.create<String>()
+        pending[id] = result
+        return try {
+            service.send(Message.obtain().apply { what = DIAGNOSTIC_FLUSH; replyTo = replies
+                data = Bundle().apply { putLong("id", id); putLong("timeout", timeoutMs) } })
+            result.get(timeoutMs, TimeUnit.MILLISECONDS) == "flushed"
+        } catch (_: Exception) { false } finally { pending.remove(id) }
     }
     private fun stopHost() {
         pending.values.forEach { it.setException(IOException("JS_RUNTIME_CLOSED")) }
@@ -179,6 +200,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
 /** No credentials/HTTP/session cache are initialized in this process. The host sends public EJS code via FD. */
 class EjsRuntimeService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
+    private val diagnosticWorker = Executors.newSingleThreadExecutor()
     @Volatile private var live = true
     private var runtime: HiddenJavascriptRuntime? = null
     private val messenger = Messenger(object : Handler(Looper.getMainLooper()) {
@@ -186,9 +208,25 @@ class EjsRuntimeService : Service() {
             val data = message.data
             val reply = message.replyTo
             val kind = message.what
+            if (kind == DIAGNOSTIC_FLUSH) {
+                diagnosticWorker.execute {
+                    val flushed = AppLog.flush(data.getLong("timeout", 1_500).coerceAtMost(1_500))
+                    runCatching { reply.send(Message.obtain().apply { this.data = Bundle().apply {
+                        putLong("id", data.getLong("id")); putString("result", if (flushed) "flushed" else "partial")
+                    } }) }
+                }
+                return
+            }
             worker.execute {
                 val started = System.nanoTime()
                 val response = Bundle().apply { putLong("id", data.getLong("id")) }
+                val origin = runCatching { data.getString("diagnostic_context")?.takeIf { it.length <= 2_048 }
+                    ?.let { Gson().fromJson(it, DiagnosticContext::class.java) } }.getOrNull() ?: DiagnosticContext()
+                val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "ejs_process", origin.child(data.getLong("id").toString()),
+                    mapOf("kind" to kind))
+                AppLog.snapshot(AppLog.Category.EXTRACTOR, operation.context, mapOf("phase" to
+                    if (kind == OPEN) "ejs_initializing" else "ejs_evaluation", "pending_requests" to listOf(data.getLong("id"))))
+                var operationFailure: Throwable? = null
                 try {
                     if (!EjsRuntimeProcess.ready) throw IOException("JS_DATA_DIRECTORY_UNAVAILABLE")
                     val ua = data.getString("ua").orEmpty()
@@ -221,6 +259,7 @@ class EjsRuntimeService : Service() {
                         response.putString("result", result)
                     }
                 } catch (failure: Throwable) {
+                    operationFailure = failure
                     val safe = setOf("JS_TIMEOUT", "JS_DATA_DIRECTORY_UNAVAILABLE", "JS_INPUT_LIMIT", "JS_RESULT_LIMIT",
                         "JS_EVALUATION_Error", "JS_EVALUATION_TypeError", "JS_EVALUATION_SyntaxError", "JS_EVALUATION_RangeError",
                         "JS_EVALUATION_ReferenceError", "JS_RENDERER_GONE", "JS_RUNTIME_CLOSED")
@@ -228,7 +267,11 @@ class EjsRuntimeService : Service() {
                 }
                 AppLog.event(AppLog.Category.EXTRACTOR, "ejs_process_result",
                     mapOf("operation" to data.getLong("id"), "kind" to kind, "duration_ms" to (System.nanoTime() - started) / 1_000_000,
-                        "error_code" to response.getString("error")), critical = response.containsKey("error"))
+                        "error_code" to response.getString("error")), critical = response.containsKey("error"),
+                    context = operation.context)
+                operation.finish(if (operationFailure == null) DiagnosticOutcome.SUCCESS else if (!live) DiagnosticOutcome.CANCELLED
+                    else DiagnosticOutcome.FAILURE, if (live) response.getString("error") else "service_destroyed", operationFailure,
+                    mapOf("kind" to kind, "phase" to if (kind == OPEN) "ejs_initializing" else "ejs_evaluation"))
                 runCatching { reply.send(Message.obtain().apply { arg1 = Process.myPid(); this.data = response }) }
             }
         }
@@ -237,6 +280,7 @@ class EjsRuntimeService : Service() {
     override fun onDestroy() {
         live = false
         worker.shutdownNow()
+        diagnosticWorker.shutdownNow()
         runtime?.close()
         super.onDestroy()
         Process.killProcess(Process.myPid())

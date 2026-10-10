@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.extractor
 
 import com.google.gson.Gson
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
@@ -8,6 +10,7 @@ import com.google.common.util.concurrent.SettableFuture
 import java.net.URI
 import android.webkit.WebView
 import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
+import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 import okhttp3.OkHttpClient
@@ -71,6 +74,16 @@ class YoutubeExtractionHost(
         Unit
     }
 
+    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext?): ClientProfile? {
+        val plan = runCatching { plans.plan(url) }.getOrNull() ?: return null
+        if (!sessions.isMediaCurrent(plan.session)) return null
+        clientOrder.mediaForbidden(videoId, sessions.scopeHint(), plan.profile)
+        AppLog.event(AppLog.Category.EXTRACTOR,
+            "client_media_forbidden", mapOf("client" to plan.profile.name, "reason" to "http_403",
+                "defer_ms" to 30_000), context = diagnosticContext)
+        return plan.profile
+    }
+
     private fun cachedSession(videoId: String, catalog: Boolean, demand: StreamDemand?): YoutubeSession? {
         val suffix = ":$videoId:$catalog:${demand?.cacheKey() ?: "0:null:false:"}"
         val candidate = synchronized(streams) {
@@ -81,17 +94,18 @@ class YoutubeExtractionHost(
         return candidate?.takeIf(sessions::isCurrent)
     }
 
-    fun context(videoId: String, fresh: Boolean, catalog: Boolean = false, demand: StreamDemand? = null, taskCurrent: () -> Boolean = { true }, deadlineNanos: Long = Long.MAX_VALUE, playbackPriority: Boolean = !catalog): ExtractionContext {
+    fun context(videoId: String, fresh: Boolean, catalog: Boolean = false, demand: StreamDemand? = null, taskCurrent: () -> Boolean = { true }, deadlineNanos: Long = Long.MAX_VALUE, playbackPriority: Boolean = !catalog, diagnosticContext: DiagnosticContext = DiagnosticContext(videoId = videoId)): ExtractionContext {
+        val scopedDiagnostics = diagnostics.scoped(diagnosticContext)
         val deadline = minOf(deadlineNanos, System.nanoTime() + TimeUnit.SECONDS.toNanos(45))
         if (deadline <= System.nanoTime() || !taskCurrent()) throw IOException("EXTRACTION_DEADLINE")
         val started = System.nanoTime()
         val cached = if (fresh) null else cachedSession(videoId, catalog, demand)
         val session = try { cached ?: if (fresh) refreshedSession(videoId, deadline, taskCurrent) else sessions.captureBounded(videoId, false, deadline, taskCurrent) } catch (failure: IOException) {
-            diagnostics.event("page", "WEB", "CAPTURE_FAILED", (System.nanoTime() - started) / 1_000_000,
+            scopedDiagnostics.event("page", "WEB", "CAPTURE_FAILED", (System.nanoTime() - started) / 1_000_000,
                 (failure as? StreamHttpException)?.status ?: 0)
             throw failure
         }
-        diagnostics.event("session", session.account.name, if (cached != null) "stream-session-cache" else session.configurationSource, (System.nanoTime() - started) / 1_000_000, 200)
+        scopedDiagnostics.event("session", session.account.name, if (cached != null) "stream-session-cache" else session.configurationSource, (System.nanoTime() - started) / 1_000_000, 200)
         lateinit var context: ExtractionContext
         val transport = transport(fresh) { context }
         val configuration = session.configuration()
@@ -99,9 +113,10 @@ class YoutubeExtractionHost(
         // configuration can safely serve another video in the same session.
         val live = configuration.getString("_VIDEO_ID") == videoId && configuration.getBoolean("_IS_LIVE", false)
         context = ExtractionContext(session, transport, solver, tokens, live, catalog, deadline,
-            { sessions.isCurrent(session) && taskCurrent() }, diagnostics)
-            .withPlaybackPriority(playbackPriority).withClientOrder(clientOrder)
+            { sessions.isCurrent(session) && taskCurrent() }, scopedDiagnostics)
+            .withPlaybackPriority(playbackPriority).withClientOrder(clientOrder.forVideo(videoId, sessions.scopeHint()))
         if (demand != null) context = context.withDemand(demand)
+        diagnostics.bind(context, diagnosticContext)
         return context
     }
 
@@ -123,7 +138,7 @@ class YoutubeExtractionHost(
     }
 
     /**
-     * Compiles the session's player solver and opens the YouTube and HLS manifest connections, so the
+     * Compiles the session's player solver and opens the media and HLS manifest connections, so the
      * first selected video skips both. Uses only an already captured configuration; never reads a page.
      */
     fun initialize(): Boolean {
@@ -159,10 +174,10 @@ class YoutubeExtractionHost(
             val context = contextOf()
             context.check()
             (if (fresh) null else browserResponses.get(request, context))?.let {
-                diagnostics.event("player", "WEB", "browser-response-cache", 0, 200)
+                diagnostics.forContext(context).event("player", "WEB", "browser-response-cache", 0, 200)
                 return Response(200, "OK", emptyMap(), it, request.url())
             }
-            val builder = okhttp3.Request.Builder().url(request.url())
+            val builder = okhttp3.Request.Builder().url(request.url()).tag(DiagnosticContext::class.java, diagnostics.contextOf(context))
             request.headers().forEach { (name, values) -> values.forEach { builder.addHeader(name, it) } }
             builder.method(request.httpMethod(), request.dataToSend()?.toRequestBody())
             val client = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
@@ -190,7 +205,7 @@ class YoutubeExtractionHost(
                         path.startsWith("/youtubei/") -> "innertube"
                         else -> "token-transport"
                     }
-                    diagnostics.event("request", kind, request.httpMethod(), (System.nanoTime() - requestStarted) / 1_000_000, response.code)
+                    diagnostics.forContext(context).event("request", kind, request.httpMethod(), (System.nanoTime() - requestStarted) / 1_000_000, response.code)
                     Response(response.code, response.message, response.headers.toMultimap(), body, response.request.url.toString())
                 }
             } finally { cancel.cancel(false) }
@@ -222,7 +237,7 @@ class YoutubeExtractionHost(
             return synchronized(streams) {
                 active.check()
                 streams[key]?.takeIf { it.expires > System.currentTimeMillis() }?.stream.also {
-                    diagnostics.event("stream-cache", "ENGINE", if (it == null) "MISS" else "HIT", 0, 0)
+                    diagnostics.forContext(active).event("stream-cache", "ENGINE", if (it == null) "MISS" else "HIT", 0, 0)
                 }
             }
         }

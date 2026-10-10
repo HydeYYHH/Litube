@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Listen in background</string>
     <string name="back_again_to_exit">Press back again to exit</string>
     <string name="navigate_back">Back</string>
     <string name="extension">Extensions</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Skip sponsors</string>
     <string name="skip_sponsors_selfpromo">Skip self-promotion</string>
+    <string name="skip_sponsors_interaction">Skip interaction reminders</string>
+    <string name="skip_sponsors_intro">Skip intros</string>
+    <string name="skip_sponsors_outro">Skip outros</string>
+    <string name="skip_sponsors_preview">Skip previews</string>
+    <string name="skip_sponsors_music_offtopic">Skip non-music sections</string>
+    <string name="skip_sponsors_filler">Skip filler</string>
     <string name="skip_sponsors_highlight">Skip highlights</string>
     <string name="remember_last_position">Remember position</string>
     <string name="remember_quality">Remember video quality</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Reset all settings</string>
     <string name="reset_extension_title">Reset extensions</string>
     <string name="reset_extension_message">Reset all extension settings to default?</string>
+    <string name="settings_backup_restore">Backup &amp; restore</string>
+    <string name="settings_export">Export settings</string>
+    <string name="settings_export_summary">Save current settings to a JSON file</string>
+    <string name="settings_import">Import settings</string>
+    <string name="settings_import_summary">Restore settings from a backup file</string>
+    <string name="settings_import_confirm_title">Import settings?</string>
+    <string name="settings_import_confirm_message">Current settings will be overwritten by the backup.</string>
+    <string name="settings_export_done">Settings exported</string>
+    <string name="settings_export_failed">Couldn\'t save settings file</string>
+    <string name="settings_import_done">Settings imported</string>
+    <string name="settings_import_failed">Invalid settings file</string>
     <string name="confirm">Confirm</string>
     <string name="cancel">Cancel</string>
     <string name="more_options">More</string>

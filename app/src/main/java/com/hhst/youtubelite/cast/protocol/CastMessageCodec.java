@@ -13,10 +13,10 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Wire codec for the one protobuf message CASTV2 uses ({@link CastMessage}), plus the stream
- * framing (a 4-byte big-endian length prefix before each encoded message). Hand-rolled because a
- * protobuf runtime is not worth a Gradle dependency for a single seven-field message; the decoder
- * skips unknown fields so receiver-side additions can't break parsing. Malformed/truncated input
- * throws {@link IOException} - callers treat that as a dead channel, never as a crash.
+ * framing (a 4-byte big-endian length prefix before each encoded message). Implemented directly
+ * because a protobuf runtime is unnecessary for a single seven-field message. The decoder
+ * skips unknown fields so receiver-side additions cannot break parsing. Malformed or truncated input
+ * throws {@link IOException}; callers treat that as a failed channel, not as a crash.
  */
 public final class CastMessageCodec {
 

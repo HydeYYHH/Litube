@@ -56,7 +56,7 @@ data class Format(
      *
      * Java `int` fields default to 0, so `>= 0` alone treats missing ranges as valid
      * and would wrap a muxed itag in a broken `indexRange="0-0"` DASH manifest.
-     * `indexEnd > indexStart` also rejects a 1-byte index; YouTube does not emit one.
+     * `indexEnd > indexStart` also rejects a 1-byte index; the host does not emit one.
      */
     val hasDashRanges: Boolean
         get() = initStart >= 0 && initEnd >= initStart && indexEnd > indexStart

@@ -77,7 +77,7 @@ import org.koin.core.context.GlobalContext
 /**
  * Emulator fault rows: notification shade, radio, MediaStore delete,
  * system font scale, TalkBack probe, process-death seed/assert, one live
- * YouTube enqueue. TalkBack is recorded blocked when the package is absent.
+ * live enqueue. TalkBack is recorded blocked when the package is absent.
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadFaultAndroidTest {
@@ -499,7 +499,7 @@ class DownloadFaultAndroidTest {
     }
 
     @Test
-    fun liveYoutube_enqueueOnce_recordsStartOrBlocked() = runBlocking {
+    fun liveYoutube_enqueueOnce_recordsStartOrBlocked(): Unit = runBlocking {
         assumeTrue("Supply -e network=1 for live-network enqueue acceptance",
             InstrumentationRegistry.getArguments().getString("network") == "1")
         waitDownloadReady()

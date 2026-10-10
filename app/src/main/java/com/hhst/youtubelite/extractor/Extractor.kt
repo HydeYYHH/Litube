@@ -1,5 +1,9 @@
 package com.hhst.youtubelite.extractor
 
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
+
 import kotlinx.coroutines.CoroutineScope
 import org.schabi.newpipe.extractor.NewPipe
 import java.util.concurrent.atomic.AtomicReference
@@ -8,12 +12,13 @@ import java.util.concurrent.TimeUnit
 import java.io.IOException
 import android.webkit.WebView
 import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
+import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * YouTube extraction entry point.
+ * Stream extraction entry point.
  *
  * [extract] returns immediately; work runs on [scope].
  */
@@ -33,6 +38,9 @@ class Extractor(
     fun initialize(): Boolean = host?.initialize() ?: false
     fun sessionStamp(): String = host?.scopeHint().orEmpty()
     fun recoveryScope(): String = host?.recoveryScope().orEmpty()
+    /** Feedback is accepted only when the failed request has an exact, current client plan. */
+    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? =
+        host?.noteMediaForbidden(videoId, url, diagnosticContext)
     fun extractionDiagnostics(): String = host?.diagnostics?.export() ?: "Legacy Java extraction adapter"
 
     init {
@@ -44,8 +52,8 @@ class Extractor(
      *
      * @throws IllegalArgumentException if [urlOrId] is not a valid id or URL
      */
-    fun extract(urlOrId: String, catalog: Boolean = false, demand: StreamDemand? = null): Extraction {
-        return synchronized(selectionLock) { startExtraction(urlOrId, catalog, demand, false).extraction }
+    fun extract(urlOrId: String, catalog: Boolean = false, demand: StreamDemand? = null, diagnosticContext: DiagnosticContext? = null): Extraction {
+        return synchronized(selectionLock) { startExtraction(urlOrId, catalog, demand, false, diagnosticContext).extraction }
     }
 
     /** Only the selected card, using the exact playback demand and shared task key. */
@@ -59,7 +67,7 @@ class Extractor(
 
     private fun startExtraction(urlOrId: String, catalog: Boolean,
                                 demand: StreamDemand?,
-                                preparation: Boolean): Inflight {
+                                preparation: Boolean, diagnosticContext: DiagnosticContext? = null): Inflight {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val (slot, created) = streamEpochs.withLock(id) {
@@ -72,12 +80,15 @@ class Extractor(
                 existing to false
             } else {
                 val createdSlot = Inflight.create(id, cache, scope, streamEpochs, host,
-                    catalog = catalog, demand = demand, preparation = preparation)
+                    catalog = catalog, demand = demand, preparation = preparation, diagnosticContext = diagnosticContext)
                 inFlight[key] = createdSlot
                 createdSlot to true
             }
         }
-        if (!created) return slot
+        if (!created) {
+            slot.logJoin(diagnosticContext)
+            return slot
+        }
 
         val remaining = AtomicInteger(if (host == null) 3 else 2)
         val onSettled = {
@@ -97,8 +108,8 @@ class Extractor(
      * cancels this wait — the shared parse and `/player` request keep running
      * for other waiters (playback).
      */
-    suspend fun awaitMedia(urlOrId: String): Pair<Metadata, Stream> {
-        val extraction = extract(urlOrId, catalog = true)
+    suspend fun awaitMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Pair<Metadata, Stream> {
+        val extraction = extract(urlOrId, catalog = true, diagnosticContext = diagnosticContext)
         val metadata = extraction.metadata.await()
         val stream = extraction.stream.await()
         return metadata to stream
@@ -108,13 +119,16 @@ class Extractor(
      * One coordinated fresh extraction per video/session; playback and download join it.
      * Captures configuration again and clears the complete token/minter context.
      */
-    fun extractFresh(urlOrId: String, playbackPriority: Boolean = true): Extraction {
+    fun extractFresh(urlOrId: String, playbackPriority: Boolean = true, diagnosticContext: DiagnosticContext? = null): Extraction {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val recoveryKey = id + ":" + recoveryScope()
         return synchronized(recoveries) {
         recoveries.entries.removeIf { it.value.first.extraction.stream.done && System.currentTimeMillis() - it.value.second >= 10_000 }
-        recoveries[recoveryKey]?.let { return@synchronized it.first.extraction }
+        recoveries[recoveryKey]?.let {
+            it.first.logJoin(diagnosticContext)
+            return@synchronized it.first.extraction
+        }
         if (recoveries.size >= 128) throw IOException("RECOVERY_CAPACITY")
         invalidateStream(id)
         val slot = Inflight.create(
@@ -125,6 +139,7 @@ class Extractor(
             host,
             true,
             playbackPriority = playbackPriority,
+            diagnosticContext = diagnosticContext,
         )
         recoveries[recoveryKey] = slot to System.currentTimeMillis()
         slot.extraction.stream.whenDone { synchronized(recoveries) { recoveries[recoveryKey] = slot to System.currentTimeMillis() } }
@@ -134,8 +149,8 @@ class Extractor(
     }
 
     /** Like [awaitMedia] but on [extractFresh]. Cancel cancels only this wait. */
-    suspend fun awaitFreshMedia(urlOrId: String): Pair<Metadata, Stream> {
-        val extraction = extractFresh(urlOrId, playbackPriority = false)
+    suspend fun awaitFreshMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Pair<Metadata, Stream> {
+        val extraction = extractFresh(urlOrId, playbackPriority = false, diagnosticContext = diagnosticContext)
         val metadata = extraction.metadata.await()
         val stream = extraction.stream.await()
         return metadata to stream
@@ -168,7 +183,13 @@ private class Inflight(
     private val catalog: Boolean,
     private val demandKey: String,
     private val sessionCurrent: () -> Boolean,
+    private val diagnosticContext: DiagnosticContext,
 ) {
+    fun logJoin(waiter: DiagnosticContext?) {
+        if (waiter != null && waiter.traceId != diagnosticContext.traceId) AppLog.detail(AppLog.Category.EXTRACTOR,
+            "shared_operation_joined", mapOf("worker_trace_id" to diagnosticContext.traceId,
+                "worker_operation_id" to diagnosticContext.operationId, "preparation" to preparation), waiter)
+    }
     fun claim() { preparation = false }
     fun cancelPreparation() { if (preparation) active.set(false) }
     fun matches(id: String, catalog: Boolean, demandKey: String): Boolean =
@@ -192,14 +213,16 @@ private class Inflight(
             demand: StreamDemand? = null,
             playbackPriority: Boolean = !catalog,
             preparation: Boolean = false,
+            diagnosticContext: DiagnosticContext? = null,
         ): Inflight {
             val epoch = streamEpochs.epochFor(id)
             val active = AtomicBoolean(true)
             val initialScope = host?.recoveryScope()
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45)
             val contextRef = AtomicReference<ExtractionContext>()
+            val diagnostic = (diagnosticContext ?: DiagnosticContext(videoId = id)).child().copy(videoId = id)
             fun createContext(forceFresh: Boolean) = requireNotNull(host).context(id, forceFresh, catalog || forceFresh,
-                demand, { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, playbackPriority).also(contextRef::set)
+                demand, { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, playbackPriority, diagnostic).also(contextRef::set)
             val context = lazy { contextRef.get() ?: createContext(fresh) }
             fun activeContext() = contextRef.get() ?: context.value
             val contextFactory: (() -> ExtractionContext)? =
@@ -211,10 +234,20 @@ private class Inflight(
             val streamCache = EpochGuardedCache(resolvedCache, id, epoch, streamEpochs)
             val extraction = Extraction(
                 metadata = Promise(Metadata(), scope, autostart = false) {
-                    it.resolveMetadata(id, resolvedCache, player)
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnostic.child())
+                    try { it.resolveMetadata(id, resolvedCache, player).also { operation.finish(DiagnosticOutcome.SUCCESS) } }
+                    catch (failure: Throwable) {
+                        operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
+                        throw failure
+                    }
                 },
                 stream = Promise(Stream(), scope, autostart = false) {
-                    it.resolveStream(id, streamCache, player)
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnostic.child(), mapOf("catalog" to catalog, "fresh" to fresh, "preparation" to preparation))
+                    try { it.resolveStream(id, streamCache, player).also { operation.finish(DiagnosticOutcome.SUCCESS) } }
+                    catch (failure: Throwable) {
+                        operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
+                        throw failure
+                    }
                 },
                 chapters = Promise(ChapterList(), scope, autostart = false) {
                     it.resolveChapters(id, resolvedCache, player)
@@ -224,7 +257,7 @@ private class Inflight(
                 demand?.cacheKey().orEmpty(), {
                     contextRef.get()?.let { runCatching { it.check() }.isSuccess }
                         ?: (host?.recoveryScope() == initialScope)
-                })
+                }, diagnostic)
         }
     }
 }

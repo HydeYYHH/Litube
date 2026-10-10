@@ -21,7 +21,7 @@ import org.schabi.newpipe.extractor.services.youtube.streams.InnertubeAuth
 import org.schabi.newpipe.extractor.services.youtube.streams.PoTokenProvider as CorePoTokenProvider
 import java.io.IOException
 
-/** BgUtils thin host; all transport goes through the immutable extraction context. */
+/** BgUtils adapter. Transport uses the immutable extraction context. */
 class PoTokenProvider(
     context: Context,
     private val timers: WebViewTimerOccupancy = WebViewTimerOccupancy.NOOP,

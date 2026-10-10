@@ -51,6 +51,21 @@ class SponsorSkipControllerTest {
     }
 
     @Test
+    fun `tapping the countdown card skips the pending segment now`() {
+        // Countdown armed inside the segment; the tap returns its end.
+        controller.tick(12_000, segments, countdownEnabled = true)
+        assertEquals(20_000L, controller.skipPending())
+        // The segment is suppressed: the chip surfaces instead of a countdown.
+        assertNull(controller.tick(13_000, segments, countdownEnabled = true))
+        assertTrue(controller.chipActive)
+    }
+
+    @Test
+    fun `skip pending without a pending segment is a no-op`() {
+        assertNull(controller.skipPending())
+    }
+
+    @Test
     fun `user seek into segment suppresses it`() {
         controller.onUserSeek(15_000, segments)
         assertNull(controller.tick(16_000, segments, countdownEnabled = true))

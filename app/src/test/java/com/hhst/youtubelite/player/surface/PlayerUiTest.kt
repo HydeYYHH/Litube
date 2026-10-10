@@ -43,6 +43,17 @@ class PlayerUiTest {
     }
 
     @Test
+    fun highlightPoints_areDrawableOnlyWithinTheTimeline() {
+        assertEquals(0.5f to 0.5f, PlayerUi.segmentRange(50, 50, 100, point = true))
+        assertEquals(0f to 0f, PlayerUi.segmentRange(0, 0, 100, point = true))
+        assertEquals(1f to 1f, PlayerUi.segmentRange(100, 100, 100, point = true))
+        assertNull(PlayerUi.segmentRange(-1, -1, 100, point = true))
+        assertNull(PlayerUi.segmentRange(101, 101, 100, point = true))
+        assertNull(PlayerUi.segmentRange(50, 50, 0, point = true))
+        assertNull(PlayerUi.segmentRange(60, 50, 100, point = true))
+    }
+
+    @Test
     fun nextBackStep_lockThenFullscreenThenBrowser() {
         assertEquals(PlayerUi.BackStep.Unlock, PlayerUi.nextBackStep(locked = true, fullscreen = true))
         assertEquals(PlayerUi.BackStep.Unlock, PlayerUi.nextBackStep(locked = true, fullscreen = false))

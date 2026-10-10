@@ -21,6 +21,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
@@ -148,7 +150,7 @@ class YoutubeHttpDataSource private constructor(
 
         // A 200 to a Range-header request is the full representation, so the
         // body starts at byte 0 and the caller still needs [dataSpec.position]
-        // skipped. YouTube `&range=` already sliced that window; skipping
+        // skipped. The `&range=` query already sliced that window; skipping
         // again would drop the first `position` bytes of the chunk.
         val bytesToSkip = skipBytesOnOpen(
             responseCode,
@@ -344,7 +346,9 @@ class YoutubeHttpDataSource private constructor(
     }
 
     private fun executeCall(request: Request): Response {
-        val call = callFactory.newCall(request)
+        val diagnostic = dataSpec?.customData as? DiagnosticContext
+        val tagged = if (diagnostic != null) DiagnosticNetwork.tag(request, diagnostic) else request
+        val call = callFactory.newCall(tagged)
         activeCall = call
         return call.execute()
     }
@@ -461,7 +465,7 @@ class YoutubeHttpDataSource private constructor(
         /**
          * Bytes to discard from a 200 body before the caller-requested offset.
          *
-         * [rangeQueryApplied] means the request used YouTube's `range=` query,
+         * [rangeQueryApplied] means the request used a `range=` query,
          * so a 200 body is already the requested slice and must not be skipped.
          */
         internal fun skipBytesOnOpen(

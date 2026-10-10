@@ -3,6 +3,7 @@ package com.hhst.youtubelite.extension
 import android.content.Context
 import android.util.Log
 import android.webkit.WebView
+import com.hhst.youtubelite.diagnostics.*
 
 /** Evaluates `script/extension.js` and logs [InjectReport]. */
 class ExtensionInjector(private val context: Context) {
@@ -11,6 +12,7 @@ class ExtensionInjector(private val context: Context) {
     private var script: String? = null
 
     fun inject(webView: WebView, onReport: ((InjectReport) -> Unit)? = null) {
+        val captured = BrowserDiagnostics.context(webView)
         val body = loadScript()
         if (body == null) {
             val report = InjectReport(
@@ -20,7 +22,7 @@ class ExtensionInjector(private val context: Context) {
                     InjectFailure(element = ASSET, reason = "failed to load asset"),
                 ),
             )
-            Log.e(TAG, report.summary())
+            AppLog.event(AppLog.Category.EXTENSION, "injection_failed", mapOf("reason" to "asset_missing"), critical = true, context = captured)
             onReport?.invoke(report)
             return
         }
@@ -40,10 +42,15 @@ class ExtensionInjector(private val context: Context) {
         """.trimIndent()
         webView.evaluateJavascript(wrapped) { raw ->
             val report = InjectReport.parse(raw)
+            if (captured != BrowserDiagnostics.context(webView)) {
+                AppLog.detail(AppLog.Category.EXTENSION, "injection_skipped", mapOf("reason" to "stale_document"), captured)
+                onReport?.invoke(report)
+                return@evaluateJavascript
+            }
             if (!report.ok || report.hasFailures) {
-                Log.w(TAG, report.summary())
+                AppLog.event(AppLog.Category.EXTENSION, "injection_failed", mapOf("reason" to report.reason, "failure_count" to report.failures.size), critical = true, context = captured)
             } else {
-                Log.d(TAG, report.summary())
+                AppLog.detail(AppLog.Category.EXTENSION, "injection_success", context = captured)
             }
             onReport?.invoke(report)
         }
@@ -57,7 +64,7 @@ class ExtensionInjector(private val context: Context) {
                 .use { it.readText() }
                 .also { script = it }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load $ASSET", e)
+            AppLog.event(AppLog.Category.EXTENSION, "injection_asset_failed", mapOf("asset" to ASSET), e)
             null
         }
     }

@@ -1260,7 +1260,10 @@
   /** Parsed getPreferences payload; {} when the bridge is missing or fails. */
   function prefs() {
     try { return JSON.parse(bridge()?.getPreferences() || '{}') || {}; }
-    catch { return {}; }
+    catch {
+      window.__litubeDiagnostic?.('bridge_failed', 'exception', 'core');
+      return {};
+    }
   }
 
   function id(url) {
@@ -1290,13 +1293,14 @@
       document.querySelector('ytm-slim-video-action-bar-renderer');
   }
 
-  const HOSTS = '.ytSpecButtonViewModelHost, .ytButtonViewModelHost, button-view-model';
+  const HOSTS = '.ytSpecButtonViewModelHost, .ytButtonViewModelHost, button-view-model, ' +
+    'ytm-button-renderer, ytm-toggle-button-renderer, ytm-slim-toggle-button-renderer';
   const NESTED = 'like-button-view-model, dislike-button-view-model, ' +
     'segmented-like-dislike-button-view-model, ytm-subscribe-button-renderer, ' +
-    'ytm-slim-video-metadata-section-renderer';
+    'ytm-slim-video-metadata-section-renderer, ytm-toggle-button-renderer, ytm-slim-toggle-button-renderer';
 
   /** Clone source for an action-bar entry: the first free native chip
-   *  (share, more, …); our own data-injected entries never qualify. When the
+   *  (share, more, …); injected entries never qualify. When the
    *  bar has no free chip yet, the last nested host — the dislike entry,
    *  after which the entries belong — is the template of last resort. */
   function chip(row) {
@@ -1429,13 +1433,32 @@
 
   const state = { mods: new Map(), raf: 0, timer: 0, step: 0 };
 
+  let reportedAppearance = null;
+  function syncAppearance() {
+    const b = bridge(), root = document.documentElement;
+    if (!b?.setPageAppearance || !root || !window.getComputedStyle) return;
+    const background = [document.body, root].filter(Boolean)
+      .map(node => getComputedStyle(node).backgroundColor)
+      .find(color => color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)');
+    const rgb = background?.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const dark = rgb ? (Number(rgb[1]) * .299 + Number(rgb[2]) * .587 + Number(rgb[3]) * .114 < 128)
+      : root.hasAttribute('dark') ? root.getAttribute('dark') !== 'false' : null;
+    if (dark == null || dark === reportedAppearance) return;
+    b.setPageAppearance(location.href, dark);
+    reportedAppearance = dark;
+  }
+
   function run() {
+    syncAppearance();
     clearTimeout(state.timer);
     state.timer = 0;
     let pending = false;
-    for (const ensure of state.mods.values()) {
+    for (const [name, ensure] of state.mods) {
       let ok = true;
-      try { ok = ensure() !== false; } catch { ok = false; }
+      try { ok = ensure() !== false; } catch {
+        window.__litubeDiagnostic?.('script_failed', 'exception', /^[a-z_-]{1,40}$/.test(name) ? name : 'core');
+        ok = false;
+      }
       if (!ok) pending = true;
     }
     if (pending) {
@@ -1488,7 +1511,7 @@
         setTimeout(poll, 300);
         return;
       }
-      console.warn('[core] bridge unavailable; re-reading prefs on next navigation');
+      window.__litubeDiagnostic?.('bridge_failed', 'missing_bridge', 'core');
       window.addEventListener('yt-navigate-finish',
         () => setTimeout(task, 300), { once: true, capture: true });
     })();
@@ -1503,14 +1526,34 @@
     if (!document.getElementById('lite-touch-style')) {
       const style = document.createElement('style');
       style.id = 'lite-touch-style';
-      style.textContent = 'html {-webkit-tap-highlight-color:transparent;}';
+      style.textContent = 'html {-webkit-tap-highlight-color:transparent;}' +
+        '.slim-video-action-bar-actions{overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none;}' +
+        '.slim-video-action-bar-actions::-webkit-scrollbar{display:none;}' +
+        '.slim-video-action-bar-actions > *{flex-shrink:0!important;}' +
+        '.slim-video-action-bar-actions .segmented-buttons,' +
+        '.slim-video-action-bar-actions .segmented-buttons-wrapper,' +
+        '.slim-video-action-bar-actions segmented-like-dislike-button-view-model{' +
+        'flex:0 0 auto!important;width:auto!important;min-width:max-content!important;max-width:none!important;overflow:visible!important;}' +
+        '.slim-video-action-bar-actions like-button-view-model,' +
+        '.slim-video-action-bar-actions dislike-button-view-model,' +
+        '.slim-video-action-bar-actions ytm-toggle-button-renderer,' +
+        '.slim-video-action-bar-actions ytm-slim-toggle-button-renderer{' +
+        'display:inline-flex!important;flex:0 0 auto!important;min-width:max-content!important;max-width:none!important;}' +
+        '[data-lite-vote-count]{white-space:nowrap;flex-shrink:0;font:inherit;}' +
+        '[data-injected="entry"] button:active{opacity:.65;}';
       root.appendChild(style);
     }
     new MutationObserver(wake).observe(root, { childList: true, subtree: true,
-      attributes: true, attributeFilter: ['lang'] });
+      attributes: true, attributeFilter: ['lang', 'dark'] });
     for (const type of ['yt-navigate-finish', 'yt-page-data-updated', 'popstate']) {
       window.addEventListener(type, () => setTimeout(wake, SPA_LAG_MS));
     }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        reportedAppearance = null;
+        wake();
+      }
+    });
     // Backstop when neither the observer nor an SPA event fires.
     setInterval(() => { if (document.visibilityState === 'visible') wake(); }, POLL_MS);
   }

@@ -23,12 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -368,7 +368,7 @@ internal fun SegmentPreviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         text = {
             Column {
                 // Reserve timestamp space before measuring the scrollable preview.
@@ -386,7 +386,7 @@ internal fun SegmentPreviewDialog(
                         modifier = Modifier.padding(top = 12.dp),
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = SettingsTokens.TitleSize.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
                 Text(
@@ -399,12 +399,12 @@ internal fun SegmentPreviewDialog(
         },
         confirmButton = {
             TextButton(onClick = onJump) {
-                Text(stringResource(R.string.jump), color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.jump))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.close))
             }
         },
     )
@@ -471,10 +471,10 @@ private fun ListPopup(
     ) {
         Surface(
             modifier = Modifier.requiredWidth(width),
-            shape = RoundedCornerShape(4.dp),
-            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
+            shadowElevation = 4.dp,
         ) {
             Column(
                 modifier = Modifier
@@ -505,10 +505,10 @@ private fun LazyPopup(
     ) {
         Surface(
             modifier = Modifier.requiredWidth(width),
-            shape = RoundedCornerShape(4.dp),
-            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
+            shadowElevation = 4.dp,
         ) {
             LazyColumn(
                 modifier = Modifier

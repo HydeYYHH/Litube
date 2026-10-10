@@ -162,7 +162,7 @@ class AndroidChallengeSolver(
 
     private fun source(url: String, context: ExtractionContext): PlayerSource {
         context.check()
-        // Only player scripts from YouTube are eligible to enter the JavaScript runtime.
+        // Only player scripts from the media host are eligible to enter the JavaScript runtime.
         val uri = URI(url)
         if (uri.scheme != "https" || uri.host != "www.youtube.com" || !uri.path.startsWith("/s/player/")) throw IOException("PLAYER_ORIGIN")
         val file = File(directory, YoutubeSessionProvider.digest(url) + ".source")

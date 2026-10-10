@@ -1,7 +1,18 @@
 package com.hhst.youtubelite
 
+import com.hhst.youtubelite.diagnostics.AppLog
+
 import android.app.PictureInPictureParams
+import android.app.PendingIntent
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.drawable.Icon
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -77,6 +88,25 @@ class MainActivity : ComponentActivity() {
 
     private var pipPrefListenerRef: ((String) -> Unit)? = null
 
+    private val pipActionsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isInPictureInPictureMode) return
+            when (intent.action) {
+                ACTION_PIP_AUDIO -> {
+                    if (!prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) return
+                    playerViewModel.playAudioOnlyInBackground()
+                    syncPipParams()
+                    // The process-scoped player and media service outlive this
+                    // activity. Finishing removes the pinned window immediately.
+                    finish()
+                }
+                ACTION_PIP_TOGGLE -> playerViewModel.onPlayPause()
+                ACTION_PIP_PREVIOUS -> playerViewModel.onPrevious()
+                ACTION_PIP_NEXT -> playerViewModel.onNext()
+            }
+        }
+    }
+
     override fun startActivity(intent: Intent) {
         PipAutoEnter.noteLegacyLaunch()
         super.startActivity(intent)
@@ -98,12 +128,22 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         PipAutoEnter.register(this)
+        ContextCompat.registerReceiver(this, pipActionsReceiver,
+            IntentFilter().apply {
+                addAction(ACTION_PIP_AUDIO)
+                addAction(ACTION_PIP_TOGGLE)
+                addAction(ACTION_PIP_PREVIOUS)
+                addAction(ACTION_PIP_NEXT)
+            }, ContextCompat.RECEIVER_NOT_EXPORTED)
         if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) {
             NotificationPermission.requestIfNeeded(this)
         }
         // Skip on recreate: the launch intent is redelivered after process death.
         if (savedInstanceState == null) {
             handleLaunchIntent(intent)
+            if (sharedUrl.value == null && playerViewModel.audioOnlyBackground) {
+                sharedUrl.value = playerViewModel.uiState.value.url
+            }
         }
         setContent {
             AppTheme {
@@ -134,7 +174,7 @@ class MainActivity : ComponentActivity() {
         // toggling ENABLE_PIP mid-playback would still auto-enter on Home
         // until then. resetToDefault broadcasts "*" (reset all keys).
         val pipPrefListener: (String) -> Unit = { key ->
-            if (key == PreferenceKeys.ENABLE_PIP || key == "*") {
+            if (key == PreferenceKeys.ENABLE_PIP || key == PreferenceKeys.ENABLE_BACKGROUND_PLAY || key == "*") {
                 runOnUiThread {
                     // Manual-PiP button state (PlayerUiState.pipAvailable) is
                     // otherwise stale until the next video starts.
@@ -145,6 +185,12 @@ class MainActivity : ComponentActivity() {
         }
         prefs.addOnChangedListener(pipPrefListener)
         pipPrefListenerRef = pipPrefListener
+        lifecycleScope.launch { playerViewModel.uiState.collect { syncPipParams() } }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        playerViewModel.returnFromAudioOnlyBackground()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -199,15 +245,41 @@ class MainActivity : ComponentActivity() {
             super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         }
         inPip.value = isInPictureInPictureMode
+        AppLog.event(AppLog.Category.APP, "pip_state", mapOf("active" to isInPictureInPictureMode))
     }
 
     private fun pipEligible(): Boolean =
-        PipSupport.isSupported(this) && playerActive && playerPlaying && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
+        PipSupport.isSupported(this) && playerActive && playerPlaying &&
+            !playerViewModel.audioOnlyBackground && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun pipParams(): PictureInPictureParams {
         val (n, d) = PlayerUi.pipAspect(playerWidth, playerHeight)
-        return PictureInPictureParams.Builder().setAspectRatio(Rational(n, d)).build()
+        return PictureInPictureParams.Builder().setAspectRatio(Rational(n, d)).setActions(pipActions()).build()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun pipActions(): List<RemoteAction> {
+        fun action(name: String, icon: Int, label: Int): RemoteAction {
+            val title = getString(label)
+            val intent = Intent(name).setPackage(packageName)
+            val pending = PendingIntent.getBroadcast(this, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            return RemoteAction(Icon.createWithResource(this, icon), title, title, pending)
+        }
+        val state = playerViewModel.uiState.value
+        return buildList {
+            if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) {
+                add(action(ACTION_PIP_AUDIO, R.drawable.ic_headphones, R.string.player_audio_only))
+            } else {
+                add(action(ACTION_PIP_PREVIOUS, R.drawable.ic_pip_previous, R.string.action_previous)
+                    .apply { isEnabled = state.hasPrevious })
+            }
+            add(if (state.isPlaying) action(ACTION_PIP_TOGGLE, R.drawable.ic_pause, R.string.action_pause)
+                else action(ACTION_PIP_TOGGLE, R.drawable.ic_play, R.string.action_play))
+            add(action(ACTION_PIP_NEXT, R.drawable.ic_pip_next, R.string.action_next)
+                .apply { isEnabled = state.hasNext })
+        }
     }
 
     private fun syncPipParams() {
@@ -217,11 +289,13 @@ class MainActivity : ComponentActivity() {
             this,
             autoEnter = PipAutoEnter.shouldAutoEnter(pipEligible(), Build.VERSION.SDK_INT),
             aspect = Rational(n, d),
+            actions = pipActions(),
         )
     }
 
     override fun onDestroy() {
         PipAutoEnter.unregister(this)
+        unregisterReceiver(pipActionsReceiver)
         pipPrefListenerRef?.let { prefs.removeOnChangedListener(it) }
         pipPrefListenerRef = null
         inPip.value = false
@@ -229,6 +303,10 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val ACTION_PIP_AUDIO = "com.hhst.youtubelite.PIP_AUDIO"
+        private const val ACTION_PIP_TOGGLE = "com.hhst.youtubelite.PIP_TOGGLE"
+        private const val ACTION_PIP_PREVIOUS = "com.hhst.youtubelite.PIP_PREVIOUS"
+        private const val ACTION_PIP_NEXT = "com.hhst.youtubelite.PIP_NEXT"
         private val URL_RE = Regex("""https?://\S+[^\s.,;:!?)]""")
 
         private fun extractSharedUrl(intent: Intent?): String? {

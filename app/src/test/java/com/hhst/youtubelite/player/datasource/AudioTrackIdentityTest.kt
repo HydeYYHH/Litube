@@ -8,6 +8,36 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioTrackIdentityTest {
+    @Test fun namedTracksWithoutLocaleOrIdRemainSelectable() {
+        val original = Format(audioOnly = true, audioTrackName = "English")
+        val dubbed = original.copy(audioTrackName = "Spanish")
+        val rows = AudioTrackIdentity.choices(listOf(original, original.copy(codec = "opus"), dubbed))
+        assertEquals(listOf("name:English", "name:Spanish"), rows.map { it.key })
+        assertTrue(AudioTrackIdentity.matches(dubbed, rows.last().key))
+        assertFalse(AudioTrackIdentity.matches(original, rows.last().key))
+        val dubs = listOf(original.copy(audioTrackType = "dubbed"), dubbed.copy(audioTrackType = "dubbed"))
+        assertEquals(listOf("name:English|dubbed", "name:Spanish|dubbed"), AudioTrackIdentity.choices(dubs).map { it.key })
+    }
+
+    @Test fun originalHlsRenditionBeatsThePlaylistLanguageDefault() {
+        val entries = listOf("ja" to "Japanese", "en" to "English (Original)")
+        assertEquals("hls:en:English (Original)", AudioTrackIdentity.originalRenditionKey(entries))
+        assertEquals("hls:en:English", AudioTrackIdentity.originalRenditionKey(
+            listOf("ja" to "Japanese", "en" to "English"), listOf(audio("en", "original"))))
+    }
+
+    @Test fun ambiguousLanguageDoesNotMistakeDescriptionForOriginal() {
+        assertNull(AudioTrackIdentity.originalRenditionKey(
+            listOf("en" to "Main", "en" to "Description"), listOf(audio("en", "original"))))
+        assertNull(AudioTrackIdentity.originalRenditionKey(listOf("en" to "English", "ja" to "Japanese")))
+    }
+
+    @Test fun originalTypeDoesNotRequireTheRedundantBooleanFlag() {
+        val original = audio("en", "original").copy(audioTrackOriginal = false, bitrate = 96_000)
+        val dub = audio("ja", "dubbed").copy(bitrate = 192_000)
+        assertEquals(original, StreamSelection.selectAudio(listOf(dub, original)))
+        assertEquals(dub, StreamSelection.selectAudio(listOf(dub, original), "ja"))
+    }
 
     @Test
     fun keyPrefersTrackId_thenLocaleAndType() {

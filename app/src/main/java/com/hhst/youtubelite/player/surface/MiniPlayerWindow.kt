@@ -372,9 +372,9 @@ fun MiniPlayerWindow(
                         modifier = Modifier.size(36.dp))
                 }
             }
-            // Skip the first frame(s) until the parent reports its size: with
-            // restX/restY still 0 the window would flash at the parent's
-            // top-left corner before snapping to its dock.
+            // Wait until the parent reports its size. With restX and restY still
+            // at 0, the window would appear at the parent's top-left corner
+            // before moving to its dock.
             if (parentSize.width > 0 && parentSize.height > 0 && viewport.width > 0 && viewport.height > 0) {
                 Box(
                     modifier = Modifier

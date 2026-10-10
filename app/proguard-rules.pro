@@ -27,6 +27,11 @@
 -keep class com.hhst.youtubelite.extractor.ChapterList { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectReport { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectFailure { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.diagnostics.DiagnosticEvent { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.diagnostics.DiagnosticContext { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.diagnostics.DiagnosticCause { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.diagnostics.DiagnosticFailure { <init>(...); <fields>; }
+-keepclassmembers enum com.hhst.youtubelite.diagnostics.** { *; }
 -keep class com.hhst.youtubelite.downloader.core.DownloadConfig { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.EnqueueResult { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.TaskRef { <init>(...); <fields>; }

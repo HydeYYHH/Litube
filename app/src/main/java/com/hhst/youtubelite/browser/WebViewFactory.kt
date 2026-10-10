@@ -1,5 +1,12 @@
 package com.hhst.youtubelite.browser
 
+import com.hhst.youtubelite.diagnostics.*
+import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
+import android.webkit.SslErrorHandler
+import android.webkit.RenderProcessGoneDetail
+import android.net.http.SslError
+
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -33,7 +40,7 @@ import com.hhst.youtubelite.net.PageScript
 import com.hhst.youtubelite.ui.theme.YtRed
 import java.util.concurrent.Executors
 
-/** Builds a swipe-refresh + mobile YouTube WebView host. */
+/** Builds a swipe-refresh WebView host for the mobile site. */
 object WebViewFactory {
     private val cookieWriter by lazy {
         Executors.newSingleThreadExecutor { task -> Thread(task, "cookie-persistence").apply { isDaemon = true } }
@@ -106,8 +113,9 @@ object WebViewFactory {
             inheritShorts = callbacks::shouldInheritShorts,
             onShortsAutoplayBlocked = callbacks::onShortsAutoplayBlocked,
             onGallery = { urls, index -> GalleryActivity.open(context, urls, index) },
+            onGoBack = callbacks::onBackRequested,
         )
-        val netTracer = NetTracer()
+        val netTracer = NetTracer(context = bridge::diagnosticContext)
         val innertube = PageScript(INNERTUBE_JS, "Innertube")
         val swipeRefresh = SwipeRefreshLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -119,6 +127,7 @@ object WebViewFactory {
         }
         val downloadBridge = DownloadWebBridge(appContext = appContext, tabId = tabId)
         val webView = WebView(context).apply {
+            BrowserDiagnostics.register(this, bridge::diagnosticContext)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -220,6 +229,9 @@ private class BrowserWebViewClient(
 ) : WebViewClient() {
     private val login = LoginNavigation()
     private var lastContentUrl: String? = null
+    private var pageOperation: DiagnosticOperation? = null
+    private var loginOperation: DiagnosticOperation? = null
+    private var loadingUrl: String? = null
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         if (!request.isForMainFrame) return false
@@ -264,9 +276,18 @@ private class BrowserWebViewClient(
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         updateRefreshEnabled(url)
-        if (login.started(url)) lastContentUrl?.let(callbacks::onLoginStarted)
+        if (login.started(url)) {
+            loginOperation?.finish(DiagnosticOutcome.SUPERSEDED, "login_restarted")
+            loginOperation = AppLog.operation(AppLog.Category.BROWSER, "login", bridge.diagnosticContext().child())
+            lastContentUrl?.let(callbacks::onLoginStarted)
+        }
         if (UrlPolicy.shouldInject(url)) lastContentUrl = url
         bridge.onDocumentStarted()
+        pageOperation?.finish(DiagnosticOutcome.SUPERSEDED, "document_replaced")
+        loadingUrl = url
+        pageOperation = AppLog.operation(AppLog.Category.BROWSER, "page_load", bridge.diagnosticContext(),
+            DiagnosticRedaction.resource(url) + mapOf("page_kind" to PageKind.of(url), "login" to UrlPolicy.isLoginUrl(url)))
+        AppLog.snapshot(AppLog.Category.BROWSER, bridge.diagnosticContext(), mapOf("phase" to "document_loading", "page_kind" to PageKind.of(url)))
         downloadBridge.bumpPage()
         if (UrlPolicy.shouldInject(url)) downloadBridge.stamp(view)
         if (!hasDocumentStartScript) injectAll(view)
@@ -276,8 +297,10 @@ private class BrowserWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
+        if (url == loadingUrl && url == view.url) pageOperation?.finish(DiagnosticOutcome.SUCCESS, "document_finished")
         if (url == view.url && login.finished(url)) {
             callbacks.onLoginFinished()
+            loginOperation?.finish(DiagnosticOutcome.SUCCESS, "login_navigation_finished")
             WebViewFactory.persistCookies()
         }
         if (UrlPolicy.shouldInject(url) && hasDocumentStartScript) {
@@ -293,6 +316,7 @@ private class BrowserWebViewClient(
 
     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
         super.doUpdateVisitedHistory(view, url, isReload)
+        AppLog.event(AppLog.Category.BROWSER, "spa_navigation", DiagnosticRedaction.resource(url) + mapOf("reload" to isReload, "page_kind" to PageKind.of(url)), context = bridge.diagnosticContext())
         // SPA navigations often skip full reloads; re-run inject for settings.
         updateRefreshEnabled(url)
         if (UrlPolicy.shouldInject(url)) {
@@ -317,6 +341,36 @@ private class BrowserWebViewClient(
             externalLinkUnavailable(context)
             true
         }
+    }
+
+    override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        if (request.isForMainFrame) {
+            pageOperation?.finish(DiagnosticOutcome.FAILURE, "main_document_error", fields = mapOf("error_code" to error.errorCode))
+            loginOperation?.finish(DiagnosticOutcome.FAILURE, "main_document_error")
+        }
+        super.onReceivedError(view, request, error)
+    }
+    override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+        if (request.isForMainFrame) pageOperation?.finish(DiagnosticOutcome.FAILURE, "main_document_http_error", fields = mapOf("status" to response.statusCode))
+        super.onReceivedHttpError(view, request, response)
+    }
+    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+        val mainDocument = error.url != null && (error.url == loadingUrl || error.url == view.url)
+        AppLog.event(AppLog.Category.BROWSER, "ssl_error", DiagnosticRedaction.resource(error.url.orEmpty()) +
+            mapOf("error_code" to error.primaryError, "main_document" to true.takeIf { mainDocument }),
+            critical = true, context = bridge.diagnosticContext())
+        if (mainDocument) {
+            pageOperation?.finish(DiagnosticOutcome.FAILURE, "main_document_ssl_error")
+            loginOperation?.finish(DiagnosticOutcome.FAILURE, "main_document_ssl_error")
+        }
+        super.onReceivedSslError(view, handler, error)
+    }
+    @androidx.annotation.RequiresApi(26)
+    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        AppLog.event(AppLog.Category.BROWSER, "renderer_exit", mapOf("crashed" to detail.didCrash(), "priority" to detail.rendererPriorityAtExit()), critical = true, context = bridge.diagnosticContext())
+        pageOperation?.finish(DiagnosticOutcome.FAILURE, "renderer_exit")
+        loginOperation?.finish(DiagnosticOutcome.FAILURE, "renderer_exit")
+        return super.onRenderProcessGone(view, detail)
     }
 
     private fun externalLinkUnavailable(context: Context) {

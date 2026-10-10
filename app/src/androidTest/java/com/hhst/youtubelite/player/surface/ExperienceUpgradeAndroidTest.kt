@@ -94,14 +94,14 @@ class ExperienceUpgradeAndroidTest {
         }
     }
 
-    @Test fun exportedLogsAreReadableZipAndRedactCredentials() {
+    @Test fun exportedArchiveRedactsCredentialsAndOpensThroughFileProvider() {
         AppLog.event(AppLog.Category.PLAYER, "upgrade_export_test", mapOf("error" to "token=secret https://host/video?sig=secret"))
-        val file = AppLog.export(compose.activity, mapOf("test" to "cookie=secret"))
+        val file = AppLog.export(compose.activity)
         ZipFile(file).use { zip ->
-            assertNotNull(zip.getEntry("device.txt")); assertNotNull(zip.getEntry("player.txt"))
-            val entries = zip.entries().asSequence().toList()
-            assertTrue(entries.any { it.name.startsWith("logs/player-") })
-            entries.forEach { entry -> assertFalse(zip.getInputStream(entry).bufferedReader().readText().contains("secret")) }
+            for (name in listOf("summary.md", "timeline.jsonl", "context.json", "manifest.json")) assertNotNull(zip.getEntry(name))
+            zip.entries().asSequence().forEach { entry ->
+                assertFalse(zip.getInputStream(entry).bufferedReader().readText().contains("secret"))
+            }
         }
         val uri = FileProvider.getUriForFile(compose.activity, "${compose.activity.packageName}.download.fileprovider", file)
         compose.activity.contentResolver.openInputStream(uri)!!.use { assertTrue(it.read() >= 0) }

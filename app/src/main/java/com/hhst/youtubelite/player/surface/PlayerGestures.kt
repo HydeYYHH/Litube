@@ -135,9 +135,9 @@ private suspend fun AwaitPointerEventScope.trackDrag(
     try {
     while (true) {
         // While undecided, race the next event against the long-press timeout.
-        // A non-positive timeout must not be passed to withTimeoutOrNull —
-        // that returns immediately without suspending and busy-loops the
-        // main thread (ANR) when long-press is disabled or after slop.
+        // A non-positive timeout must not be passed to withTimeoutOrNull.
+        // It returns immediately without suspending and spins the main thread
+        // when long-press is disabled or after the touch slop.
         val event = if (!longPressResolved && !dragResolved && !zooming) {
             val remaining = LONG_PRESS_MS - (SystemClock.uptimeMillis() - startTime)
             if (remaining <= 0L) {

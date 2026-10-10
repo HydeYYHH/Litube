@@ -46,10 +46,10 @@ class PlayerControlSizingAndroidTest {
     private fun back() = InstrumentationRegistry.getInstrumentation()
         .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
 
-    private fun button(node: SemanticsNodeInteraction, frame: Rect, density: Float): Rect {
+    private fun button(node: SemanticsNodeInteraction, frame: Rect, density: Float, widthDp: Int = 48): Rect {
         node.assertIsDisplayed()
         val rect = node.fetchSemanticsNode().boundsInRoot
-        assertTrue("Button is too small to tap reliably: $rect", rect.width >= 48 * density - 1 && rect.height >= 48 * density - 1)
+        assertTrue("Button is too small to tap reliably: $rect", rect.width >= widthDp * density - 1 && rect.height >= 48 * density - 1)
         assertTrue("Button outside video frame", rect.left >= frame.left - 1 && rect.right <= frame.right + 1 &&
             rect.top >= frame.top - 1 && rect.bottom <= frame.bottom + 1)
         return rect
@@ -82,7 +82,7 @@ class PlayerControlSizingAndroidTest {
             compose.onNodeWithText("2:22:24").assertIsDisplayed()
             val more = compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options))
             val full = compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen))
-            val moreRect = button(more, frame, density)
+            val moreRect = button(more, frame, density, widthDp = 40)
             val fullRect = button(full, frame, density)
             assertTrue("Top and bottom buttons overlap", moreRect.bottom <= fullRect.top)
             DeviceEvidence.captureScene("controls-embedded-$nextWidth-font${(scale * 10).toInt()}")
@@ -157,6 +157,52 @@ class PlayerControlSizingAndroidTest {
         DeviceEvidence.captureScene("controls-tall-320-font20")
     }
 
+    @Test fun visualsGrowWithThePlayerSlotWhileTouchTargetsStayAccessible() {
+        orient(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+        var width by mutableIntStateOf(320)
+        var height by mutableIntStateOf(180)
+        compose.setContent { AppTheme(darkTheme = true, dynamicColor = false) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                PlayerSurface(sample(), remember { mutableStateOf(0L) }, remember { mutableStateOf(0L) },
+                    remember { mutableStateOf(null) }, remember { mutableStateOf(null) },
+                    remember { mutableStateOf(emptyList()) }, actions(), {}, {}, managedByHost = true,
+                    modifier = Modifier.size(width.dp, height.dp).testTag("control-frame"))
+            }
+        } }
+        compose.waitForIdle()
+        val playLabel = compose.activity.getString(R.string.action_play)
+        val fullLabel = compose.activity.getString(R.string.action_fullscreen)
+        val smallPlay = compose.onNodeWithContentDescription(playLabel).fetchSemanticsNode().boundsInRoot.height
+        fun centerSeparation(): Float = compose.onNodeWithContentDescription(playLabel).fetchSemanticsNode().boundsInRoot.center.x -
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_previous)).fetchSemanticsNode().boundsInRoot.center.x
+        val smallSeparation = centerSeparation()
+        fun assertCentered() {
+            val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
+            for (label in listOf(playLabel, compose.activity.getString(R.string.action_previous), compose.activity.getString(R.string.action_next))) {
+                val bounds = compose.onNodeWithContentDescription(label).fetchSemanticsNode().boundsInRoot
+                assertEquals("Center buttons must follow the video center", frame.center.y, bounds.center.y, 1f)
+            }
+            val subtitles = compose.onNodeWithContentDescription(compose.activity.getString(R.string.subtitles)).fetchSemanticsNode().boundsInRoot
+            val more = compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).fetchSemanticsNode().boundsInRoot
+            val density = compose.activity.resources.displayMetrics.density
+            assertTrue("CC and settings are too far apart", more.center.x - subtitles.center.x <= 41f * density)
+        }
+        assertCentered()
+        val smallIcon = compose.onNodeWithContentDescription(fullLabel, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height
+        val smallTitle = compose.onNodeWithText(sample().title).fetchSemanticsNode().boundsInRoot.height
+        DeviceEvidence.captureScene("responsive-player-small")
+        compose.runOnIdle { width = 700; height = 350 }
+        compose.waitForIdle()
+        assertCentered()
+        assertTrue("Wide players should spread the center controls", centerSeparation() > smallSeparation * 1.2f)
+        assertTrue(compose.onNodeWithContentDescription(playLabel).fetchSemanticsNode().boundsInRoot.height > smallPlay)
+        assertTrue(compose.onNodeWithContentDescription(fullLabel, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height > smallIcon)
+        assertTrue(compose.onNodeWithText(sample().title).fetchSemanticsNode().boundsInRoot.height > smallTitle)
+        compose.onNodeWithContentDescription(fullLabel).performTouchInput { click() }
+        compose.runOnIdle { assertEquals(1, calls["onFullscreenToggle"]) }
+        DeviceEvidence.captureScene("responsive-player-large")
+    }
+
     @Test fun fullscreenControlsRemainSeparatedWithLargeFonts() {
         orient(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
         var fontScale by mutableFloatStateOf(1f)
@@ -185,12 +231,15 @@ class PlayerControlSizingAndroidTest {
             compose.waitForIdle()
             val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
             val rects = listOf(R.string.queue, R.string.segments, R.string.subtitles, R.string.more_options).map {
-                button(compose.onNodeWithContentDescription(compose.activity.getString(it)), frame, density)
+                button(compose.onNodeWithContentDescription(compose.activity.getString(it)), frame, density,
+                    widthDp = if (it == R.string.subtitles || it == R.string.more_options) 40 else 48)
             }
             rects.zipWithNext().forEach { (a, b) -> assertTrue("Top targets overlap", a.right <= b.left + 1) }
             button(compose.onNodeWithText("Auto 1080p"), frame, density)
             button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
             compose.onNodeWithText("1:11:12").assertIsDisplayed()
+            Thread.sleep(200) // SurfaceView and vector redraw follow the platform frame clock.
+            compose.waitForIdle()
             DeviceEvidence.captureScene("controls-fullscreen-font${(scale * 10).toInt()}")
         }
     }

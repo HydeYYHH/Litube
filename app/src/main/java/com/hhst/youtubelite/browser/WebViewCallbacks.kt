@@ -14,4 +14,5 @@ interface WebViewCallbacks {
     fun onNavigationStateChanged(canGoBack: Boolean)
     fun onHistoryChanged(url: String)
     fun onOpenTab(url: String)
+    fun onBackRequested() {}
 }

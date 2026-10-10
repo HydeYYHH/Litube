@@ -40,15 +40,15 @@ class ResponsiveExperienceAndroidTest {
         val label = compose.onNodeWithText(compose.activity.getString(R.string.interface_category))
         val results = mutableListOf<TextLayoutResult>()
         label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
-        assertEquals(16.sp, results.single().layoutInput.style.fontSize)
-        assertEquals(22.sp, results.single().layoutInput.style.lineHeight)
+        assertEquals(14.sp, results.single().layoutInput.style.fontSize)
+        assertEquals(20.sp, results.single().layoutInput.style.lineHeight)
         assertEquals(FontWeight.Normal, results.single().layoutInput.style.fontWeight)
         assertEquals(48f, label.fetchSemanticsNode().boundsInRoot.height, 1f)
         results.clear()
         compose.onNodeWithText(compose.activity.getString(R.string.extension))
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         assertEquals(20.sp, results.single().layoutInput.style.fontSize)
-        assertEquals(FontWeight.Bold, results.single().layoutInput.style.fontWeight)
+        assertEquals(FontWeight.Medium, results.single().layoutInput.style.fontWeight)
     }
 
     @Test fun aboutRemainsCenteredAndScrollableWithLargeFontOnWideWindow() {

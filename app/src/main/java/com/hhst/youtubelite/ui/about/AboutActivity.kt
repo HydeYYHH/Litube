@@ -18,6 +18,7 @@ import androidx.core.content.FileProvider
 import com.google.gson.JsonParser
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.MemCache
 import com.hhst.youtubelite.ui.theme.AppTheme
@@ -38,17 +39,21 @@ class AboutActivity : ComponentActivity() {
             var busy by remember { mutableStateOf(false) }
             var status by remember { mutableStateOf("") }
             val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-            fun action(work: suspend () -> String) {
+            fun action(name: String, work: suspend () -> String) {
                 if (busy) return
                 busy = true; status = getString(R.string.about_working)
                 scope.launch {
-                    status = runCatching { work() }.getOrElse { getString(R.string.about_operation_failed) }
+                    val operation = AppLog.operation(AppLog.Category.APP, name)
+                    status = runCatching { work().also { operation.finish(DiagnosticOutcome.SUCCESS) } }.getOrElse {
+                        operation.finish(if (it is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, "operation_failed", it)
+                        getString(R.string.about_operation_failed)
+                    }
                     busy = false
                 }
             }
             AboutScreen(applicationInfo.loadLabel(packageManager).toString(), version, { finish() }, busy, status,
                 onSource = { openUrl(SOURCE) },
-                onUpdate = { action {
+                onUpdate = { action("check_update") {
                     val latest = withContext(Dispatchers.IO) {
                         val request = Request.Builder().url("https://api.github.com/repos/HydeYYHH/litube/releases/latest")
                             .header("Accept", "application/vnd.github+json").build()
@@ -67,7 +72,7 @@ class AboutActivity : ComponentActivity() {
                     }
                 } },
                 onRelease = { openUrl("$SOURCE/releases/latest") },
-                onClear = { action {
+                onClear = { action("clear_cache") {
                     // clearCache removes HTTP cache only; cookies and WebStorage keep the account.
                     WebView(this@AboutActivity).let { it.clearCache(true); it.destroy() }
                     withContext(Dispatchers.IO) {
@@ -78,10 +83,9 @@ class AboutActivity : ComponentActivity() {
                     }
                     getString(R.string.about_cache_cleared)
                 } },
-                onExport = { action {
+                onExport = { action("export_share") {
                     val archive = withContext(Dispatchers.IO) {
-                        AppLog.export(this@AboutActivity, mapOf("extractor" to get<Extractor>(Extractor::class.java).extractionDiagnostics(),
-                            "retention" to "Categories: crash, extractor, downloader, player\nRetention: 3 days / 20 MiB"))
+                        AppLog.export(this@AboutActivity)
                     }
                     val uri = FileProvider.getUriForFile(this@AboutActivity, "$packageName.download.fileprovider", archive)
                     startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {

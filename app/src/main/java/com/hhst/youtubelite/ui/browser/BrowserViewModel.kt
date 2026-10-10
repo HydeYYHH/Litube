@@ -42,6 +42,7 @@ class BrowserViewModel(
     var onShortsClosed: (() -> Unit)? = null
     var onShortsOpened: (() -> Unit)? = null
     var onTabSwitched: (() -> Unit)? = null
+    var onPageBack: (() -> Unit)? = null
     private var shortsSource: Tab? = null
     @Volatile private var inheritShorts = false
     private var inheritedShortsId: Long? = null
@@ -94,8 +95,8 @@ class BrowserViewModel(
         }
 
         val previousActive = _uiState.value.activeId
-        // Hosts stay alive across suspension, so a revived suspended tab needs
-        // its explicit load request emitted just like any other existing tab.
+        // Hosts stay alive across suspension, so a revived suspended tab emits
+        // the same explicit load request as any other existing tab.
         val existingIds = _uiState.value.tabs.mapTo(mutableSetOf()) { it.id }
             .apply { _uiState.value.suspendedWatchId?.let { add(it) } }
         val suspendWatch = shouldSuspendWatch(targetKind = kind)
@@ -282,6 +283,10 @@ class BrowserViewModel(
 
         override fun onOpenTab(url: String) {
             openTab(url)
+        }
+
+        override fun onBackRequested() {
+            if (_uiState.value.activeId == tabId) onPageBack?.invoke()
         }
     }
 

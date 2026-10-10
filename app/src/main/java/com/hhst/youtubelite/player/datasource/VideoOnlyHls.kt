@@ -15,7 +15,7 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable
 import java.io.InputStream
 
 /**
- * YouTube audio renditions name each language but omit `CODECS`, channel count,
+ * Audio renditions name each language but omit `CODECS`, channel count,
  * and sample rate. Media3 then either skips chunkless preparation or marks the
  * track unsupported, so the menu never sees the other languages. Fill those in
  * from the variant so every name is a supported track.

@@ -104,9 +104,20 @@ data class Extension(
                 children = listOf(
                     toggle(PreferenceKeys.SKIP_SPONSORS, R.string.skip_sponsors),
                     toggle(PreferenceKeys.SKIP_SELF_PROMO, R.string.skip_sponsors_selfpromo),
+                    toggle(PreferenceKeys.SKIP_INTERACTION, R.string.skip_sponsors_interaction),
+                    toggle(PreferenceKeys.SKIP_INTRO, R.string.skip_sponsors_intro),
+                    toggle(PreferenceKeys.SKIP_OUTRO, R.string.skip_sponsors_outro),
+                    toggle(PreferenceKeys.SKIP_PREVIEW, R.string.skip_sponsors_preview),
+                    toggle(PreferenceKeys.SKIP_MUSIC_OFFTOPIC, R.string.skip_sponsors_music_offtopic),
+                    toggle(PreferenceKeys.SKIP_FILLER, R.string.skip_sponsors_filler),
                     toggle(PreferenceKeys.SKIP_POI_HIGHLIGHT, R.string.skip_sponsors_highlight),
                     toggle(PreferenceKeys.SPONSOR_COUNTDOWN, R.string.sponsor_countdown),
                 ),
+            ),
+            nav(
+                id = NAV_DATA,
+                title = R.string.settings_backup_restore,
+                icon = R.drawable.ic_backup_restore,
             ),
             nav(
                 id = NAV_DOWNLOADS,
@@ -115,6 +126,7 @@ data class Extension(
             ),
         )
 
+        const val NAV_DATA = "data"
         const val NAV_DOWNLOADS = "downloads"
 
         fun group(

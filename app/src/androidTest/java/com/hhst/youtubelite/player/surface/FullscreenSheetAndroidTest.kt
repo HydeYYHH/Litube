@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.surface
 
 import android.content.Context
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.view.Choreographer
 import android.view.KeyEvent
@@ -36,6 +38,11 @@ class FullscreenSheetAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<PlayerTestActivity>()
 
     @Test fun fullscreenSheetsKeepBarsHiddenFromOpeningThroughDismissal() {
+        // Sample sheet focus after the activity's fullscreen rotation has settled.
+        compose.runOnUiThread { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE }
+        compose.waitUntil(10_000) {
+            compose.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        }
         var sheet by mutableStateOf<PlayerSheet?>(null)
         var dialog by mutableStateOf<PlayerDialog?>(null)
         var fullscreen by mutableStateOf(true)
@@ -113,6 +120,8 @@ class FullscreenSheetAndroidTest {
                 }
             }
             compose.runOnIdle { sheet = PlayerSheet.Queue }
+            compose.waitForIdle()
+            DeviceEvidence.captureScene("fullscreen-sheet-queue")
             compose.onNodeWithContentDescription(compose.activity.getString(R.string.close)).performClick()
             compose.waitUntil(10000) { sheet == null }
             compose.runOnIdle { sheet = PlayerSheet.More }

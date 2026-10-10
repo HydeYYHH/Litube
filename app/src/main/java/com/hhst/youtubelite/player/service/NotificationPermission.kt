@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.service
 
+import com.hhst.youtubelite.diagnostics.AppLog
+
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -14,6 +16,7 @@ object NotificationPermission {
         ) {
             return
         }
+        AppLog.event(AppLog.Category.APP, "notification_permission_requested")
         activity.requestPermissions(
             arrayOf(Manifest.permission.POST_NOTIFICATIONS),
             0,
