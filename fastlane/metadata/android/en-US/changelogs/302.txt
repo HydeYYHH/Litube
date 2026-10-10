@@ -1,0 +1,8 @@
+- Add in-app diagnostics with an exportable report for troubleshooting playback issues (#329)
+- Fix playback failures from expired stream URLs, HTTP 403s, session changes, and network errors (#325, #329)
+- Fix blurry artwork on the media notification (#333)
+- Fix audio track selection for original-audio renditions on HLS streams (#337)
+- Fix the page header Back button across web and native tabs (#334)
+- Fix SponsorBlock not skipping segments and add all categories with individual toggles (#332)
+- Add audio-only background listening and remote actions in Picture-in-Picture (#331)
+- Add settings backup and restore via JSON export/import (#335)

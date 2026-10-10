@@ -8,7 +8,7 @@ Requires Android 6.0 (API 23) or later and an up-to-date Android System WebView.
 ## Releases
 See the following release notes for details.
 
-**Latest Release: [v3.0.1](https://github.com/HydeYYHH/litube/releases/tag/v3.0.1)**
+**Latest Release: [v3.0.2](https://github.com/HydeYYHH/litube/releases/tag/v3.0.2)**
 
 **Important Releases: [v2.1.0](https://github.com/HydeYYHH/litube/releases/tag/v2.1.0), [v2.0.0](https://github.com/HydeYYHH/litube/releases/tag/v2.0.0)**
 
