@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Слушать в фоне</string>
     <string name="back_again_to_exit">Нажмите «Назад» ещё раз для выхода</string>
     <string name="navigate_back">Назад</string>
     <string name="extension">Расширения</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Пропускать рекламу спонсоров</string>
     <string name="skip_sponsors_selfpromo">Пропускать саморекламу</string>
+    <string name="skip_sponsors_interaction">Пропускать призывы к действию</string>
+    <string name="skip_sponsors_intro">Пропускать вступления</string>
+    <string name="skip_sponsors_outro">Пропускать концовки</string>
+    <string name="skip_sponsors_preview">Пропускать превью</string>
+    <string name="skip_sponsors_music_offtopic">Пропускать фрагменты без музыки</string>
+    <string name="skip_sponsors_filler">Пропускать отступления от темы</string>
     <string name="skip_sponsors_highlight">Пропускать яркие моменты</string>
     <string name="remember_last_position">Запоминать позицию</string>
     <string name="remember_quality">Запоминать качество</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">Сбросить все настройки</string>
     <string name="reset_extension_title">Сбросить расширения</string>
     <string name="reset_extension_message">Сбросить все настройки расширений?</string>
+    <string name="settings_backup_restore">Резервная копия</string>
+    <string name="settings_export">Экспортировать настройки</string>
+    <string name="settings_export_summary">Сохранить текущие настройки в файл JSON</string>
+    <string name="settings_import">Импортировать настройки</string>
+    <string name="settings_import_summary">Восстановить настройки из резервной копии</string>
+    <string name="settings_import_confirm_title">Импортировать настройки?</string>
+    <string name="settings_import_confirm_message">Текущие настройки будут заменены данными из резервной копии.</string>
+    <string name="settings_export_done">Настройки экспортированы</string>
+    <string name="settings_export_failed">Не удалось сохранить файл настроек</string>
+    <string name="settings_import_done">Настройки импортированы</string>
+    <string name="settings_import_failed">Неверный файл настроек</string>
     <string name="confirm">Подтвердить</string>
     <string name="cancel">Отмена</string>
     <string name="open_with">Открыть с помощью</string>

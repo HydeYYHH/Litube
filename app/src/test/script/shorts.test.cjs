@@ -72,3 +72,28 @@ test('native Shorts touch gestures and playback speed are left untouched', () =>
   assert.equal(p.video.playbackRate, 2);
   assert.deepEqual(p.events, ['ready']);
 });
+
+test('a pause right after a tap while the video plays is kept and never reported as blocked', () => {
+  const p = page(); p.poll(1); assert.equal(p.video.paused, false);
+  p.touch('pointerdown'); p.video.pause(); p.poll(300);
+  assert.equal(p.video.paused, true);
+  p.poll(3000); assert.equal(p.video.paused, true); assert.deepEqual(p.events, []);
+  p.video.play(); p.listeners.get('play')({ target: p.video }); p.poll(3500);
+  assert.deepEqual(p.events, ['ready']);
+});
+
+test('pauses without a tap during playback are still retried', () => {
+  const p = page(); p.poll(1); p.video.pause(); p.poll(300); assert.equal(p.video.paused, false);
+  const q = page(); q.touch('pointerdown'); q.poll(1); q.video.pause(); q.poll(300); assert.equal(q.video.paused, false);
+});
+
+test('a swipe onto the reused video element is not taken for a user pause', () => {
+  const p = page(); p.poll(1); assert.equal(p.video.paused, false);
+  p.touch('pointerdown');
+  Object.assign(p.context.location, { pathname: '/shorts/bbbbbbbbbbb', href: 'https://m.youtube.com/shorts/bbbbbbbbbbb' });
+  p.video.paused = true;
+  let retries = 0;
+  p.video.play = () => { retries++; return Promise.resolve(); };
+  [300, 1000, 3000].forEach(p.poll);
+  assert.equal(retries, 3); assert.deepEqual(p.events, ['paused_after_ready']);
+});

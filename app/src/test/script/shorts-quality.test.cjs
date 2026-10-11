@@ -7,7 +7,7 @@ function page(host) {
   const video = { getBoundingClientRect: () => ({width:300,height:500,top:0,bottom:500}), closest: () => host };
   const context = { location: { pathname: '/shorts/fixture' }, innerHeight: 800,
     document: { querySelectorAll: () => [video], querySelector: () => null, addEventListener() {} },
-    addEventListener() {}, Lite: { module() {}, text: key => ({auto:'自动',unavailable:'不可用'})[key] } };
+    addEventListener() {}, Lite: { module() {}, sheet() {}, text: key => ({auto:'自动',unavailable:'不可用'})[key] } };
   context.window = context;
   vm.runInNewContext(script.replace("Lite.module('shorts-quality', ensure);",
     "window.access={levels,label,apply,player};Lite.module('shorts-quality', ensure);"), context);

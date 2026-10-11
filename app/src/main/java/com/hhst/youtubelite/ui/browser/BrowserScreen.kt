@@ -4,10 +4,12 @@ package com.hhst.youtubelite.ui.browser
 
 import android.os.Build
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.media.AudioManager
 import android.os.Handler
@@ -19,6 +21,8 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -250,12 +254,31 @@ fun BrowserScreen(
             if (speaksForPlayback) playerViewModel.onPageHasPlaylist(has)
         }
     }
+    var microphoneGrant by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
+    val microphoneLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        microphoneGrant?.invoke(granted)
+        microphoneGrant = null
+    }
+    val onMicrophoneRequest: ((Boolean) -> Unit) -> Unit = remember(context, microphoneLauncher) {
+        { onResult ->
+            val permission = Manifest.permission.RECORD_AUDIO
+            if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                onResult(true)
+            } else if (microphoneGrant != null) {
+                onResult(false)
+            } else {
+                microphoneGrant = onResult
+                microphoneLauncher.launch(permission)
+            }
+        }
+    }
     LaunchedEffect(liveTabIds) {
         createHosts(
             tabs, hosts, context, viewModel, extensionManager, onOpenExtension,
             onOpenDownloads, onOpenWith, onAbout, extractor,
             playerViewModel, onAddToQueue, onShowMediaItemMenu,
             onPlaylistPresence = onPlaylistPresence,
+            onMicrophoneRequest = onMicrophoneRequest,
         )
         delay(TAB_DESTROY_DELAY_MS)
         hosts.keys.filter { it !in liveTabIds }.forEach { id ->
@@ -796,6 +819,7 @@ private fun createHosts(
     onAddToQueue: ((Bridge.QueueItemJson?) -> Unit)? = null,
     onShowMediaItemMenu: ((Bridge.QueueItemJson) -> Unit)? = null,
     onPlaylistPresence: ((Long, Boolean) -> Unit)? = null,
+    onMicrophoneRequest: ((onResult: (Boolean) -> Unit) -> Unit)? = null,
 ) {
     for (tab in tabs) {
         if (tab.id in hosts) continue
@@ -820,6 +844,7 @@ private fun createHosts(
             onPlaylistPresence = onPlaylistPresence?.let { callback ->
                 { has: Boolean -> callback(tabId, has) }
             },
+            onMicrophoneRequest = onMicrophoneRequest,
         ).also {
             WebViewFactory.prepareBackground(it.webView, tab.url)
             it.webView.loadUrl(tab.url)

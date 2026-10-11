@@ -22,6 +22,7 @@
     try { Lite.bridge()?.prepare?.(href); } catch {}
   }, true);
   const MEDIA_CONTEXT_BLOCK_MS = 400;
+  const SHEET_INJECT_MS = 12500;
   let activeId = null;
   let playerShown = false;
   let bridgeWarned = false;
@@ -31,7 +32,8 @@
   const MEDIA_ROOT = 'ytm-media-item, yt-lockup-view-model, ytm-rich-item-renderer, .ytLockupViewModelHost';
   const MEDIA_INFO = '.media-item-info';
   const MENU_TRIGGER = '.media-item-menu, .ytLockupMetadataViewModelMenuButton';
-  const SHEET_ITEM = 'ytm-menu-service-item-renderer, yt-list-item-view-model, toggleable-list-item-view-model';
+  const SHEET_ITEM = 'ytm-menu-service-item-renderer, ytm-menu-navigation-item-renderer, ' +
+    'yt-list-item-view-model, toggleable-list-item-view-model';
   const SHEET_BUTTONS = [
     'button.menu-item-button',
     'button.yt-list-item-view-model__button-or-anchor',
@@ -690,7 +692,13 @@
     }, true);
   }
 
-  // -- ⋮ overflow sheet → inject Add to queue as the first row --
+  // -- ⋮ overflow sheet → inject Add to queue and Download as the first rows --
+
+  const SHEET_ROWS = [
+    { kind: 'queue-item', icon: Lite.queueIcon, label: 'addToQueue' },
+    { kind: 'download-item', icon: Lite.downloadIcon, label: 'download' },
+  ];
+  const SHEET_ROW = SHEET_ROWS.map((row) => `[data-injected="${row.kind}"]`).join(',');
 
   function isSheetItem(element) {
     if (!(element instanceof Element)) return false;
@@ -722,7 +730,7 @@
       document.querySelector('ytm-app-bottom-sheet-layout');
   }
 
-  function styleQueueMenuItem(menuItem, template) {
+  function styleSheetItem(menuItem, template, row) {
     const menuButton = SHEET_BUTTONS.map((selector) => menuItem.querySelector(selector))
       .find((node) => node instanceof Element);
     if (!(menuButton instanceof Element)) return false;
@@ -737,14 +745,14 @@
       menuText.setAttribute('role', 'text');
       menuButton.appendChild(menuText);
     }
-    const label = Lite.text('addToQueue');
-    Lite.menuIcon(menuItem, Lite.queueIcon, template);
+    const label = Lite.text(row.label);
+    Lite.menuIcon(menuItem, row.icon, template);
     menuText.textContent = label;
     menuButton.setAttribute('aria-label', label);
     return true;
   }
 
-  function ensureQueueMenuItem(sheet, payload) {
+  function ensureSheetItems(sheet, payload) {
     const layout = sheet instanceof Element ? sheet : sheetRoot();
     if (!(layout instanceof Element)) return false;
     const menuContainer = menuBox(layout) ||
@@ -754,44 +762,55 @@
       warnSelectorMiss('sheet-menu-container');
       return false;
     }
-    const marked = '[data-injected="queue-item"]';
-    const existing = Array.from(menuContainer.children).filter(
-      (child) => child instanceof Element && child.getAttribute('data-injected') === 'queue-item',
-    );
-    existing.forEach((node, index) => { if (index > 0) node.remove(); });
-    if (!payload || !payload.videoId) {
-      existing.forEach((node) => node.remove());
-      return true;
-    }
-    let item = existing[0];
     const template = Array.from(menuContainer.children).reverse().find(
       child => child instanceof Element && !child.hasAttribute('data-injected') && isSheetItem(child));
-    if (!(item instanceof Element)) {
-      if (!(template instanceof Element)) {
-        warnSelectorMiss('sheet-menu-item');
-        return false;
+    let anchor = null;
+    for (const row of SHEET_ROWS) {
+      const existing = Array.from(menuContainer.children).filter(
+        (child) => child instanceof Element && child.getAttribute('data-injected') === row.kind,
+      );
+      existing.forEach((node, index) => { if (index > 0) node.remove(); });
+      if (!payload || !payload.videoId) {
+        existing.forEach((node) => node.remove());
+        continue;
       }
-      item = template.cloneNode(true);
-      item.setAttribute('data-injected', 'queue-item');
-    }
-    item.dataset.queuePayload = JSON.stringify(payload);
-    if (!styleQueueMenuItem(item, template)) return false;
-    if (item.parentElement !== menuContainer || item !== menuContainer.firstElementChild) {
-      menuContainer.insertBefore(item, menuContainer.firstElementChild);
+      let item = existing[0];
+      if (!(item instanceof Element)) {
+        if (!(template instanceof Element)) {
+          warnSelectorMiss('sheet-menu-item');
+          return false;
+        }
+        item = template.cloneNode(true);
+        Lite.strip(item);
+        item.setAttribute('data-injected', row.kind);
+      }
+      item.dataset.queuePayload = JSON.stringify(payload);
+      if (!styleSheetItem(item, template, row)) return false;
+      const ref = anchor ? anchor.nextElementSibling : menuContainer.firstElementChild;
+      if (item !== ref) menuContainer.insertBefore(item, ref);
+      anchor = item;
     }
     return true;
   }
 
   let sheetRetry = null;
+  let sheetUntil = 0;
   let lastSheetPayload = null;
+
+  // Until the sheet opens, sheetRoot() can resolve to a card's ⋮ trigger.
+  function injectSheet() {
+    if (Date.now() >= sheetUntil) return true;
+    const sheet = sheetRoot();
+    if (!sheet || sheet.matches(MENU_TRIGGER) || !ensureSheetItems(sheet, lastSheetPayload)) return false;
+    sheetUntil = 0;
+    return true;
+  }
 
   function scheduleSheetInject(payload) {
     lastSheetPayload = payload;
+    sheetUntil = Date.now() + SHEET_INJECT_MS;
     if (sheetRetry) sheetRetry.cancel();
-    sheetRetry = Lite.retry(() => {
-      const sheet = sheetRoot();
-      return !!(sheet && ensureQueueMenuItem(sheet, lastSheetPayload));
-    }, 9);
+    sheetRetry = Lite.retry(injectSheet, 9);
   }
 
   function menuTriggerOf(event) {
@@ -806,37 +825,46 @@
     return closestDeep(target, MENU_TRIGGER);
   }
 
-  function queueItemFromPath(event) {
+  function sheetItemFromPath(event) {
     for (const node of pathOf(event)) {
-      if (node instanceof Element && node.getAttribute('data-injected') === 'queue-item') {
+      if (node instanceof Element && node.matches(SHEET_ROW)) {
         return node;
       }
     }
     const target = event.target;
-    return (target && target.closest && target.closest('[data-injected="queue-item"]')) || null;
+    return (target && target.closest && target.closest(SHEET_ROW)) || null;
   }
 
-  /** ⋮ on a media card opens the page sheet; inject Add to queue as the first row. */
+  function downloadFromSheet(payload) {
+    let item = null;
+    try { item = JSON.parse(payload); } catch { return; }
+    window.__download?.openConfirm(item);
+  }
+
+  /** ⋮ on a media card opens the page sheet; inject Add to queue and Download as the first rows. */
   function interceptMediaMenu() {
     document.addEventListener('click', (event) => {
-      if (queueItemFromPath(event)) return;
+      if (sheetItemFromPath(event)) return;
       const trigger = menuTriggerOf(event);
       if (!trigger) return;
       const root = mediaCardOf(trigger);
       scheduleSheetInject(root ? queuePayloadForRoot(root) : null);
     }, true);
     document.addEventListener('click', (event) => {
-      const item = queueItemFromPath(event);
+      const item = sheetItemFromPath(event);
       if (!item) return;
       const payload = item.dataset.queuePayload;
       const b = Lite.bridge();
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (payload && b && typeof b.addToQueue === 'function') {
+      if (item.getAttribute('data-injected') === 'download-item') {
+        downloadFromSheet(payload);
+      } else if (payload && b && typeof b.addToQueue === 'function') {
         b.addToQueue(payload);
       } else if (b && typeof b.reportQueueAddFailed === 'function') {
         b.reportQueueAddFailed();
       }
+      Lite.closeSheet();
     }, true);
   }
 
@@ -852,6 +880,7 @@
     interceptTimestamps();
     interceptMediaHold();
     interceptMediaMenu();
+    Lite.sheet('media-menu', injectSheet);
     window.addEventListener('resize', ensure);
     window.addEventListener('scroll', ensure, { passive: true });
     if (window.visualViewport) {

@@ -10,6 +10,7 @@
   const RETRY_MS = [128, 256, 512, 1024, 2048];
   const POLL_MS = 1000;
   const SPA_LAG_MS = 80;
+  const SHEET_WATCH_MS = 1500;
   const ID_RE = /^[a-zA-Z0-9_-]{11}$/;
   const SHORTS_PATH_RE = /^\/shorts(?:\/|$)/;
 
@@ -1242,11 +1243,14 @@
     return 'en';
   }
 
-  // The one glyph two features share — "add to queue" (watch-bar entry and
+  // A glyph two features share — "add to queue" (watch-bar entry and
   // the ⋮ sheet row). Deliberately the playlist-add glyph, not the native
   // queue icon: keep its stroke and viewBox aligned with adjacent controls.
   const queueIcon =
     'M120-320v-80h280v80H120Zm0-160v-80h440v80H120Zm0-160v-80h440v80H120Zm520 480v-160H480v-80h160v-160h80v160h160v80H720v160h-80Z';
+
+  const downloadIcon =
+    'M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z';
 
   function text(key) {
     const row = TEXT[key] || {};
@@ -1517,6 +1521,40 @@
     })();
   }
 
+  const sheetHooks = new Map();
+  let sheetWatch = null;
+  let sheetWatchTimer = 0;
+
+  /** Registers (or replaces) sheet hook [name]; ensure() runs as soon as a
+   *  tap adds nodes, before the sheet sizes itself on its first frame. */
+  function sheet(name, ensure) {
+    sheetHooks.set(name, ensure);
+  }
+
+  /** Closes the open sheet the way its own rows do: pops its #hash entry. */
+  function closeSheet() {
+    if (location.hash) history.back();
+  }
+
+  function watchSheets() {
+    if (!sheetHooks.size) return;
+    clearTimeout(sheetWatchTimer);
+    sheetWatchTimer = setTimeout(() => {
+      sheetWatch?.disconnect();
+      sheetWatch = null;
+    }, SHEET_WATCH_MS);
+    if (sheetWatch) return;
+    sheetWatch = new MutationObserver((records) => {
+      if (!records.some((record) => record.addedNodes.length)) return;
+      for (const [name, ensure] of sheetHooks) {
+        try { ensure(); } catch {
+          window.__litubeDiagnostic?.('script_failed', 'exception', /^[a-z_-]{1,40}$/.test(name) ? name : 'core');
+        }
+      }
+    });
+    sheetWatch.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   function start() {
     const root = document.documentElement;
     if (!root) {
@@ -1545,6 +1583,7 @@
     }
     new MutationObserver(wake).observe(root, { childList: true, subtree: true,
       attributes: true, attributeFilter: ['lang', 'dark'] });
+    for (const type of ['pointerdown', 'click']) window.addEventListener(type, watchSheets, true);
     for (const type of ['yt-navigate-finish', 'yt-page-data-updated', 'popstate']) {
       window.addEventListener(type, () => setTimeout(wake, SPA_LAG_MS));
     }
@@ -1560,7 +1599,7 @@
 
   window.Lite = {
     text, bridge, prefs, id, isId, isShorts, bar, chip, strip, icon, svg, fit, menuIcon,
-    queueIcon, module, retry, bridgeReady, wake,
+    queueIcon, downloadIcon, module, retry, bridgeReady, wake, sheet, closeSheet,
   };
   start();
 })();

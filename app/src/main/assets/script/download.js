@@ -1,7 +1,7 @@
 /**
  * Watch-page entries: download, add to queue, open with, and the live-chat
- * panel, injected atomically through the shared scheduler; plus the
- * playlist snapshot the native download bridge collects.
+ * panel, injected atomically through the shared scheduler; the Shorts ⋮
+ * download row; plus the playlist snapshot the native download bridge collects.
  */
 (() => {
   'use strict';
@@ -14,8 +14,7 @@
   const NS = '__download';
 
   const ICONS = {
-    download:
-      'M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z',
+    download: Lite.downloadIcon,
     queue: Lite.queueIcon,
     openWith:
       'M648-96q-50 0-85-35t-35-85q0-9 4-29L295-390q-16 14-36.05 22-20.04 8-42.95 8-50 0-85-35t-35-85q0-50 35-85t85-35q23 0 43 8t36 22l237-145q-2-7-3-13.81-1-6.81-1-15.19 0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35q-23 0-43-8t-36-22L332-509q2 7 3 13.81 1 6.81 1 15.19 0 8.38-1 15.19-1 6.81-3 13.81l237 145q16-14 36.05-22 20.04-8 42.95-8 50 0 85 35t35 85q0 50-35 85t-85 35Zm0-72q20.4 0 34.2-13.8Q696-195.6 696-216q0-20.4-13.8-34.2Q668.4-264 648-264q-20.4 0-34.2 13.8Q600-236.4 600-216q0 20.4 13.8 34.2Q627.6-168 648-168ZM216-432q20.4 0 34.2-14 13.8-14 13.8-34t-13.8-34q-13.8-14-34.2-14-20.4 0-34.2 14-13.8 14-13.8 34t13.8 34q13.8 14 34.2 14Zm466-277.8q14-13.8 14-34.2 0-20.4-13.8-34.2Q668.4-792 648-792q-20.4 0-34.2 13.8Q600-764.4 600-744q0 20.4 14 34.2 14 13.8 34 13.8t34-13.8ZM648-216ZM216-480Zm432-264Z',
@@ -410,14 +409,69 @@
     return { type: 'openBatch', name: (header && header.textContent || '').trim(), items };
   }
 
+  // -- Shorts ⋮ download row --
+
+  const SHORTS_ROW = 'shorts-download';
+
+  function openConfirm(video) {
+    if (!video || !Lite.isId(video.videoId)) return;
+    post({ type: 'openConfirm', videoId: video.videoId, title: video.title || '', author: video.author || null });
+  }
+
+  function shortsVideo() {
+    const videoId = Lite.id();
+    if (!Lite.isShorts() || !Lite.isId(videoId)) return null;
+    const visible = Array.from(document.querySelectorAll('video')).find((video) => {
+      const rect = video.getBoundingClientRect();
+      return rect.width > 40 && rect.height > 40 && rect.top < innerHeight && rect.bottom > 0;
+    });
+    const host = visible?.closest('.html5-video-player') || document.querySelector('#movie_player');
+    let data = null;
+    try { data = host?.getVideoData?.(); } catch { /* player API optional */ }
+    const own = data?.video_id === videoId;
+    return { videoId, title: own && data.title || '', author: own && data.author || null };
+  }
+
+  function ensureShortsRow() {
+    const shorts = Lite.isShorts();
+    for (const row of document.querySelectorAll(`[data-injected="${SHORTS_ROW}"]`)) {
+      if (!shorts || row.previousElementSibling?.getAttribute('data-injected') !== 'shorts-quality') row.remove();
+    }
+    if (!shorts) return true;
+    for (const quality of document.querySelectorAll('[data-injected="shorts-quality"]')) {
+      if (quality.nextElementSibling?.getAttribute('data-injected') === SHORTS_ROW) continue;
+      const row = quality.cloneNode(true);
+      row.setAttribute('data-injected', SHORTS_ROW);
+      const text = row.querySelector('.yt-core-attributed-string,[role="text"],.menu-item-text,.ytListItemViewModelTitle');
+      const button = row.querySelector('button,[role="button"]');
+      if (!text || !button) continue;
+      const label = Lite.text('download');
+      text.textContent = label;
+      button.setAttribute('aria-label', label);
+      Lite.menuIcon(row, Lite.downloadIcon, quality);
+      quality.parentElement.insertBefore(row, quality.nextElementSibling);
+    }
+    return true;
+  }
+
+  window.addEventListener('click', (event) => {
+    if (!event.target?.closest?.(`[data-injected="${SHORTS_ROW}"]`)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openConfirm(shortsVideo());
+    Lite.closeSheet();
+  }, true);
+
   // -- lifecycle --
 
   function rebind() {
     bindHost();
     Lite.module('watch', ensure);
+    Lite.module('shorts-download', ensureShortsRow);
     Lite.wake();
   }
 
   rebind();
-  window[NS] = { rebind, collect };
+  Lite.sheet('shorts-download', ensureShortsRow);
+  window[NS] = { rebind, collect, openConfirm };
 })();

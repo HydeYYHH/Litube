@@ -118,7 +118,7 @@ class BrowserViewModel(
     fun onBack(webCanGoBack: Boolean): BackResult {
         // Back on a watch page suspends it to the mini-player and returns to
         // the previous page instead of walking the WebView history or popping
-        // the tab.
+        // the tab; an open sheet or dialog is closed first.
         if (UrlPolicy.isLoginUrl(_uiState.value.url)) {
             if (webCanGoBack) return BackResult.GoWebBack
             val source = loginSources.remove(_uiState.value.activeId)
@@ -130,6 +130,7 @@ class BrowserViewModel(
                 return BackResult.Handled
             }
         }
+        if (webCanGoBack && _uiState.value.url.substringAfter('#', "").isNotEmpty()) return BackResult.GoWebBack
         if (shouldSuspendWatch()) {
             val state = tabs.suspendActiveWatch() ?: return BackResult.Finish
             onWatchSuspended?.invoke()
