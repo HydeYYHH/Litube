@@ -181,58 +181,37 @@ object DownloadSelector {
         videoId: String,
     ): DownloadSelection {
         val pool = files.filter { it.audioOnly }.ifEmpty { files.filter(StreamSelection::isMuxed) }
-        val candidates = pool.filter { format ->
-            if (format.audioOnly) DownloadCodecs.audioEnabled(format)
-            else DownloadCodecs.comboEnabled(format, null, audioOnly = false)
-        }.ifEmpty { pool }
-
-        val itagHint = config.audioItagHint
-        if (itagHint != null && itagHint > 0) {
-            val hinted = candidates.firstOrNull { it.itag == itagHint &&
-                (config.audioTrack.isNullOrBlank() || AudioTrackIdentity.matches(it, config.audioTrack)) }
-            val usable = hinted != null && (
-                !hinted.audioOnly || DownloadCodecs.audioEnabled(hinted)
-            )
-            if (hinted != null && usable) {
-                return DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, hinted)))
-            }
-        }
-
         val preferred = config.audioTrack
-        if (!preferred.isNullOrBlank()) {
-            val match = candidates.filter { AudioTrackIdentity.matches(it, preferred) }.maxByOrNull { it.bitrate }
-                ?: return fail(
+        val chosenGroup = if (!preferred.isNullOrBlank()) {
+            pool.filter { AudioTrackIdentity.matches(it, preferred) }.ifEmpty {
+                return fail(
                     DownloadUnavailableReason.AUDIO_LANGUAGE_UNAVAILABLE,
                     "audio track $preferred is unavailable",
                 )
-            if (match.audioOnly && !DownloadCodecs.audioEnabled(match)) return codecUnavailable()
-            return DownloadSelection.Ready(DownloadPlan(audio = mediaChoice(videoId, match)))
+            }
+        } else {
+            val tracks = pool.groupBy(AudioTrackIdentity::key)
+            val originals = tracks.values.filter { group -> group.any(AudioTrackIdentity::isOriginal) }
+            val defaults = tracks.values.filter { group -> group.any { it.audioTrackType.equals("default", ignoreCase = true) } }
+            if (originals.size > 1 || defaults.size > 1) return ambiguousAudio()
+            when {
+                originals.size == 1 -> originals.single()
+                defaults.size == 1 -> defaults.single()
+                tracks.size == 1 -> tracks.values.single()
+                else -> return ambiguousAudio()
+            }
         }
-
-        // Group by track identity. Streams WITHOUT track metadata share one
-        // "unknown" bucket — bitrate variants of a single track must never
-        // read as separate dubs (that dead-ends the sheet with no chips).
-        val tracks = candidates.groupBy { AudioTrackIdentity.key(it) }
-        fun original(group: List<Format>) = group.first().let {
-            it.audioTrackOriginal || it.audioTrackType.equals("original", ignoreCase = true)
-        }
-        fun flaggedDefault(group: List<Format>) =
-            group.first().audioTrackType.equals("default", ignoreCase = true)
-
-        val originals = tracks.values.filter(::original)
-        if (originals.size > 1) return ambiguousAudio()
-        val defaults = tracks.values.filter(::flaggedDefault)
-        if (defaults.size > 1) return ambiguousAudio()
-
-        val chosenGroup = when {
-            originals.size == 1 -> originals.single()
-            defaults.size == 1 -> defaults.single()
-            tracks.size == 1 -> tracks.values.single()
-            else -> return ambiguousAudio()
-        }
-        // One track, several renditions: take the highest bitrate.
+        val available = chosenGroup.filter { format ->
+            if (format.audioOnly) DownloadCodecs.audioEnabled(format)
+            else DownloadCodecs.comboEnabled(format, null, audioOnly = false)
+        }.ifEmpty { return codecUnavailable() }
+        val bitrate = config.audioBitrate?.takeIf { it > 0 }
+        val qualities = if (bitrate == null) available else available.filter { it.bitrate in 1..bitrate }
+        val chosen = qualities.firstOrNull { config.audioItagHint != null && it.itag == config.audioItagHint }
+            ?: qualities.maxByOrNull { it.bitrate }
+            ?: return fail(DownloadUnavailableReason.QUALITY_UNAVAILABLE, "audio bitrate is unavailable")
         return DownloadSelection.Ready(
-            DownloadPlan(audio = mediaChoice(videoId, chosenGroup.maxBy { it.bitrate })),
+            DownloadPlan(audio = mediaChoice(videoId, chosen)),
         )
     }
 

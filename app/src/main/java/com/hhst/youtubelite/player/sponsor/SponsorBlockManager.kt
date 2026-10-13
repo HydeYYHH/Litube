@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.player.sponsor
 
-import android.util.Log
 import com.hhst.youtubelite.diagnostics.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -19,8 +18,6 @@ import okhttp3.Call
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicLong
 import okhttp3.Request
-
-private const val TAG = "SponsorBlockManager"
 
 /**
  * SponsorBlock client: fetches skip segments and reports them to the engine.
@@ -86,19 +83,23 @@ class SponsorBlockManager(
         scope.launch {
             val context = (diagnosticContext ?: DiagnosticContext(videoId = id)).child(requestId.toString())
             val operation = AppLog.operation(AppLog.Category.PLAYER, "sponsorblock", context, mapOf("categories" to categories))
-            // null = fetch failed: for the SAME video keep the working segments
-            // (a transient 5xx must not kill skipping for the rest of it); for
-            // a new video segments were already cleared above.
-            val fetched = runCatching { fetch(id, categories, context) }
-                .onFailure { operation.finish(if (requestId != requestSeq.get()) DiagnosticOutcome.SUPERSEDED else DiagnosticOutcome.FAILURE, "fetch_failed", it) }
-                .getOrNull()
+            // Failed refreshes retain segments for the current video.
+            val result = runCatching { fetch(id, categories, context) }
             if (requestId != requestSeq.get()) { operation.finish(DiagnosticOutcome.SUPERSEDED, "video_replaced"); return@launch }
-            if (fetched != null) {
-                segments = fetched
-                segmentsVideoId = id
+            val failure = result.exceptionOrNull()
+            if (failure != null) {
+                operation.finish(DiagnosticOutcome.FAILURE,
+                    if (failure is SponsorBlockParseException) "parse_failed" else "fetch_failed", failure)
+                onSegmentsLoaded?.invoke(segments)
+                return@launch
             }
+            val fetched = result.getOrThrow()
+            segments = fetched
+            segmentsVideoId = id
             onSegmentsLoaded?.invoke(segments)
-            operation.finish(DiagnosticOutcome.SUCCESS, fields = mapOf("segment_count" to segments.size))
+            operation.finish(DiagnosticOutcome.SUCCESS,
+                if (fetched.isEmpty()) "no_segments" else "segments_loaded",
+                fields = mapOf("segment_count" to fetched.size))
         }
     }
 
@@ -156,10 +157,7 @@ class SponsorBlockManager(
             PreferenceKeys.SKIP_POI_HIGHLIGHT to "poi_highlight",
         )
 
-        /**
-         * 404 is a valid empty result. 2xx is parsed. Timeout / 5xx return
-         * null so [load] keeps working segments for the same video.
-         */
+        /** Distinguishes empty results, HTTP failures and invalid responses. */
         fun interpretHttp(code: Int, body: String?, videoId: String): List<Segment>? {
             if (code == 404) return emptyList()
             if (code in 200..299) return SponsorBlockParser.parse(body.orEmpty(), videoId)
@@ -173,34 +171,35 @@ class SponsorBlockManager(
             .joinToString("") { "%02x".format(it) }
 }
 
-/** Pure SponsorBlock response parser (no Android deps; unit-testable). */
+/** Parses SponsorBlock responses for one video. */
 object SponsorBlockParser {
 
     private val gson = Gson()
     private val type =
-        object : TypeToken<List<SponsorBlockResponse>>() {}.type
+        object : TypeToken<List<Response>>() {}.type
 
-    fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> {
-        val responses: List<SponsorBlockResponse> =
-            runCatching { gson.fromJson<List<SponsorBlockResponse>>(json, type) }
-                .onFailure { AppLog.event(AppLog.Category.PLAYER, "sponsorblock_parse_failed", failure = it,
-                    context = DiagnosticContext(videoId = videoId)) }
-                .getOrNull() ?: return emptyList()
-        return responses
+    fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> = try {
+        val responses = gson.fromJson<List<Response>>(json, type)
+            ?: throw IllegalArgumentException("Missing SponsorBlock response")
+        responses
             .filter { it.videoID == videoId }
             .flatMap { it.segments }
             .mapNotNull { data ->
                 val pair = data.segment
-                if (pair.size < 2) return@mapNotNull null
+                if (pair.size < 2 || !pair[0].isFinite() || !pair[1].isFinite()
+                    || pair[0] < 0 || pair[1] < pair[0]
+                    || pair[1] == pair[0] && data.category != "poi_highlight") return@mapNotNull null
                 SponsorBlockManager.Segment(
                     startMs = (pair[0] * 1000).toLong(),
                     endMs = (pair[1] * 1000).toLong(),
                     category = data.category,
                 )
             }
+    } catch (failure: Exception) {
+        throw SponsorBlockParseException(failure)
     }
 
-    private data class SponsorBlockResponse(
+    private data class Response(
         val videoID: String = "",
         val segments: List<SegmentData> = emptyList(),
     )
@@ -210,3 +209,5 @@ object SponsorBlockParser {
         val segment: List<Double> = emptyList(),
     )
 }
+
+class SponsorBlockParseException(cause: Exception) : IOException("Invalid SponsorBlock response", cause)

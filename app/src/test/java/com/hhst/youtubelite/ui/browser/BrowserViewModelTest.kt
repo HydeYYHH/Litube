@@ -17,6 +17,26 @@ import org.junit.Test
 
 class BrowserViewModelTest {
 
+    @Test fun searchResultsSuspendWatchAndBackRestoresTheSameDocument() {
+        val model = vm(miniEnabled = true, playerShowing = true)
+        val watch = "https://m.youtube.com/watch?v=aaaaaaaaaaa"
+        model.openTab(watch)
+        val watchId = model.uiState.value.activeId
+        var mini = false
+        var restored: String? = null
+        model.onWatchSuspended = { mini = true }
+        model.onWatchOpened = { restored = it }
+        model.openTab("https://m.youtube.com/results?search_query=music")
+        assertTrue(mini)
+        assertEquals("searching", activeKind(model))
+        assertEquals(watchId, model.uiState.value.suspendedWatchId)
+        assertEquals(BackResult.GoWebBack, model.onBack(true))
+        assertEquals(BackResult.Handled, model.onBack(false))
+        assertEquals(watchId, model.uiState.value.activeId)
+        assertEquals(watch, restored)
+        assertNull(model.uiState.value.suspendedWatchId)
+    }
+
     private fun vm(miniEnabled: Boolean = false, playerShowing: Boolean = false): BrowserViewModel {
         val store = object : PrefStore {
             private val values = mutableMapOf<String, Boolean>()

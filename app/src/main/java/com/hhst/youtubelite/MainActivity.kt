@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
 
     /** PiP mode state consumed by BrowserScreen (no recreate on config change). */
     private val inPip = MutableStateFlow(false)
+    private var pipWasActive = false
 
     private var pipPrefListenerRef: ((String) -> Unit)? = null
 
@@ -190,7 +191,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isInPictureInPictureMode) pipWasActive = false
         playerViewModel.returnFromAudioOnlyBackground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        closeStoppedPip()
+    }
+
+    private fun closeStoppedPip() {
+        // PiP mode can remain set after the window is dismissed.
+        if (!pipWasActive || isChangingConfigurations || playerViewModel.audioOnlyBackground) return
+        pipWasActive = false
+        playerViewModel.onPipDismissed()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -245,6 +259,7 @@ class MainActivity : ComponentActivity() {
             super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         }
         inPip.value = isInPictureInPictureMode
+        if (isInPictureInPictureMode) pipWasActive = true
         AppLog.event(AppLog.Category.APP, "pip_state", mapOf("active" to isInPictureInPictureMode))
     }
 
@@ -294,6 +309,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        closeStoppedPip()
         PipAutoEnter.unregister(this)
         unregisterReceiver(pipActionsReceiver)
         pipPrefListenerRef?.let { prefs.removeOnChangedListener(it) }

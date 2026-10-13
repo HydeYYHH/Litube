@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Player operations callable from injected page scripts. */
 interface PlayerHooks {
+    fun canAutoplayAdvance(videoId: String, requestId: Long, origin: PageOrigin): Boolean = false
     /** Selected card preparation; no queue, history, surface or playback changes. */
     fun prepareVideo(url: String) { }
     // The three hooks below are invoked on the MAIN thread (Bridge posts them).
@@ -60,6 +61,7 @@ data class PageOrigin(val tabId: Long, val documentGeneration: Long) {
 
 /** WebView-level operations the player needs (evaluated in the watch page). */
 interface WatchPage {
+    fun origin(): PageOrigin? = null
     /** Runs JS in the watch WebView; null when no watch host exists. */
     fun evaluate(js: String, onResult: (String?) -> Unit)
     /** True when the watch WebView can go back. */
@@ -93,6 +95,7 @@ class Bridge(
     private val isActive: () -> Boolean = { true },
     private val onGallery: (List<String>, Int) -> Unit = { _, _ -> },
     private val onGoBack: () -> Unit = {},
+    private val onTransientUi: (TransientUi) -> Unit = {},
 ) {
     /** Minimal shape the page's add-to-queue payload must have. */
     data class QueueItemJson(
@@ -112,6 +115,7 @@ class Bridge(
         AppLog.endContext(documentContext)
         documentGeneration.incrementAndGet()
         documentContext = DiagnosticContext(tabId = tabId, documentGeneration = documentGeneration.get())
+        onTransientUi(TransientUi(origin = pageOrigin()))
     }
 
     /** Only first-party, bounded event codes and typed safe fields cross this boundary. */
@@ -127,6 +131,14 @@ class Bridge(
     }
 
     fun pageOrigin(): PageOrigin = PageOrigin(tabId, documentGeneration.get())
+    @JavascriptInterface
+    fun setTransientUi(code: String?, generation: Long, geometry: String?) {
+        val kind = TransientKind.parse(code) ?: return
+        val origin = PageOrigin(tabId, generation)
+        main.post {
+            if (origin == pageOrigin() && isActive()) onTransientUi(TransientUi.fromPage(kind, origin, geometry))
+        }
+    }
     @JavascriptInterface fun shouldInheritShorts(): Boolean = inheritShorts()
     @JavascriptInterface fun shortsAutoplayBlocked(url: String?, reason: String?) {
         if (url == null || !UrlPolicy.isAllowedUrl(url) || !PageKind.isShorts(url)) return
@@ -149,6 +161,11 @@ class Bridge(
         main.post { if (origin == pageOrigin() && isActive()) onGallery(urls, index) }
     }
     @JavascriptInterface fun currentDocumentGeneration(): Long = documentGeneration.get()
+    @JavascriptInterface fun canAutoplayAdvance(videoId: String?, requestId: Long, generation: Long): Boolean {
+        val origin = PageOrigin(tabId, generation)
+        return videoId != null && origin == pageOrigin() && canPlay() &&
+            playerHooks?.canAutoplayAdvance(videoId, requestId, origin) == true
+    }
     @JavascriptInterface fun currentExtractionSession(): String = extractor?.sessionStamp().orEmpty()
 
     @JavascriptInterface
@@ -202,7 +219,8 @@ class Bridge(
     fun addToQueue(itemJson: String?) {
         if (itemJson.isNullOrBlank()) return
         val item = parseQueueItem(itemJson)
-        main.post { onAddToQueue?.invoke(item) }
+        val origin = pageOrigin()
+        main.post { if (origin == pageOrigin() && isActive()) onAddToQueue?.invoke(item) }
     }
 
     @JavascriptInterface
@@ -235,7 +253,7 @@ class Bridge(
         val title = item.title?.takeIf { it.isNotBlank() }
             ?: item.videoId?.takeIf { it.isNotBlank() }
             ?: id
-        return item.copy(title = title)
+        return item.copy(videoId = id, title = title)
     }
 
     // -- player hooks (player-hook.js) --

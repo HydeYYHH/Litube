@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
 
 import com.hhst.youtubelite.downloader.core.CompletionKind
+import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.downloader.core.DownloadFilter
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadStatus
@@ -8,10 +9,12 @@ import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.downloader.core.FileAvailability
 import com.hhst.youtubelite.downloader.net.DownloadBitrate
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
-import com.hhst.youtubelite.downloader.resolve.DownloadPlan
 import com.hhst.youtubelite.downloader.resolve.DownloadCodecs
+import com.hhst.youtubelite.downloader.resolve.DownloadPlan
+import com.hhst.youtubelite.downloader.resolve.DownloadSelection
 import com.hhst.youtubelite.downloader.resolve.DownloadSelector
 import com.hhst.youtubelite.extractor.Format
+import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import java.util.Locale
 
@@ -150,6 +153,18 @@ object DownloadPresentation {
 
     fun qualityItag(catalog: DownloadCatalog, label: String): Int? =
         downloadableVideos(catalog).firstOrNull { qualityLabel(it) == label }?.itag
+
+    fun audioBitrates(catalog: DownloadCatalog, trackKey: String?): List<Int> {
+        val selection = DownloadSelector.select(catalog, DownloadConfig(audioOnly = true, audioTrack = trackKey))
+            as? DownloadSelection.Ready ?: return emptyList()
+        val audio = selection.plan.audio?.format ?: return emptyList()
+        val track = AudioTrackIdentity.key(audio)
+        return catalog.formats.filter {
+            it.audioOnly && DownloadSelector.isFileStream(it) && DownloadCodecs.audioEnabled(it) &&
+                AudioTrackIdentity.key(it) == track && it.bitrate > 0
+        }
+            .map { it.bitrate }.sortedDescending().distinctBy { (it + 500L) / 1000 }
+    }
 
     /** Phases where bytes are actively moving or about to move. */
     fun isActivePhase(phase: DownloadPhase): Boolean = when (phase) {

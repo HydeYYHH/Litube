@@ -10,8 +10,8 @@ plugins {
 
 // File-content providers make the fingerprint respond to source changes with configuration caching.
 val diagnosticDigest = MessageDigest.getInstance("SHA-256")
-listOf(fileTree("src/main"), fileTree("../external/NewPipeExtractor/extractor/src/main"),
-    files("build.gradle.kts", "proguard-rules.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts").asFileTree)
+listOf(fileTree("src/main"),
+    files("build.gradle.kts", "proguard-rules.pro", "proguard-r8-verification.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts").asFileTree)
     .flatMap { it.files }.sortedBy { it.invariantSeparatorsPath }.forEach { source ->
         diagnosticDigest.update(source.relativeTo(rootDir).invariantSeparatorsPath.toByteArray())
         diagnosticDigest.update(providers.fileContents(layout.projectDirectory.file(source.relativeTo(projectDir).path)).asBytes.get())
@@ -47,6 +47,21 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
+        create("minifiedDebug") {
+            initWith(getByName("release"))
+            proguardFile("proguard-r8-verification.pro")
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".minified"
+            versionNameSuffix = "-minified"
+            matchingFallbacks += listOf("release")
+        }
+    }
+
+    testBuildType = providers.gradleProperty("androidTestBuildType").orElse("debug").get()
+    if (testBuildType == "minifiedDebug") {
+        defaultConfig.testInstrumentationRunner = "com.hhst.youtubelite.player.sponsor.R8VerificationRunner"
+        // Release-like verification must not depend on debug-only test activities.
+        sourceSets.getByName("androidTest").java.setSrcDirs(listOf("src/r8AndroidTest/java"))
     }
 
     compileOptions {
@@ -67,7 +82,7 @@ android {
     }
 
     lint {
-        abortOnError = false
+        abortOnError = true
         warning += "MissingTranslation"
     }
 
@@ -75,6 +90,10 @@ android {
         animationsDisabled = true
         unitTests {
             isReturnDefaultValues = true
+            all {
+                it.maxHeapSize = "256m"
+                it.maxParallelForks = 1
+            }
         }
     }
 
@@ -85,15 +104,19 @@ android {
 }
 
 val diagnosticMappingDir = layout.buildDirectory.dir("outputs/diagnostic-mappings/$diagnosticBuildId")
-tasks.register<Copy>("archiveReleaseDiagnostics") {
-    val destination = diagnosticMappingDir.get().asFile
-    val identity = diagnosticBuildId
-    dependsOn("minifyReleaseWithR8")
-    from(layout.buildDirectory.dir("outputs/mapping/release"))
-    into(diagnosticMappingDir)
-    doLast { destination.resolve("build-id.txt").writeText(identity + "\n") }
+listOf("release", "minifiedDebug").forEach { variant ->
+    val suffix = variant.replaceFirstChar { it.uppercaseChar() }
+    val archive = tasks.register<Copy>("archive${suffix}Diagnostics") {
+        val directory = diagnosticMappingDir.get().asFile
+        val destination = if (variant == "release") directory else directory.resolve(variant)
+        val identity = diagnosticBuildId
+        dependsOn("minify${suffix}WithR8")
+        from(layout.buildDirectory.dir("outputs/mapping/$variant"))
+        into(destination)
+        doLast { destination.resolve("build-id.txt").writeText(identity + "\n") }
+    }
+    tasks.matching { it.name == "assemble$suffix" }.configureEach { finalizedBy(archive) }
 }
-tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy("archiveReleaseDiagnostics") }
 
 kotlin {
     compilerOptions {
@@ -140,6 +163,7 @@ dependencies {
     implementation(libs.nanohttpd)
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    add("minifiedDebugImplementation", libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

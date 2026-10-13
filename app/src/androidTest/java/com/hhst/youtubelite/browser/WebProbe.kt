@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.browser
 
 import android.webkit.WebView
+import android.os.SystemClock
+import com.hhst.youtubelite.core.DeviceEvidence
 import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -10,7 +12,7 @@ import org.json.JSONTokener
 import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 
-/** evaluate/waitFor pair shared by the web-fragment tests; [view] is read lazily. */
+/** Evaluates page state and waits for bounded conditions. */
 internal class WebProbe(private val view: () -> WebView) {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
@@ -25,14 +27,18 @@ internal class WebProbe(private val view: () -> WebView) {
     }
 
     fun waitFor(source: String): JSONObject {
-        val deadline = System.currentTimeMillis() + 10_000
+        val deadline = SystemClock.elapsedRealtime() + 10_000
         var state = JSONObject()
-        while (System.currentTimeMillis() < deadline) {
+        while (SystemClock.elapsedRealtime() < deadline) {
             state = evaluate(source)
             if (state.optBoolean("ready")) return state
             Thread.sleep(100)
         }
-        fail("Page condition not met: $state")
+        runCatching {
+            DeviceEvidence.captureScene("web-condition")
+            DeviceEvidence.dumpUi("web-condition.xml")
+        }
+        fail("Page condition not met: $state; query: $source")
         return state
     }
 }

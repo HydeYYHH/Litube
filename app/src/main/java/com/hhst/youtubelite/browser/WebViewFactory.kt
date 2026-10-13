@@ -39,6 +39,9 @@ import com.hhst.youtubelite.net.NetTracer
 import com.hhst.youtubelite.net.PageScript
 import com.hhst.youtubelite.ui.theme.YtRed
 import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /** Builds a swipe-refresh WebView host for the mobile site. */
 object WebViewFactory {
@@ -66,6 +69,7 @@ object WebViewFactory {
 
     private val coreScript = PageScript(CORE_JS, "Core")
     private val navScript = PageScript(NAV_JS, "Nav")
+    private val uiScript = PageScript("script/ui.js", "Ui")
     private val playerHookScript = PageScript(PLAYER_HOOK_JS, "PlayerHook")
     private val dislikesScript = PageScript(DISLIKES_JS, "DisplayDislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
@@ -95,6 +99,7 @@ object WebViewFactory {
     ): BrowserHost {
         val appContext = context.applicationContext
         val injector = ExtensionInjector(appContext)
+        val transientUi = MutableStateFlow(TransientUi())
         val bridge = Bridge(
             onOpenTab = callbacks::onOpenTab,
             onOpenExtension = onOpenExtension,
@@ -114,6 +119,7 @@ object WebViewFactory {
             onShortsAutoplayBlocked = callbacks::onShortsAutoplayBlocked,
             onGallery = { urls, index -> GalleryActivity.open(context, urls, index) },
             onGoBack = callbacks::onBackRequested,
+            onTransientUi = { transientUi.value = it },
         )
         val netTracer = NetTracer(context = bridge::diagnosticContext)
         val innertube = PageScript(INNERTUBE_JS, "Innertube")
@@ -134,6 +140,8 @@ object WebViewFactory {
             )
             isFocusable = true
             isFocusableInTouchMode = true
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
             setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -155,6 +163,7 @@ object WebViewFactory {
             addJavascriptInterface(bridge, Bridge.NAME)
             extractor.installBrowserCapture(this) { bridge.pageOrigin().documentGeneration }
             coreScript.install(appContext, this)
+            uiScript.install(appContext, this)
             navScript.install(appContext, this)
             netTracer.install(appContext, this)
             innertube.install(appContext, this)
@@ -190,7 +199,7 @@ object WebViewFactory {
         swipeRefresh.addView(webView)
         swipeRefresh.setOnRefreshListener { onRefresh(webView) }
 
-        return BrowserHost(swipeRefresh, webView, downloadBridge)
+        return BrowserHost(swipeRefresh, webView, downloadBridge, transientUi.asStateFlow(), bridge::pageOrigin)
     }
 
     internal fun injectExtras(context: Context, webView: WebView) {
@@ -201,6 +210,7 @@ object WebViewFactory {
     }
 
     internal fun injectNavScript(context: Context, webView: WebView) {
+        uiScript.inject(context, webView)
         navScript.inject(context, webView)
     }
 }
@@ -209,6 +219,8 @@ data class BrowserHost(
     val container: SwipeRefreshLayout,
     val webView: WebView,
     val downloadBridge: DownloadWebBridge? = null,
+    val transientUi: StateFlow<TransientUi> = MutableStateFlow(TransientUi()),
+    val documentOrigin: () -> PageOrigin = { PageOrigin.HOST },
 )
 
 private class BrowserWebViewClient(

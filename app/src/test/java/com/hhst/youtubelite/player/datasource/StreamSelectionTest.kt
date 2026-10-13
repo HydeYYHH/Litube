@@ -2,11 +2,17 @@ package com.hhst.youtubelite.player.datasource
 
 import com.hhst.youtubelite.extractor.Format
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamSelectionTest {
+
+    @Before
+    fun setDecoderSupport() {
+        CodecCapabilities.setDecodersForTest(mapOf("video/avc" to listOf(CodecCapabilities.Decoder(true) { true })))
+    }
 
     @After
     fun tearDown() {
@@ -123,7 +129,6 @@ class StreamSelectionTest {
 
     @Test
     fun preferPlayable_allowAndroidVrDoesNotReintroduceUndecodable() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
         val vr = format(2160).copy(url = "https://gv/videoplayback?id=a&c=ANDROID_VR")
         val av1 = format(1080, codec = "av01.0.09M.08")
             .copy(url = "https://gv/videoplayback?id=a&c=WEB")
@@ -165,6 +170,19 @@ class StreamSelectionTest {
             "en.0",
             StreamSelection.selectAudio(listOf(us, descriptive), "en")?.audioTrackId,
         )
+    }
+
+    @Test fun playableFilteringKeepsTheChosenAudioIdentity() {
+        val original = Format(url = "https://gv/videoplayback?c=VISIONOS", audioOnly = true,
+            codec = "mp4a.40.2", audioTrackOriginal = true, audioTrackId = "en.0", audioLocale = "en")
+        val dub = original.copy(url = "https://gv/videoplayback?c=WEB&pot=token", audioTrackOriginal = false,
+            audioTrackId = "es.1", audioLocale = "es", bitrate = 256_000)
+        val formats = listOf(original, dub)
+        assertEquals(original, StreamSelection.selectAudio(StreamSelection.preferPlayable(
+            StreamSelection.audioCandidates(formats))))
+        assertEquals(dub, StreamSelection.selectAudio(StreamSelection.preferPlayable(
+            StreamSelection.audioCandidates(formats, "id:es.1")), "id:es.1"))
+        assertTrue(StreamSelection.audioCandidates(formats, "id:missing").isEmpty())
     }
 
     @Test

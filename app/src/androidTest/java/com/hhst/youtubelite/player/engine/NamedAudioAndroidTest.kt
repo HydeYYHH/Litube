@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.media3.common.C
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.rules.ActivityScenarioRule
@@ -23,6 +25,7 @@ import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import fi.iki.elonen.NanoHTTPD
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
@@ -85,7 +88,7 @@ class NamedAudioAndroidTest {
         }
     }
 
-    @Test fun missingIdsAndLocalesDoNotHideNamesOrPreventSwitching() {
+    @Test fun namedAudioSurvivesQualityChanges() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
         val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
@@ -101,20 +104,23 @@ class NamedAudioAndroidTest {
             formats = listOf(
                 Format(url = "http://127.0.0.1:${server.listeningPort}/english.ts", audioOnly = true,
                     codec = "mp4a.40.2", audioTrackName = "English", audioTrackOriginal = true),
-                Format(url = "http://127.0.0.1:${server.listeningPort}/spanish.ts", audioOnly = true,
+                Format(url = "http://127.0.0.1:${server.listeningPort}/spanish.ts?pot=fixture", audioOnly = true,
                     codec = "mp4a.40.2", audioTrackName = "Spanish", bitrate = 200000))
         }
         val fixtureCache = streamCache(stream, title = "Named audio")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         lateinit var engine: PlaybackEngine
         lateinit var player: ExoPlayer
-        fun awaitTrack(key: String, path: String) {
+        val timelineChanges = AtomicInteger()
+        fun awaitTrack(key: String, path: String, minimumChanges: Int = 0) {
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 15_000
             while (!ready && SystemClock.elapsedRealtime() < deadline) {
                 instrumentation.runOnMainSync {
                     player.audioDecoderCounters?.ensureUpdated()
-                    ready = engine.snapshot.value.audioTrackKey == key && player.isPlaying && requests.contains(path) &&
+                    ready = engine.snapshot.value.videoId == "namedAud001" && engine.snapshot.value.prepared &&
+                        !engine.snapshot.value.isBuffering && timelineChanges.get() >= minimumChanges &&
+                        engine.snapshot.value.audioTrackKey == key && player.isPlaying && requests.contains(path) &&
                         (player.audioDecoderCounters?.renderedOutputBufferCount ?: 0) > 0
                 }
                 if (!ready) Thread.sleep(50)
@@ -129,15 +135,22 @@ class NamedAudioAndroidTest {
                     MediaSourceResolver(PlayerDataSource.create(app, http)), GlobalContext.get().get<JsonCache>(), prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
+                player.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) timelineChanges.incrementAndGet()
+                    }
+                })
                 engine.play("namedAud001")
             }
             awaitTrack("name:English", "/english.ts")
             assertEquals(listOf("name:English", "name:Spanish"), engine.snapshot.value.audioTracks.map { it.key })
             instrumentation.runOnMainSync { engine.setAudioTrack("name:Spanish") }
             awaitTrack("name:Spanish", "/spanish.ts")
+            val changes = timelineChanges.get()
+            instrumentation.runOnMainSync { engine.setQuality("720p") }
+            awaitTrack("name:Spanish", "/spanish.ts", minimumChanges = changes + 1)
             instrumentation.runOnMainSync { engine.setAudioTrack(null) }
             awaitTrack("name:English", "/english.ts")
-            DeviceEvidence.writeJson("issue-337-named-audio.json", "{\"namedTracksVisible\":2,\"originalDefault\":true,\"dubDecoded\":true,\"defaultRestoresOriginal\":true}")
         } finally {
             instrumentation.runOnMainSync { engine.stop(); player.release() }
             scope.cancel(); server.stop()

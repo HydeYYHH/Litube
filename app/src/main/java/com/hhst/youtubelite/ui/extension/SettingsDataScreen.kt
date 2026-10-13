@@ -56,9 +56,11 @@ fun SettingsDataScreen(
     onClose: () -> Unit,
     manager: ExtensionManager = koinInject(),
     downloadPrefs: DownloadPrefs = koinInject(),
+    onReloadPages: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var pendingImport by remember { mutableStateOf<SettingsBackupData?>(null) }
+    var importDone by remember { mutableStateOf(false) }
     val fileOperations = remember { arrayOfNulls<DiagnosticOperation>(2) }
 
     BackHandler { onClose() }
@@ -173,7 +175,7 @@ fun SettingsDataScreen(
                     onClick = {
                         SettingsBackup.apply(backup, manager, downloadPrefs)
                         pendingImport = null
-                        Toast.makeText(context, R.string.settings_import_done, Toast.LENGTH_SHORT).show()
+                        importDone = true
                     },
                 ) {
                     Text(text = stringResource(R.string.confirm), color = scheme.primary)
@@ -182,6 +184,24 @@ fun SettingsDataScreen(
             dismissButton = {
                 TextButton(onClick = { pendingImport = null }) {
                     Text(text = stringResource(R.string.cancel), color = scheme.onSurfaceVariant)
+                }
+            },
+        )
+    }
+
+    if (importDone) {
+        AlertDialog(
+            onDismissRequest = { importDone = false },
+            title = { Text(stringResource(R.string.settings_import_done)) },
+            text = { Text(stringResource(R.string.settings_import_reload_message)) },
+            confirmButton = {
+                TextButton(onClick = { importDone = false; onReloadPages() }) {
+                    Text(stringResource(R.string.settings_reload_now))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { importDone = false }) {
+                    Text(stringResource(R.string.settings_reload_later))
                 }
             },
         )

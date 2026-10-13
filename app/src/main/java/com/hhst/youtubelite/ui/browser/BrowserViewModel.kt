@@ -148,6 +148,15 @@ class BrowserViewModel(
             return BackResult.Handled
         }
         if (webCanGoBack) return BackResult.GoWebBack
+        if (PageKind.of(_uiState.value.url) == "searching" &&
+            _uiState.value.suspendedWatchId != null) {
+            val restored = tabs.restoreSuspendedWatch()
+            if (restored != null) {
+                onWatchOpened?.invoke(restored.active?.url)
+                publish(restored, resetLoading = false, forward = false)
+                return BackResult.Handled
+            }
+        }
         if (tabs.canPop()) {
             val state = tabs.pop() ?: return BackResult.Finish
             when {
@@ -239,6 +248,7 @@ class BrowserViewModel(
         override fun onPageStarted(url: String) {
             tabs.updateUrl(tabId, url)
             if (_uiState.value.activeId != tabId) return
+            publish(tabs.state(), resetLoading = false)
             _uiState.update {
                 it.copy(url = url, isLoading = true, progress = 0.06f)
             }
@@ -247,6 +257,7 @@ class BrowserViewModel(
         override fun onPageFinished(url: String) {
             tabs.updateUrl(tabId, url)
             if (_uiState.value.activeId != tabId) return
+            publish(tabs.state(), resetLoading = false)
             _uiState.update {
                 it.copy(
                     url = url,
@@ -278,7 +289,7 @@ class BrowserViewModel(
         override fun onHistoryChanged(url: String) {
             tabs.updateUrl(tabId, url)
             if (_uiState.value.activeId != tabId) return
-            _uiState.update { it.copy(url = url) }
+            publish(tabs.state(), resetLoading = false)
         }
 
         override fun onOpenTab(url: String) {

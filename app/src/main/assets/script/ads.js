@@ -44,6 +44,9 @@
       .replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
   }
   const hiddenPromotions = new WeakMap();
+  const closingPromotions = new WeakMap();
+  const dialogs = '[role="dialog"],ytm-dialog,tp-yt-paper-dialog,c3-dialog';
+  const rows = 'yt-list-item-view-model,ytm-menu-service-item-renderer,ytm-menu-navigation-item-renderer,ytm-compact-link-renderer';
   function appLink(href) {
     href = String(href || '').trim();
     if (!href || href[0] === '#') return false;
@@ -61,12 +64,17 @@
     return false;
   }
   function hideAppPromotions() {
-    const surfaces = headers.concat(['[role="dialog"]', '[role="menu"]', 'bottom-sheet-layout']);
+    const surfaces = headers.concat([dialogs, '[role="menu"]', 'bottom-sheet-layout']);
     for (const header of document.querySelectorAll(surfaces.join(','))) {
       for (const control of header.querySelectorAll('a,button,[role="button"]')) {
         const labels = [control.getAttribute('aria-label'), control.textContent].map(normalized);
-        const button = control.closest?.('yt-list-item-view-model,ytm-menu-service-item-renderer,ytm-menu-navigation-item-renderer') || control;
-        if (appLink(control.getAttribute('href') || '') || labels.some(label => appLabels.has(label))) {
+        const button = control.closest?.(rows) || control;
+        const linked = appLink(control.getAttribute('href') || '');
+        if (linked || labels.some(label => appLabels.has(label))) {
+          const dialog = control.closest?.(dialogs);
+          if (linked && dialog && Date.now() >= (closingPromotions.get(dialog) || 0) && window.Lite?.ui?.dismiss(dialog)) {
+            closingPromotions.set(dialog, Date.now() + 500);
+          }
           if (!hiddenPromotions.has(button)) hiddenPromotions.set(button, {
             display: button.style.getPropertyValue('display'), priority: button.style.getPropertyPriority('display'),
             aria: button.getAttribute('aria-hidden'),
@@ -85,8 +93,8 @@
     }
   }
   function installStyle() {
-    if (!document.getElementById('lite-ad-rules') && document.documentElement) {
-      const style = document.createElement('style'); style.id = 'lite-ad-rules';
+    if (!document.getElementById('ad-rules') && document.documentElement) {
+      const style = document.createElement('style'); style.id = 'ad-rules';
       style.textContent = css; document.documentElement.append(style);
     }
   }

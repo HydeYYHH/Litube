@@ -20,6 +20,7 @@ class CodecCapabilitiesTest {
         height = height,
         width = height * 16 / 9,
         bitrate = 1_000_000,
+        fps = 60,
         codec = codec,
         container = "MP4",
         videoOnly = true,
@@ -33,29 +34,36 @@ class CodecCapabilitiesTest {
 
     @Test
     fun av1_droppedWithoutHardwareDecoder() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
+        CodecCapabilities.setDecodersForTest(mapOf("video/av01" to listOf(CodecCapabilities.Decoder(false) { true })))
         assertFalse(CodecCapabilities.isDecodable(format("av01.0.09M.08")))
+        assertFalse(CodecCapabilities.isDecodable(format("av1")))
     }
 
     @Test
-    fun av1_keptWithHardwareDecoderUpToCeiling() {
-        CodecCapabilities.setHardwareMimesForTest(mapOf("video/av01" to true))
-        assertTrue(CodecCapabilities.isDecodable(format("av01.0.09M.08", height = 1080)))
-        assertFalse(CodecCapabilities.isDecodable(format("av01.0.12M.08", height = 1440)))
+    fun av1UsesDecoderDimensionsAndFrameRate() {
+        CodecCapabilities.setDecodersForTest(mapOf("video/av01" to listOf(CodecCapabilities.Decoder(true) {
+            it.width <= 3840 && it.height <= 2160 && it.fps <= 60
+        })))
+        assertTrue(CodecCapabilities.isDecodable(format("av01.0.12M.08", height = 2160)))
+        assertFalse(CodecCapabilities.isDecodable(format("av01.0.16M.08", height = 4320)))
+        assertFalse(CodecCapabilities.isDecodable(format("av01.0.12M.08", height = 2160).copy(fps = 120)))
+        CodecCapabilities.setDecodersForTest(mapOf("video/av01" to listOf(CodecCapabilities.Decoder(true) { true })))
+        assertTrue(CodecCapabilities.isDecodable(format("av01.0.16M.08", height = 4320)))
     }
 
     @Test
-    fun avc_vp9_hevc_alwaysDecodable() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
+    fun unknownCapabilitiesUseConservativeStandardResolution() {
+        CodecCapabilities.setDecodersForTest(emptyMap())
         assertTrue(CodecCapabilities.isDecodable(format("avc1.640028")))
         assertTrue(CodecCapabilities.isDecodable(format("vp9")))
         assertTrue(CodecCapabilities.isDecodable(format("h265")))
         assertTrue(CodecCapabilities.isDecodable(format(null)))
+        assertFalse(CodecCapabilities.isDecodable(format("vp9", height = 2160)))
     }
 
     @Test
     fun preferPlayable_filtersUndecodableAv1() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
+        CodecCapabilities.setDecodersForTest(emptyMap())
         val av1 = format("av01.0.09M.08", height = 1080)
         val vp9 = format("vp9", height = 1080)
         val pool = StreamSelection.preferPlayable(listOf(av1, vp9))
@@ -64,19 +72,14 @@ class CodecCapabilitiesTest {
 
     @Test
     fun preferPlayable_failsFastWhenNothingIsDecodable() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
+        CodecCapabilities.setDecodersForTest(emptyMap())
         val av1 = format("av01.0.09M.08", height = 1080)
-        // Nothing hardware-decodable: empty pool, so the caller fails fast
-        // into re-extract / client-exclusion recovery instead of handing
-        // ExoPlayer a rep it cannot decode.
         assertTrue(StreamSelection.preferPlayable(listOf(av1)).isEmpty())
     }
 
     @Test
     fun preferPlayable_decodableBeatsPotBearingUndecodable() {
-        CodecCapabilities.setHardwareMimesForTest(emptyMap())
-        // A pot URL does not rescue an undecodable codec — playback would
-        // still stutter through software decode. The decodable vp9 wins.
+        CodecCapabilities.setDecodersForTest(emptyMap())
         val av1Pot = format("av01.0.09M.08")
             .let { it.copy(url = it.url + "&pot=abc") }
         val vp9 = format("vp9")

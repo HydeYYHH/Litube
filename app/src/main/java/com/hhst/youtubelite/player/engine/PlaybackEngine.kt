@@ -86,12 +86,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
-/**
- * End-of-playback behavior behind the loop settings toggle. Only [LOOP_ONE]
- * literally loops; the QUEUE_* values advance the queue/page playlist, and
- * [PAUSE_AT_END] stops. Persisted via [persistedValue], so the ordinal and
- * value are fixed.
- */
+/** Playback modes with stable persisted values. */
 enum class LoopMode(val persistedValue: Int, val repeatMode: Int) {
     QUEUE_NEXT(0, Player.REPEAT_MODE_OFF),
     LOOP_ONE(1, Player.REPEAT_MODE_ONE),
@@ -616,7 +611,7 @@ class PlaybackEngine(
         }
     }
 
-    private var requestedAudioTrackKey: String? = null
+    private var audioPreference: String? = null
     private var videoPinRescued = false
 
     private suspend fun loadInternal(
@@ -628,7 +623,7 @@ class PlaybackEngine(
         val generation = playbackGeneration.get()
         val context = beginDiagnostics(videoId, generation)
         val preparing = AppLog.operation(AppLog.Category.PLAYER, "prepare", context.child(), mapOf("reextract" to reExtract))
-        if (videoId != _snapshot.value.videoId) requestedAudioTrackKey = null
+        if (videoId != _snapshot.value.videoId) audioPreference = null
         handler.removeCallbacks(diagnosticTicker); handler.post(diagnosticTicker)
         val speed = rememberedSpeed()
         val loop = rememberedLoopMode()
@@ -667,7 +662,7 @@ class PlaybackEngine(
             if (!stillCurrent(generation)) return
             currentStream = stream
             currentMetadata = metadata
-            lastAudioFormat = source.audioFormat
+            rememberAudio(source.audioFormat)
             adaptiveVideoPool = source.videoFormats
             // Clear just before the new source attaches: the old one keeps its
             // pin while the extraction runs and must not adapt up in the gap.
@@ -718,7 +713,7 @@ class PlaybackEngine(
                 },
                 audioTracks = audioChoices,
                 audioTrackKey = source.audioFormat?.let { AudioTrackIdentity.key(it) }
-                    ?: rememberedAudioTrackKey(),
+                    ?: audioPreference,
                 prepared = true,
                 error = null,
                 chapters = emptyList(),
@@ -919,7 +914,6 @@ class PlaybackEngine(
     }
 
     override fun setQueueNavigation(hasNext: Boolean, hasPrevious: Boolean) {
-        navNextAvailable = hasNext
         notificationController?.onQueueNavigation(hasNext, hasPrevious)
     }
 
@@ -1106,9 +1100,8 @@ class PlaybackEngine(
         // extractor menu is left alone. HLS exposes one row per rendition.
         if (choices.isEmpty()) return
         val key = _snapshot.value.audioTrackKey
-        val renditionKey = requestedAudioTrackKey?.takeIf { candidate ->
-            candidate.startsWith("hls:") && choices.any { it.key == candidate }
-        } ?: AudioTrackIdentity.originalRenditionKey(entries, currentStream?.formats.orEmpty())
+        val renditionKey = AudioTrackIdentity.renditionFor(entries, currentStream?.formats.orEmpty(), audioPreference)
+        if (audioPreference == null) audioPreference = renditionKey
         if (choices != _snapshot.value.audioTracks || renditionKey != key) {
             _snapshot.value = _snapshot.value.copy(
                 audioTracks = choices,
@@ -1118,6 +1111,11 @@ class PlaybackEngine(
         if (renditionKey != null && selectedRenditionKey() != renditionKey) {
             applyRenditionAudio(renditionKey)
         }
+    }
+
+    private fun rememberAudio(format: Format?) {
+        lastAudioFormat = format
+        if (audioPreference == null) audioPreference = format?.let(AudioTrackIdentity::key)?.takeIf { it.isNotBlank() }
     }
 
     private fun playerAudioEntries(): List<Pair<String?, String?>> {
@@ -1213,7 +1211,7 @@ class PlaybackEngine(
     /** Audio track change: re-resolve with the chosen identity key. */
     override fun setAudioTrack(trackKey: String?) {
         // A manual dub applies to this video. Every new video starts with Original.
-        requestedAudioTrackKey = trackKey
+        audioPreference = trackKey
         val renditionMenu = _snapshot.value.audioTracks.any { it.key.startsWith("hls:") }
         if (trackKey?.startsWith("hls:") == true || (trackKey == null && renditionMenu)) {
             _snapshot.value = _snapshot.value.copy(audioTrackKey = trackKey)
@@ -1450,7 +1448,7 @@ class PlaybackEngine(
                                 if (_snapshot.value.videoId == id) {
                                     currentStream = extracted
                                     if (source != null) {
-                                        lastAudioFormat = source.audioFormat
+                                        rememberAudio(source.audioFormat)
                                         adaptiveVideoPool = source.videoFormats
                                     }
                                 }
@@ -1515,7 +1513,7 @@ class PlaybackEngine(
     ): MediaSourceResolver.Resolved = resolver.resolve(
         stream, metadata,
         preferredQuality = rememberedQuality(),
-        audioTrackKey = rememberedAudioTrackKey(),
+        audioTrackKey = audioPreference,
         forceMuxed = muxedFallbackActive,
         subtitleKey = rememberedSubtitleKey(),
         diagnosticContext = context,
@@ -1523,28 +1521,17 @@ class PlaybackEngine(
 
     // -- end-of-playback --
 
-    /** Mirrors the nav availability the VM pushes (queue next / page playlist). */
-    private var navNextAvailable = true
-
     private fun handleEnded() {
         if (playJob?.isActive == true || rebuildJob?.isActive == true) return
         if (attachedGeneration != playbackGeneration.get()) return
         progressWatchdog.reset("completed")
         playbackOperation?.finish(DiagnosticOutcome.SUCCESS, "ended")
         persistPosition()
-        val p = activePlayer()
-        val duration = p.duration
         when (_snapshot.value.loopMode) {
             LoopMode.LOOP_ONE -> Unit // REPEAT_MODE_ONE already replays
             LoopMode.PAUSE_AT_END -> Unit // stay ended
-            // Queue/page-playlist advancement wins over the loop below; a
-            // short video with nothing to advance to just replays.
             LoopMode.QUEUE_NEXT, LoopMode.QUEUE_RANDOM -> {
                 if (localDivergedFromReceiver()) return
-                if (duration in 1 until PlaybackProgress.SAFE_ZONE_MS && !navNextAvailable) {
-                    replayFromStart(p)
-                    return
-                }
                 onEnded?.invoke()
             }
         }
@@ -1795,7 +1782,7 @@ class PlaybackEngine(
                 // when the session ends); the receiver keeps playing until
                 // onCastManifestReload recasts.
                 player.playWhenReady = castPlayer == null && userWantsPlay
-                lastAudioFormat = source.audioFormat
+                rememberAudio(source.audioFormat)
                 adaptiveVideoPool = source.videoFormats
                 // Re-apply the pin after the source swap; onTracksChanged then
                 // publishes the honest badge from the actually selected track.
@@ -1900,7 +1887,7 @@ class PlaybackEngine(
 
     private fun playbackDemand(videoId: String? = _snapshot.value.videoId) = StreamDemand(
         rememberedQuality()?.let(StreamSelection::parseHeight) ?: 0,
-        rememberedAudioTrackKey()?.takeIf { videoId == _snapshot.value.videoId && it.startsWith("id:") }?.removePrefix("id:"), false,
+        audioPreference?.takeIf { videoId == _snapshot.value.videoId && it.startsWith("id:") }?.removePrefix("id:"), false,
         setOf("avc", "vp9", "vp09", "hvc", "hev") +
             if (CodecCapabilities.isDecodable(
                     Format(codec = "av01", height = 1080))) setOf("av01") else emptySet())
@@ -1914,9 +1901,6 @@ class PlaybackEngine(
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
         return cache.get(KEY_SUBTITLE, String::class.java)
     }
-
-    private fun rememberedAudioTrackKey(): String? =
-        requestedAudioTrackKey
 
     private fun rememberedPosition(videoId: String, durationSec: Long): Long {
         if (!prefs.isEnabled(PreferenceKeys.REMEMBER_LAST_POSITION)) return 0L
@@ -1992,7 +1976,9 @@ class PlaybackEngine(
 
     private fun playbackFailed(t: Throwable): String {
         Log.w(TAG, "playback failed", t)
-        return appContext.getString(R.string.player_error)
+        val liveUnavailable = generateSequence(t) { it.cause }.take(12)
+            .any { it.message == "LIVE_STREAM_SOURCE_UNAVAILABLE" }
+        return appContext.getString(if (liveUnavailable) R.string.player_live_unavailable else R.string.player_error)
     }
 
     companion object {

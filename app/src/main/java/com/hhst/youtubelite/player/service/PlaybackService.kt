@@ -294,7 +294,7 @@ class PlaybackService : Service() {
         )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_play)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(lastTitle)
             .setContentText(lastAuthor)
             .setLargeIcon(lastArt)
@@ -348,7 +348,7 @@ class PlaybackService : Service() {
 
     private fun placeholderNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_play)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.player_channel_name))
             .setOngoing(true)

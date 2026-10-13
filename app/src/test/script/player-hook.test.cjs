@@ -259,3 +259,22 @@ test('playlist next at the last item stops instead of wrapping', () => {
   assert.equal(context.location.href, 'https://m.youtube.com/watch?v=bbbbbbbbbbb&list=PLtest');
 });
 
+test('autoplay requires a response owned by the current watch video', () => {
+  const { context } = page();
+  const query = context.document.querySelector;
+  context.document.querySelector = selector => selector.includes('ytp-autonav-toggle-button')
+    ? { getAttribute: () => 'true' } : query(selector);
+  const data = { contents: { singleColumnWatchNextResults: { autoplay: { autoplay: {
+    autoplaySets: [{ autoplayVideo: { watchEndpoint: { videoId: 'bbbbbbbbbbb' } } }],
+  } } } } };
+  context.ytInitialData = data;
+  assert.equal(context.__watchAutoplayNext().url, null);
+  data.currentVideoEndpoint = { watchEndpoint: { videoId: 'ccccccccccc' } };
+  assert.equal(context.__watchAutoplayNext().url, null);
+  data.currentVideoEndpoint.watchEndpoint.videoId = 'aaaaaaaaaaa';
+  assert.equal(context.__watchAutoplayNext().url, 'https://m.youtube.com/watch?v=bbbbbbbbbbb');
+  context.location.href = 'https://m.youtube.com/watch?v=ccccccccccc';
+  context.location.search = '?v=ccccccccccc';
+  assert.equal(context.__watchAutoplayNext().url, null);
+});
+

@@ -17,6 +17,8 @@ import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.WatchPage
+import com.hhst.youtubelite.browser.WatchAutoplayCandidate
+import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.cast.CastDevice
 import com.hhst.youtubelite.cast.LocalStreamProxy
@@ -42,6 +44,7 @@ import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.player.surface.ResizeMode
 import com.hhst.youtubelite.player.surface.SubtitleStyle
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -246,6 +249,9 @@ class PlayerViewModel(
 
     /** Supersedes in-flight cast-handoff waiters when a newer play/close wins. */
     private var playbackRequestSeq = 0
+    private var handledEndSeq: Int? = null
+    private val autoplayRequestId = AtomicLong()
+    @Volatile private var autoplayOrigin: PageOrigin? = null
 
     /** Last notification nav push; snapshots tick 4x/s, refresh is not free. */
     private var lastNavNext: Boolean? = null
@@ -269,13 +275,13 @@ class PlayerViewModel(
     var watchPage: WatchPage? = null
 
     /** Last "playlist present" answer from the page (Bridge push). */
-    private var pageHasPlaylist = false
+    @Volatile private var pageHasPlaylist = false
 
     /** Installed once in the init block; the process-scoped router is never re-pointed. */
     private val commandHandler = object : PlaybackCommandRouter.Handler {
         override fun onPlayPause() { this@PlayerViewModel.onPlayPause() }
-        override fun onPlay() { engine.play() }
-        override fun onPause() { engine.pause() }
+        override fun onPlay() { autoplayRequestId.incrementAndGet(); engine.play() }
+        override fun onPause() { autoplayRequestId.incrementAndGet(); engine.pause() }
         override fun onNext() { skipToNext() }
         override fun onPrevious() { skipToPrevious() }
     }
@@ -379,6 +385,11 @@ class PlayerViewModel(
     }
 
     private fun mergeSnapshot(s: PlaybackSnapshot) {
+        if (_uiState.value.ended && !s.ended) {
+            // Replaying/seeking also invalidates any previous end-of-video query.
+            autoplayRequestId.incrementAndGet()
+            handledEndSeq = null
+        }
         _positionState.longValue = s.positionMs
         _bufferedPositionState.longValue = s.bufferedPositionMs
         _subtitleCuesState.value = s.subtitleCues
@@ -459,12 +470,19 @@ class PlayerViewModel(
 
     /** A web feed suspends local playback until the user resumes the preserved watch item. */
     private var shortsPausedId: String? = null
-    private var inShorts = false
+    @Volatile private var inShorts = false
 
     override fun playVideo(url: String, origin: PageOrigin) {
         if (inShorts || PageKind.isShorts(url)) return
         if (VideoId.parse(url) == shortsPausedId) { onReturnToWatch(url); return }
         shortsPausedId = null
+        val current = engine.snapshot.value
+        val documentReloaded = !origin.isHost && origin.tabId == playbackOrigin?.tabId &&
+            origin.documentGeneration != playbackOrigin?.documentGeneration
+        if (documentReloaded && current.prepared && current.videoId == VideoId.parse(url)) {
+            playbackOrigin = origin
+            return
+        }
         if (!origin.isHost) playbackOrigin = origin
         startPlayback(url, keepMini = _uiState.value.mini)
     }
@@ -581,6 +599,7 @@ class PlayerViewModel(
 
     private fun stopAndHide(pausePlayback: Boolean = true) {
         playbackRequestSeq++
+        autoplayRequestId.incrementAndGet()
         autoEnteredFullscreen = false
         if (audioOnlyBackground) {
             audioOnlyBackground = false
@@ -594,6 +613,7 @@ class PlayerViewModel(
 
     /** Queue navigation keeps the current surface. */
     private fun startPlayback(url: String, keepMini: Boolean) {
+        autoplayRequestId.incrementAndGet()
         playbackRequestSeq++
         val token = playbackRequestSeq
         val id = VideoId.parse(url)
@@ -670,6 +690,7 @@ class PlayerViewModel(
         val currentId = _uiState.value.videoId ?: return false
         val targetId = VideoId.parse(url) ?: return false
         if (currentId != targetId) return false
+        autoplayRequestId.incrementAndGet()
         mainHandler.post { engine.seekTo(positionMs) }
         return true
     }
@@ -690,11 +711,12 @@ class PlayerViewModel(
 
     // -- PlayerPlaybackActions --
 
-    override fun onPlayPause() = engine.playOrPause()
-    override fun onSeek(positionMs: Long) = engine.seekTo(positionMs)
+    override fun onPlayPause() { autoplayRequestId.incrementAndGet(); engine.playOrPause() }
+    override fun onSeek(positionMs: Long) { autoplayRequestId.incrementAndGet(); engine.seekTo(positionMs) }
 
     /** Double-tap seek with accumulation (±10 s per tap, 600 ms window). */
     override fun onDoubleTapSeek(offsetMs: Long) {
+        autoplayRequestId.incrementAndGet()
         val now = SystemClock.uptimeMillis()
         if (now - lastSeekTapAt > SEEK_ACCUM_WINDOW_MS || (seekAccumMs > 0) != (offsetMs > 0)) seekAccumMs = 0L
         lastSeekTapAt = now
@@ -720,6 +742,7 @@ class PlayerViewModel(
         _gestureState.value = null
         val anchor = scrubAnchorMs ?: return
         scrubAnchorMs = null
+        autoplayRequestId.incrementAndGet()
         engine.seekTo(scrubTarget(anchor + offsetMs))
     }
 
@@ -1138,10 +1161,9 @@ class PlayerViewModel(
     }
 
     private fun onPlaybackEnded() {
-        // Auto-advance honors the same priority as manual skip (queue first,
-        // then the page playlist), never WebView back. The queue does NOT
-        // wrap here: at the tail playback simply ends;
-        // only the manual next button wraps.
+        if (!engine.snapshot.value.ended || handledEndSeq == playbackRequestSeq) return
+        handledEndSeq = playbackRequestSeq
+        // Queue and playlist playback take priority over page autoplay.
         val queueContext = queueActive()
         val current = playbackQueueId()
         val target = when (_uiState.value.loopMode) {
@@ -1160,7 +1182,30 @@ class PlayerViewModel(
             _uiState.value.loopMode == LoopMode.QUEUE_NEXT
         ) {
             watchPage?.evaluate("window.__playlistNav && window.__playlistNav(1);") { }
+            return
         }
+        if (queueContext || pageHasPlaylist || inShorts || _uiState.value.loopMode != LoopMode.QUEUE_NEXT) return
+        val page = watchPage ?: return
+        val id = engine.snapshot.value.videoId ?: return
+        val token = playbackRequestSeq
+        val origin = page.origin()
+        val request = autoplayRequestId.incrementAndGet()
+        autoplayOrigin = origin
+        page.evaluate("JSON.stringify(window.__watchAutoplayNext?.() ?? null);") { raw ->
+            if (request != autoplayRequestId.get() || token != playbackRequestSeq || watchPage !== page || page.origin() != origin ||
+                engine.snapshot.value.videoId != id || !engine.snapshot.value.ended) return@evaluate
+            if (_uiState.value.loopMode != LoopMode.QUEUE_NEXT || queueActive() || pageHasPlaylist) return@evaluate
+            val candidate = WatchAutoplayCandidate.parse(raw, id) ?: return@evaluate
+            val gson = Gson()
+            page.evaluate("window.__watchAutoplayAdvance?.(${gson.toJson(id)},${gson.toJson(candidate.url)},$request) === true;") { }
+        }
+    }
+
+    override fun canAutoplayAdvance(videoId: String, requestId: Long, origin: PageOrigin): Boolean {
+        val snapshot = engine.snapshot.value
+        return requestId == autoplayRequestId.get() && autoplayOrigin == origin &&
+            snapshot.videoId == videoId && snapshot.ended && _uiState.value.visible &&
+            _uiState.value.loopMode == LoopMode.QUEUE_NEXT && !queueActive() && !pageHasPlaylist && !inShorts
     }
 
     // Weak on purpose: this VM is a process-scoped singleton and the view
@@ -1193,6 +1238,14 @@ class PlayerViewModel(
         _uiState.update { it.copy(locked = locked, controlsVisible = !locked) }
 
     fun pauseForBackground() = engine.pauseLocal()
+
+    /** Closing the system PiP window explicitly ends local playback. */
+    fun onPipDismissed() {
+        val remote = cast.state.value.chromecastSession || cast.state.value.linkConnected
+        stopAndHide(pausePlayback = !remote)
+        if (remote) engine.pauseLocal() else engine.stop()
+        onWatchClosed?.invoke()
+    }
 
     /** Explicit PiP headphone action; applies to this background session only. */
     var audioOnlyBackground: Boolean = false

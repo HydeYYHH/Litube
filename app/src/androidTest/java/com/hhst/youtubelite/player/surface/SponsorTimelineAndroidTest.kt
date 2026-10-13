@@ -83,16 +83,19 @@ class SponsorTimelineAndroidTest {
             assertTrue(requestChecked)
             val segments = manager.currentSegments
             assertEquals(categoryPrefs.keys.toList(), segments.map { it.category })
+            val position = mutableStateOf(40_000L)
+            val boundaryPosition = mutableStateOf(10_000L)
+            val buffered = mutableStateOf(60_000L)
             compose.setContent {
                 AppTheme(darkTheme = true, dynamicColor = false) {
                     Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding().padding(16.dp)) {
                         segments.forEach { segment ->
                             Text(segment.category, color = Color.White)
-                            PlayerTimeBar(mutableStateOf(40_000L), mutableStateOf(60_000L),
+                            PlayerTimeBar(position, buffered,
                                 100_000L, listOf(segment), {}, Modifier.height(32.dp).testTag(segment.category))
                         }
                         Text("Highlights at timeline boundaries", color = Color.White)
-                        PlayerTimeBar(mutableStateOf(10_000L), mutableStateOf(60_000L), 100_000L,
+                        PlayerTimeBar(boundaryPosition, buffered, 100_000L,
                             listOf(SponsorBlockManager.Segment(0, 0, "poi_highlight"),
                                 SponsorBlockManager.Segment(100_000, 100_000, "poi_highlight")),
                             {}, Modifier.height(32.dp).testTag("boundaries"))

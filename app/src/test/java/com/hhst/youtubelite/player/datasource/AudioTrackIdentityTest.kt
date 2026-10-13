@@ -8,6 +8,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioTrackIdentityTest {
+    @Test fun renditionIdentitySurvivesSourceChanges() {
+        val original = audio("en", "original", "en.0").copy(audioTrackName = "English")
+        val dub = audio("es", "dubbed", "es.1").copy(audioTrackName = "Spanish")
+        val description = audio("es", "descriptive", "es.d").copy(audioTrackName = "Description")
+        val formats = listOf(original, dub, description)
+        assertEquals(listOf(dub), AudioTrackIdentity.matchingFormats(formats, "hls:es:Spanish"))
+        assertEquals(listOf(original), AudioTrackIdentity.matchingFormats(formats, "hls:en:English original"))
+        assertTrue(AudioTrackIdentity.matchingFormats(formats, "hls:es:Unknown").isEmpty())
+        assertEquals("hls:es:Spanish", AudioTrackIdentity.renditionFor(
+            listOf("en" to "English", "es" to "Spanish", "es" to "Description"), formats, "id:es.1"))
+    }
+
     @Test fun namedTracksWithoutLocaleOrIdRemainSelectable() {
         val original = Format(audioOnly = true, audioTrackName = "English")
         val dubbed = original.copy(audioTrackName = "Spanish")

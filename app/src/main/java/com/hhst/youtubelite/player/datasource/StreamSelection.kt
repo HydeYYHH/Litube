@@ -34,22 +34,16 @@ object StreamSelection {
         return best.first()
     }
 
-    /**
-     * Picks the best audio format. [preferredKey] is a track identity
-     * (`id:` / `loc:`) or a legacy language code; it wins even when an
-     * original track exists (otherwise the audio menu cannot select a dub).
-     * Without a preference, original then bitrate.
-     */
-    fun selectAudio(formats: List<Format>, preferredKey: String? = null): Format? {
-        if (formats.isEmpty()) return null
-        if (preferredKey != null) {
-            val matching = formats.filter { AudioTrackIdentity.matches(it, preferredKey) }
-            matching.filter(AudioTrackIdentity::isOriginal).ifEmpty { matching }.maxByOrNull { it.bitrate }
-                ?.let { return it }
+    fun audioCandidates(formats: List<Format>, preferredKey: String? = null): List<Format> {
+        val matching = if (preferredKey.isNullOrBlank()) formats
+        else AudioTrackIdentity.matchingFormats(formats, preferredKey)
+        return matching.filter(AudioTrackIdentity::isOriginal).ifEmpty {
+            matching.filter { it.audioTrackType.equals("default", ignoreCase = true) }.ifEmpty { matching }
         }
-        val original = formats.filter(AudioTrackIdentity::isOriginal)
-        return (original.ifEmpty { formats }).maxByOrNull { it.bitrate }
     }
+
+    fun selectAudio(formats: List<Format>, preferredKey: String? = null): Format? =
+        audioCandidates(formats, preferredKey).maxByOrNull { it.bitrate }
 
     /**
      * Dedupes per `height#fps`, preferring poToken, then codec

@@ -105,6 +105,7 @@ fun SingleVideoConfirmSheet(
     var videoItag by rememberSaveable(videoId) { mutableStateOf<Int?>(null) }
     var more by rememberSaveable(videoId) { mutableStateOf(false) }
     var audioTrack by rememberSaveable(videoId) { mutableStateOf(last.audioTrack.orEmpty()) }
+    var audioBitrate by rememberSaveable(videoId) { mutableStateOf(last.audioBitrate ?: 0) }
     var includeSubtitle by rememberSaveable(videoId) { mutableStateOf(last.includeSubtitle) }
     var subtitleLanguage by rememberSaveable(videoId) { mutableStateOf(last.subtitleLanguage.orEmpty()) }
     var includeCover by rememberSaveable(videoId) { mutableStateOf(last.includeCover) }
@@ -134,12 +135,30 @@ fun SingleVideoConfirmSheet(
     val config = DownloadConfig(
         videoQuality = quality.takeIf { it.isNotBlank() }, videoItagHint = videoItag,
         audioOnly = audioOnly && !attachmentsOnly, audioTrack = audioTrack.takeIf { it.isNotBlank() },
+        audioBitrate = audioBitrate.takeIf { audioOnly && !attachmentsOnly && it > 0 },
         includeSubtitle = includeSubtitle, subtitleLanguage = subtitleLanguage.takeIf { it.isNotBlank() },
         includeCover = includeCover, fileNameTemplate = fileName.takeIf { it.isNotBlank() },
         attachmentsOnly = attachmentsOnly,
     )
     val preview = remember(catalog, config) { catalog?.let { viewModel.preview(it, config) } }
     val ready = preview as? DownloadViewModel.PreviewState.Ready
+    val bitrates = remember(catalog, audioTrack) {
+        catalog?.let { DownloadPresentation.audioBitrates(it, audioTrack.takeIf(String::isNotBlank)) }.orEmpty()
+    }
+    LaunchedEffect(bitrates) {
+        if (audioBitrate > 0 && bitrates.isNotEmpty() && audioBitrate !in bitrates) {
+            audioBitrate = bitrates.firstOrNull { it <= audioBitrate } ?: bitrates.last()
+        }
+    }
+    val autoLabel = stringResource(R.string.player_quality_auto)
+    val bitrateOptions = listOf("0" to autoLabel) + bitrates.map {
+        it.toString() to stringResource(R.string.download_bitrate, (it + 500L) / 1000)
+    }
+    val qualityOptions = if (audioOnly) bitrateOptions else qualities.map { it to it }
+    val qualityKey = if (audioOnly) audioBitrate.toString() else quality
+    val selectedQuality = if (audioOnly) {
+        bitrateOptions.firstOrNull { it.first == qualityKey }?.second ?: autoLabel
+    } else quality.ifBlank { "—" }
     val reason = (catalogState as? DownloadViewModel.CatalogState.Failed)?.reason
         ?: (preview as? DownloadViewModel.PreviewState.Unavailable)?.reason
     val catalogTitle = catalog?.title?.ifBlank { title } ?: title
@@ -196,8 +215,8 @@ fun SingleVideoConfirmSheet(
                         Text(stringResource(R.string.download_catalog_loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                SelectionRow(stringResource(R.string.download_quality), if (catalog == null) "—" else quality.ifBlank { "—" },
-                    catalog != null && qualities.isNotEmpty() && !audioOnly && !attachmentsOnly) { picker = "quality" }
+                SelectionRow(stringResource(R.string.download_quality), if (catalog == null) "—" else selectedQuality,
+                    catalog != null && !attachmentsOnly && (if (audioOnly) bitrates.isNotEmpty() else qualities.isNotEmpty())) { picker = "quality" }
                 SelectionRow(stringResource(R.string.audio_track), selectedAudio, catalog != null && !attachmentsOnly) { picker = "audio" }
                 SelectionRow(stringResource(R.string.subtitles), selectedSub, catalog != null) { picker = "subtitle" }
                 SizeRow(ready?.size?.kind ?: SizeKind.UNKNOWN, ready?.size?.bytes)
@@ -242,14 +261,18 @@ fun SingleVideoConfirmSheet(
         dragHandle = { YoutubeSheetHandle() },
         tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
     picker?.let { kind ->
-        val options = when (kind) { "quality" -> qualities.map { it to it }; "audio" -> audioOptions; else -> subOptions }
-        val selected = when (kind) { "quality" -> quality; "audio" -> selectedAudioKey; else -> selectedSubKey }
+        val options = when (kind) { "quality" -> qualityOptions; "audio" -> audioOptions; else -> subOptions }
+        val selected = when (kind) { "quality" -> qualityKey; "audio" -> selectedAudioKey; else -> selectedSubKey }
         ChoiceDialog(stringResource(when (kind) { "quality" -> R.string.download_quality; "audio" -> R.string.audio_track; else -> R.string.subtitles }),
             options, selected, { picker = null }) { key ->
             when (kind) {
                 "quality" -> {
-                    quality = key
-                    videoItag = catalog?.let { DownloadPresentation.qualityItag(it, key) }
+                    if (audioOnly) {
+                        audioBitrate = key.toInt()
+                    } else {
+                        quality = key
+                        videoItag = catalog?.let { DownloadPresentation.qualityItag(it, key) }
+                    }
                 }
                 "audio" -> audioTrack = key
                 else -> { includeSubtitle = key.isNotBlank(); subtitleLanguage = key }

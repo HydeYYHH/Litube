@@ -96,10 +96,16 @@
   }
 
   history.back = function () {
+    if (window.Lite?.ui && Lite.ui.kind() !== 'none') {
+      return originalBack.apply(this, arguments);
+    }
     if (!nativeBack()) return originalBack.apply(this, arguments);
   };
 
   history.go = function (delta) {
+    if (Number(delta) === -1 && window.Lite?.ui && Lite.ui.kind() !== 'none') {
+      return originalGo.apply(this, arguments);
+    }
     if (Number(delta) === -1 && nativeBack()) return;
     return originalGo.apply(this, arguments);
   };

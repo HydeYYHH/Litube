@@ -38,7 +38,8 @@ import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(label: String, version: String, onClose: () -> Unit, busy: Boolean, status: String,
-    onSource: () -> Unit, onUpdate: () -> Unit, onRelease: () -> Unit, onClear: () -> Unit, onExport: () -> Unit) {
+    onSource: () -> Unit, onUpdate: () -> Unit, onRelease: () -> Unit, onClear: () -> Unit, onExport: () -> Unit,
+    onSave: () -> Unit = {}) {
     BackHandler { onClose() }
     Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = {
         TopAppBar(title = { Text(stringResource(R.string.about), style = MaterialTheme.typography.titleLarge) },
@@ -60,6 +61,7 @@ fun AboutScreen(label: String, version: String, onClose: () -> Unit, busy: Boole
                 TextButton(onClick = onRelease, modifier = Modifier.fillMaxWidth().heightIn(min = SettingsTokens.RowHeight), contentPadding = PaddingValues(vertical = SettingsTokens.RowPadding)) { Text(modifier = Modifier.fillMaxWidth(), text = stringResource(R.string.about_releases)) }
                 TextButton(enabled = !busy, onClick = onClear, modifier = Modifier.fillMaxWidth().heightIn(min = SettingsTokens.RowHeight), contentPadding = PaddingValues(vertical = SettingsTokens.RowPadding)) { Text(modifier = Modifier.fillMaxWidth(), text = stringResource(R.string.about_clear_cache)) }
                 TextButton(enabled = !busy, onClick = onExport, modifier = Modifier.fillMaxWidth().heightIn(min = SettingsTokens.RowHeight), contentPadding = PaddingValues(vertical = SettingsTokens.RowPadding)) { Text(modifier = Modifier.fillMaxWidth(), text = stringResource(R.string.about_export_logs)) }
+                TextButton(enabled = !busy, onClick = onSave, modifier = Modifier.fillMaxWidth().heightIn(min = SettingsTokens.RowHeight), contentPadding = PaddingValues(vertical = SettingsTokens.RowPadding)) { Text(modifier = Modifier.fillMaxWidth(), text = stringResource(R.string.about_save_logs)) }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
             }

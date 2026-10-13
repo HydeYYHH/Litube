@@ -183,6 +183,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Download quality</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Higher quality uses more data and storage</string>
     <string name="download_size_estimate">About %1$s</string>
     <string name="download_size_unknown">Size unknown</string>
@@ -296,4 +297,12 @@
     <string name="info_buffer_count">Buffers/min: %1$d</string>
     <string name="audio_description">Audio description</string>
     <string name="secondary_audio">Secondary audio</string>
+    <string name="settings_import_reload_message" translatable="false">Settings have been updated. Reload open pages to apply all changes. Your playback position will be kept.</string>
+    <string name="settings_reload_now" translatable="false">Reload pages now</string>
+    <string name="settings_reload_later" translatable="false">Later</string>
+    <string name="about_save_logs" translatable="false">Save diagnostic file</string>
+    <string name="about_save_done" translatable="false">Diagnostic ZIP saved</string>
+    <string name="about_save_cancelled" translatable="false">Save cancelled</string>
+    <string name="about_save_failed" translatable="false">Could not save diagnostics. Choose another location and try again.</string>
+    <string name="player_live_unavailable" translatable="false">No playable live stream is available. Please try again later.</string>
 </resources>

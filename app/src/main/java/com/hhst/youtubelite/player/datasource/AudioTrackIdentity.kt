@@ -17,13 +17,15 @@ data class AudioTrackChoice(
  * locale tag + type, then display name. Old language-only prefs (`en`) still match.
  */
 object AudioTrackIdentity {
+    private val originalLabel = Regex("\\boriginal\\b|原始|原聲|原声|オリジナル|오리지널", RegexOption.IGNORE_CASE)
+
     fun isOriginal(format: Format): Boolean = format.audioTrackOriginal ||
         format.audioTrackType.equals("original", ignoreCase = true)
 
     /** HLS may declare Original only in NAME, rather than its DEFAULT flag. */
     fun originalRenditionKey(entries: List<Pair<String?, String?>>, formats: List<Format> = emptyList()): String? {
         entries.firstOrNull { (_, label) ->
-            label?.contains(Regex("\\boriginal\\b|原始|原聲|原声|オリジナル|오리지널", RegexOption.IGNORE_CASE)) == true
+            label?.contains(originalLabel) == true
         }?.let { return renditionKey(it.first, it.second) }
         val originals = formats.filter(::isOriginal)
         entries.firstOrNull { (_, label) ->
@@ -34,6 +36,36 @@ object AudioTrackIdentity {
             language != null && originals.any { it.audioLocale?.let { locale -> localeMatches(locale, language) } == true }
         }.distinct()
         return candidates.singleOrNull()?.let { renditionKey(it.first, it.second) }
+    }
+
+    fun matchingFormats(formats: List<Format>, trackKey: String): List<Format> {
+        if (!trackKey.startsWith("hls:")) return formats.filter { matches(it, trackKey) }
+        val identity = trackKey.removePrefix("hls:")
+        val language = identity.substringBefore(':')
+        val name = identity.substringAfter(':', "")
+        val candidates = formats.filter {
+            language.isBlank() || it.audioLocale?.let { locale -> localeMatches(locale, language) } == true
+        }
+        val named = candidates.filter { name.isNotBlank() && it.audioTrackName.equals(name, ignoreCase = true) }
+        if (named.isNotEmpty()) return named
+        val typed = if (name.contains(originalLabel)) candidates.filter(::isOriginal) else candidates
+        return typed.takeIf { it.map(::key).distinct().size == 1 }.orEmpty()
+    }
+
+    fun renditionFor(entries: List<Pair<String?, String?>>, formats: List<Format>, trackKey: String?): String? {
+        if (trackKey.isNullOrBlank()) return originalRenditionKey(entries, formats)
+        if (trackKey.startsWith("hls:")) return trackKey.takeIf { candidate ->
+            entries.any { renditionKey(it.first, it.second) == candidate }
+        }
+        val format = matchingFormats(formats, trackKey).maxByOrNull { it.bitrate } ?: return null
+        if (isOriginal(format)) return originalRenditionKey(entries, listOf(format))
+        entries.firstOrNull { (language, label) ->
+            !label.isNullOrBlank() && format.audioTrackName.equals(label, ignoreCase = true) &&
+                (language.isNullOrBlank() || format.audioLocale?.let { locale -> localeMatches(locale, language) } == true)
+        }?.let { return renditionKey(it.first, it.second) }
+        return entries.filter { (language, _) ->
+            language != null && format.audioLocale?.let { locale -> localeMatches(locale, language) } == true
+        }.distinct().singleOrNull()?.let { renditionKey(it.first, it.second) }
     }
 
     fun key(format: Format): String {

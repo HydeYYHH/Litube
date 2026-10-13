@@ -178,20 +178,24 @@
     } catch {}
   }
 
-  // A drag over the watch content must not reach the page player's fullscreen
-  // gesture logic on the suppressed page player; taps and scrolling need
-  // no JS events. The scheduler re-runs this after every re-render.
+  // Block player drag gestures while preserving delegated tap handlers.
   const GESTURE_TRAP = 'gestureTrap';
-  const GESTURE_TYPES =
-    ['touchmove', 'touchend', 'touchcancel', 'pointermove', 'pointerup', 'pointercancel'];
-
   function trapWatchGestures() {
     for (const node of document.querySelectorAll('.watch-below-the-player')) {
       if (!(node instanceof Element) || node.dataset[GESTURE_TRAP] === 'true') continue;
       node.dataset[GESTURE_TRAP] = 'true';
-      for (const type of GESTURE_TYPES) {
-        node.addEventListener(type, (event) => event.stopPropagation(),
-          { capture: true, passive: true });
+      let start = null;
+      const point = event => event.touches?.[0] || event;
+      const begin = event => { const p = point(event); start = { x: p.clientX, y: p.clientY }; };
+      const move = event => {
+        if (!start || Lite.ui && Lite.ui.kind() !== 'none') return;
+        const p = point(event);
+        if (Math.hypot(p.clientX - start.x, p.clientY - start.y) > MOVE_CANCEL_PX) event.stopPropagation();
+      };
+      for (const type of ['touchstart', 'pointerdown']) node.addEventListener(type, begin, { capture: true, passive: true });
+      for (const type of ['touchmove', 'pointermove']) node.addEventListener(type, move, { capture: true, passive: true });
+      for (const type of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) {
+        node.addEventListener(type, () => { start = null; }, { capture: true, passive: true });
       }
     }
   }
@@ -423,6 +427,43 @@
     const jsonUrl = playlistEntryUrl(dir);
     if (goToEntryUrl(jsonUrl)) return 'navigating';
     return JSON.parse(jsonUrl);
+  };
+
+  // Use the explicit autoplay endpoint and page switch.
+  window.__watchAutoplayNext = function () {
+    const videoId = Lite.id();
+    const toggle = document.querySelector('.ytp-autonav-toggle-button,ytm-autonav-toggle-renderer [aria-checked],ytm-autoplay-switch-renderer [aria-checked],.autoplay-switch [aria-checked],.autoplay-switch-button[aria-checked]');
+    const checked = toggle?.getAttribute('aria-checked');
+    const enabled = checked === 'true' ? true : checked === 'false' ? false : null;
+    let url = null;
+    const nextLink = document.querySelector('.ytp-next-button[href]');
+    if (nextLink && Lite.id(nextLink.href) && Lite.id(nextLink.href) !== videoId) url = nextLink.href;
+    if (!url) {
+      for (const data of [document.querySelector('ytm-app')?.data, window.ytInitialData]) {
+        const currentId = data?.currentVideoEndpoint?.watchEndpoint?.videoId;
+        if (!currentId || currentId !== videoId) continue;
+        const results = data?.contents?.singleColumnWatchNextResults || data?.contents?.twoColumnWatchNextResults;
+        const autoplay = results?.autoplay;
+        const sets = autoplay?.autoplay?.autoplaySets || autoplay?.autoplaySets;
+        const endpoint = Array.isArray(sets) && sets.find(set => set.autoplayVideo?.watchEndpoint?.videoId)?.autoplayVideo?.watchEndpoint;
+        if (endpoint?.videoId && endpoint.videoId !== videoId) {
+          url = MEDIA_BASE_URL + '/watch?v=' + encodeURIComponent(endpoint.videoId);
+          break;
+        }
+      }
+    }
+    return { videoId, enabled, url };
+  };
+
+  window.__watchAutoplayAdvance = function (videoId, url, requestId) {
+    const current = window.__watchAutoplayNext();
+    if (current.videoId !== videoId || current.enabled !== true || current.url !== url) return false;
+    const bridge = Lite.bridge();
+    if (!bridge?.canAutoplayAdvance?.(videoId, requestId, bridge.currentDocumentGeneration())) return false;
+    const target = new URL(url, location.href);
+    if (target.protocol !== 'https:' || !/(^|\.)youtube\.com$/.test(target.hostname) || !Lite.id(target.href)) return false;
+    location.href = target.href;
+    return true;
   };
 
   // -- long-press media card → native menu --

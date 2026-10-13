@@ -533,7 +533,7 @@ class DownloadFaultAndroidTest {
             """{"videoId":"$videoId","status":"${snap.task.status}","phase":"${snap.task.phase}","error":${jsonString(snap.task.errorMessage)},"blocked":$blocked,"api":${Build.VERSION.SDK_INT}}""",
         )
         File(targetContext.cacheDir, "live-youtube-logcat.txt").writeText(logs.take(8_000))
-        DeviceEvidence.shell("cp ${File(targetContext.cacheDir, "live-youtube-logcat.txt").absolutePath} /data/local/tmp/device-${DeviceEvidence.DATE}/live-youtube-logcat.txt")
+        DeviceEvidence.shell("cp ${File(targetContext.cacheDir, "live-youtube-logcat.txt").absolutePath} ${DeviceEvidence.deviceDir().absolutePath}/live-youtube-logcat.txt")
         runCatching { coordinator.cancel(DownloadTarget.Task(taskId)) }
         runCatching { koin.get<BackgroundDownloadScheduler>().cancel(taskId) }
     }

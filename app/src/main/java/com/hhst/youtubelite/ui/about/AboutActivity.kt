@@ -8,22 +8,27 @@ import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.content.FileProvider
 import com.google.gson.JsonParser
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
+import com.hhst.youtubelite.diagnostics.Documents
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.MemCache
 import com.hhst.youtubelite.ui.theme.AppTheme
 import com.tencent.mmkv.MMKV
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,8 +41,34 @@ class AboutActivity : ComponentActivity() {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         setContent { AppTheme {
             val scope = rememberCoroutineScope()
-            var busy by remember { mutableStateOf(false) }
-            var status by remember { mutableStateOf("") }
+            var status by rememberSaveable { mutableStateOf("") }
+            var pendingArchive by rememberSaveable { mutableStateOf<String?>(null) }
+            var busy by remember { mutableStateOf(pendingArchive != null) }
+            val saveLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/zip"),
+            ) { uri ->
+                val archive = pendingArchive?.let(::File)
+                pendingArchive = null
+                val operation = AppLog.operation(AppLog.Category.STORAGE, "diagnostics_save")
+                if (uri == null) {
+                    operation.finish(DiagnosticOutcome.CANCELLED, "file_picker_cancelled")
+                    busy = false
+                    status = getString(R.string.about_save_cancelled)
+                } else {
+                    scope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) {
+                                checkNotNull(archive) { "Missing diagnostic archive" }
+                                Documents.save(archive) { contentResolver.openOutputStream(uri, "w") }
+                            }
+                        }
+                        operation.finish(if (result.isSuccess) DiagnosticOutcome.SUCCESS else DiagnosticOutcome.FAILURE,
+                            if (result.isSuccess) "diagnostics_saved" else "file_write_failed", result.exceptionOrNull())
+                        status = getString(if (result.isSuccess) R.string.about_save_done else R.string.about_save_failed)
+                        busy = false
+                    }
+                }
+            }
             val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
             fun action(name: String, work: suspend () -> String) {
                 if (busy) return
@@ -45,7 +76,7 @@ class AboutActivity : ComponentActivity() {
                 scope.launch {
                     val operation = AppLog.operation(AppLog.Category.APP, name)
                     status = runCatching { work().also { operation.finish(DiagnosticOutcome.SUCCESS) } }.getOrElse {
-                        operation.finish(if (it is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, "operation_failed", it)
+                        operation.finish(if (it is CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, "operation_failed", it)
                         getString(R.string.about_operation_failed)
                     }
                     busy = false
@@ -94,7 +125,31 @@ class AboutActivity : ComponentActivity() {
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }, getString(R.string.about_export_logs)))
                     getString(R.string.about_export_ready)
-                } })
+                } },
+                onSave = {
+                    if (!busy) {
+                        busy = true
+                        status = getString(R.string.about_working)
+                        scope.launch {
+                            val result = runCatching {
+                                withContext(Dispatchers.IO) { AppLog.export(this@AboutActivity) }
+                            }
+                            result.onSuccess { archive ->
+                                pendingArchive = archive.absolutePath
+                                runCatching { saveLauncher.launch(archive.name) }.onFailure { failure ->
+                                    AppLog.event(AppLog.Category.STORAGE, "diagnostics_picker_failed", failure = failure)
+                                    pendingArchive = null
+                                    busy = false
+                                    status = getString(R.string.about_save_failed)
+                                }
+                            }.onFailure { failure ->
+                                AppLog.event(AppLog.Category.STORAGE, "diagnostics_export_failed", failure = failure)
+                                busy = false
+                                status = getString(R.string.about_save_failed)
+                            }
+                        }
+                    }
+                })
         } }
     }
     private fun openUrl(url: String) {

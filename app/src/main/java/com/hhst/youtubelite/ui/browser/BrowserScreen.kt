@@ -15,6 +15,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.OrientationEventListener
+import android.view.SurfaceView
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.Toast
@@ -41,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +71,9 @@ import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.Tab
 import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.browser.WebViewFactory
+import com.hhst.youtubelite.browser.TransientUi
+import com.hhst.youtubelite.browser.TransientKind
+import androidx.compose.ui.graphics.graphicsLayer
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.SnapshotReject
@@ -101,6 +107,7 @@ import com.hhst.youtubelite.ui.extension.SettingsDataScreen
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import org.koin.androidx.compose.koinViewModel
@@ -134,15 +141,28 @@ fun BrowserScreen(
     SideEffect { if (hosts[uiState.activeId] != null) displayedTabId = uiState.activeId }
     var showExtension by remember { mutableStateOf(false) }
     var showSettingsData by remember { mutableStateOf(false) }
+    var mediaMenuItem by remember { mutableStateOf<Bridge.QueueItemJson?>(null) }
     // PiP flips without a recreate; the activity pushes it through [inPipFlow].
     var inPip by remember { mutableStateOf(inPipFlow?.value == true) }
     LaunchedEffect(inPipFlow) {
-        inPipFlow?.collect { inPip = it }
+        inPipFlow?.collect {
+            inPip = it
+            if (it) {
+                showExtension = false
+                showSettingsData = false
+                mediaMenuItem = null
+                hosts.values.forEach { host ->
+                    host.webView.evaluateJavascript("window.Lite?.ui?.dismiss();", null)
+                }
+            }
+        }
     }
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
     val activeId = uiState.activeId
+    val emptyTransientUi = remember { MutableStateFlow(TransientUi()) }
+    val webTransientUi by (hosts[activeId]?.transientUi ?: emptyTransientUi).collectAsState()
     val forward = uiState.forward
     val tabs = uiState.tabs
     val onOpenExtension = remember { { showExtension = true } }
@@ -228,11 +248,12 @@ fun BrowserScreen(
                         thumbnailUrl = item.thumbnailUrl,
                     ),
                 )
+                hosts[viewModel.uiState.value.activeId]?.webView
+                    ?.evaluateJavascript("window.Lite?.ui?.dismiss();", null)
                 Toast.makeText(context, queueAdded, Toast.LENGTH_SHORT).show()
             }
         }
     }
-    var mediaMenuItem by remember { mutableStateOf<Bridge.QueueItemJson?>(null) }
     val onShowMediaItemMenu = remember {
         { item: Bridge.QueueItemJson -> mediaMenuItem = item }
     }
@@ -371,7 +392,7 @@ fun BrowserScreen(
     val exitHint = stringResource(R.string.back_again_to_exit)
     var lastFinishAt by remember { mutableLongStateOf(0L) }
 
-    val handleBack: () -> Unit = {
+    val navigateBack: () -> Unit = {
         val ps = playerViewModel.uiState.value
         when (PlayerUi.nextBackStep(ps.locked, ps.fullscreen)) {
             PlayerUi.BackStep.Unlock -> playerViewModel.setLocked(false)
@@ -407,6 +428,15 @@ fun BrowserScreen(
         }
     }
 
+    val handleBack: () -> Unit = {
+        val id = viewModel.uiState.value.activeId
+        val host = latestHosts.value[id]
+        if (host != null && host.transientUi.value.kind != TransientKind.NONE) {
+            // A close attempt owns this Back press even while the page animates.
+            host.webView.evaluateJavascript("window.Lite?.ui?.dismiss() === true;", null)
+        } else navigateBack()
+    }
+
     // Always consume Back. Same path as the player overlay back button.
     BackHandler(enabled = !showExtension && !showSettingsData) { handleBack() }
 
@@ -436,9 +466,16 @@ fun BrowserScreen(
             return hosts[watchId]?.webView
         }
         playerViewModel.watchPage = object : WatchPage {
+            override fun origin() = watchWebView()?.let { view ->
+                hosts.values.firstOrNull { it.webView === view }?.documentOrigin?.invoke()
+            }
+
             override fun evaluate(js: String, onResult: (String?) -> Unit) {
                 val webView = watchWebView() ?: return onResult(null)
-                webView.evaluateJavascript(js) { result -> onResult(result) }
+                val document = origin()
+                webView.evaluateJavascript(js) { result ->
+                    onResult(result.takeIf { watchWebView() === webView && origin() == document })
+                }
             }
 
             override fun canGoBack(): Boolean = watchWebView()?.canGoBack() == true
@@ -693,25 +730,37 @@ fun BrowserScreen(
                 WindowInsets.navigationBars.getBottom(this).toDp().value.toInt()
             }
             val isMini = (playerState.mini || layoutMini) && !inPip && !playerState.fullscreen
-            // One shared surface invocation: mini/embedded differ only in the
-            // modifier and the docking window around it.
+            var modalOverlapsPlayer by remember(activeId) { mutableStateOf(false) }
+            val hideForWebModal = !inPip && webTransientUi.kind != TransientKind.NONE && modalOverlapsPlayer
+            // Keep one surface across embedded and mini modes.
             val playerSurface: @Composable (Modifier) -> Unit = { surfaceModifier ->
-                PlayerSurface(
-                    state = if (layoutMini) playerState.copy(mini = true, locked = false) else playerState,
-                    callbacks = surfaceCallbacks,
-                    onAttachSurface = playerViewModel::attachSurface,
-                    onDetachSurface = playerViewModel::detachSurface,
-                    zoneEnabled = playerViewModel::gestureEnabled,
-                    pip = inPip,
-                    onRefreshCastState = playerViewModel::refreshCastState,
-                    positionState = playerViewModel.positionState,
-                    bufferedPositionState = playerViewModel.bufferedPositionState,
-                    gestureState = playerViewModel.gestureState,
-                    hintState = playerViewModel.hintState,
-                    subtitleCuesState = playerViewModel.subtitleCuesState,
-                    modifier = surfaceModifier,
-                    managedByHost = true,
-                )
+                var modalSurface by remember { mutableStateOf<SurfaceView?>(null) }
+                SideEffect { modalSurface?.visibility = if (hideForWebModal) View.INVISIBLE else View.VISIBLE }
+                Box(surfaceModifier) {
+                    PlayerSurface(
+                        state = if (layoutMini) playerState.copy(mini = true, locked = false) else playerState,
+                        callbacks = surfaceCallbacks,
+                        onAttachSurface = { modalSurface = it; playerViewModel.attachSurface(it) },
+                        onDetachSurface = { if (modalSurface === it) modalSurface = null; playerViewModel.detachSurface(it) },
+                        zoneEnabled = playerViewModel::gestureEnabled,
+                        pip = inPip,
+                        onRefreshCastState = playerViewModel::refreshCastState,
+                        positionState = playerViewModel.positionState,
+                        bufferedPositionState = playerViewModel.bufferedPositionState,
+                        gestureState = playerViewModel.gestureState,
+                        hintState = playerViewModel.hintState,
+                        subtitleCuesState = playerViewModel.subtitleCuesState,
+                        modifier = Modifier.fillMaxSize(),
+                        managedByHost = true,
+                    )
+                    val modalHost = hosts[activeId]
+                    if (!inPip && modalHost != null && webTransientUi.kind != TransientKind.NONE) {
+                        TouchShield(modalHost.webView, webTransientUi, modalHost.documentOrigin,
+                            onOverlapChanged = { modalOverlapsPlayer = it }) {
+                            modalHost.webView.evaluateJavascript("window.Lite?.ui?.dismiss();", null)
+                        }
+                    }
+                }
             }
             MiniPlayerWindow(
                     screenWidthDp = availableWidthDp,
@@ -722,13 +771,14 @@ fun BrowserScreen(
                     onDismiss = playerViewModel::onMiniClose,
                     mini = isMini,
                     fillsWindow = inPip || playerState.fullscreen,
-                    fullscreenSwipeEnabled = !inPip,
+                    fullscreenSwipeEnabled = !inPip && webTransientUi.kind == TransientKind.NONE,
                     embeddedTopDp = PlayerUi.playerTopOffsetDp(false, pageBounds.top, topInsetDp),
                     embeddedHeightDp = pageBounds.height,
                     embeddedLeftDp = pageBounds.left,
                     embeddedWidthDp = pageBounds.width,
                     topInsetDp = topInsetDp,
-                    modifier = if (inPip || playerState.fullscreen) Modifier else Modifier.padding(start = leftInsetDp.dp, end = rightInsetDp.dp),
+                    modifier = (if (inPip || playerState.fullscreen) Modifier else Modifier.padding(start = leftInsetDp.dp, end = rightInsetDp.dp))
+                        .graphicsLayer { alpha = if (hideForWebModal) 0f else 1f },
                 ) {
                     playerSurface(Modifier.fillMaxSize())
                 }
@@ -764,7 +814,13 @@ fun BrowserScreen(
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing),
             ) {
-                SettingsDataScreen(onClose = { showSettingsData = false })
+                SettingsDataScreen(
+                    onClose = { showSettingsData = false },
+                    onReloadPages = {
+                        showSettingsData = false
+                        hosts.values.forEach { it.webView.reload() }
+                    },
+                )
             }
         }
 

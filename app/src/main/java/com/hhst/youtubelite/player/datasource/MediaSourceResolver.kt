@@ -200,10 +200,10 @@ class MediaSourceResolver(
         }
 
         // 8. Audio-only. ANDROID_VR remains excluded unless allowVr is true.
-        val audioOnly = StreamSelection.selectAudio(StreamSelection.preferPlayable(
-            formats.filter { it.audioOnly },
+        val audioOnly = StreamSelection.preferPlayable(
+            StreamSelection.audioCandidates(formats.filter { it.audioOnly }, audioTrackKey),
             allowVr,
-        ), audioTrackKey)
+        ).maxByOrNull { it.bitrate }
         if (audioOnly != null) {
             return Resolved(
                 withSubtitles(singleFormatSource(audioOnly, durationMs, meta), subtitles),
@@ -230,7 +230,7 @@ class MediaSourceResolver(
             allowAndroidVr,
         )
         var audios = StreamSelection.preferPlayable(
-            formats.filter { it.audioOnly && it.hasDashRanges },
+            StreamSelection.audioCandidates(formats.filter { it.audioOnly && it.hasDashRanges }, audioTrackKey),
             allowAndroidVr,
         )
         if (requirePoToken) {
@@ -248,7 +248,7 @@ class MediaSourceResolver(
         // Whole pool (deduped per height#fps) goes into one multi-representation
         // manifest so later quality picks are track selections, not rebuilds.
         val videoPool = StreamSelection.filterBest(videos)
-        val audio = StreamSelection.selectAudio(audios, audioTrackKey) ?: return null
+        val audio = audios.maxByOrNull { it.bitrate } ?: return null
         // selectVideo never returns null for a non-empty pool (falls back to best).
         val video = StreamSelection.selectVideo(videoPool, preferredQuality) ?: return null
         return Resolved(
@@ -302,7 +302,7 @@ class MediaSourceResolver(
         val best = StreamSelection.preferPlayable(
             stream.formats.filter(StreamSelection::isMuxed),
         ).maxByOrNull { it.height }
-            ?: throw IllegalStateException("No playable live stream")
+            ?: throw IllegalStateException("LIVE_STREAM_SOURCE_UNAVAILABLE")
         return Resolved(
             withSubtitles(progressive(best.url, best.mimeType.ifBlank { null }, meta, dataSources.ytLiveProgressive), subtitles),
             best, null,

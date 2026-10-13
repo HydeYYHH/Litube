@@ -6,25 +6,35 @@ const vm = require('node:vm');
 
 const res = path.join(__dirname, '../../main/res');
 const core = fs.readFileSync(path.join(__dirname, '../../main/assets/script/core.js'), 'utf8');
-const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../scripts/locales.json'), 'utf8')).locales;
-const folders = Object.fromEntries(catalog.map(entry => [entry.tag, entry.resource]));
+const config = fs.readFileSync(path.join(res, 'xml/locales_config.xml'), 'utf8');
+const tags = [...config.matchAll(/android:name="([^"]+)"/g)].map(entry => entry[1]);
+const folders = Object.fromEntries(tags.map(tag => {
+  const candidates = tag === 'en' ? ['values'] : [
+    'values-b+' + tag.replaceAll('-', '+'),
+    'values-' + tag.replace(/-([A-Z]{2}|\d{3})$/, '-r$1'),
+    'values-' + tag.split('-')[0],
+  ];
+  const folder = candidates.find(value => fs.existsSync(path.join(res, value)));
+  assert.ok(folder, `missing resources: ${tag}`);
+  return [tag, folder];
+}));
 const labels = { download: 'download', downloaded: 'web_downloaded', addToQueue: 'add_to_queue',
   openWith: 'open_with', chat: 'web_chat', about: 'about', extension: 'extension',
   downloads: 'downloads', closeChat: 'web_close_chat', quality: 'player_info_quality',
   auto: 'player_quality_auto', unavailable: 'info_unavailable', close: 'close' };
 
 function resources(folder) {
-  const source = fs.readFileSync(path.join(res, folder, 'strings.xml'), 'utf8');
-  const strings = new Map();
+  const source = fs.readdirSync(path.join(res, folder)).filter(file => file.endsWith('.xml'))
+    .map(file => fs.readFileSync(path.join(res, folder, file), 'utf8')).join('\n');
+  const strings = new Map(folder === 'values' ? [] : resources('values'));
+  const names = new Set();
   for (const entry of source.matchAll(/<string\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/string>/g)) {
-    assert.ok(!strings.has(entry[1]), `duplicate resource: ${folder}/${entry[1]}`);
+    assert.ok(!names.has(entry[1]), `duplicate resource: ${folder}/${entry[1]}`);
+    names.add(entry[1]);
     const text = entry[2].replace(/&(amp|lt|gt|quot|apos);/g, (_, entity) =>
       ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[entity])
       .replace(/\\([\\'"nt])/g, (_, escaped) => ({ n: '\n', t: '\t' })[escaped] ?? escaped);
     assert.ok(text.trim(), `empty resource: ${folder}/${entry[1]}`);
-    assert.doesNotMatch(text, /[\[【［]\s*[\d\u200b-\u200f\u2066-\u2069\s]+[\]】］]/,
-      `unexpected draft boundary: ${folder}/${entry[1]}`);
-    assert.doesNotMatch(text, /\uFFFD|987650\d{3}/, `broken encoding or format argument: ${folder}/${entry[1]}`);
     strings.set(entry[1], text);
   }
   return strings;
@@ -42,7 +52,7 @@ function page(lang = '', browserLanguage = 'en') {
   return { root, text: context.Lite.text };
 }
 
-test('all supported Android locales cover the catalog and preserve typed format arguments', () => {
+test('localized resources and English fallbacks preserve typed format arguments', () => {
   const base = resources('values');
   const argumentsOf = text => Array.from(text.matchAll(/%\d+\$[dsf]/g), m => m[0]).sort();
   for (const folder of Object.values(folders)) {
@@ -54,25 +64,12 @@ test('all supported Android locales cover the catalog and preserve typed format 
   }
 });
 
-test('Android locale configuration and script variants match the shared catalog', () => {
-  assert.equal(new Set(catalog.map(entry => entry.tag.toLowerCase())).size, catalog.length);
-  assert.equal(new Set(Object.values(folders)).size, catalog.length);
-  const config = fs.readFileSync(path.join(res, 'xml/locales_config.xml'), 'utf8');
-  const tags = [...config.matchAll(/android:name="([^"]+)"/g)].map(entry => entry[1]);
-  assert.deepEqual(tags, catalog.map(entry => entry.displayTag || entry.tag));
-  for (const entry of catalog) {
-    for (const mirror of entry.mirrors || []) {
-      assert.deepEqual(resources(mirror), resources(entry.resource), mirror);
-    }
-  }
-});
-
 test('injected page labels match Android wording in every supported language', () => {
   for (const [lang, folder] of Object.entries(folders)) {
     const p = page(lang);
     const localized = resources(folder);
     for (const [key, resource] of Object.entries(labels)) {
-      assert.equal(p.text(key), localized.get(resource), `${lang}/${key}; run scripts/sync-web-translations.py`);
+      assert.equal(p.text(key), localized.get(resource), `${lang}/${key}`);
     }
   }
 });

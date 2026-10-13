@@ -1,0 +1,187 @@
+name: Android
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Page script tests
+        run: node --test app/src/test/script/*.test.cjs
+      - name: Unit tests, Lint and debug build
+        run: >-
+          bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+          --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
+          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
+      - name: Build debug-signed R8 verification APKs
+        run: >-
+          bash gradlew -PandroidTestBuildType=minifiedDebug :app:assembleMinifiedDebug :app:assembleMinifiedDebugAndroidTest
+          --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
+          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-reports
+          path: |
+            app/build/reports
+            app/build/test-results
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apks-and-mapping
+          path: |
+            app/build/outputs/apk
+            app/build/outputs/mapping/minifiedDebug
+            app/build/outputs/mapping/minifiedDebugAndroidTest
+            app/build/outputs/diagnostic-mappings
+          if-no-files-found: error
+
+  offline-device:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apks-and-mapping
+          path: artifacts
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare device tests
+        run: |
+          cat > "$RUNNER_TEMP/device.sh" <<'EOF'
+            set -euo pipefail
+            mkdir -p device-results
+            collect_results() {
+              adb logcat -d > device-results/logcat.txt || true
+              adb shell dumpsys window > device-results/windows.txt || true
+              adb pull /data/local/tmp/device-evidence device-results/evidence > /dev/null 2>&1 || true
+              for package in com.hhst.litube.debug com.hhst.litube.minified; do
+                adb pull "/data/user/0/$package/files/device-evidence" "device-results/$package" > /dev/null 2>&1 || true
+              done
+            }
+            trap collect_results EXIT
+            adb root
+            adb wait-for-device
+            for table in iptables ip6tables; do
+              adb shell "$table" -I OUTPUT -p tcp -m multiport --dports 80,443 -j REJECT
+              adb shell "$table" -I OUTPUT -p udp --dport 443 -j REJECT
+            done
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell am force-stop com.google.android.googlesdksetup
+            adb shell settings put secure immersive_mode_confirmations confirmed
+            adb shell wm dismiss-keyguard
+            ready=false
+            started=''
+            for ((attempt=0; attempt<30; attempt++)); do
+              launcher=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -n 1) || launcher=''
+              if [[ "$launcher" == */* ]]; then
+                if [[ "$launcher" != "$started" ]]; then
+                  adb shell am force-stop "${launcher%%/*}"
+                  if adb shell am start -n "$launcher" -a android.intent.action.MAIN -c android.intent.category.HOME > device-results/launcher.txt 2>&1; then
+                    started="$launcher"
+                  fi
+                fi
+                adb shell dumpsys window > device-results/windows.txt
+                if [[ "$launcher" == "$started" ]] && grep -F 'mCurrentFocus=' device-results/windows.txt | grep -Fq "${launcher%%/*}/"; then
+                  ready=true
+                  break
+                fi
+              fi
+              sleep 1
+            done
+            if [[ "$ready" != true ]]; then
+              echo 'Launcher window is not ready'
+              exit 1
+            fi
+            install_apks() {
+              local variant="$1"
+              adb install -r -t -g "artifacts/apk/$variant/app-$variant.apk"
+              adb install -r -t -g "artifacts/apk/androidTest/$variant/app-$variant-androidTest.apk"
+            }
+            run_suite() {
+              local package="$1" classes="$2" label="$3" runner="${4:-androidx.test.runner.AndroidJUnitRunner}"
+              adb shell am force-stop "$package" || return
+              adb shell am instrument -w -r -e class "$classes" "$package.test/$runner" | tee "device-results/$label.txt" || return
+              grep -Eq '^OK \([1-9][0-9]* tests?\)' "device-results/$label.txt"
+            }
+            classes=(
+              com.hhst.youtubelite.browser.TransientUiAndroidTest
+              com.hhst.youtubelite.browser.ExternalRouteAndroidTest
+              com.hhst.youtubelite.player.engine.PipDismissAndroidTest
+              com.hhst.youtubelite.diagnostics.DiagnosticSaveAndroidTest
+              com.hhst.youtubelite.player.surface.FullscreenSheetAndroidTest
+              com.hhst.youtubelite.player.surface.PlayerControlSizingAndroidTest
+              com.hhst.youtubelite.player.datasource.PlaybackLoadErrorAndroidTest
+              com.hhst.youtubelite.player.engine.TransportRecoveryAndroidTest
+              com.hhst.youtubelite.player.engine.PinnedVideoRecoveryAndroidTest
+              com.hhst.youtubelite.player.engine.NamedAudioAndroidTest#namedAudioSurvivesQualityChanges
+              com.hhst.youtubelite.player.engine.OriginalAudioAndroidTest
+              com.hhst.youtubelite.downloader.android.DownloadOptionsAndroidTest
+              com.hhst.youtubelite.downloader.android.DownloadIntentAndroidTest
+            )
+            printf -v class_list '%s,' "${classes[@]}"
+            status=0
+            install_apks debug
+            run_suite com.hhst.litube.debug "${class_list%,}" offline || status=1
+            run_suite com.hhst.litube.debug \
+              com.hhst.youtubelite.player.engine.PipAudioOnlyAndroidTest \
+              pip-audio || status=1
+            install_apks minifiedDebug
+            run_suite com.hhst.litube.minified \
+              com.hhst.youtubelite.player.sponsor.SponsorBlockMinifiedAndroidTest \
+              sponsorblock-r8 com.hhst.youtubelite.player.sponsor.R8VerificationRunner || status=1
+            exit "$status"
+          EOF
+          bash -n "$RUNNER_TEMP/device.sh"
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash "$RUNNER_TEMP/device.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-offline-device-results
+          path: device-results
+          if-no-files-found: warn

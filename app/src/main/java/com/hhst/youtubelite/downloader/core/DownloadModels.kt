@@ -83,14 +83,11 @@ data class DownloadConfig(
     val fileNameTemplate: String? = null,
     /** Subtitle/cover without a video or audio asset. */
     val attachmentsOnly: Boolean = false,
-    /**
-     * The itag is a selection hint only — never identity; re-validate
-     * against the current catalog and omit from [fingerprint].
-     */
+    /** Catalog selection hints, excluded from [fingerprint]. */
     val videoItagHint: Int? = null,
     val audioItagHint: Int? = null,
+    val audioBitrate: Int? = null,
 ) {
-    /** Stable business identity of this config (no Gson key-order). */
     fun fingerprint(videoId: String): String = listOf(
         videoId,
         videoQuality.orEmpty(),
@@ -101,7 +98,7 @@ data class DownloadConfig(
         if (includeCover) "1" else "0",
         fileNameTemplate.orEmpty(),
         if (attachmentsOnly) "1" else "0",
-    ).joinToString("|")
+    ).plus(listOfNotNull(audioBitrate?.takeIf { it > 0 }?.toString())).joinToString("|")
 }
 
 

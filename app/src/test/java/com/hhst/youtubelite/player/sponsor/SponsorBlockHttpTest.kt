@@ -7,6 +7,16 @@ import org.junit.Test
 
 class SponsorBlockHttpTest {
 
+    @Test(expected = SponsorBlockParseException::class)
+    fun malformedSuccessfulResponseIsNotReportedAsNoSegments() {
+        SponsorBlockManager.interpretHttp(200, "invalid json", "aaaaaaaaaaa")
+    }
+
+    @Test(expected = SponsorBlockParseException::class)
+    fun emptySuccessfulBodyIsAParseFailure() {
+        SponsorBlockManager.interpretHttp(200, null, "aaaaaaaaaaa")
+    }
+
     @Test
     fun notFoundIsValidEmptyResult() {
         val result = SponsorBlockManager.interpretHttp(404, "Not Found", "aaaaaaaaaaa")

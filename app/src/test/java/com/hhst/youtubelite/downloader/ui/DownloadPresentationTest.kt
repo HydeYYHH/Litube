@@ -27,6 +27,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadPresentationTest {
+    @Test fun audioBitratesContainOnlyTheSelectedPlayableTrack() {
+        val original = audioFormat(original = true, trackId = "en", bitrate = 128_000)
+        val low = original.copy(itag = 139, bitrate = 64_000)
+        val dub = audioFormat(language = "ja", original = false, trackId = "ja", bitrate = 256_000)
+        val data = catalog(listOf(original, low, dub, original.copy(codec = "opus", bitrate = 160_000),
+            original.copy(bitrate = 0)))
+        assertEquals(listOf(128_000, 64_000), DownloadPresentation.audioBitrates(data, null))
+        assertEquals(listOf(256_000), DownloadPresentation.audioBitrates(data, "id:ja"))
+        assertTrue(DownloadPresentation.audioBitrates(data, "id:missing").isEmpty())
+    }
+
 
     @Test
     fun filters_mapToCoordinatorPhases() {

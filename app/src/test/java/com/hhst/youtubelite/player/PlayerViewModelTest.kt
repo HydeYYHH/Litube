@@ -7,7 +7,9 @@ import android.view.SurfaceView
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import com.hhst.youtubelite.browser.PageOrigin
+import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.cast.CastController
+import com.hhst.youtubelite.cast.CastUiState
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.MemoryPrefStore
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -41,6 +43,9 @@ class PlayerViewModelTest {
 
     private lateinit var engine: FakeEngine
     private lateinit var viewModel: PlayerViewModel
+    private lateinit var queue: QueueRepository
+    private lateinit var preferences: ExtensionManager
+    private lateinit var cast: CastController
     private var previousCommandHandler: PlaybackCommandRouter.Handler? = null
 
     @Before
@@ -216,11 +221,13 @@ class PlayerViewModelTest {
     private fun bindViewModel() {
         engine = FakeEngine()
         val cache = MemJsonCache()
-        val cast = CastController(ContextWrapper(null), OkHttpClient())
+        cast = CastController(ContextWrapper(null), OkHttpClient())
+        queue = QueueRepository(cache)
+        preferences = ExtensionManager(MemoryPrefStore())
         viewModel = PlayerViewModel(
             engine,
-            QueueRepository(cache),
-            ExtensionManager(MemoryPrefStore()),
+            queue,
+            preferences,
             cache,
             cast,
         )
@@ -320,6 +327,167 @@ class PlayerViewModelTest {
         assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
+    @Test fun documentReloadPreservesPausedPlaybackAndPosition() {
+        bindViewModel()
+        viewModel.playVideo(watchUrl, PageOrigin(1, 1))
+        engine.settle(watchId, 42_000)
+        engine.pause()
+        viewModel.playVideo(watchUrl, PageOrigin(1, 2))
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(42_000L, engine.snapshot.value.positionMs)
+        assertFalse(engine.snapshot.value.isPlaying)
+        engine.settle(watchId, 120_000)
+        engine.finish()
+        viewModel.playVideo(watchUrl, PageOrigin(1, 3))
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(120_000L, engine.snapshot.value.positionMs)
+        assertTrue(engine.snapshot.value.ended)
+    }
+
+    @Test fun pipDismissalStopsLocalPlaybackWithEitherBackgroundPreference() {
+        bindViewModel()
+        for (enabled in listOf(false, true)) {
+            preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, enabled)
+            viewModel.playVideo(watchUrl)
+            engine.settle(watchId)
+            viewModel.onPipDismissed()
+            assertFalse(viewModel.uiState.value.visible)
+            assertFalse(engine.snapshot.value.isPlaying)
+        }
+        assertEquals(2, engine.stopCalls)
+    }
+
+    @Test fun ordinaryAutoplayAdvancesOnceOnlyWithExplicitEnabledTarget() {
+        bindViewModel()
+        val page = FakeWatchPage()
+        viewModel.watchPage = page
+        viewModel.playVideo(watchUrl)
+        engine.settle(watchId)
+        engine.finish()
+        engine.onEnded?.invoke()
+        assertEquals(1, page.scripts.size)
+        page.callbacks.removeAt(0)(autoplayResult())
+        assertEquals(2, page.scripts.size)
+        assertTrue(page.scripts.last().contains("__watchAutoplayAdvance"))
+        val request = Regex(",([0-9]+)\\)").find(page.scripts.last())!!.groupValues[1].toLong()
+        assertTrue(viewModel.canAutoplayAdvance(watchId, request, page.pageOrigin))
+        assertFalse(viewModel.canAutoplayAdvance(watchId, request, PageOrigin(2, 1)))
+        viewModel.onSeek(0)
+        assertFalse(viewModel.canAutoplayAdvance(watchId, request, page.pageOrigin))
+    }
+
+    @Test fun notificationPlayAndPauseDiscardPendingAutoplayEvenBeforeTheSnapshotChanges() {
+        bindViewModel()
+        val page = FakeWatchPage()
+        viewModel.watchPage = page
+        for (command in listOf<() -> Unit>(
+            { PlaybackCommandRouter.handler!!.onPlay() },
+            { PlaybackCommandRouter.handler!!.onPause() },
+        )) {
+            page.scripts.clear(); page.callbacks.clear()
+            viewModel.playVideo(watchUrl)
+            engine.settle(watchId)
+            engine.finish()
+            val callback = page.callbacks.removeAt(0)
+            command()
+            assertTrue(engine.snapshot.value.ended)
+            callback(autoplayResult())
+            assertEquals(1, page.scripts.size)
+        }
+    }
+
+    @Test fun pipDismissalKeepsTheConnectedCastAndOnlyPausesLocalPlayback() {
+        bindViewModel()
+        viewModel.playVideo(watchUrl)
+        engine.settle(watchId)
+        @Suppress("UNCHECKED_CAST")
+        val state = cast.javaClass.getDeclaredField("_state").apply { isAccessible = true }
+            .get(cast) as MutableStateFlow<CastUiState>
+        state.value = state.value.copy(linkConnected = true, linkUrl = "http://127.0.0.1/player")
+        viewModel.onPipDismissed()
+        assertTrue(cast.state.value.linkConnected)
+        assertEquals("http://127.0.0.1/player", cast.state.value.linkUrl)
+        assertEquals(0, engine.stopCalls)
+        assertFalse(engine.snapshot.value.isPlaying)
+        assertFalse(viewModel.uiState.value.visible)
+    }
+
+    @Test fun autoplayOffUnknownAndPauseAtEndNeverAdvance() {
+        bindViewModel()
+        val page = FakeWatchPage()
+        viewModel.watchPage = page
+        for (result in listOf(autoplayResult("false"), autoplayResult("null"), "null")) {
+            page.scripts.clear()
+            viewModel.playVideo(watchUrl)
+            engine.settle(watchId)
+            engine.finish()
+            assertEquals(1, page.scripts.size)
+            page.callbacks.removeAt(0)(result)
+            assertEquals(1, page.scripts.size)
+        }
+        page.scripts.clear()
+        viewModel.playVideo(watchUrl)
+        engine.settle(watchId)
+        engine.setLoopMode(LoopMode.PAUSE_AT_END)
+        engine.finish()
+        assertTrue(page.scripts.isEmpty())
+    }
+
+    @Test fun delayedAutoplayIsDiscardedAfterReplayPageReplacementOrClose() {
+        bindViewModel()
+        val page = FakeWatchPage()
+        viewModel.watchPage = page
+        for (cancel in listOf<() -> Unit>(
+            { engine.seekTo(0); engine.finish() },
+            { page.pageOrigin = PageOrigin(1, page.pageOrigin.documentGeneration + 1) },
+            { viewModel.onMiniClose() },
+        )) {
+            page.scripts.clear(); page.callbacks.clear()
+            viewModel.playVideo(watchUrl)
+            engine.settle(watchId)
+            engine.finish()
+            val oldCallback = page.callbacks.removeAt(0)
+            cancel()
+            val queries = page.scripts.size
+            oldCallback(autoplayResult())
+            assertEquals(queries, page.scripts.size)
+        }
+    }
+
+    @Test fun queueAndPlaylistRetainPriorityOverOrdinaryAutoplay() {
+        bindViewModel()
+        val page = FakeWatchPage()
+        viewModel.watchPage = page
+        queue.setEnabled(true)
+        queue.add(QueueItem(watchId, watchUrl, "First"))
+        queue.add(QueueItem("bbbbbbbbbbb", VideoId.watchUrl("bbbbbbbbbbb"), "Second"))
+        viewModel.playVideo(watchUrl)
+        engine.settle(watchId)
+        engine.finish()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+        assertTrue(page.scripts.isEmpty())
+        queue.clear(); queue.setEnabled(false)
+        viewModel.playVideo(watchUrl)
+        engine.settle(watchId)
+        viewModel.onPageHasPlaylist(true)
+        engine.finish()
+        assertEquals(1, page.scripts.size)
+        assertTrue(page.scripts.single().contains("__playlistNav"))
+    }
+
+    private fun autoplayResult(enabled: String = "true") =
+        """{"videoId":"$watchId","enabled":$enabled,"url":"https://m.youtube.com/watch?v=bbbbbbbbbbb"}"""
+
+    private class FakeWatchPage : WatchPage {
+        var pageOrigin = PageOrigin(1, 1)
+        val scripts = mutableListOf<String>()
+        val callbacks = mutableListOf<(String?) -> Unit>()
+        override fun origin() = pageOrigin
+        override fun evaluate(js: String, onResult: (String?) -> Unit) { scripts += js; callbacks += onResult }
+        override fun canGoBack() = false
+        override fun goBack() = Unit
+    }
+
     /**
      * Records playback commands and publishes test-driven snapshots. Only
      * [settle] marks a snapshot prepared, so recast waiters resume exactly
@@ -330,6 +498,12 @@ class PlayerViewModelTest {
         override val snapshot: StateFlow<PlaybackSnapshot> = _snapshot.asStateFlow()
 
         val playCalls = mutableListOf<String>()
+        var stopCalls = 0
+
+        fun finish() {
+            _snapshot.value = _snapshot.value.copy(ended = true, isPlaying = false)
+            onEnded?.invoke()
+        }
 
         /** Publishes a settled (prepared) and playing engine state for [videoId]. */
         fun settle(videoId: String, positionMs: Long = 0L) {
@@ -339,6 +513,7 @@ class PlayerViewModelTest {
                 prepared = true,
                 error = null,
                 isPlaying = true,
+                ended = false,
             )
         }
 
@@ -356,7 +531,7 @@ class PlayerViewModelTest {
             )
         }
         override fun retry() = Unit
-        override fun stop() = Unit
+        override fun stop() { stopCalls++; _snapshot.value = PlaybackSnapshot() }
         override fun setVideoSurface(surface: SurfaceView?) = Unit
         override fun playOrPause() = Unit
         override fun play() = Unit
@@ -370,11 +545,11 @@ class PlayerViewModelTest {
         }
 
         override fun markReceiverIdentity(videoId: String, title: String, author: String?) = Unit
-        override fun seekTo(positionMs: Long) = Unit
+        override fun seekTo(positionMs: Long) { _snapshot.value = _snapshot.value.copy(positionMs = positionMs, ended = false) }
         override fun seekRelative(offsetMs: Long) = Unit
         override fun setSpeed(speed: Float) = Unit
         override fun setSpeedHold(active: Boolean) = Unit
-        override fun setLoopMode(mode: LoopMode) = Unit
+        override fun setLoopMode(mode: LoopMode) { _snapshot.value = _snapshot.value.copy(loopMode = mode) }
         override fun setQuality(label: String?) = Unit
         override fun setSubtitle(trackKey: String?): Boolean = true
         override fun setAudioTrack(trackKey: String?) = Unit

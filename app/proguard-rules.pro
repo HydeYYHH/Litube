@@ -5,10 +5,9 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Gson models persist queue, progress, captions, extraction, and inject reports.
-# -keep class (not only keepclassmembers): R8 otherwise abstracts classes that
-# are only constructed via Gson.fromJson, which crashes WebView inject callbacks.
+# Gson reflection requires model classes, fields, and generic signatures.
 -keepattributes Signature
+-keepattributes InnerClasses,EnclosingMethod
 -keepattributes *Annotation*
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
@@ -17,6 +16,8 @@
 -keep class com.hhst.youtubelite.player.QueueState { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.player.engine.ResumePoint { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.player.surface.SubtitleStyle { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.sponsor.SponsorBlockParser$Response { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.player.sponsor.SponsorBlockParser$SegmentData { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Format { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.PoIntegrity { <init>(...); <fields>; }
 -keep class org.schabi.newpipe.extractor.services.youtube.streams.FormatKey { <init>(...); <fields>; }
@@ -27,6 +28,8 @@
 -keep class com.hhst.youtubelite.extractor.ChapterList { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectReport { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.InjectFailure { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extension.SettingsBackupData { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.extension.DownloadBackupData { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.diagnostics.DiagnosticEvent { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.diagnostics.DiagnosticContext { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.diagnostics.DiagnosticCause { <init>(...); <fields>; }

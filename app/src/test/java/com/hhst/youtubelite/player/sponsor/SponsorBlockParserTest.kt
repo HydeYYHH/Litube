@@ -2,6 +2,7 @@ package com.hhst.youtubelite.player.sponsor
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SponsorBlockParserTest {
@@ -40,9 +41,10 @@ class SponsorBlockParserTest {
     }
 
     @Test
-    fun parse_malformed_returnsEmpty() {
-        assertTrue(SponsorBlockParser.parse("not json", "abc12345678").isEmpty())
-        assertTrue(SponsorBlockParser.parse("{}", "abc12345678").isEmpty())
+    fun malformedResponsesReportParseFailure() {
+        for (json in listOf("not json", "{}", "null")) {
+            assertThrows(SponsorBlockParseException::class.java) { SponsorBlockParser.parse(json, "abc12345678") }
+        }
     }
 
     @Test

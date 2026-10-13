@@ -28,6 +28,21 @@ class ExtensionViewModel(
     )
     val uiState: StateFlow<ExtensionUiState> = _uiState.asStateFlow()
 
+    private val preferenceListener: (String) -> Unit = {
+        _uiState.update { state ->
+            state.copy(toggles = snapshotToggles(sections), hapticStrength = manager.hapticStrength())
+        }
+    }
+
+    init {
+        manager.addOnChangedListener(preferenceListener)
+    }
+
+    override fun onCleared() {
+        manager.removeOnChangedListener(preferenceListener)
+        super.onCleared()
+    }
+
     fun toggleExpanded(id: String) {
         _uiState.update { state ->
             val next = if (id in state.expanded) {
@@ -42,17 +57,14 @@ class ExtensionViewModel(
     fun setEnabled(key: String, enabled: Boolean) {
         if (key == PreferenceKeys.ENABLE_PIP && !pipSupported) return
         manager.setEnabled(key, enabled)
-        _uiState.update { it.copy(toggles = snapshotToggles(sections)) }
     }
 
     fun resetToDefault() {
         manager.resetToDefault()
-        _uiState.update { it.copy(toggles = snapshotToggles(sections), hapticStrength = manager.hapticStrength()) }
     }
 
     fun setHapticStrength(value: Int) {
         manager.setHapticStrength(value)
-        _uiState.update { it.copy(hapticStrength = manager.hapticStrength()) }
     }
 
     private fun snapshotToggles(nodes: List<Extension>): Map<String, Boolean> {

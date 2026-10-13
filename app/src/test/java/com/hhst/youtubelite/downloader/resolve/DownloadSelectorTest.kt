@@ -9,6 +9,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadSelectorTest {
+    @Test fun audioBitrateKeepsLanguageAndRejectsAnUnavailableQuality() {
+        val low = audioFormat(original = true, trackId = "en", itag = 139, bitrate = 64_000)
+        val high = low.copy(itag = 140, bitrate = 128_000)
+        val dub = audioFormat(language = "ja", original = false, trackId = "ja", itag = 139, bitrate = 48_000)
+        val data = catalog(listOf(low, high, dub))
+        val config = DownloadConfig(audioOnly = true, audioBitrate = 64_000, audioItagHint = 140)
+        val chosen = DownloadSelector.select(data, config) as DownloadSelection.Ready
+        assertEquals(139, chosen.plan.audio!!.format.itag)
+        assertEquals("id:en", chosen.plan.audio!!.audioTrackKey)
+        assertEquals(high, (DownloadSelector.select(data, config.copy(audioBitrate = null)) as DownloadSelection.Ready).plan.audio!!.format)
+        val unavailable = DownloadSelector.select(catalog(listOf(high, dub)), config) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.QUALITY_UNAVAILABLE, unavailable.reason)
+        assertTrue(config.fingerprint(data.videoId) != config.copy(audioBitrate = 128_000).fingerprint(data.videoId))
+    }
+
+    @Test fun unsupportedOriginalDoesNotSelectADub() {
+        val original = audioFormat(original = true, trackId = "en", codec = "opus")
+        val dub = audioFormat(language = "ja", original = false, trackId = "ja")
+        val failed = DownloadSelector.select(catalog(listOf(original, dub)), DownloadConfig(audioOnly = true)) as DownloadSelection.Failed
+        assertEquals(DownloadUnavailableReason.CODEC_NOT_ENABLED, failed.reason)
+    }
+
 
     @Test fun explicitCaptionKindDoesNotFallBackAndAudioHintKeepsTrackIdentity() {
         val data = catalog(listOf(videoFormat(720),

@@ -71,6 +71,20 @@ test('a reused promotion control restores its prior display and accessibility wh
   control.textContent='ログイン';p.run();assert.equal(control.style.getPropertyValue('display'),'inline-flex');
   assert.equal(control.attributes['aria-hidden'],'false');
 });
+test('promotion rows collapse and linked dialogs use the shared close action', () => {
+  const row = button(''), dialog = {};
+  const promotion = button('Open app', 'intent://watch#Intent;package=com.google.android.youtube;end');
+  promotion.closest = selector => selector.includes('dialog') ? dialog : row;
+  const p = page([promotion]);
+  const dismissed = [];
+  p.context.Lite.ui = { dismiss: target => { dismissed.push(target); return true; } };
+  p.run(); p.run();
+  assert.ok(row.hidden());
+  assert.equal(promotion.hidden(), false);
+  assert.deepEqual(dismissed, [dialog]);
+  promotion.attributes.href = ''; promotion.textContent = 'Settings';
+  p.run(); assert.equal(row.hidden(), false);
+});
 test('structural prompt rules install before scheduling and remain separate from unsupported relational selectors',()=>{
   const p=page();const plain=p.css().split('tp-yt-paper-dialog:has')[0];
   assert.ok(plain.includes('.ytp-unmute'));assert.ok(plain.includes('package=com.google.android.youtube'));
