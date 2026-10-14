@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ស្តាប់ក្នុងផ្ទៃខាងក្រោយ</string>
     <string name="back_again_to_exit">ចុចត្រឡប់មកវិញម្តងទៀតដើម្បីចេញ</string>
     <string name="navigate_back">ត្រឡប់មកវិញ</string>
     <string name="extension">ផ្នែកបន្ថែម</string>
@@ -8,7 +9,7 @@
     <string name="about">អំពីកម្មវិធីនេះ</string>
     <string name="display_dislikes">បង្ហាញការមិនចូលចិត្ត</string>
     <string name="display_dislikes_summary">ផ្ញើលេខសម្គាល់វីដេអូទៅ returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">លាក់ខោខ្លី</string>
+    <string name="hide_shorts">លាក់ Shorts</string>
     <string name="interface_category">ចំណុចប្រទាក់</string>
     <string name="player">ការចាក់ឡើងវិញ</string>
     <string name="gesture">កាយវិការ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">រំលងអ្នកឧបត្ថម្ភ</string>
     <string name="skip_sponsors_selfpromo">រំលងការផ្សព្វផ្សាយខ្លួនឯង</string>
+    <string name="skip_sponsors_interaction">រំលងការរំលឹកអំពីការចូលចិត្តនិងការជាវ</string>
+    <string name="skip_sponsors_intro">រំលងផ្នែកដើម</string>
+    <string name="skip_sponsors_outro">រំលងផ្នែកចុង</string>
+    <string name="skip_sponsors_preview">រំលងការមើលជាមុន</string>
+    <string name="skip_sponsors_music_offtopic">រំលងផ្នែកដែលគ្មានតន្ត្រី</string>
+    <string name="skip_sponsors_filler">រំលងផ្នែកក្រៅប្រធានបទ</string>
     <string name="skip_sponsors_highlight">រំលងការរំលេច</string>
     <string name="remember_last_position">ចងចាំទីតាំង</string>
     <string name="remember_quality">ចងចាំគុណភាពវីដេអូ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">កំណត់ការកំណត់ទាំងអស់ឡើងវិញ</string>
     <string name="reset_extension_title">កំណត់ផ្នែកបន្ថែមឡើងវិញ</string>
     <string name="reset_extension_message">កំណត់ការកំណត់ផ្នែកបន្ថែមទាំងអស់ឡើងវិញទៅជាលំនាំដើម?</string>
+    <string name="settings_backup_restore">បម្រុងទុក &amp; ស្ដារ</string>
+    <string name="settings_export">នាំចេញការកំណត់</string>
+    <string name="settings_export_summary">រក្សាទុកការកំណត់បច្ចុប្បន្នទៅឯកសារ JSON</string>
+    <string name="settings_import">នាំចូលការកំណត់</string>
+    <string name="settings_import_summary">ស្តារការកំណត់ពីឯកសារបម្រុងទុក</string>
+    <string name="settings_import_confirm_title">នាំចូលការកំណត់?</string>
+    <string name="settings_import_confirm_message">ការកំណត់បច្ចុប្បន្ននឹងត្រូវបានសរសេរជាន់លើដោយការបម្រុងទុក។</string>
+    <string name="settings_export_done">បាននាំចេញការកំណត់</string>
+    <string name="settings_export_failed">មិនអាចរក្សាទុកឯកសារការកំណត់បានទេ។</string>
+    <string name="settings_import_done">បាននាំចូលការកំណត់</string>
+    <string name="settings_import_failed">ឯកសារការកំណត់មិនត្រឹមត្រូវ</string>
     <string name="confirm">បញ្ជាក់</string>
     <string name="cancel">បោះបង់</string>
     <string name="more_options">ច្រើនទៀត</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">ទំហំអត្ថបទ</string>
     <string name="subtitle_style_background">ផ្ទៃខាងក្រោយ</string>
     <string name="subtitle_background_none">គ្មាន</string>
-    <string name="subtitle_background_semi">ថ្លា</string>
+    <string name="subtitle_background_semi">ថ្លាពាក់កណ្តាល</string>
     <string name="subtitle_background_opaque">ព.ស</string>
     <string name="subtitle_style_color">ពណ៌អត្ថបទ</string>
     <string name="subtitle_style_hex">កូដពណ៌ Hex</string>
@@ -104,7 +122,7 @@
     <string name="retry">ព្យាយាមម្តងទៀត</string>
     <string name="segment_intro">ការណែនាំ</string>
     <string name="segment_outro">ក្រៅ</string>
-    <string name="segment_interaction">ចូលចិត្ត និងជាវការរំលឹក</string>
+    <string name="segment_interaction">ការរំលឹកអំពីការចូលចិត្តនិងការជាវ</string>
     <string name="segment_preview">មើលជាមុន</string>
     <string name="segment_music_offtopic">មិនមែនតន្ត្រី</string>
     <string name="cast">ស្ទ្រីមទៅកាន់ឧបករណ៍មួយ។</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">រកមិនឃើញឧបករណ៍ស្ទ្រីមដែលត្រូវគ្នាទេ។</string>
     <string name="cast_no_devices_hint">ភ្ជាប់ឧបករណ៍ទាំងពីរទៅបណ្តាញតែមួយ។</string>
     <string name="cast_unavailable">ការស្ទ្រីមឧបករណ៍មិនអាចប្រើបានទេ។</string>
-    <string name="cast_unavailable_hint">ការស្ទ្រីមឧបករណ៍ត្រូវការសេវាកម្ម Google Play ។</string>
+    <string name="cast_unavailable_hint">ភ្ជាប់ឧបករណ៍ទាំងពីរទៅបណ្តាញតែមួយ។</string>
     <string name="cast_section_devices">ឧបករណ៍ដែលមាន</string>
     <string name="cast_section_link">បើកនៅលើឧបករណ៍ណាមួយ។</string>
     <string name="cast_section_link_hint">នៅលើបណ្តាញ Wi-Fi ដូចគ្នា។</string>
@@ -163,6 +181,7 @@
     <string name="download_video">វីដេអូ</string>
     <string name="download_audio">សំឡេង</string>
     <string name="download_quality">គុណភាពទាញយក</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">គុណភាពខ្ពស់ប្រើប្រាស់ទិន្នន័យ និងទំហំផ្ទុកកាន់តែច្រើន</string>
     <string name="download_size_estimate">អំពី %1$s</string>
     <string name="download_size_unknown">ទំហំមិនស្គាល់</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ជ្រើសរើស៖ %1$d / %2$d</string>
     <string name="download_batch_meta">ធាតុ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">មិនមានកិច្ចការថ្មីទេ។</string>
-    <string name="download_snapshot_too_many">ធាតុច្រើនពេក (អតិបរមា 500)។គ្មានអ្វីត្រូវបានកាត់បន្ថយទេ។</string>
-    <string name="download_snapshot_too_large">រូបថតធំជាង 1 MB ។គ្មានអ្វីត្រូវបានកាត់បន្ថយទេ។</string>
+    <string name="download_snapshot_too_many">ធាតុច្រើនពេក។ ជ្រើសរើសមិនលើសពី 500 ។</string>
+    <string name="download_snapshot_too_large">បញ្ជីដែលបានជ្រើសរើសលើសពី 1 មេកាបៃ។ ជ្រើសរើសធាតុតិចជាង។</string>
     <string name="download_reason_live">ការផ្សាយបន្តផ្ទាល់មិនអាចទាញយកបានទេ។</string>
     <string name="download_reason_premiere">ការបញ្ចាំងលើកដំបូងនេះមិនទាន់បានចាប់ផ្តើមទេ។</string>
     <string name="download_reason_no_streams">គ្មានស្ទ្រីមឯកសារដែលអាចទាញយកបានទេ។</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">សតិបណ្តោះអាសន្ន/នាទី៖ %1$d</string>
     <string name="audio_description">ការពណ៌នាជាសំឡេង</string>
     <string name="secondary_audio">អូឌីយ៉ូទីពីរ</string>
+    <string name="settings_import_reload_message">បានធ្វើបច្ចុប្បន្នភាពការកំណត់។ ផ្ទុកទំព័រដែលបើកឡើងវិញ ដើម្បីអនុវត្តការផ្លាស់ប្តូរ។ ទីតាំងចាក់សារថ្មីរបស់អ្នកនឹងត្រូវបានរក្សាទុក។</string>
+    <string name="settings_reload_now">ផ្ទុកទំព័រឡើងវិញឥឡូវនេះ</string>
+    <string name="settings_reload_later">ពេលក្រោយ</string>
+    <string name="about_save_logs">រក្សាទុកកំណត់ហេតុវិភាគកម្មវិធី</string>
+    <string name="about_save_done">ឯកសារ ZIP វិនិច្ឆ័យកម្មវិធីត្រូវបានរក្សាទុក</string>
+    <string name="about_save_cancelled">បានលុបចោល</string>
+    <string name="about_save_failed">មិនអាចរក្សាទុកកំណត់ហេតុកម្មវិធីបានទេ។ ជ្រើសរើសទីតាំងរក្សាទុកផ្សេងទៀត ហើយព្យាយាមម្តងទៀត។</string>
+    <string name="player_live_unavailable">ការផ្សាយបន្តផ្ទាល់មិនអាចប្រើបានទេ។ សូមព្យាយាមម្តងទៀតនៅពេលក្រោយ។</string>
 </resources>

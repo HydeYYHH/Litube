@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Paminaw sa background</string>
     <string name="back_again_to_exit">Pindota balik pag-usab aron makagawas</string>
     <string name="navigate_back">Balik</string>
     <string name="extension">Mga Extension</string>
@@ -8,9 +9,9 @@
     <string name="about">Bahin niini nga app</string>
     <string name="display_dislikes">Ipakita ang dili gusto</string>
     <string name="display_dislikes_summary">Nagpadala og mga video ID sa returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Tagoa ang mga Short</string>
+    <string name="hide_shorts">Tagoa ang Shorts</string>
     <string name="interface_category">Interface</string>
-    <string name="player">Pagdula</string>
+    <string name="player">Pagpatugtog</string>
     <string name="gesture">Mga lihok</string>
     <string name="gesture_single_tap">Usa ka tap</string>
     <string name="gesture_double_tap">Doble nga tap</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Sa naka-embed nga magdudula</string>
     <string name="enable_in_fullscreen">Sa fullscreen</string>
     <string name="brightness">Kahayag</string>
-    <string name="volume">Tomo</string>
+    <string name="volume">Kakusog sa tingog</string>
     <string name="background_mini_player">Background ug mini player</string>
     <string name="pip">Hulagway-sa-Hulagway</string>
     <string name="in_app_mini_player">In-app nga mini-player</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Laktawan ang mga sponsor</string>
     <string name="skip_sponsors_selfpromo">Laktawan ang pagpasiugda sa kaugalingon</string>
+    <string name="skip_sponsors_interaction">Laktawi ang mga pahinumdom sa pag-like ug pag-subscribe</string>
+    <string name="skip_sponsors_intro">Laktawi ang mga pasiuna</string>
+    <string name="skip_sponsors_outro">Laktawi ang mga panapos</string>
+    <string name="skip_sponsors_preview">Laktawi ang mga pasilip</string>
+    <string name="skip_sponsors_music_offtopic">Laktawi ang mga bahin nga walay musika</string>
+    <string name="skip_sponsors_filler">Laktawi ang mga bahin nga wala sa hilisgutan</string>
     <string name="skip_sponsors_highlight">Laktawan ang mga highlight</string>
     <string name="remember_last_position">Hinumdumi ang posisyon</string>
     <string name="remember_quality">Hinumdumi ang kalidad sa video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">I-reset ang tanang setting</string>
     <string name="reset_extension_title">I-reset ang mga extension</string>
     <string name="reset_extension_message">I-reset ang tanang setting sa extension sa default?</string>
+    <string name="settings_backup_restore">I-backup ug iuli</string>
+    <string name="settings_export">Mga setting sa pag-eksport</string>
+    <string name="settings_export_summary">I-save ang kasamtangan nga mga setting sa usa ka JSON file</string>
+    <string name="settings_import">Mga setting sa import</string>
+    <string name="settings_import_summary">Ibalik ang mga setting gikan sa backup file</string>
+    <string name="settings_import_confirm_title">Mga setting sa import?</string>
+    <string name="settings_import_confirm_message">Ang kasamtangan nga mga setting ma-overwrite sa backup.</string>
+    <string name="settings_export_done">Gi-eksport ang mga setting</string>
+    <string name="settings_export_failed">Dili ma-save ang settings file</string>
+    <string name="settings_import_done">Gi-import ang mga setting</string>
+    <string name="settings_import_failed">Dili balido nga setting file</string>
     <string name="confirm">Kumpirma</string>
     <string name="cancel">Pagkansela</string>
     <string name="more_options">Dugang pa</string>
@@ -64,8 +82,8 @@
     <string name="player_quality_auto">Awto</string>
     <string name="player_live">BUHI</string>
     <string name="player_time_bar">Posisyon sa pagdula</string>
-    <string name="lock_screen">Lock</string>
-    <string name="unlock_screen">Unlock</string>
+    <string name="lock_screen">I-lock</string>
+    <string name="unlock_screen">I-unlock</string>
     <string name="audio_track">Audio track</string>
     <string name="player_audio_default">Default</string>
     <string name="info">Impormasyon</string>
@@ -82,16 +100,16 @@
     <string name="resize_fixed_width">Naayo nga gilapdon</string>
     <string name="resize_fixed_height">Piho nga gitas-on</string>
     <string name="subtitle_style">Estilo sa subtitle</string>
-    <string name="subtitle_style_preview">Subtitle preview</string>
+    <string name="subtitle_style_preview">Pasikatan sa subtitle</string>
     <string name="subtitle_style_text_size">Gidak-on sa teksto</string>
     <string name="subtitle_style_background">Background</string>
     <string name="subtitle_background_none">Wala</string>
-    <string name="subtitle_background_semi">Translucent</string>
+    <string name="subtitle_background_semi">Medyo tin-aw</string>
     <string name="subtitle_background_opaque">Opaque</string>
     <string name="subtitle_style_color">Kolor sa teksto</string>
     <string name="subtitle_style_hex">Hex nga code sa kolor</string>
     <string name="subtitle_style_drag_hint">I-drag ang preview aron i-reposition</string>
-    <string name="subtitle_style_bold">Maisugon</string>
+    <string name="subtitle_style_bold">Bagang letra</string>
     <string name="subtitle_auto_generated">(awto)</string>
     <string name="reset">I-reset</string>
     <string name="share">Ipakigbahin</string>
@@ -104,7 +122,7 @@
     <string name="retry">Sulayi pag-usab</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Gawas</string>
-    <string name="segment_interaction">Pag-like ug pag-subscribe sa mga pahinumdom</string>
+    <string name="segment_interaction">Pahinumdom sa pag-like ug pag-subscribe</string>
     <string name="segment_preview">Paglantaw</string>
     <string name="segment_music_offtopic">Dili musika</string>
     <string name="cast">Pag-stream sa usa ka aparato</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Wala’y nakit-an nga katugbang nga mga aparato sa streaming</string>
     <string name="cast_no_devices_hint">Ikonektar ang duha ka device ngadto sa samang network.</string>
     <string name="cast_unavailable">Dili magamit ang streaming sa aparato</string>
-    <string name="cast_unavailable_hint">Ang streaming sa aparato nanginahanglan Mga Serbisyo sa Google Play.</string>
+    <string name="cast_unavailable_hint">Ikonektar ang duha ka device ngadto sa samang network.</string>
     <string name="cast_section_devices">Anaa nga mga gamit</string>
     <string name="cast_section_link">Ablihi sa bisan unsang device</string>
     <string name="cast_section_link_hint">Sa parehas nga Wi-Fi network.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kalidad sa pag-download</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ang mas taas nga kalidad naggamit ug daghang datos ug pagtipig</string>
     <string name="download_size_estimate">Mga %1$s</string>
     <string name="download_size_unknown">Wala mahibal-an ang gidak-on</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Gipili: %1$d / %2$d</string>
     <string name="download_batch_meta">Mga butang: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Walay bag-ong buluhaton</string>
-    <string name="download_snapshot_too_many">Daghan kaayo nga mga butang (max 500).Walay naputol.</string>
-    <string name="download_snapshot_too_large">Mas dako ang snapshot sa 1 MB.Walay naputol.</string>
+    <string name="download_snapshot_too_many">Daghan kaayo nga mga butang. Pagpili dili molapas sa 500.</string>
+    <string name="download_snapshot_too_large">Ang pinili nga listahan milapas sa 1 MB. Pagpili og mas gamay nga mga butang.</string>
     <string name="download_reason_live">Dili ma-download ang mga live stream</string>
     <string name="download_reason_premiere">Kini nga premiere wala pa magsugod</string>
     <string name="download_reason_no_streams">Walay ma-download nga file stream</string>
@@ -245,7 +264,7 @@
     <string name="about_check_update">Susiha ang mga stable nga update</string>
     <string name="about_releases">Ablihi ang pinakabag-o nga stable nga pagpagawas</string>
     <string name="about_clear_cache">Hawani ang cache</string>
-    <string name="about_export_logs">Export diagnostic logs</string>
+    <string name="about_export_logs">I-export ang diagnostic logs</string>
     <string name="about_cache_cleared">Natangtang ang cache</string>
     <string name="about_export_ready">Andam na ang diagnostic archive</string>
     <string name="about_development_version">Pagtukod sa kalamboan · Pinakabag-o nga kuwadra: %1$s</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Mga buffer/min: %1$d</string>
     <string name="audio_description">Deskripsyon sa audio</string>
     <string name="secondary_audio">Ikaduha nga audio</string>
+    <string name="settings_import_reload_message">Gi-update ang mga setting. I-reload ang bukas nga mga panid aron magamit ang mga pagbag-o. Ang imong playback nga posisyon ipabilin.</string>
+    <string name="settings_reload_now">I-reload ang mga panid karon</string>
+    <string name="settings_reload_later">Sa ulahi</string>
+    <string name="about_save_logs">I-save ang mga log sa diagnostic sa app</string>
+    <string name="about_save_done">App diagnostic ZIP file na-save</string>
+    <string name="about_save_cancelled">Gikansela</string>
+    <string name="about_save_failed">Dili ma-save ang mga log sa app. Pagpili og laing lokasyon sa pagtipig ug pagsulay pag-usab.</string>
+    <string name="player_live_unavailable">Dili magamit ang live stream. Sulayi pag-usab unya.</string>
 </resources>

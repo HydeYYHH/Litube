@@ -20,4 +20,6 @@ local.properties
 *.ipr
 *.patch
 
-scripts/
+scripts/*
+!scripts/locales.json
+!scripts/sync-web-translations.py

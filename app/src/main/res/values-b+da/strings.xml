@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Lyt i baggrunden</string>
     <string name="back_again_to_exit">Tryk tilbage igen for at afslutte</string>
     <string name="navigate_back">Tilbage</string>
     <string name="extension">Udvidelser</string>
@@ -8,7 +9,7 @@
     <string name="about">Om</string>
     <string name="display_dislikes">Vis antipatier</string>
     <string name="display_dislikes_summary">Sender video-id\'er til returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Skjul shorts</string>
+    <string name="hide_shorts">Skjul Shorts</string>
     <string name="interface_category">Interface</string>
     <string name="player">Afspilning</string>
     <string name="gesture">Gestik</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">I indlejret afspiller</string>
     <string name="enable_in_fullscreen">I fuldskærm</string>
     <string name="brightness">Lysstyrke</string>
-    <string name="volume">Bind</string>
+    <string name="volume">Lydstyrke</string>
     <string name="background_mini_player">Baggrund og miniafspiller</string>
     <string name="pip">Billede-i-billede</string>
     <string name="in_app_mini_player">In-app mini-afspiller</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Spring sponsorer over</string>
     <string name="skip_sponsors_selfpromo">Spring selvpromovering over</string>
+    <string name="skip_sponsors_interaction">Spring interaktionspåmindelser over</string>
+    <string name="skip_sponsors_intro">Spring introer over</string>
+    <string name="skip_sponsors_outro">Spring afslutninger over</string>
+    <string name="skip_sponsors_preview">Spring forhåndsvisninger over</string>
+    <string name="skip_sponsors_music_offtopic">Spring afsnit uden musik over</string>
+    <string name="skip_sponsors_filler">Spring uvedkommende afsnit over</string>
     <string name="skip_sponsors_highlight">Spring højdepunkter over</string>
     <string name="remember_last_position">Husk position</string>
     <string name="remember_quality">Husk videokvalitet</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Nulstil alle indstillinger</string>
     <string name="reset_extension_title">Nulstil udvidelser</string>
     <string name="reset_extension_message">Nulstille alle udvidelsesindstillinger til standard?</string>
+    <string name="settings_backup_restore">Sikkerhedskopiering og gendannelse</string>
+    <string name="settings_export">Eksporter indstillinger</string>
+    <string name="settings_export_summary">Gem aktuelle indstillinger i en JSON-fil</string>
+    <string name="settings_import">Importer indstillinger</string>
+    <string name="settings_import_summary">Gendan indstillinger fra en sikkerhedskopifil</string>
+    <string name="settings_import_confirm_title">Vil du importere indstillinger?</string>
+    <string name="settings_import_confirm_message">Aktuelle indstillinger vil blive overskrevet af sikkerhedskopien.</string>
+    <string name="settings_export_done">Indstillinger eksporteret</string>
+    <string name="settings_export_failed">Indstillingsfilen kunne ikke gemmes</string>
+    <string name="settings_import_done">Indstillinger importeret</string>
+    <string name="settings_import_failed">Ugyldig indstillingsfil</string>
     <string name="confirm">Bekræft</string>
     <string name="cancel">Annuller</string>
     <string name="more_options">Mere</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tekststørrelse</string>
     <string name="subtitle_style_background">Baggrund</string>
     <string name="subtitle_background_none">Ingen</string>
-    <string name="subtitle_background_semi">Gennemskinnelig</string>
+    <string name="subtitle_background_semi">Halvgennemsigtig</string>
     <string name="subtitle_background_opaque">Uigennemsigtig</string>
     <string name="subtitle_style_color">Tekstfarve</string>
     <string name="subtitle_style_hex">Hex farvekode</string>
@@ -104,17 +122,17 @@
     <string name="retry">Prøv igen</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Synes godt om og abonner på påmindelser</string>
+    <string name="segment_interaction">Interaktionspåmindelse</string>
     <string name="segment_preview">Forhåndsvisning</string>
     <string name="segment_music_offtopic">Ikke-musik</string>
     <string name="cast">Cast</string>
-    <string name="cast_stop">Stop casting</string>
+    <string name="cast_stop">Stop castingen</string>
     <string name="cast_failed">Streaming mislykkedes</string>
     <string name="casting_to">Streaming til %1$s</string>
     <string name="cast_no_devices_found">Ingen kompatible streamingenheder fundet</string>
     <string name="cast_no_devices_hint">Forbind begge enheder til det samme netværk.</string>
     <string name="cast_unavailable">Enhedsstreaming er ikke tilgængelig</string>
-    <string name="cast_unavailable_hint">Enhedsstreaming kræver Google Play-tjenester.</string>
+    <string name="cast_unavailable_hint">Forbind begge enheder til det samme netværk.</string>
     <string name="cast_section_devices">Tilgængelige enheder</string>
     <string name="cast_section_link">Åbn på enhver enhed</string>
     <string name="cast_section_link_hint">På det samme Wi-Fi-netværk.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Downloadkvalitet</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Højere kvalitet bruger mere data og lagerplads</string>
     <string name="download_size_estimate">Omkring %1$s</string>
     <string name="download_size_unknown">Størrelse ukendt</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Valgt: %1$d / %2$d</string>
     <string name="download_batch_meta">Varer: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ingen nye opgaver</string>
-    <string name="download_snapshot_too_many">For mange varer (maks. 500).Intet blev afkortet.</string>
-    <string name="download_snapshot_too_large">Snapshot er større end 1 MB.Intet blev afkortet.</string>
+    <string name="download_snapshot_too_many">For mange varer. Vælg ikke mere end 500.</string>
+    <string name="download_snapshot_too_large">Den valgte liste overstiger 1 MB. Vælg færre varer.</string>
     <string name="download_reason_live">Livestreams kan ikke downloades</string>
     <string name="download_reason_premiere">Denne premiere er ikke startet</string>
     <string name="download_reason_no_streams">Ingen filstreams, der kan downloades</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffere/min.: %1$d</string>
     <string name="audio_description">Lydbeskrivelse</string>
     <string name="secondary_audio">Sekundær lyd</string>
+    <string name="settings_import_reload_message">Indstillinger opdateret. Genindlæs åbne sider for at anvende ændringer. Din afspilningsposition bevares.</string>
+    <string name="settings_reload_now">Genindlæs sider nu</string>
+    <string name="settings_reload_later">Senere</string>
+    <string name="about_save_logs">Gem app-diagnoselogfiler</string>
+    <string name="about_save_done">App diagnostisk ZIP-fil gemt</string>
+    <string name="about_save_cancelled">Annulleret</string>
+    <string name="about_save_failed">Applogfilerne kunne ikke gemmes. Vælg en anden gemmeplacering, og prøv igen.</string>
+    <string name="player_live_unavailable">Livestream er ikke tilgængelig. Prøv igen senere.</string>
 </resources>

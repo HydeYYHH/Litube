@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">પૃષ્ઠભૂમિમાં સાંભળો</string>
     <string name="back_again_to_exit">બહાર નીકળવા માટે ફરી પાછા દબાવો</string>
     <string name="navigate_back">પાછળ</string>
     <string name="extension">એક્સ્ટેંશન</string>
@@ -8,7 +9,7 @@
     <string name="about">ઍપ વિશે</string>
     <string name="display_dislikes">નાપસંદ બતાવો</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com પર વિડિયો આઈડી મોકલે છે</string>
-    <string name="hide_shorts">શોર્ટ્સ છુપાવો</string>
+    <string name="hide_shorts">Shorts છુપાવો</string>
     <string name="interface_category">ઇન્ટરફેસ</string>
     <string name="player">પ્લેબેક</string>
     <string name="gesture">હાવભાવ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">એમ્બેડેડ પ્લેયરમાં</string>
     <string name="enable_in_fullscreen">પૂર્ણસ્ક્રીનમાં</string>
     <string name="brightness">તેજ</string>
-    <string name="volume">વોલ્યુમ</string>
+    <string name="volume">અવાજનું સ્તર</string>
     <string name="background_mini_player">પૃષ્ઠભૂમિ અને મીની પ્લેયર</string>
     <string name="pip">ચિત્ર-માં-ચિત્ર</string>
     <string name="in_app_mini_player">ઇન-એપ મીની-પ્લેયર</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">પ્રાયોજકોને છોડો</string>
     <string name="skip_sponsors_selfpromo">સ્વ-પ્રમોશન છોડો</string>
+    <string name="skip_sponsors_interaction">લાઈક અને સબ્સ્ક્રાઇબના રિમાઇન્ડર્સ છોડો</string>
+    <string name="skip_sponsors_intro">શરૂઆતના ભાગો છોડો</string>
+    <string name="skip_sponsors_outro">અંતના ભાગો છોડો</string>
+    <string name="skip_sponsors_preview">પૂર્વાવલોકનો છોડો</string>
+    <string name="skip_sponsors_music_offtopic">સંગીત વિનાના ભાગો છોડો</string>
+    <string name="skip_sponsors_filler">વિષયબાહ્ય ભાગો છોડો</string>
     <string name="skip_sponsors_highlight">હાઇલાઇટ્સ છોડો</string>
     <string name="remember_last_position">સ્થિતિ યાદ રાખો</string>
     <string name="remember_quality">વિડિઓ ગુણવત્તા યાદ રાખો</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">બધી સેટિંગ્સ રીસેટ કરો</string>
     <string name="reset_extension_title">એક્સ્ટેંશન રીસેટ કરો</string>
     <string name="reset_extension_message">તમામ એક્સ્ટેંશન સેટિંગ્સને ડિફોલ્ટ પર રીસેટ કરીએ?</string>
+    <string name="settings_backup_restore">બેકઅપ અને પુનઃસ્થાપિત</string>
+    <string name="settings_export">નિકાસ સેટિંગ્સ</string>
+    <string name="settings_export_summary">વર્તમાન સેટિંગ્સને JSON ફાઇલમાં સાચવો</string>
+    <string name="settings_import">આયાત સેટિંગ્સ</string>
+    <string name="settings_import_summary">બેકઅપ ફાઇલમાંથી સેટિંગ્સ પુનઃસ્થાપિત કરો</string>
+    <string name="settings_import_confirm_title">સેટિંગ્સ આયાત કરીએ?</string>
+    <string name="settings_import_confirm_message">વર્તમાન સેટિંગ્સ બેકઅપ દ્વારા ઓવરરાઇટ કરવામાં આવશે.</string>
+    <string name="settings_export_done">સેટિંગ્સ નિકાસ કરી</string>
+    <string name="settings_export_failed">સેટિંગ્સ ફાઇલ સાચવી શકાઈ નથી</string>
+    <string name="settings_import_done">સેટિંગ્સ આયાત કરી</string>
+    <string name="settings_import_failed">અમાન્ય સેટિંગ્સ ફાઇલ</string>
     <string name="confirm">પુષ્ટિ કરો</string>
     <string name="cancel">રદ કરો</string>
     <string name="more_options">વધુ</string>
@@ -91,7 +109,7 @@
     <string name="subtitle_style_color">ટેક્સ્ટનો રંગ</string>
     <string name="subtitle_style_hex">હેક્સ કલર કોડ</string>
     <string name="subtitle_style_drag_hint">પુનઃસ્થાપિત કરવા માટે પૂર્વાવલોકનને ખેંચો</string>
-    <string name="subtitle_style_bold">બોલ્ડ</string>
+    <string name="subtitle_style_bold">ઘાટું</string>
     <string name="subtitle_auto_generated">(ઓટો)</string>
     <string name="reset">રીસેટ</string>
     <string name="share">શેર કરો</string>
@@ -104,7 +122,7 @@
     <string name="retry">ફરી પ્રયાસ કરો</string>
     <string name="segment_intro">પ્રસ્તાવના</string>
     <string name="segment_outro">આઉટરો</string>
-    <string name="segment_interaction">રીમાઇન્ડર્સને લાઇક કરો અને સબ્સ્ક્રાઇબ કરો</string>
+    <string name="segment_interaction">લાઈક અને સબ્સ્ક્રાઇબનું રિમાઇન્ડર</string>
     <string name="segment_preview">પૂર્વાવલોકન</string>
     <string name="segment_music_offtopic">બિન-સંગીત</string>
     <string name="cast">ઉપકરણ પર સ્ટ્રીમ કરો</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">કોઈ સુસંગત સ્ટ્રીમિંગ ઉપકરણો મળ્યાં નથી</string>
     <string name="cast_no_devices_hint">બંને ઉપકરણોને એક જ નેટવર્ક સાથે જોડો.</string>
     <string name="cast_unavailable">ઉપકરણ સ્ટ્રીમિંગ અનુપલબ્ધ</string>
-    <string name="cast_unavailable_hint">ઉપકરણ સ્ટ્રીમિંગ માટે Google Play સેવાઓની જરૂર છે.</string>
+    <string name="cast_unavailable_hint">બંને ઉપકરણોને એક જ નેટવર્ક સાથે જોડો.</string>
     <string name="cast_section_devices">ઉપલબ્ધ ઉપકરણો</string>
     <string name="cast_section_link">કોઈપણ ઉપકરણ પર ખોલો</string>
     <string name="cast_section_link_hint">સમાન Wi-Fi નેટવર્ક પર.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">વિડિયો</string>
     <string name="download_audio">ઓડિયો</string>
     <string name="download_quality">ગુણવત્તા ડાઉનલોડ કરો</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ઉચ્ચ ગુણવત્તા વધુ ડેટા અને સ્ટોરેજ વાપરે છે</string>
     <string name="download_size_estimate">લગભગ %1$s</string>
     <string name="download_size_unknown">કદ અજ્ઞાત</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">પસંદ કરેલ: %1$d / %2$d</string>
     <string name="download_batch_meta">વસ્તુઓ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">કોઈ નવા કાર્યો નથી</string>
-    <string name="download_snapshot_too_many">ઘણી બધી વસ્તુઓ (મહત્તમ 500).કંઈ કાપ્યું ન હતું.</string>
-    <string name="download_snapshot_too_large">સ્નેપશોટ 1 MB કરતા મોટો છે.કંઈ કાપ્યું ન હતું.</string>
+    <string name="download_snapshot_too_many">ઘણી બધી વસ્તુઓ. 500 થી વધુ પસંદ ન કરો.</string>
+    <string name="download_snapshot_too_large">પસંદ કરેલ સૂચિ 1 MB થી વધુ છે. ઓછી વસ્તુઓ પસંદ કરો.</string>
     <string name="download_reason_live">લાઇવ સ્ટ્રીમ ડાઉનલોડ કરી શકાતી નથી</string>
     <string name="download_reason_premiere">આ પ્રીમિયર શરૂ થયો નથી</string>
     <string name="download_reason_no_streams">ડાઉનલોડ કરવા યોગ્ય ફાઇલ સ્ટ્રીમ્સ નથી</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">બફર્સ/મિનિટ: %1$d</string>
     <string name="audio_description">ઓડિયો વર્ણન</string>
     <string name="secondary_audio">માધ્યમિક ઑડિઓ</string>
+    <string name="settings_import_reload_message">સેટિંગ્સ અપડેટ કરી. ફેરફારો લાગુ કરવા માટે ખુલ્લા પૃષ્ઠોને ફરીથી લોડ કરો. તમારી પ્લેબેક સ્થિતિ રાખવામાં આવશે.</string>
+    <string name="settings_reload_now">હવે પૃષ્ઠો ફરીથી લોડ કરો</string>
+    <string name="settings_reload_later">બાદમાં</string>
+    <string name="about_save_logs">એપ્લિકેશન ડાયગ્નોસ્ટિક લૉગ્સ સાચવો</string>
+    <string name="about_save_done">એપ્લિકેશન ડાયગ્નોસ્ટિક ઝીપ ફાઇલ સાચવી</string>
+    <string name="about_save_cancelled">રદ</string>
+    <string name="about_save_failed">એપ્લિકેશન લૉગ્સ સાચવી શક્યાં નથી. બીજું સાચવવાનું સ્થાન પસંદ કરો અને ફરી પ્રયાસ કરો.</string>
+    <string name="player_live_unavailable">લાઇવ સ્ટ્રીમ ઉપલબ્ધ નથી. પછીથી ફરી પ્રયાસ કરો.</string>
 </resources>

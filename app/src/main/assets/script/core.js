@@ -10,6 +10,7 @@
   const RETRY_MS = [128, 256, 512, 1024, 2048];
   const POLL_MS = 1000;
   const SPA_LAG_MS = 80;
+  const SHEET_WATCH_MS = 1500;
   const ID_RE = /^[a-zA-Z0-9_-]{11}$/;
   const SHORTS_PATH_RE = /^\/shorts(?:\/|$)/;
 
@@ -76,7 +77,7 @@
       "nb": "Last ned",
       "ne": "डाउनलोड गर्नुहोस्",
       "nl": "Downloaden",
-      "or": "ଡାଉନଲୋଡ୍ କରନ୍ତୁ |",
+      "or": "ଡାଉନଲୋଡ୍ କରନ୍ତୁ",
       "pa": "ਡਾਊਨਲੋਡ ਕਰੋ",
       "pl": "Pobierz",
       "ps": "ډاونلوډ کړئ",
@@ -166,7 +167,7 @@
       "nb": "Lastet ned",
       "ne": "डाउनलोड गरियो",
       "nl": "Gedownload",
-      "or": "ଡାଉନଲୋଡ୍ ହୋଇଛି |",
+      "or": "ଡାଉନଲୋଡ୍ ହୋଇଛି",
       "pa": "ਡਾਊਨਲੋਡ ਕੀਤਾ",
       "pl": "Pobrano",
       "ps": "ډاونلوډ شوی",
@@ -256,7 +257,7 @@
       "nb": "Legg til i kø",
       "ne": "लाममा थप्नुहोस्",
       "nl": "Toevoegen aan wachtrij",
-      "or": "ଧାଡିରେ ଯୋଡନ୍ତୁ |",
+      "or": "ଧାଡିରେ ଯୋଡନ୍ତୁ",
       "pa": "ਕਤਾਰ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ",
       "pl": "Dodaj do kolejki",
       "ps": "په کتار کې شامل کړئ",
@@ -346,7 +347,7 @@
       "nb": "Åpne med",
       "ne": "सँग खोल्नुहोस्",
       "nl": "Openen met",
-      "or": "ସହିତ ଖୋଲ |",
+      "or": "ସହିତ ଖୋଲ",
       "pa": "ਨਾਲ ਖੋਲ੍ਹੋ",
       "pl": "Otwórz za pomocą",
       "ps": "سره خلاص",
@@ -436,7 +437,7 @@
       "nb": "Live chat",
       "ne": "प्रत्यक्ष कुराकानी",
       "nl": "Livechat",
-      "or": "ଲାଇଭ୍ ଚାଟ୍ |",
+      "or": "ଲାଇଭ୍ ଚାଟ୍",
       "pa": "ਲਾਈਵ ਚੈਟ",
       "pl": "Czat na żywo",
       "ps": "ژوندۍ خبرې",
@@ -526,7 +527,7 @@
       "nb": "Om",
       "ne": "एपबारे",
       "nl": "Over",
-      "or": "ଏହି ଆପ୍ ବିଷୟରେ |",
+      "or": "ଏହି ଆପ୍ ବିଷୟରେ",
       "pa": "ਇਸ ਐਪ ਬਾਰੇ",
       "pl": "O aplikacji",
       "ps": "د اپ په اړه",
@@ -616,7 +617,7 @@
       "nb": "Utvidelser",
       "ne": "विस्तारहरू",
       "nl": "Uitbreidingen",
-      "or": "ବିସ୍ତୃତକରଣ |",
+      "or": "ବିସ୍ତୃତକରଣ",
       "pa": "ਐਕਸਟੈਂਸ਼ਨਾਂ",
       "pl": "Rozszerzenia",
       "ps": "غزول",
@@ -706,7 +707,7 @@
       "nb": "Nedlastinger",
       "ne": "डाउनलोड",
       "nl": "Downloaden",
-      "or": "ଡାଉନଲୋଡ୍ |",
+      "or": "ଡାଉନଲୋଡ୍",
       "pa": "ਡਾਊਨਲੋਡ",
       "pl": "Pobieranie",
       "ps": "کښته کول",
@@ -796,7 +797,7 @@
       "nb": "Lukk live chat",
       "ne": "लाइभ च्याट बन्द गर्नुहोस्",
       "nl": "Sluit livechat",
-      "or": "ଲାଇଭ୍ ଚାଟ୍ ବନ୍ଦ କରନ୍ତୁ |",
+      "or": "ଲାଇଭ୍ ଚାଟ୍ ବନ୍ଦ କରନ୍ତୁ",
       "pa": "ਲਾਈਵ ਚੈਟ ਬੰਦ ਕਰੋ",
       "pl": "Zamknij czat na żywo",
       "ps": "ژوندۍ خبرې بندې کړئ",
@@ -886,7 +887,7 @@
       "nb": "Kvalitet",
       "ne": "गुणस्तर",
       "nl": "Kwaliteit",
-      "or": "ଗୁଣବତ୍ତା |",
+      "or": "ଗୁଣବତ୍ତା",
       "pa": "ਗੁਣ",
       "pl": "Jakość",
       "ps": "کیفیت",
@@ -976,7 +977,7 @@
       "nb": "Auto",
       "ne": "अटो",
       "nl": "Automatisch",
-      "or": "ଅଟୋ |",
+      "or": "ଅଟୋ",
       "pa": "ਆਟੋ",
       "pl": "Automat",
       "ps": "اتومات",
@@ -1156,7 +1157,7 @@
       "nb": "Lukk",
       "ne": "बन्द",
       "nl": "Sluiten",
-      "or": "ବନ୍ଦ କରନ୍ତୁ |",
+      "or": "ବନ୍ଦ କରନ୍ତୁ",
       "pa": "ਬੰਦ ਕਰੋ",
       "pl": "Zamknij",
       "ps": "تړل",
@@ -1242,11 +1243,14 @@
     return 'en';
   }
 
-  // The one glyph two features share — "add to queue" (watch-bar entry and
+  // A glyph two features share — "add to queue" (watch-bar entry and
   // the ⋮ sheet row). Deliberately the playlist-add glyph, not the native
   // queue icon: keep its stroke and viewBox aligned with adjacent controls.
   const queueIcon =
     'M120-320v-80h280v80H120Zm0-160v-80h440v80H120Zm0-160v-80h440v80H120Zm520 480v-160H480v-80h160v-160h80v160h160v80H720v160h-80Z';
+
+  const downloadIcon =
+    'M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z';
 
   function text(key) {
     const row = TEXT[key] || {};
@@ -1517,6 +1521,40 @@
     })();
   }
 
+  const sheetHooks = new Map();
+  let sheetWatch = null;
+  let sheetWatchTimer = 0;
+
+  /** Registers (or replaces) sheet hook [name]; ensure() runs as soon as a
+   *  tap adds nodes, before the sheet sizes itself on its first frame. */
+  function sheet(name, ensure) {
+    sheetHooks.set(name, ensure);
+  }
+
+  /** Closes the open sheet the way its own rows do: pops its #hash entry. */
+  function closeSheet() {
+    if (location.hash) history.back();
+  }
+
+  function watchSheets() {
+    if (!sheetHooks.size) return;
+    clearTimeout(sheetWatchTimer);
+    sheetWatchTimer = setTimeout(() => {
+      sheetWatch?.disconnect();
+      sheetWatch = null;
+    }, SHEET_WATCH_MS);
+    if (sheetWatch) return;
+    sheetWatch = new MutationObserver((records) => {
+      if (!records.some((record) => record.addedNodes.length)) return;
+      for (const [name, ensure] of sheetHooks) {
+        try { ensure(); } catch {
+          window.__litubeDiagnostic?.('script_failed', 'exception', /^[a-z_-]{1,40}$/.test(name) ? name : 'core');
+        }
+      }
+    });
+    sheetWatch.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   function start() {
     const root = document.documentElement;
     if (!root) {
@@ -1545,6 +1583,7 @@
     }
     new MutationObserver(wake).observe(root, { childList: true, subtree: true,
       attributes: true, attributeFilter: ['lang', 'dark'] });
+    for (const type of ['pointerdown', 'click']) window.addEventListener(type, watchSheets, true);
     for (const type of ['yt-navigate-finish', 'yt-page-data-updated', 'popstate']) {
       window.addEventListener(type, () => setTimeout(wake, SPA_LAG_MS));
     }
@@ -1560,7 +1599,7 @@
 
   window.Lite = {
     text, bridge, prefs, id, isId, isShorts, bar, chip, strip, icon, svg, fit, menuIcon,
-    queueIcon, module, retry, bridgeReady, wake,
+    queueIcon, downloadIcon, module, retry, bridgeReady, wake, sheet, closeSheet,
   };
   start();
 })();

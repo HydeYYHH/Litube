@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Լսեք ֆոնին</string>
     <string name="back_again_to_exit">Դուրս գալու համար կրկին սեղմեք հետ</string>
     <string name="navigate_back">Ետ</string>
     <string name="extension">Ընդլայնումներ</string>
@@ -8,7 +9,7 @@
     <string name="about">Հավելվածի մասին</string>
     <string name="display_dislikes">Ցույց տալ չհավանումները</string>
     <string name="display_dislikes_summary">Ուղարկում է տեսանյութի ID-ներ returnyoutubedislikeapi.com հասցեին</string>
-    <string name="hide_shorts">Թաքցնել շորտեր</string>
+    <string name="hide_shorts">Թաքցնել Shorts-ը</string>
     <string name="interface_category">Ինտերֆեյս</string>
     <string name="player">Նվագարկում</string>
     <string name="gesture">Ժեստեր</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Ներկառուցված նվագարկիչում</string>
     <string name="enable_in_fullscreen">Ամբողջ էկրանով</string>
     <string name="brightness">Պայծառություն</string>
-    <string name="volume">Ծավալ</string>
+    <string name="volume">Ձայնի ուժգնություն</string>
     <string name="background_mini_player">Ֆոնային և մինի նվագարկիչ</string>
     <string name="pip">Նկար նկարում</string>
     <string name="in_app_mini_player">Ներծրագրային մինի նվագարկիչ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Բաց թողեք հովանավորներին</string>
     <string name="skip_sponsors_selfpromo">Բաց թողեք ինքնագովազդը</string>
+    <string name="skip_sponsors_interaction">Բաց թողնել հավանելու և բաժանորդագրվելու հիշեցումները</string>
+    <string name="skip_sponsors_intro">Բաց թողնել ներածությունները</string>
+    <string name="skip_sponsors_outro">Բաց թողնել ավարտական մասերը</string>
+    <string name="skip_sponsors_preview">Բաց թողնել նախադիտումները</string>
+    <string name="skip_sponsors_music_offtopic">Բաց թողնել ոչ երաժշտական մասերը</string>
+    <string name="skip_sponsors_filler">Բաց թողնել թեմայից դուրս մասերը</string>
     <string name="skip_sponsors_highlight">Բաց թողեք կարևոր կետերը</string>
     <string name="remember_last_position">Հիշեք դիրքը</string>
     <string name="remember_quality">Հիշեք տեսանյութի որակը</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Վերականգնել բոլոր կարգավորումները</string>
     <string name="reset_extension_title">Վերականգնել ընդարձակումները</string>
     <string name="reset_extension_message">Վերակայե՞լ ընդլայնման բոլոր կարգավորումները լռելյայն:</string>
+    <string name="settings_backup_restore">Կրկնօրինակում և վերականգնում</string>
+    <string name="settings_export">Արտահանման կարգավորումներ</string>
+    <string name="settings_export_summary">Պահպանեք ընթացիկ կարգավորումները JSON ֆայլում</string>
+    <string name="settings_import">Ներմուծման կարգավորումներ</string>
+    <string name="settings_import_summary">Վերականգնել պարամետրերը պահուստային ֆայլից</string>
+    <string name="settings_import_confirm_title">Ներմուծե՞լ կարգավորումները:</string>
+    <string name="settings_import_confirm_message">Ընթացիկ կարգավորումները կվերագրվեն կրկնօրինակի կողմից:</string>
+    <string name="settings_export_done">Կարգավորումները արտահանվեցին</string>
+    <string name="settings_export_failed">Չհաջողվեց պահպանել կարգավորումների ֆայլը</string>
+    <string name="settings_import_done">Կարգավորումները ներմուծված են</string>
+    <string name="settings_import_failed">Անվավեր կարգավորումների ֆայլ</string>
     <string name="confirm">Հաստատեք</string>
     <string name="cancel">Չեղարկել</string>
     <string name="more_options">Ավելին</string>
@@ -86,15 +104,15 @@
     <string name="subtitle_style_text_size">Տեքստի չափը</string>
     <string name="subtitle_style_background">Նախապատմություն</string>
     <string name="subtitle_background_none">Ոչ</string>
-    <string name="subtitle_background_semi">Թափանցիկ</string>
+    <string name="subtitle_background_semi">Կիսաթափանցիկ</string>
     <string name="subtitle_background_opaque">Անթափանցիկ</string>
     <string name="subtitle_style_color">Տեքստի գույն</string>
     <string name="subtitle_style_hex">Վեցանկյուն գունային ծածկագիր</string>
     <string name="subtitle_style_drag_hint">Քաշեք նախադիտումը վերադիրքավորելու համար</string>
-    <string name="subtitle_style_bold">Համարձակ</string>
+    <string name="subtitle_style_bold">Թավ</string>
     <string name="subtitle_auto_generated">(ավտոմատ)</string>
     <string name="reset">Վերականգնել</string>
-    <string name="share">Share</string>
+    <string name="share">Համօգտագործել</string>
     <string name="share_no_link_found">Հղում չի գտնվել</string>
     <string name="close">Փակել</string>
     <string name="jump">Ցատկ</string>
@@ -104,7 +122,7 @@
     <string name="retry">Կրկին փորձեք</string>
     <string name="segment_intro">Ներածություն</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Հավանել և բաժանորդագրվել հիշեցումներին</string>
+    <string name="segment_interaction">Հավանելու և բաժանորդագրվելու հիշեցում</string>
     <string name="segment_preview">Նախադիտում</string>
     <string name="segment_music_offtopic">Ոչ երաժշտություն</string>
     <string name="cast">Հեռարձակում դեպի սարք</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Համատեղելի հոսքային սարքեր չեն գտնվել</string>
     <string name="cast_no_devices_hint">Միացրեք երկու սարքերը նույն ցանցին:</string>
     <string name="cast_unavailable">Սարքի հոսքն անհասանելի է</string>
-    <string name="cast_unavailable_hint">Սարքի հոսքի կարիքն ունի Google Play ծառայություններ:</string>
+    <string name="cast_unavailable_hint">Միացրեք երկու սարքերը նույն ցանցին:</string>
     <string name="cast_section_devices">Հասանելի սարքեր</string>
     <string name="cast_section_link">Բացեք ցանկացած սարքի վրա</string>
     <string name="cast_section_link_hint">Նույն Wi-Fi ցանցում։</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Տեսանյութ</string>
     <string name="download_audio">Աուդիո</string>
     <string name="download_quality">Ներբեռնման որակ</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ավելի բարձր որակը օգտագործում է ավելի շատ տվյալներ և պահեստավորում</string>
     <string name="download_size_estimate">Մոտ %1$s</string>
     <string name="download_size_unknown">Չափն անհայտ է</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Ընտրված՝ %1$d / %2$d</string>
     <string name="download_batch_meta">Նյութեր՝ %1$d · %2$s</string>
     <string name="download_no_new_tasks">Նոր առաջադրանքներ չկան</string>
-    <string name="download_snapshot_too_many">Չափից շատ տարրեր (առավելագույնը 500):Ոչինչ չի կտրվել:</string>
-    <string name="download_snapshot_too_large">Snapshot-ը 1 ՄԲ-ից մեծ է:Ոչինչ չի կտրվել:</string>
+    <string name="download_snapshot_too_many">Չափազանց շատ տարրեր: Ընտրեք ոչ ավելի, քան 500:</string>
+    <string name="download_snapshot_too_large">Ընտրված ցանկը գերազանցում է 1 ՄԲ-ը: Ընտրեք ավելի քիչ տարրեր:</string>
     <string name="download_reason_live">Ուղիղ հեռարձակումները հնարավոր չէ ներբեռնել</string>
     <string name="download_reason_premiere">Այս պրեմիերան չի սկսվել</string>
     <string name="download_reason_no_streams">Ներբեռնվող ֆայլերի հոսքեր չկան</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Բուֆերներ/րոպե՝ %1$d</string>
     <string name="audio_description">Աուդիո նկարագրություն</string>
     <string name="secondary_audio">Երկրորդական աուդիո</string>
+    <string name="settings_import_reload_message">Կարգավորումները թարմացվել են: Վերբեռնեք բաց էջերը՝ փոփոխությունները կիրառելու համար: Ձեր նվագարկման դիրքը կպահպանվի:</string>
+    <string name="settings_reload_now">Վերբեռնեք էջերը հիմա</string>
+    <string name="settings_reload_later">Ավելի ուշ</string>
+    <string name="about_save_logs">Պահպանեք հավելվածների ախտորոշման մատյանները</string>
+    <string name="about_save_done">Ախտորոշիչ ZIP ֆայլը պահպանված է</string>
+    <string name="about_save_cancelled">Չեղարկված</string>
+    <string name="about_save_failed">Չհաջողվեց պահպանել հավելվածների մատյանները: Choose another save location and try again.</string>
+    <string name="player_live_unavailable">Ուղիղ հեռարձակումը հասանելի չէ։ Փորձեք կրկին ավելի ուշ։</string>
 </resources>

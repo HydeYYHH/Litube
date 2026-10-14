@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Klausieties fonā</string>
     <string name="back_again_to_exit">Lai izietu, vēlreiz nospiediet atpakaļ</string>
     <string name="navigate_back">Atpakaļ</string>
     <string name="extension">Paplašinājumi</string>
@@ -8,7 +9,7 @@
     <string name="about">Par lietotni</string>
     <string name="display_dislikes">Parādīt nepatikšanas</string>
     <string name="display_dislikes_summary">Nosūta video ID uz returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Slēpt šortus</string>
+    <string name="hide_shorts">Slēpt Shorts</string>
     <string name="interface_category">Interfeiss</string>
     <string name="player">Atskaņošana</string>
     <string name="gesture">Žesti</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Iegultajā atskaņotājā</string>
     <string name="enable_in_fullscreen">Pilnekrāna režīmā</string>
     <string name="brightness">Spilgtums</string>
-    <string name="volume">Sējums</string>
+    <string name="volume">Skaļums</string>
     <string name="background_mini_player">Fons un mini atskaņotājs</string>
     <string name="pip">Attēls attēlā</string>
     <string name="in_app_mini_player">Mini atskaņotājs lietotnē</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Izlaist sponsorus</string>
     <string name="skip_sponsors_selfpromo">Izlaist pašreklāmu</string>
+    <string name="skip_sponsors_interaction">Izlaist aicinājumus iesaistīties</string>
+    <string name="skip_sponsors_intro">Izlaist ievadus</string>
+    <string name="skip_sponsors_outro">Izlaist noslēgumus</string>
+    <string name="skip_sponsors_preview">Izlaist priekšskatījumus</string>
+    <string name="skip_sponsors_music_offtopic">Izlaist daļas bez mūzikas</string>
+    <string name="skip_sponsors_filler">Izlaist ar tēmu nesaistītās daļas</string>
     <string name="skip_sponsors_highlight">Izlaist svarīgākos punktus</string>
     <string name="remember_last_position">Atcerieties pozīciju</string>
     <string name="remember_quality">Atcerieties video kvalitāti</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Atiestatīt visus iestatījumus</string>
     <string name="reset_extension_title">Atiestatīt paplašinājumus</string>
     <string name="reset_extension_message">Vai atiestatīt visus paplašinājuma iestatījumus uz noklusējuma iestatījumiem?</string>
+    <string name="settings_backup_restore">Dublēšana un atjaunošana</string>
+    <string name="settings_export">Eksportēt iestatījumus</string>
+    <string name="settings_export_summary">Saglabājiet pašreizējos iestatījumus JSON failā</string>
+    <string name="settings_import">Importēt iestatījumus</string>
+    <string name="settings_import_summary">Atjaunojiet iestatījumus no dublējuma faila</string>
+    <string name="settings_import_confirm_title">Vai importēt iestatījumus?</string>
+    <string name="settings_import_confirm_message">Pašreizējie iestatījumi tiks pārrakstīti ar dublējumu.</string>
+    <string name="settings_export_done">Iestatījumi eksportēti</string>
+    <string name="settings_export_failed">Nevarēja saglabāt iestatījumu failu</string>
+    <string name="settings_import_done">Iestatījumi importēti</string>
+    <string name="settings_import_failed">Nederīgs iestatījumu fails</string>
     <string name="confirm">Apstiprināt</string>
     <string name="cancel">Atcelt</string>
     <string name="more_options">Vairāk</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Teksta lielums</string>
     <string name="subtitle_style_background">Fons</string>
     <string name="subtitle_background_none">Nav</string>
-    <string name="subtitle_background_semi">Caurspīdīgs</string>
+    <string name="subtitle_background_semi">Daļēji caurspīdīgs</string>
     <string name="subtitle_background_opaque">Necaurspīdīgs</string>
     <string name="subtitle_style_color">Teksta krāsa</string>
     <string name="subtitle_style_hex">Hex krāsu kods</string>
     <string name="subtitle_style_drag_hint">Velciet priekšskatījumu, lai to pārvietotu</string>
-    <string name="subtitle_style_bold">Treknrakstā</string>
+    <string name="subtitle_style_bold">Treknraksts</string>
     <string name="subtitle_auto_generated">(automātiski)</string>
     <string name="reset">Atiestatīt</string>
     <string name="share">Dalīties</string>
@@ -104,7 +122,7 @@
     <string name="retry">Mēģiniet vēlreiz</string>
     <string name="segment_intro">Ievads</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Patīk un abonēšanas atgādinājumi</string>
+    <string name="segment_interaction">Aicinājums iesaistīties</string>
     <string name="segment_preview">Priekšskatījums</string>
     <string name="segment_music_offtopic">Ne-mūzika</string>
     <string name="cast">Apraidīt</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nav atrasta neviena saderīga straumēšanas ierīce</string>
     <string name="cast_no_devices_hint">Pievienojiet abas ierīces vienam tīklam.</string>
     <string name="cast_unavailable">Ierīces straumēšana nav pieejama</string>
-    <string name="cast_unavailable_hint">Straumēšanai ierīcē ir nepieciešami Google Play pakalpojumi.</string>
+    <string name="cast_unavailable_hint">Pievienojiet abas ierīces vienam tīklam.</string>
     <string name="cast_section_devices">Pieejamās ierīces</string>
     <string name="cast_section_link">Atvērts jebkurā ierīcē</string>
     <string name="cast_section_link_hint">Tajā pašā Wi-Fi tīklā.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Lejupielādes kvalitāte</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Augstāka kvalitāte izmanto vairāk datu un krātuves</string>
     <string name="download_size_estimate">Apmēram %1$s</string>
     <string name="download_size_unknown">Izmērs nav zināms</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Atlasīts: %1$d / %2$d</string>
     <string name="download_batch_meta">Preces: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Nav jaunu uzdevumu</string>
-    <string name="download_snapshot_too_many">Pārāk daudz vienumu (maks. 500).Nekas nebija saīsināts.</string>
-    <string name="download_snapshot_too_large">Momentuzņēmums ir lielāks par 1 MB.Nekas nebija saīsināts.</string>
+    <string name="download_snapshot_too_many">Pārāk daudz vienumu. Izvēlieties ne vairāk kā 500.</string>
+    <string name="download_snapshot_too_large">Atlasītais saraksts pārsniedz 1 MB. Atlasiet mazāk vienumu.</string>
     <string name="download_reason_live">Tiešraides straumes nevar lejupielādēt</string>
     <string name="download_reason_premiere">Šī pirmizrāde nav sākusies</string>
     <string name="download_reason_no_streams">Nav lejupielādējamu failu straumju</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buferi/min: %1$d</string>
     <string name="audio_description">Audio apraksts</string>
     <string name="secondary_audio">Sekundārā audio</string>
+    <string name="settings_import_reload_message">Iestatījumi atjaunināti. Atkārtoti ielādējiet atvērtās lapas, lai lietotu izmaiņas. Jūsu atskaņošanas pozīcija tiks saglabāta.</string>
+    <string name="settings_reload_now">Atkārtoti ielādējiet lapas tūlīt</string>
+    <string name="settings_reload_later">Vēlāk</string>
+    <string name="about_save_logs">Saglabājiet lietotņu diagnostikas žurnālus</string>
+    <string name="about_save_done">Lietotnes diagnostikas ZIP fails ir saglabāts</string>
+    <string name="about_save_cancelled">Atcelts</string>
+    <string name="about_save_failed">Nevarēja saglabāt lietotņu žurnālus. Izvēlieties citu saglabāšanas vietu un mēģiniet vēlreiz.</string>
+    <string name="player_live_unavailable">Tiešraide nav pieejama. Mēģiniet vēlāk.</string>
 </resources>

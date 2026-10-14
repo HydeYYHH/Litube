@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Rungokake ing latar mburi</string>
     <string name="back_again_to_exit">Pencet bali maneh kanggo metu</string>
     <string name="navigate_back">Mbalik</string>
     <string name="extension">Ekstensi</string>
@@ -8,9 +9,9 @@
     <string name="about">Babagan</string>
     <string name="display_dislikes">Tampilake ora seneng</string>
     <string name="display_dislikes_summary">Ngirim ID video menyang returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Singidaken Celana Pendek</string>
+    <string name="hide_shorts">Singidaken Shorts</string>
     <string name="interface_category">Antarmuka</string>
-    <string name="player">Puter maneh</string>
+    <string name="player">Puter</string>
     <string name="gesture">Sikep</string>
     <string name="gesture_single_tap">Tutul tunggal</string>
     <string name="gesture_double_tap">Tutul kaping pindho</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Ing pamuter ditempelake</string>
     <string name="enable_in_fullscreen">Ing layar wutuh</string>
     <string name="brightness">Padhang</string>
-    <string name="volume">Volume</string>
+    <string name="volume">Volume swara</string>
     <string name="background_mini_player">Latar mburi &amp; pamuter mini</string>
     <string name="pip">Gambar-ing-Gambar</string>
     <string name="in_app_mini_player">Mini-pamuter ing-app</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Skip sponsor</string>
     <string name="skip_sponsors_selfpromo">Skip promosi dhiri</string>
+    <string name="skip_sponsors_interaction">Liwati pangeling interaksi</string>
+    <string name="skip_sponsors_intro">Liwati pambuka</string>
+    <string name="skip_sponsors_outro">Liwati panutup</string>
+    <string name="skip_sponsors_preview">Liwati pratinjau</string>
+    <string name="skip_sponsors_music_offtopic">Liwati bagean tanpa musik</string>
+    <string name="skip_sponsors_filler">Liwati bagean ing njaba topik</string>
     <string name="skip_sponsors_highlight">Skip sorotan</string>
     <string name="remember_last_position">Eling posisi</string>
     <string name="remember_quality">Elingi kualitas video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Reset kabeh setelan</string>
     <string name="reset_extension_title">Reset ekstensi</string>
     <string name="reset_extension_message">Reset kabeh setelan ekstensi menyang gawan?</string>
+    <string name="settings_backup_restore">Gawe serep &amp; pulihake</string>
+    <string name="settings_export">Setelan ekspor</string>
+    <string name="settings_export_summary">Simpen setelan saiki menyang file JSON</string>
+    <string name="settings_import">Setelan impor</string>
+    <string name="settings_import_summary">Mulihake setelan saka file serep</string>
+    <string name="settings_import_confirm_title">Setelan impor?</string>
+    <string name="settings_import_confirm_message">Setelan saiki bakal ditindih dening serep.</string>
+    <string name="settings_export_done">Setelan diekspor</string>
+    <string name="settings_export_failed">Ora bisa nyimpen file setelan</string>
+    <string name="settings_import_done">Setelan diimpor</string>
+    <string name="settings_import_failed">File setelan ora valid</string>
     <string name="confirm">Konfirmasi</string>
     <string name="cancel">Batal</string>
     <string name="more_options">Liyane</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Ukuran teks</string>
     <string name="subtitle_style_background">Latar</string>
     <string name="subtitle_background_none">Ora ana</string>
-    <string name="subtitle_background_semi">Tembus</string>
+    <string name="subtitle_background_semi">Setengah tembus</string>
     <string name="subtitle_background_opaque">Opaque</string>
     <string name="subtitle_style_color">Werna teks</string>
     <string name="subtitle_style_hex">Kode warna hex</string>
@@ -104,7 +122,7 @@
     <string name="retry">Coba maneh</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Kasedhiya</string>
-    <string name="segment_interaction">Like lan subscribe pangeling</string>
+    <string name="segment_interaction">Pangeling interaksi</string>
     <string name="segment_preview">Pratinjau</string>
     <string name="segment_music_offtopic">Non-musik</string>
     <string name="cast">Cast</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Ora ana piranti streaming sing kompatibel</string>
     <string name="cast_no_devices_hint">Sambungake piranti loro-lorone menyang jaringan sing padha.</string>
     <string name="cast_unavailable">Streaming piranti ora kasedhiya</string>
-    <string name="cast_unavailable_hint">Streaming piranti mbutuhake Layanan Google Play.</string>
+    <string name="cast_unavailable_hint">Sambungake piranti loro-lorone menyang jaringan sing padha.</string>
     <string name="cast_section_devices">Piranti sing kasedhiya</string>
     <string name="cast_section_link">Mbukak ing piranti apa wae</string>
     <string name="cast_section_link_hint">Ing jaringan Wi-Fi sing padha.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kualitas download</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Kualitas sing luwih dhuwur nggunakake data lan panyimpenan luwih akeh</string>
     <string name="download_size_estimate">Udakara %1$s</string>
     <string name="download_size_unknown">Ukuran ora dingerteni</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Sing dipilih: %1$d / %2$d</string>
     <string name="download_batch_meta">Item: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ora ana tugas anyar</string>
-    <string name="download_snapshot_too_many">Kakehan item (maks 500).Ora ana sing dipotong.</string>
-    <string name="download_snapshot_too_large">Gambar luwih gedhe tinimbang 1 MB.Ora ana sing dipotong.</string>
+    <string name="download_snapshot_too_many">Kakehan item. Pilih ora luwih saka 500.</string>
+    <string name="download_snapshot_too_large">Dhaptar sing dipilih ngluwihi 1 MB. Pilih item sing luwih sithik.</string>
     <string name="download_reason_live">Live stream ora bisa diundhuh</string>
     <string name="download_reason_premiere">Tayangan perdana iki durung diwiwiti</string>
     <string name="download_reason_no_streams">Ora ana stream file sing bisa didownload</string>
@@ -261,7 +280,7 @@
     <string name="info_playback_speed">Kacepetan puter maneh</string>
     <string name="info_buffer_state">Puter maneh / buffering</string>
     <string name="info_first_frame">Wektu pigura pisanan</string>
-    <string name="gallery_zoom">Zoom in</string>
+    <string name="gallery_zoom">Gedhekake gambar</string>
     <string name="gallery_reset_zoom">Reset zoom</string>
     <string name="web_downloaded">Diundhuh</string>
     <string name="web_chat">Obrolan langsung</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffer / min: %1$d</string>
     <string name="audio_description">Katrangan audio</string>
     <string name="secondary_audio">Audio sekunder</string>
+    <string name="settings_import_reload_message">Setelan dianyari. Muat maneh kaca sing mbukak kanggo ngetrapake owah-owahan. Posisi puter maneh bakal disimpen.</string>
+    <string name="settings_reload_now">Muat maneh kaca saiki</string>
+    <string name="settings_reload_later">mengko</string>
+    <string name="about_save_logs">Simpen log diagnostik app</string>
+    <string name="about_save_done">File ZIP diagnostik app disimpen</string>
+    <string name="about_save_cancelled">Batal</string>
+    <string name="about_save_failed">Ora bisa nyimpen log app. Pilih lokasi nyimpen liyane lan coba maneh.</string>
+    <string name="player_live_unavailable">Siaran langsung ora kasedhiya. Coba maneh mengko.</string>
 </resources>

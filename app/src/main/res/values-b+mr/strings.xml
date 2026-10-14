@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">पार्श्वभूमीत ऐका</string>
     <string name="back_again_to_exit">बाहेर पडण्यासाठी पुन्हा दाबा</string>
     <string name="navigate_back">मागे</string>
     <string name="extension">विस्तार</string>
@@ -8,7 +9,7 @@
     <string name="about">अ‍ॅपबद्दल</string>
     <string name="display_dislikes">नापसंती दर्शवा</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com वर व्हिडिओ आयडी पाठवतो</string>
-    <string name="hide_shorts">शॉर्ट्स लपवा</string>
+    <string name="hide_shorts">Shorts लपवा</string>
     <string name="interface_category">इंटरफेस</string>
     <string name="player">प्लेबॅक</string>
     <string name="gesture">हातवारे</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">एम्बेडेड प्लेअरमध्ये</string>
     <string name="enable_in_fullscreen">फुलस्क्रीनमध्ये</string>
     <string name="brightness">चमक</string>
-    <string name="volume">खंड</string>
+    <string name="volume">आवाजाची पातळी</string>
     <string name="background_mini_player">पार्श्वभूमी आणि मिनी प्लेयर</string>
     <string name="pip">पिक्चर-इन-पिक्चर</string>
     <string name="in_app_mini_player">ॲपमधील मिनी-प्लेअर</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">प्रायोजक वगळा</string>
     <string name="skip_sponsors_selfpromo">स्व-प्रमोशन वगळा</string>
+    <string name="skip_sponsors_interaction">लाईक आणि सदस्यत्वाच्या आठवणी वगळा</string>
+    <string name="skip_sponsors_intro">सुरुवातीचे भाग वगळा</string>
+    <string name="skip_sponsors_outro">शेवटचे भाग वगळा</string>
+    <string name="skip_sponsors_preview">पूर्वावलोकने वगळा</string>
+    <string name="skip_sponsors_music_offtopic">संगीत नसलेले भाग वगळा</string>
+    <string name="skip_sponsors_filler">विषयाबाहेरील भाग वगळा</string>
     <string name="skip_sponsors_highlight">हायलाइट्स वगळा</string>
     <string name="remember_last_position">स्थिती लक्षात ठेवा</string>
     <string name="remember_quality">व्हिडिओ गुणवत्ता लक्षात ठेवा</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">सर्व सेटिंग्ज रीसेट करा</string>
     <string name="reset_extension_title">विस्तार रीसेट करा</string>
     <string name="reset_extension_message">सर्व विस्तार सेटिंग्ज डीफॉल्टवर रीसेट करायची?</string>
+    <string name="settings_backup_restore">बॅकअप आणि पुनर्संचयित करा</string>
+    <string name="settings_export">सेटिंग्ज निर्यात करा</string>
+    <string name="settings_export_summary">वर्तमान सेटिंग्ज JSON फाइलमध्ये सेव्ह करा</string>
+    <string name="settings_import">सेटिंग्ज आयात करा</string>
+    <string name="settings_import_summary">बॅकअप फाइलमधून सेटिंग्ज पुनर्संचयित करा</string>
+    <string name="settings_import_confirm_title">सेटिंग्ज आयात करायची?</string>
+    <string name="settings_import_confirm_message">वर्तमान सेटिंग्ज बॅकअपद्वारे अधिलिखित केल्या जातील.</string>
+    <string name="settings_export_done">सेटिंग्ज निर्यात केल्या</string>
+    <string name="settings_export_failed">सेटिंग्ज फाइल जतन करू शकलो नाही</string>
+    <string name="settings_import_done">सेटिंग्ज इंपोर्ट केल्या</string>
+    <string name="settings_import_failed">अवैध सेटिंग्ज फाइल</string>
     <string name="confirm">पुष्टी करा</string>
     <string name="cancel">रद्द करा</string>
     <string name="more_options">अधिक</string>
@@ -104,7 +122,7 @@
     <string name="retry">पुन्हा प्रयत्न करा</string>
     <string name="segment_intro">परिचय</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">स्मरणपत्रे लाइक करा आणि सदस्यता घ्या</string>
+    <string name="segment_interaction">लाईक आणि सदस्यत्वाची आठवण</string>
     <string name="segment_preview">पूर्वावलोकन</string>
     <string name="segment_music_offtopic">संगीत नसलेले</string>
     <string name="cast">डिव्हाइसवर प्रवाहित करा</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">कोणतीही सुसंगत प्रवाह साधने आढळली नाहीत</string>
     <string name="cast_no_devices_hint">दोन्ही उपकरणे एकाच नेटवर्कशी कनेक्ट करा.</string>
     <string name="cast_unavailable">डिव्हाइस स्ट्रीमिंग अनुपलब्ध</string>
-    <string name="cast_unavailable_hint">डिव्हाइस स्ट्रीमिंगसाठी Google Play सेवा आवश्यक आहेत.</string>
+    <string name="cast_unavailable_hint">दोन्ही उपकरणे एकाच नेटवर्कशी कनेक्ट करा.</string>
     <string name="cast_section_devices">उपलब्ध उपकरणे</string>
     <string name="cast_section_link">कोणत्याही उपकरणावर उघडा</string>
     <string name="cast_section_link_hint">त्याच वाय-फाय नेटवर्कवर.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">व्हिडिओ</string>
     <string name="download_audio">ऑडिओ</string>
     <string name="download_quality">गुणवत्ता डाउनलोड करा</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">उच्च गुणवत्ता अधिक डेटा आणि स्टोरेज वापरते</string>
     <string name="download_size_estimate">सुमारे %1$s</string>
     <string name="download_size_unknown">आकार अज्ञात</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">निवडलेले: %1$d / %2$d</string>
     <string name="download_batch_meta">आयटम: %1$d · %2$s</string>
     <string name="download_no_new_tasks">नवीन कार्ये नाहीत</string>
-    <string name="download_snapshot_too_many">बऱ्याच वस्तू (कमाल 500).काहीही कापले गेले नाही.</string>
-    <string name="download_snapshot_too_large">स्नॅपशॉट 1 MB पेक्षा मोठा आहे.काहीही कापले गेले नाही.</string>
+    <string name="download_snapshot_too_many">बरेच आयटम. 500 पेक्षा जास्त निवडा.</string>
+    <string name="download_snapshot_too_large">निवडलेली सूची 1 MB पेक्षा जास्त आहे. कमी आयटम निवडा.</string>
     <string name="download_reason_live">थेट प्रवाह डाउनलोड करता येत नाहीत</string>
     <string name="download_reason_premiere">हा प्रीमियर सुरू झालेला नाही</string>
     <string name="download_reason_no_streams">डाउनलोड करण्यायोग्य फाइल प्रवाह नाहीत</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">बफर/मि: %1$d</string>
     <string name="audio_description">ऑडिओ वर्णन</string>
     <string name="secondary_audio">दुय्यम ऑडिओ</string>
+    <string name="settings_import_reload_message">सेटिंग्ज अद्ययावत केल्या आहेत. बदल लागू करण्यासाठी उघडलेली पृष्ठे पुन्हा लोड करा. प्लेबॅकची जागा कायम राहील.</string>
+    <string name="settings_reload_now">आता पृष्ठे रीलोड करा</string>
+    <string name="settings_reload_later">नंतर</string>
+    <string name="about_save_logs">ॲप डायग्नोस्टिक लॉग सेव्ह करा</string>
+    <string name="about_save_done">ॲप डायग्नोस्टिक झिप फाइल सेव्ह केली</string>
+    <string name="about_save_cancelled">रद्द</string>
+    <string name="about_save_failed">अॅपचे लॉग जतन करता आले नाहीत. जतन करण्यासाठी दुसरे स्थान निवडा आणि पुन्हा प्रयत्न करा.</string>
+    <string name="player_live_unavailable">थेट प्रसारण उपलब्ध नाही. नंतर पुन्हा प्रयत्न करा.</string>
 </resources>

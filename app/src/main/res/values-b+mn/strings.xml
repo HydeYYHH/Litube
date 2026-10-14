@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Ар талд нь сонс</string>
     <string name="back_again_to_exit">Гарахын тулд буцааж дарна уу</string>
     <string name="navigate_back">Буцах</string>
     <string name="extension">Өргөтгөлүүд</string>
@@ -8,7 +9,7 @@
     <string name="about">Тухай</string>
     <string name="display_dislikes">Таалагдаагүйг харуулах</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com руу видео ID илгээдэг</string>
-    <string name="hide_shorts">Богино өмд нуух</string>
+    <string name="hide_shorts">Shorts нуух</string>
     <string name="interface_category">Интерфэйс</string>
     <string name="player">Тоглуулах</string>
     <string name="gesture">Дохио зангаа</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">суулгагдсан тоглуулагчид</string>
     <string name="enable_in_fullscreen">Бүтэн дэлгэцээр</string>
     <string name="brightness">Гэрэл</string>
-    <string name="volume">Эзлэхүүн</string>
+    <string name="volume">Дууны түвшин</string>
     <string name="background_mini_player">Арын дэвсгэр ба мини тоглуулагч</string>
     <string name="pip">Зураг доторх зураг</string>
     <string name="in_app_mini_player">Апп доторх мини тоглуулагч</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Ивээн тэтгэгчдийг алгасах</string>
     <string name="skip_sponsors_selfpromo">Өөрийгөө сурталчлахыг алгасах</string>
+    <string name="skip_sponsors_interaction">Таалагдах болон бүртгүүлэх сануулгыг алгасах</string>
+    <string name="skip_sponsors_intro">Эхлэл хэсгийг алгасах</string>
+    <string name="skip_sponsors_outro">Төгсгөл хэсгийг алгасах</string>
+    <string name="skip_sponsors_preview">Урьдчилсан үзүүлбэрийг алгасах</string>
+    <string name="skip_sponsors_music_offtopic">Хөгжимгүй хэсгийг алгасах</string>
+    <string name="skip_sponsors_filler">Сэдэвтэй холбоогүй хэсгийг алгасах</string>
     <string name="skip_sponsors_highlight">Онцлох зүйлсийг алгасах</string>
     <string name="remember_last_position">Байр сууриа санаарай</string>
     <string name="remember_quality">Видеоны чанарыг санаарай</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Бүх тохиргоог дахин тохируулна уу</string>
     <string name="reset_extension_title">Өргөтгөлүүдийг дахин тохируулах</string>
     <string name="reset_extension_message">Бүх өргөтгөлийн тохиргоог өгөгдмөл болгож шинэчлэх үү?</string>
+    <string name="settings_backup_restore">Нөөцлөх, сэргээх</string>
+    <string name="settings_export">Экспортын тохиргоо</string>
+    <string name="settings_export_summary">Одоогийн тохиргоог JSON файлд хадгална уу</string>
+    <string name="settings_import">Импортын тохиргоо</string>
+    <string name="settings_import_summary">Нөөц файлаас тохиргоог сэргээнэ үү</string>
+    <string name="settings_import_confirm_title">Тохиргоог импортлох уу?</string>
+    <string name="settings_import_confirm_message">Одоогийн тохиргоог нөөцлөлтөөр дарж бичнэ.</string>
+    <string name="settings_export_done">Тохиргоог экспортолсон</string>
+    <string name="settings_export_failed">Тохиргооны файлыг хадгалж чадсангүй</string>
+    <string name="settings_import_done">Тохиргоог импортолсон</string>
+    <string name="settings_import_failed">Буруу тохиргооны файл</string>
     <string name="confirm">Баталгаажуулах</string>
     <string name="cancel">Цуцлах</string>
     <string name="more_options">Илүү</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Текстийн хэмжээ</string>
     <string name="subtitle_style_background">Суурь мэдээлэл</string>
     <string name="subtitle_background_none">Байхгүй</string>
-    <string name="subtitle_background_semi">Тунгалаг</string>
-    <string name="subtitle_background_opaque">Тунгалаг</string>
+    <string name="subtitle_background_semi">Хагас тунгалаг</string>
+    <string name="subtitle_background_opaque">Тунгалаг бус</string>
     <string name="subtitle_style_color">Текстийн өнгө</string>
     <string name="subtitle_style_hex">Hex өнгөний код</string>
     <string name="subtitle_style_drag_hint">Байршлыг нь өөрчлөхийн тулд урьдчилж харах хэсгийг чирнэ үү</string>
-    <string name="subtitle_style_bold">Болд</string>
+    <string name="subtitle_style_bold">Тод</string>
     <string name="subtitle_auto_generated">(автомат)</string>
     <string name="reset">Дахин тохируулах</string>
     <string name="share">Хуваалцах</string>
@@ -104,7 +122,7 @@
     <string name="retry">Дахин оролдоно уу</string>
     <string name="segment_intro">Танилцуулга</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Сануулгад лайк дарж бүртгүүлээрэй</string>
+    <string name="segment_interaction">Таалагдах болон бүртгүүлэх сануулга</string>
     <string name="segment_preview">Урьдчилан үзэх</string>
     <string name="segment_music_offtopic">Хөгжимгүй</string>
     <string name="cast">Дамжуулах</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Тохиромжтой дамжуулах төхөөрөмж олдсонгүй</string>
     <string name="cast_no_devices_hint">Хоёр төхөөрөмжийг нэг сүлжээнд холбоно уу.</string>
     <string name="cast_unavailable">Төхөөрөмжийн дамжуулалт боломжгүй</string>
-    <string name="cast_unavailable_hint">Төхөөрөмжийн дамжуулалтад Google Play үйлчилгээ хэрэгтэй.</string>
+    <string name="cast_unavailable_hint">Хоёр төхөөрөмжийг нэг сүлжээнд холбоно уу.</string>
     <string name="cast_section_devices">Боломжтой төхөөрөмжүүд</string>
     <string name="cast_section_link">Дурын төхөөрөмж дээр нээх</string>
     <string name="cast_section_link_hint">Нэг Wi-Fi сүлжээнд.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Видео</string>
     <string name="download_audio">Аудио</string>
     <string name="download_quality">Татаж авах чанар</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Өндөр чанар нь илүү их өгөгдөл, хадгалах санг ашигладаг</string>
     <string name="download_size_estimate">%1$s орчим</string>
     <string name="download_size_unknown">Хэмжээ тодорхойгүй</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Сонгосон: %1$d / %2$d</string>
     <string name="download_batch_meta">Бараа: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Шинэ даалгавар байхгүй</string>
-    <string name="download_snapshot_too_many">Хэт олон зүйл (хамгийн ихдээ 500).Юу ч тайраагүй.</string>
-    <string name="download_snapshot_too_large">Хормын хувилбар нь 1 МБ-аас том байна.Юу ч таслаагүй.</string>
+    <string name="download_snapshot_too_many">Хэт олон зүйл. 500-аас илүүгүйг сонгоно уу.</string>
+    <string name="download_snapshot_too_large">Сонгосон жагсаалт 1 МБ-аас хэтэрсэн байна. Цөөн зүйл сонгоно уу.</string>
     <string name="download_reason_live">Шууд дамжуулалтыг татаж авах боломжгүй</string>
     <string name="download_reason_premiere">Энэ нээлт эхлээгүй байна</string>
     <string name="download_reason_no_streams">Татаж авах боломжтой файлын урсгал байхгүй</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Буфер/мин: %1$d</string>
     <string name="audio_description">Аудио тайлбар</string>
     <string name="secondary_audio">Хоёрдогч аудио</string>
+    <string name="settings_import_reload_message">Тохиргоог шинэчилсэн. Өөрчлөлтүүдийг хэрэгжүүлэхийн тулд нээлттэй хуудсыг дахин ачаална уу. Таны тоглуулах байрлал хадгалагдах болно.</string>
+    <string name="settings_reload_now">Хуудсуудыг одоо дахин ачаална уу</string>
+    <string name="settings_reload_later">Дараа нь</string>
+    <string name="about_save_logs">Програмын оношлогооны бүртгэлийг хадгалах</string>
+    <string name="about_save_done">Апп оношилгооны ZIP файл хадгалагдсан</string>
+    <string name="about_save_cancelled">Цуцлагдсан</string>
+    <string name="about_save_failed">Програмын бүртгэлийг хадгалж чадсангүй. Өөр хадгалах байршлыг сонгоод дахин оролдоно уу.</string>
+    <string name="player_live_unavailable">Шууд дамжуулалт боломжгүй байна. Дараа дахин оролдоно уу.</string>
 </resources>

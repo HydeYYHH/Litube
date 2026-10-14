@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Éist sa chúlra</string>
     <string name="back_again_to_exit">Brúigh ar ais arís chun imeacht</string>
     <string name="navigate_back">Ar ais</string>
     <string name="extension">Eisínteachtaí</string>
@@ -8,7 +9,7 @@
     <string name="about">Maidir leis</string>
     <string name="display_dislikes">Taispeáin na rudaí nach dtaitníonn leo</string>
     <string name="display_dislikes_summary">Seoltar aitheantais físeáin chuig returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Folaigh Gearrscéalta</string>
+    <string name="hide_shorts">Folaigh Shorts</string>
     <string name="interface_category">Comhéadan</string>
     <string name="player">Athsheinm</string>
     <string name="gesture">Gothaí</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">I imreoir leabaithe</string>
     <string name="enable_in_fullscreen">I lánscáileán</string>
     <string name="brightness">Gile</string>
-    <string name="volume">Imleabhar</string>
+    <string name="volume">Airde fuaime</string>
     <string name="background_mini_player">Cúlra &amp; mionimreoir</string>
     <string name="pip">Pictiúr-i-Phictiúr</string>
     <string name="in_app_mini_player">Mion-imreoir in-app</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Léim ar urraitheoirí</string>
     <string name="skip_sponsors_selfpromo">Léim féin-chur chun cinn</string>
+    <string name="skip_sponsors_interaction">Scipeáil meabhrúcháin idirghníomhaíochta</string>
+    <string name="skip_sponsors_intro">Scipeáil réamhráite</string>
+    <string name="skip_sponsors_outro">Scipeáil codanna deiridh</string>
+    <string name="skip_sponsors_preview">Scipeáil réamhamhairc</string>
+    <string name="skip_sponsors_music_offtopic">Scipeáil codanna gan cheol</string>
+    <string name="skip_sponsors_filler">Scipeáil codanna nach mbaineann leis an ábhar</string>
     <string name="skip_sponsors_highlight">Léim ar bhuaicphointí</string>
     <string name="remember_last_position">Cuimhnigh ar an suíomh</string>
     <string name="remember_quality">Cuimhnigh ar cháilíocht físeáin</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Athshocraigh gach socrú</string>
     <string name="reset_extension_title">Athshocraigh síntí</string>
     <string name="reset_extension_message">An bhfuil fonn ort gach socrú eisínteachta a athshocrú go réamhshocrú?</string>
+    <string name="settings_backup_restore">Cúltaca &amp; aischur</string>
+    <string name="settings_export">Socruithe easpórtála</string>
+    <string name="settings_export_summary">Sábháil na socruithe reatha i gcomhad JSON</string>
+    <string name="settings_import">Socruithe a allmhairiú</string>
+    <string name="settings_import_summary">Athchóirigh socruithe ó chomhad cúltaca</string>
+    <string name="settings_import_confirm_title">Iompórtáil socruithe?</string>
+    <string name="settings_import_confirm_message">Déanfaidh an cúltaca socruithe reatha a fhorscríobh.</string>
+    <string name="settings_export_done">Socruithe easpórtáilte</string>
+    <string name="settings_export_failed">Níorbh fhéidir an comhad socruithe a shábháil</string>
+    <string name="settings_import_done">Socruithe allmhairithe</string>
+    <string name="settings_import_failed">Comhad socruithe neamhbhailí</string>
     <string name="confirm">Deimhnigh</string>
     <string name="cancel">Cealaigh</string>
     <string name="more_options">Tuilleadh</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Méid an téacs</string>
     <string name="subtitle_style_background">Cúlra</string>
     <string name="subtitle_background_none">Níl aon cheann</string>
-    <string name="subtitle_background_semi">Tréshoilseach</string>
+    <string name="subtitle_background_semi">Leath-thrédhearcach</string>
     <string name="subtitle_background_opaque">Teimhneach</string>
     <string name="subtitle_style_color">Dath an téacs</string>
     <string name="subtitle_style_hex">Cód datha heicsidheachúlach</string>
@@ -104,7 +122,7 @@
     <string name="retry">Atriail</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Asro</string>
-    <string name="segment_interaction">Is maith agus liostáil meabhrúcháin</string>
+    <string name="segment_interaction">Meabhrúchán idirghníomhaíochta</string>
     <string name="segment_preview">Réamhamharc</string>
     <string name="segment_music_offtopic">Neamh-cheol</string>
     <string name="cast">Sruthaigh</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Níor aimsíodh aon ghléas sruthú comhoiriúnach</string>
     <string name="cast_no_devices_hint">Ceangail an dá ghléas leis an líonra céanna.</string>
     <string name="cast_unavailable">Níl sruthú gléis ar fáil</string>
-    <string name="cast_unavailable_hint">Teastaíonn Seirbhísí Súgartha Google le sruthú gléis.</string>
+    <string name="cast_unavailable_hint">Ceangail an dá ghléas leis an líonra céanna.</string>
     <string name="cast_section_devices">Gléasanna atá ar fáil</string>
     <string name="cast_section_link">Oscail ar ghléas ar bith</string>
     <string name="cast_section_link_hint">Ar an líonra Wi-Fi céanna.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Físeán</string>
     <string name="download_audio">Fuaim</string>
     <string name="download_quality">Cáilíocht íoslódála</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Úsáideann cáilíocht níos airde tuilleadh sonraí agus stórála</string>
     <string name="download_size_estimate">Maidir le %1$s</string>
     <string name="download_size_unknown">Ní fios méid</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Roghnaithe: %1$d / %2$d</string>
     <string name="download_batch_meta">Míreanna: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Níl aon tascanna nua ann</string>
-    <string name="download_snapshot_too_many">An iomarca míreanna (uasmhéid 500).Ní raibh aon rud teasctha.</string>
-    <string name="download_snapshot_too_large">Tá an seat níos mó ná 1 MB.Ní raibh aon rud teasctha.</string>
+    <string name="download_snapshot_too_many">An iomarca míreanna. Roghnaigh níos mó ná 500.</string>
+    <string name="download_snapshot_too_large">Sáraíonn an liosta roghnaithe 1 MB. Roghnaigh níos lú míreanna.</string>
     <string name="download_reason_live">Ní féidir sruthanna beo a íoslódáil</string>
     <string name="download_reason_premiere">Níl an chéad taibhiú tosaithe</string>
     <string name="download_reason_no_streams">Níl aon sruthanna comhaid iníoslódáilte</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Maoláin/nóiméad: %1$d</string>
     <string name="audio_description">Cur síos fuaime</string>
     <string name="secondary_audio">Fuaim thánaisteach</string>
+    <string name="settings_import_reload_message">Nuashonraíodh na socruithe. Athlódáil leathanaigh oscailte chun athruithe a chur i bhfeidhm. Coinneofar do shuíomh athsheinm.</string>
+    <string name="settings_reload_now">Athlódáil leathanaigh anois</string>
+    <string name="settings_reload_later">Níos déanaí</string>
+    <string name="about_save_logs">Sábháil logaí diagnóiseacha app</string>
+    <string name="about_save_done">Comhad ZIP diagnóiseach aipe sábháilte</string>
+    <string name="about_save_cancelled">Ar ceal</string>
+    <string name="about_save_failed">Níorbh fhéidir logaí feidhmchláir a shábháil. Roghnaigh suíomh sábháil eile agus bain triail eile as.</string>
+    <string name="player_live_unavailable">Níl an sruth beo ar fáil. Bain triail eile as níos déanaí.</string>
 </resources>

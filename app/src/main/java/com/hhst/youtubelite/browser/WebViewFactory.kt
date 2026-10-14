@@ -17,6 +17,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -95,6 +96,7 @@ object WebViewFactory {
         onAddToQueue: ((Bridge.QueueItemJson?) -> Unit)? = null,
         onShowMediaItemMenu: ((Bridge.QueueItemJson) -> Unit)? = null,
         onPlaylistPresence: ((Boolean) -> Unit)? = null,
+        onMicrophoneRequest: ((onResult: (Boolean) -> Unit) -> Unit)? = null,
         tabId: Long = 0L,
     ): BrowserHost {
         val appContext = context.applicationContext
@@ -193,7 +195,7 @@ object WebViewFactory {
                 bridge = bridge,
                 swipeRefresh = swipeRefresh,
             )
-            webChromeClient = BrowserChromeClient(callbacks)
+            webChromeClient = BrowserChromeClient(callbacks, onMicrophoneRequest)
         }
 
         swipeRefresh.addView(webView)
@@ -413,11 +415,20 @@ private class BrowserWebViewClient(
 
 private class BrowserChromeClient(
     private val callbacks: WebViewCallbacks,
+    private val onMicrophoneRequest: ((onResult: (Boolean) -> Unit) -> Unit)?,
 ) : WebChromeClient() {
 
     override fun onProgressChanged(view: WebView, newProgress: Int) {
         callbacks.onProgressChanged(newProgress)
         super.onProgressChanged(view, newProgress)
+    }
+
+    override fun onPermissionRequest(request: PermissionRequest) {
+        val audio = PermissionRequest.RESOURCE_AUDIO_CAPTURE
+        val voiceSearch = callbacks.isActiveTab() && request.resources.singleOrNull() == audio &&
+            UrlPolicy.shouldInject(request.origin.toString())
+        if (onMicrophoneRequest == null || !voiceSearch) { request.deny(); return }
+        onMicrophoneRequest { granted -> if (granted) request.grant(arrayOf(audio)) else request.deny() }
     }
 
     override fun getDefaultVideoPoster(): Bitmap = createBitmap(1, 1)

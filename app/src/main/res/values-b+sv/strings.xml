@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Lyssna i bakgrunden</string>
     <string name="back_again_to_exit">Tryck tillbaka igen för att avsluta</string>
     <string name="navigate_back">Tillbaka</string>
     <string name="extension">Tillägg</string>
@@ -8,7 +9,7 @@
     <string name="about">Om</string>
     <string name="display_dislikes">Visa ogillar</string>
     <string name="display_dislikes_summary">Skickar video-ID:n till returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Hide Shorts</string>
+    <string name="hide_shorts">Dölj Shorts</string>
     <string name="interface_category">Gränssnitt</string>
     <string name="player">Uppspelning</string>
     <string name="gesture">Gester</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Hoppa över sponsorer</string>
     <string name="skip_sponsors_selfpromo">Hoppa över självreklam</string>
+    <string name="skip_sponsors_interaction">Hoppa över interaktionspåminnelser</string>
+    <string name="skip_sponsors_intro">Hoppa över inledningar</string>
+    <string name="skip_sponsors_outro">Hoppa över avslutningar</string>
+    <string name="skip_sponsors_preview">Hoppa över förhandsvisningar</string>
+    <string name="skip_sponsors_music_offtopic">Hoppa över delar utan musik</string>
+    <string name="skip_sponsors_filler">Hoppa över delar utanför ämnet</string>
     <string name="skip_sponsors_highlight">Hoppa över höjdpunkter</string>
     <string name="remember_last_position">Kom ihåg position</string>
     <string name="remember_quality">Kom ihåg videokvaliteten</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Återställ alla inställningar</string>
     <string name="reset_extension_title">Återställ tillägg</string>
     <string name="reset_extension_message">Återställa alla tilläggsinställningar till standard?</string>
+    <string name="settings_backup_restore">Säkerhetskopiera och återställa</string>
+    <string name="settings_export">Exportera inställningar</string>
+    <string name="settings_export_summary">Spara aktuella inställningar i en JSON-fil</string>
+    <string name="settings_import">Importera inställningar</string>
+    <string name="settings_import_summary">Återställ inställningar från en säkerhetskopia</string>
+    <string name="settings_import_confirm_title">Importera inställningar?</string>
+    <string name="settings_import_confirm_message">Aktuella inställningar kommer att skrivas över av säkerhetskopian.</string>
+    <string name="settings_export_done">Inställningar exporterade</string>
+    <string name="settings_export_failed">Det gick inte att spara inställningsfilen</string>
+    <string name="settings_import_done">Inställningar importerade</string>
+    <string name="settings_import_failed">Ogiltig inställningsfil</string>
     <string name="confirm">Bekräfta</string>
     <string name="cancel">Avbryt</string>
     <string name="more_options">Mer</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Textstorlek</string>
     <string name="subtitle_style_background">Bakgrund</string>
     <string name="subtitle_background_none">Inga</string>
-    <string name="subtitle_background_semi">Genomskinlig</string>
+    <string name="subtitle_background_semi">Halvgenomskinlig</string>
     <string name="subtitle_background_opaque">Opak</string>
     <string name="subtitle_style_color">Textfärg</string>
     <string name="subtitle_style_hex">Hexfärgkod</string>
@@ -104,7 +122,7 @@
     <string name="retry">Försök igen</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Gilla och prenumerera på påminnelser</string>
+    <string name="segment_interaction">Interaktionspåminnelse</string>
     <string name="segment_preview">Förhandsgranskning</string>
     <string name="segment_music_offtopic">Icke-musik</string>
     <string name="cast">Casta</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Inga kompatibla streamingenheter hittades</string>
     <string name="cast_no_devices_hint">Anslut båda enheterna till samma nätverk.</string>
     <string name="cast_unavailable">Enhetsströmning är inte tillgänglig</string>
-    <string name="cast_unavailable_hint">Enhetsströmning kräver Google Play-tjänster.</string>
+    <string name="cast_unavailable_hint">Anslut båda enheterna till samma nätverk.</string>
     <string name="cast_section_devices">Tillgängliga enheter</string>
     <string name="cast_section_link">Öppna på valfri enhet</string>
     <string name="cast_section_link_hint">På samma Wi-Fi-nätverk.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Ljud</string>
     <string name="download_quality">Nedladdningskvalitet</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Högre kvalitet använder mer data och lagring</string>
     <string name="download_size_estimate">Cirka %1$s</string>
     <string name="download_size_unknown">Storlek okänd</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Valda: %1$d / %2$d</string>
     <string name="download_batch_meta">Artiklar: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Inga nya uppgifter</string>
-    <string name="download_snapshot_too_many">För många föremål (max 500).Ingenting var stympat.</string>
-    <string name="download_snapshot_too_large">Snapshot är större än 1 MB.Ingenting var stympat.</string>
+    <string name="download_snapshot_too_many">För många föremål. Välj inte fler än 500.</string>
+    <string name="download_snapshot_too_large">Den valda listan överstiger 1 MB. Välj färre objekt.</string>
     <string name="download_reason_live">Liveströmmar kan inte laddas ner</string>
     <string name="download_reason_premiere">Denna premiär har inte börjat</string>
     <string name="download_reason_no_streams">Inga nedladdningsbara filströmmar</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffertar/min: %1$d</string>
     <string name="audio_description">Ljudbeskrivning</string>
     <string name="secondary_audio">Sekundärt ljud</string>
+    <string name="settings_import_reload_message">Inställningar uppdaterade. Ladda om öppna sidor för att tillämpa ändringar. Din uppspelningsposition kommer att behållas.</string>
+    <string name="settings_reload_now">Ladda om sidor nu</string>
+    <string name="settings_reload_later">Senare</string>
+    <string name="about_save_logs">Spara appdiagnostikloggar</string>
+    <string name="about_save_done">Appens diagnostiska ZIP-fil har sparats</string>
+    <string name="about_save_cancelled">Avbruten</string>
+    <string name="about_save_failed">Det gick inte att spara apploggar. Välj en annan plats för att spara och försök igen.</string>
+    <string name="player_live_unavailable">Livesändningen är inte tillgänglig. Försök igen senare.</string>
 </resources>

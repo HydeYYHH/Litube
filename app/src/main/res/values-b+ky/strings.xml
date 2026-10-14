@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Фондо угуңуз</string>
     <string name="back_again_to_exit">Чыгуу үчүн кайра басыңыз</string>
     <string name="navigate_back">Артка</string>
     <string name="extension">Кеңейтүүлөр</string>
@@ -8,7 +9,7 @@
     <string name="about">Колдонмо жөнүндө</string>
     <string name="display_dislikes">Жактырбоолорду көрсөтүү</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com сайтына видео ID жөнөтөт</string>
-    <string name="hide_shorts">Шорттарды жашыруу</string>
+    <string name="hide_shorts">Shorts жашыруу</string>
     <string name="interface_category">Интерфейс</string>
     <string name="player">Ойнотуу</string>
     <string name="gesture">Жаңсоо</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">кыналган ойноткучта</string>
     <string name="enable_in_fullscreen">Толук экранда</string>
     <string name="brightness">Жарыктык</string>
-    <string name="volume">Көлөм</string>
+    <string name="volume">Үн деңгээли</string>
     <string name="background_mini_player">Фон жана мини ойноткуч</string>
     <string name="pip">Сүрөт ичиндеги сүрөт</string>
     <string name="in_app_mini_player">Колдонмодогу мини-плеер</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Демөөрчүлөрдү өткөрүп жиберүү</string>
     <string name="skip_sponsors_selfpromo">Өзүн-өзү жарнамалоону өткөрүп жиберүү</string>
+    <string name="skip_sponsors_interaction">Жактыруу жана жазылуу эскертмелерин өткөрүп жиберүү</string>
+    <string name="skip_sponsors_intro">Кириш сөздөрдү өткөрүп жиберүү</string>
+    <string name="skip_sponsors_outro">Соңку бөлүктөрдү өткөрүп жиберүү</string>
+    <string name="skip_sponsors_preview">Алдын ала көрүүлөрдү өткөрүп жиберүү</string>
+    <string name="skip_sponsors_music_offtopic">Музыкасыз бөлүктөрдү өткөрүп жиберүү</string>
+    <string name="skip_sponsors_filler">Темадан тышкары бөлүктөрдү өткөрүп жиберүү</string>
     <string name="skip_sponsors_highlight">Маанилүү учурларды өткөрүп жиберүү</string>
     <string name="remember_last_position">Позицияны эстеңиз</string>
     <string name="remember_quality">Видеонун сапатын унутпаңыз</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Бардык орнотууларды баштапкы абалга келтирүү</string>
     <string name="reset_extension_title">Кеңейтүүлөрдү баштапкы абалга келтирүү</string>
     <string name="reset_extension_message">Бардык кеңейтүү жөндөөлөрү демейкиге кайтарылсынбы?</string>
+    <string name="settings_backup_restore">Камдык көчүрмөнү сактоо жана калыбына келтирүү</string>
+    <string name="settings_export">Экспорт жөндөөлөрү</string>
+    <string name="settings_export_summary">Учурдагы жөндөөлөрдү JSON файлына сактаңыз</string>
+    <string name="settings_import">Импорт жөндөөлөрү</string>
+    <string name="settings_import_summary">Камдык файлдан орнотууларды калыбына келтирүү</string>
+    <string name="settings_import_confirm_title">Импорттоо жөндөөлөрү?</string>
+    <string name="settings_import_confirm_message">Учурдагы орнотуулар камдык көчүрмө менен кайра жазылат.</string>
+    <string name="settings_export_done">Жөндөөлөр экспорттолду</string>
+    <string name="settings_export_failed">Орнотуулар файлы сакталган жок</string>
+    <string name="settings_import_done">Орнотуулар импорттолду</string>
+    <string name="settings_import_failed">Жараксыз орнотуулар файлы</string>
     <string name="confirm">Ырастоо</string>
     <string name="cancel">Жокко чыгаруу</string>
     <string name="more_options">Дагы</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Тексттин өлчөмү</string>
     <string name="subtitle_style_background">Фон</string>
     <string name="subtitle_background_none">Жок</string>
-    <string name="subtitle_background_semi">Тунук</string>
+    <string name="subtitle_background_semi">Жарым тунук</string>
     <string name="subtitle_background_opaque">Тунук эмес</string>
     <string name="subtitle_style_color">Тексттин түсү</string>
     <string name="subtitle_style_hex">Hex түс коду</string>
     <string name="subtitle_style_drag_hint">Алдын ала көрүүнү кайра жайгаштыруу үчүн сүйрөңүз</string>
-    <string name="subtitle_style_bold">Болд</string>
+    <string name="subtitle_style_bold">Калың</string>
     <string name="subtitle_auto_generated">(авт.)</string>
     <string name="reset">Калыбына келтирүү</string>
     <string name="share">Бөлүшүү</string>
@@ -104,7 +122,7 @@
     <string name="retry">Кайталап көрүңүз</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Лайк жана жазылуу эскертүүлөрү</string>
+    <string name="segment_interaction">Жактыруу жана жазылуу эскертмеси</string>
     <string name="segment_preview">Алдын ала көрүү</string>
     <string name="segment_music_offtopic">Музыкалык эмес</string>
     <string name="cast">Трансляциялоо</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Эч бир шайкеш агымдык түзмөк табылган жок</string>
     <string name="cast_no_devices_hint">Эки түзмөктү бир тармакка туташтыруу.</string>
     <string name="cast_unavailable">Түзмөк агымы жеткиликсиз</string>
-    <string name="cast_unavailable_hint">Түзмөктүн агымы Google Play Кызматтарына муктаж.</string>
+    <string name="cast_unavailable_hint">Эки түзмөктү бир тармакка туташтыруу.</string>
     <string name="cast_section_devices">Жеткиликтүү түзмөктөр</string>
     <string name="cast_section_link">Каалаган түзмөктө ачуу</string>
     <string name="cast_section_link_hint">Ошол эле Wi-Fi тармагында.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Видео</string>
     <string name="download_audio">Аудио</string>
     <string name="download_quality">Жүктөө сапаты</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Жогорку сапат көбүрөөк маалымат жана сактагычты колдонот</string>
     <string name="download_size_estimate">%1$s жөнүндө</string>
     <string name="download_size_unknown">Өлчөмү белгисиз</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Тандалган: %1$d / %2$d</string>
     <string name="download_batch_meta">Объекттер: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Жаңы тапшырмалар жок</string>
-    <string name="download_snapshot_too_many">Өтө көп нерсе (максималдуу 500).Эч нерсе кыскартылган жок.</string>
-    <string name="download_snapshot_too_large">Сүрөттүн көлөмү 1 МБдан чоңураак.Эч нерсе кыскартылган жок.</string>
+    <string name="download_snapshot_too_many">Өтө көп нерселер. 500дөн ашык эмес тандаңыз.</string>
+    <string name="download_snapshot_too_large">Тандалган тизме 1 Мб ашат. Азыраак нерселерди тандаңыз.</string>
     <string name="download_reason_live">Түз агымдарды жүктөп алуу мүмкүн эмес</string>
     <string name="download_reason_premiere">Бул премьера баштала элек</string>
     <string name="download_reason_no_streams">Жүктөп алуучу файл агымдары жок</string>
@@ -216,7 +235,7 @@
     <string name="download_empty">Азырынча жүктөөлөр жок</string>
     <string name="download_kind_attachments">Тиркемелер</string>
     <string name="download_batch_progress">Аякталды: %1$d / %2$d</string>
-    <string name="download_batch_failed_count">Failed: %1$d</string>
+    <string name="download_batch_failed_count">Ишке ашкан жок: %1$d</string>
     <string name="download_pause_all">Баарын тындыруу</string>
     <string name="download_resume_all">Баарын улантуу</string>
     <string name="download_delete_batch">Пакетти жок кылуу</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Буферлер/мин: %1$d</string>
     <string name="audio_description">Аудио сүрөттөмө</string>
     <string name="secondary_audio">Экинчилик аудио</string>
+    <string name="settings_import_reload_message">Жөндөөлөр жаңырды. Өзгөртүүлөрдү колдонуу үчүн ачык барактарды кайра жүктөңүз. Ойнотуу позицияңыз сакталат.</string>
+    <string name="settings_reload_now">Барактарды азыр кайра жүктөңүз</string>
+    <string name="settings_reload_later">Кийинчерээк</string>
+    <string name="about_save_logs">Колдонмонун диагностикалык журналдарын сактаңыз</string>
+    <string name="about_save_done">Колдонмонун диагностикалык ZIP файлы сакталды</string>
+    <string name="about_save_cancelled">Жокко чыгарылды</string>
+    <string name="about_save_failed">Колдонмонун таржымалдары сакталган жок. Башка сактоо жерин тандап, кайра аракет кылыңыз.</string>
+    <string name="player_live_unavailable">Түз эфир жеткиликсиз. Кийинчерээк кайра аракет кылыңыз.</string>
 </resources>

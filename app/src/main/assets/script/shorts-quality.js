@@ -7,7 +7,7 @@
   const qualityIcon = 'M120-160v-640h720v640H120Zm80-80h560v-480H200v480Zm80-80v-240h80v80h80v-80h80v240h-80v-80h-80v80h-80Zm280 0v-240h120q40 0 40 40v160q0 40-40 40H560Zm80-80h40v-80h-40v80Z';
   const heights = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720,
     hd1080: 1080, hd1440: 1440, hd2160: 2160, hd2880: 2880, hd4320: 4320 };
-  let preference = null, lastPlayer = null, lastVideo = '', panel = null;
+  let preference = null, lastPlayer = null, lastVideo = '', panel = null, fromPlayerMenu = false;
   const isShorts = Lite.isShorts;
   function player() {
     for (const video of document.querySelectorAll('video')) {
@@ -104,6 +104,10 @@
         lastPlayer = host; lastVideo = location.pathname;
       }
     }
+    return ensureRows();
+  }
+  function ensureRows() {
+    if (!isShorts()) return true;
     for (const sheet of document.querySelectorAll('bottom-sheet-layout,ytm-bottom-sheet-renderer,ytm-app-bottom-sheet-layout,.menu-content[role="dialog"],ytm-menu-popup-renderer')) {
       // Some custom sheet hosts use display:contents and have no own bounds.
       const template = Array.from(sheet.querySelectorAll(rows)).find(item => {
@@ -114,6 +118,9 @@
       const container = template.parentElement;
       let item = container.querySelector(mark);
       if (!item) {
+        const nativeRows = Array.from(container.children).filter(row => !row.hasAttribute('data-injected'));
+        const controls = nativeRows.filter(row => row.querySelector('.ytListItemViewModelSelectionText,.menu-item-secondary-text'));
+        if (!fromPlayerMenu && !controls.length) continue;
         item = template.cloneNode(true); Lite.strip(item);
         item.dataset.injected = 'shorts-quality';
         item.removeAttribute('id');
@@ -124,8 +131,6 @@
         item.querySelectorAll('.ytListItemViewModelTrailing,.menu-item-secondary-text').forEach(node => node.remove());
         button.setAttribute('aria-label', Lite.text('quality'));
         Lite.menuIcon(item, qualityIcon, template);
-        const nativeRows = Array.from(container.children).filter(row => !row.hasAttribute('data-injected'));
-        const controls = nativeRows.filter(row => row.querySelector('.ytListItemViewModelSelectionText,.menu-item-secondary-text'));
         const cancel = nativeRows.find(row => row.querySelector('.menu-cancel-button'));
         container.insertBefore(item, controls.length ? controls[controls.length - 1].nextSibling : cancel || null);
       }
@@ -142,10 +147,15 @@
     if (!item || !isShorts()) return;
     event.preventDefault(); event.stopImmediatePropagation(); open(item.parentElement);
   }, true);
+  window.addEventListener('pointerdown', event => {
+    const menu = event.target?.closest?.('ytm-bottom-sheet-renderer,ytm-menu-renderer');
+    fromPlayerMenu = !!menu?.closest('ytm-reel-player-overlay-renderer');
+  }, true);
   document.addEventListener('keydown', event => {
     if (panel && event.key === 'Escape') { event.preventDefault(); close(); }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) close(); });
   window.addEventListener('tabVisibilityChanged', event => { if (!event.detail?.active) close(); });
   Lite.module('shorts-quality', ensure);
+  Lite.sheet('shorts-quality', ensureRows);
 })();

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">پس منظر میں سنیں۔</string>
     <string name="back_again_to_exit">باہر نکلنے کے لیے دوبارہ دبائیں۔</string>
     <string name="navigate_back">واپس</string>
     <string name="extension">ایکسٹینشنز</string>
@@ -8,7 +9,7 @@
     <string name="about">تعارف</string>
     <string name="display_dislikes">ناپسندیدگی دکھائیں۔</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com پر ویڈیو آئی ڈی بھیجیں۔</string>
-    <string name="hide_shorts">شارٹس چھپائیں۔</string>
+    <string name="hide_shorts">Shorts چھپائیں</string>
     <string name="interface_category">انٹرفیس</string>
     <string name="player">پلے بیک</string>
     <string name="gesture">اشارے</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ایمبیڈڈ پلیئر میں</string>
     <string name="enable_in_fullscreen">پوری اسکرین میں</string>
     <string name="brightness">چمک</string>
-    <string name="volume">جلد</string>
+    <string name="volume">آواز کی سطح</string>
     <string name="background_mini_player">پس منظر اور منی پلیئر</string>
     <string name="pip">تصویر میں تصویر</string>
     <string name="in_app_mini_player">ان ایپ منی پلیئر</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">اسپانسرز کو چھوڑیں۔</string>
     <string name="skip_sponsors_selfpromo">خود پروموشن کو چھوڑ دیں۔</string>
+    <string name="skip_sponsors_interaction">پسند اور سبسکرپشن کی یاد دہانیاں چھوڑیں</string>
+    <string name="skip_sponsors_intro">ابتدائی حصے چھوڑیں</string>
+    <string name="skip_sponsors_outro">اختتامی حصے چھوڑیں</string>
+    <string name="skip_sponsors_preview">پیش نظارے چھوڑیں</string>
+    <string name="skip_sponsors_music_offtopic">موسیقی کے بغیر حصے چھوڑیں</string>
+    <string name="skip_sponsors_filler">موضوع سے ہٹ کر حصے چھوڑیں</string>
     <string name="skip_sponsors_highlight">جھلکیاں چھوڑ دیں۔</string>
     <string name="remember_last_position">پوزیشن یاد رکھیں</string>
     <string name="remember_quality">ویڈیو کے معیار کو یاد رکھیں</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">تمام ترتیبات کو دوبارہ ترتیب دیں۔</string>
     <string name="reset_extension_title">ایکسٹینشنز کو ری سیٹ کریں۔</string>
     <string name="reset_extension_message">ایکسٹینشن کی تمام ترتیبات کو ڈیفالٹ پر ری سیٹ کریں؟</string>
+    <string name="settings_backup_restore">بیک اپ اور بحالی</string>
+    <string name="settings_export">ترتیبات برآمد کریں۔</string>
+    <string name="settings_export_summary">موجودہ ترتیبات کو JSON فائل میں محفوظ کریں۔</string>
+    <string name="settings_import">ترتیبات درآمد کریں۔</string>
+    <string name="settings_import_summary">بیک اپ فائل سے ترتیبات کو بحال کریں۔</string>
+    <string name="settings_import_confirm_title">ترتیبات درآمد کریں؟</string>
+    <string name="settings_import_confirm_message">موجودہ ترتیبات بیک اپ کے ذریعے اوور رائٹ ہو جائیں گی۔</string>
+    <string name="settings_export_done">ترتیبات برآمد کی گئیں۔</string>
+    <string name="settings_export_failed">ترتیبات کی فائل محفوظ نہیں ہو سکی</string>
+    <string name="settings_import_done">ترتیبات درآمد کی گئیں۔</string>
+    <string name="settings_import_failed">غلط ترتیبات کی فائل</string>
     <string name="confirm">تصدیق کریں۔</string>
     <string name="cancel">منسوخ کریں۔</string>
     <string name="more_options">مزید</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">متن کا سائز</string>
     <string name="subtitle_style_background">پس منظر</string>
     <string name="subtitle_background_none">کوئی نہیں۔</string>
-    <string name="subtitle_background_semi">پارباسی</string>
+    <string name="subtitle_background_semi">نیم شفاف</string>
     <string name="subtitle_background_opaque">مبہم</string>
     <string name="subtitle_style_color">متن کا رنگ</string>
     <string name="subtitle_style_hex">ہیکس کلر کوڈ</string>
     <string name="subtitle_style_drag_hint">پیش نظارہ کو دوبارہ جگہ پر گھسیٹیں۔</string>
-    <string name="subtitle_style_bold">بولڈ</string>
+    <string name="subtitle_style_bold">موٹا</string>
     <string name="subtitle_auto_generated">(آٹو)</string>
     <string name="reset">دوبارہ ترتیب دیں۔</string>
     <string name="share">شیئر کریں۔</string>
@@ -104,7 +122,7 @@
     <string name="retry">دوبارہ کوشش کریں۔</string>
     <string name="segment_intro">تعارف</string>
     <string name="segment_outro">آؤٹرو</string>
-    <string name="segment_interaction">یاد دہانیوں کو لائک اور سبسکرائب کریں۔</string>
+    <string name="segment_interaction">پسند اور سبسکرپشن کی یاد دہانی</string>
     <string name="segment_preview">پیش نظارہ</string>
     <string name="segment_music_offtopic">غیر موسیقی</string>
     <string name="cast">کسی ڈیوائس پر سٹریم کریں۔</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">کوئی مطابقت پذیر اسٹریمنگ ڈیوائسز نہیں ملے</string>
     <string name="cast_no_devices_hint">دونوں ڈیوائسز کو ایک ہی نیٹ ورک سے جوڑیں۔</string>
     <string name="cast_unavailable">ڈیوائس اسٹریمنگ دستیاب نہیں ہے۔</string>
-    <string name="cast_unavailable_hint">ڈیوائس اسٹریمنگ کے لیے گوگل پلے سروسز کی ضرورت ہے۔</string>
+    <string name="cast_unavailable_hint">دونوں ڈیوائسز کو ایک ہی نیٹ ورک سے جوڑیں۔</string>
     <string name="cast_section_devices">دستیاب آلات</string>
     <string name="cast_section_link">کسی بھی ڈیوائس پر کھولیں۔</string>
     <string name="cast_section_link_hint">اسی وائی فائی نیٹ ورک پر۔</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ویڈیو</string>
     <string name="download_audio">آڈیو</string>
     <string name="download_quality">کوالٹی ڈاؤن لوڈ کریں۔</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">اعلیٰ معیار زیادہ ڈیٹا اور اسٹوریج کا استعمال کرتا ہے۔</string>
     <string name="download_size_estimate">%1$s کے بارے میں</string>
     <string name="download_size_unknown">سائز نامعلوم</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">منتخب: %1$d / %2$d</string>
     <string name="download_batch_meta">اشیاء: %1$d · %2$s</string>
     <string name="download_no_new_tasks">کوئی نیا کام نہیں۔</string>
-    <string name="download_snapshot_too_many">بہت زیادہ اشیاء (زیادہ سے زیادہ 500)۔کچھ بھی نہیں کاٹا گیا۔</string>
-    <string name="download_snapshot_too_large">سنیپ شاٹ 1 MB سے بڑا ہے۔کچھ بھی نہیں کاٹا گیا۔</string>
+    <string name="download_snapshot_too_many">بہت زیادہ آئٹمز۔ 500 سے زیادہ نہ منتخب کریں۔</string>
+    <string name="download_snapshot_too_large">منتخب کردہ فہرست 1 MB سے زیادہ ہے۔ کم آئٹمز منتخب کریں۔</string>
     <string name="download_reason_live">لائیو سٹریمز کو ڈاؤن لوڈ نہیں کیا جا سکتا</string>
     <string name="download_reason_premiere">یہ پریمیئر شروع نہیں ہوا ہے۔</string>
     <string name="download_reason_no_streams">ڈاؤن لوڈ کے قابل فائل اسٹریمز نہیں ہیں۔</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">بفرز/منٹ: %1$d</string>
     <string name="audio_description">آڈیو کی تفصیل</string>
     <string name="secondary_audio">ثانوی آڈیو</string>
+    <string name="settings_import_reload_message">ترتیبات اپ ڈیٹ ہو گئیں۔ تبدیلیاں لاگو کرنے کے لیے کھلے ہوئے صفحات کو دوبارہ لوڈ کریں۔ آپ کی پلے بیک پوزیشن برقرار رکھی جائے گی۔</string>
+    <string name="settings_reload_now">ابھی صفحات دوبارہ لوڈ کریں۔</string>
+    <string name="settings_reload_later">بعد میں</string>
+    <string name="about_save_logs">ایپ کے تشخیصی لاگز کو محفوظ کریں۔</string>
+    <string name="about_save_done">ایپ کی تشخیصی زپ فائل محفوظ ہو گئی۔</string>
+    <string name="about_save_cancelled">منسوخ</string>
+    <string name="about_save_failed">ایپ لاگز کو محفوظ نہیں کیا جا سکا۔ ایک اور محفوظ مقام کا انتخاب کریں اور دوبارہ کوشش کریں۔</string>
+    <string name="player_live_unavailable">براہ راست نشریات دستیاب نہیں ہیں۔ بعد میں دوبارہ کوشش کریں۔</string>
 </resources>

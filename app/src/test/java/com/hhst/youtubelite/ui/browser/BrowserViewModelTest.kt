@@ -174,6 +174,21 @@ class BrowserViewModelTest {
     }
 
     @Test
+    fun onBack_onWatch_withSheetOpen_closesSheetBeforeSuspending() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        vm.openTab("https://m.youtube.com/watch?v=1")
+        val watch = vm.callbacksFor(vm.uiState.value.activeId)
+
+        watch.onHistoryChanged("https://m.youtube.com/watch?v=1#bottom-sheet")
+        assertEquals(BackResult.GoWebBack, vm.onBack(webCanGoBack = true))
+        assertNull(vm.uiState.value.suspendedWatchId)
+
+        watch.onHistoryChanged("https://m.youtube.com/watch?v=1")
+        assertEquals(BackResult.Handled, vm.onBack(webCanGoBack = true))
+        assertNotNull(vm.uiState.value.suspendedWatchId)
+    }
+
+    @Test
     fun openTab_awayFromWatch_withMini_suspendsWatch() {
         val vm = vm(miniEnabled = true, playerShowing = true)
         vm.openTab("https://m.youtube.com/watch?v=1")
@@ -334,6 +349,37 @@ class BrowserViewModelTest {
 
         assertEquals(1, closed)
         assertEquals(Constants.PAGE_HOME, activeKind(vm))
+    }
+
+    @Test
+    fun onBack_inShorts_withSheetOpen_closesSheetBeforePopping() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        vm.openTab("https://m.youtube.com/shorts/aaaaaaaaaaa")
+        val shorts = vm.callbacksFor(vm.uiState.value.activeId)
+        var closed = 0
+        vm.onShortsClosed = { closed++ }
+
+        shorts.onHistoryChanged("https://m.youtube.com/shorts/aaaaaaaaaaa#bottom-sheet")
+        assertEquals(BackResult.GoWebBack, vm.onBack(webCanGoBack = true))
+        assertEquals(0, closed)
+
+        shorts.onHistoryChanged("https://m.youtube.com/shorts/aaaaaaaaaaa")
+        assertEquals(BackResult.Handled, vm.onBack(webCanGoBack = true))
+        assertEquals(1, closed)
+        assertEquals(Constants.PAGE_HOME, activeKind(vm))
+    }
+
+    @Test
+    fun onBack_inShorts_withFragmentButNoWebHistory_closesShorts() {
+        val vm = vm()
+        vm.openTab("https://m.youtube.com/shorts/aaaaaaaaaaa")
+        val shorts = vm.callbacksFor(vm.uiState.value.activeId)
+        var closed = 0
+        vm.onShortsClosed = { closed++ }
+
+        shorts.onHistoryChanged("https://m.youtube.com/shorts/aaaaaaaaaaa#bottom-sheet")
+        assertEquals(BackResult.Handled, vm.onBack(webCanGoBack = false))
+        assertEquals(1, closed)
     }
 
     @Test

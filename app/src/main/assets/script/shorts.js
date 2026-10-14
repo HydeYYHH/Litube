@@ -3,7 +3,7 @@
   if (window.__shorts) return;
   window.__shorts = true;
   let active = true, key = '', video = null, readyAt = 0, attempts = 0;
-  let userMuted = false, reported = false, hiddenVideo = null;
+  let userMuted = false, reported = false, hiddenVideo = null, userPaused = null, touch = null;
   const isShorts = Lite.isShorts;
   const currentVideo = () => Array.from(document.querySelectorAll('video')).find(v => {
     const r = v.getBoundingClientRect();
@@ -11,6 +11,7 @@
   });
   const api = () => document.querySelector('#movie_player') || document.querySelector('#player')?.getPlayer?.();
   function stop() {
+    touch = null;
     if (video && !video.paused) hiddenVideo = video;
     document.querySelectorAll('video').forEach(v => v.pause());
     try { api()?.pauseVideo?.(); } catch (_) {}
@@ -21,6 +22,7 @@
     const next = currentVideo();
     if (id !== key || next !== video) {
       key = id; video = next; hiddenVideo = null; readyAt = 0; attempts = 0; reported = false;
+      userPaused = null; touch = null;
     }
     if (!active || document.hidden) { stop(); return true; }
     if (!video || video.readyState < 2) return true;
@@ -28,7 +30,8 @@
       hiddenVideo = null;
       try { api()?.playVideo?.(); video.play()?.catch(() => {}); } catch (_) {}
     }
-    if (userMuted) return true;
+    if (video.paused && touch?.video === video && Date.now() - touch.at < 2000) userPaused = video;
+    if (userMuted || userPaused === video) return true;
     if (!readyAt) readyAt = Date.now();
     if (!reported && attempts < 3 && (video.muted || video.paused || video.volume === 0)) {
       attempts++;
@@ -67,6 +70,12 @@
       }, 100);
     }
   }, true);
+  // A pause right after a tap is the user's; autoplay retries leave it.
+  document.addEventListener('pointerdown', () => {
+    const v = isShorts() && currentVideo();
+    touch = v && !v.paused ? { video: v, at: Date.now() } : null;
+  }, true);
+  document.addEventListener('play', e => { if (e.target === userPaused) userPaused = null; }, true);
   // core.js is injected first (see WebViewFactory), so Lite is always present here.
   window.Lite?.module('shorts', ensure);
 })();

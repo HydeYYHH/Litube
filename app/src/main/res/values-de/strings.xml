@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Im Hintergrund hören</string>
     <string name="back_again_to_exit">Zum Beenden erneut zurück drücken</string>
     <string name="navigate_back">Zurück</string>
     <string name="extension">Erweiterungen</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Sponsoring überspringen</string>
     <string name="skip_sponsors_selfpromo">Eigenwerbung überspringen</string>
+    <string name="skip_sponsors_interaction">Interaktionshinweise überspringen</string>
+    <string name="skip_sponsors_intro">Intros überspringen</string>
+    <string name="skip_sponsors_outro">Outros überspringen</string>
+    <string name="skip_sponsors_preview">Vorschauen überspringen</string>
+    <string name="skip_sponsors_music_offtopic">Abschnitte ohne Musik überspringen</string>
+    <string name="skip_sponsors_filler">Themenfremde Abschnitte überspringen</string>
     <string name="skip_sponsors_highlight">Highlights überspringen</string>
     <string name="remember_last_position">Wiedergabeposition merken</string>
     <string name="remember_quality">Videoqualität merken</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">Alle Einstellungen zurücksetzen</string>
     <string name="reset_extension_title">Erweiterungen zurücksetzen</string>
     <string name="reset_extension_message">Alle Erweiterungen auf Standardwerte zurücksetzen?</string>
+    <string name="settings_backup_restore">Sichern und wiederherstellen</string>
+    <string name="settings_export">Einstellungen exportieren</string>
+    <string name="settings_export_summary">Aktuelle Einstellungen als JSON-Datei speichern</string>
+    <string name="settings_import">Einstellungen importieren</string>
+    <string name="settings_import_summary">Einstellungen aus einer Sicherung wiederherstellen</string>
+    <string name="settings_import_confirm_title">Einstellungen importieren?</string>
+    <string name="settings_import_confirm_message">Die aktuellen Einstellungen werden durch die Sicherung ersetzt.</string>
+    <string name="settings_export_done">Einstellungen exportiert</string>
+    <string name="settings_export_failed">Einstellungsdatei konnte nicht gespeichert werden</string>
+    <string name="settings_import_done">Einstellungen importiert</string>
+    <string name="settings_import_failed">Ungültige Einstellungsdatei</string>
     <string name="confirm">Bestätigen</string>
     <string name="cancel">Abbrechen</string>
     <string name="open_with">Öffnen mit</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Keine Cast-Geräte gefunden</string>
     <string name="cast_no_devices_hint">Geräte im selben Netzwerk einrichten.</string>
     <string name="cast_unavailable">Streaming nicht verfügbar</string>
-    <string name="cast_unavailable_hint">Google Play-Dienste erforderlich.</string>
+    <string name="cast_unavailable_hint">Geräte im selben Netzwerk einrichten.</string>
     <string name="cast_section_devices">Verfügbare Geräte</string>
     <string name="cast_section_link">Auf anderem Gerät öffnen</string>
     <string name="cast_section_link_hint">Im selben WLAN.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Downloadqualität</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Höhere Qualität benötigt mehr Daten und Speicherplatz</string>
     <string name="download_size_estimate">Etwa %1$s</string>
     <string name="download_size_unknown">Größe unbekannt</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Auswahl: %1$d / %2$d</string>
     <string name="download_batch_meta">Einträge: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Keine neuen Downloads</string>
-    <string name="download_snapshot_too_many">Zu viele Einträge (max. 500). Die Liste wurde nicht gekürzt.</string>
-    <string name="download_snapshot_too_large">Liste größer als 1 MB. Sie wurde nicht gekürzt.</string>
+    <string name="download_snapshot_too_many">Zu viele Artikel. Wählen Sie nicht mehr als 500 aus.</string>
+    <string name="download_snapshot_too_large">Die ausgewählte Liste ist größer als 1 MB. Wählen Sie weniger Artikel aus.</string>
     <string name="download_reason_live">Livestreams können nicht heruntergeladen werden</string>
     <string name="download_reason_premiere">Premiere hat noch nicht begonnen</string>
     <string name="download_reason_no_streams">Keine herunterladbaren Dateien</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Pufferungen/min: %1$d</string>
     <string name="audio_description">Audiodeskription</string>
     <string name="secondary_audio">Zusätzliche Tonspur</string>
+    <string name="settings_import_reload_message">Einstellungen aktualisiert. Laden Sie offene Seiten neu, um die Änderungen anzuwenden. Die Wiedergabeposition bleibt erhalten.</string>
+    <string name="settings_reload_now">Seiten jetzt neu laden</string>
+    <string name="settings_reload_later">Später</string>
+    <string name="about_save_logs">Diagnoseprotokolle speichern</string>
+    <string name="about_save_done">Diagnose-ZIP-Datei gespeichert</string>
+    <string name="about_save_cancelled">Speichern abgebrochen</string>
+    <string name="about_save_failed">Diagnoseprotokolle konnten nicht gespeichert werden. Wählen Sie einen anderen Speicherort und versuchen Sie es erneut.</string>
+    <string name="player_live_unavailable">Livestream nicht verfügbar. Versuchen Sie es später erneut.</string>
 </resources>

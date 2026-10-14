@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Gee ntị n\'azụ</string>
     <string name="back_again_to_exit">Pịa azụ ọzọ ka ịpụ</string>
     <string name="navigate_back">Azụ</string>
     <string name="extension">Mgbatị</string>
@@ -8,7 +9,7 @@
     <string name="about">Banyere</string>
     <string name="display_dislikes">Gosi enweghị mmasị</string>
     <string name="display_dislikes_summary">Na-eziga NJ vidiyo na returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Zoo uwe mwụda</string>
+    <string name="hide_shorts">Zoo Shorts</string>
     <string name="interface_category">Njikọ</string>
     <string name="player">Ngwugharị</string>
     <string name="gesture">Mmegharị ahụ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">N\'ime ọkpụkpọ agbakwunyere</string>
     <string name="enable_in_fullscreen">Na ihuenyo zuru ezu</string>
     <string name="brightness">Ọcha</string>
-    <string name="volume">Mpịakọta</string>
+    <string name="volume">Olu ụda</string>
     <string name="background_mini_player">Background &amp; Obere ọkpụkpọ</string>
     <string name="pip">Foto dị na foto</string>
     <string name="in_app_mini_player">Obere ọkpụkpọ in-app</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Mafere ndị nkwado</string>
     <string name="skip_sponsors_selfpromo">Kwụsị ịkwalite onwe gị</string>
+    <string name="skip_sponsors_interaction">Mafee ncheta mmekọrịta</string>
+    <string name="skip_sponsors_intro">Mafee mmalite</string>
+    <string name="skip_sponsors_outro">Mafee mmechi</string>
+    <string name="skip_sponsors_preview">Mafee nlele mbụ</string>
+    <string name="skip_sponsors_music_offtopic">Mafee akụkụ na-enweghị egwu</string>
+    <string name="skip_sponsors_filler">Mafee akụkụ na-enweghị njikọ na isiokwu</string>
     <string name="skip_sponsors_highlight">Mafere isi ihe</string>
     <string name="remember_last_position">Cheta ọnọdụ</string>
     <string name="remember_quality">Cheta ogo vidiyo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Tọgharịa ntọala niile</string>
     <string name="reset_extension_title">Tọgharịa ndọtị</string>
     <string name="reset_extension_message">Tọgharia ntọala ndọtị niile ka ọ bụrụ nke ndabara?</string>
+    <string name="settings_backup_restore">Ndabere &amp; weghachite</string>
+    <string name="settings_export">Ntọala mbupu</string>
+    <string name="settings_export_summary">Chekwa ntọala ugbu a na faịlụ JSON</string>
+    <string name="settings_import">Bubata ntọala</string>
+    <string name="settings_import_summary">Weghachite ntọala site na faịlụ ndabere</string>
+    <string name="settings_import_confirm_title">Bubata ntọala?</string>
+    <string name="settings_import_confirm_message">A ga-eji nkwado ndabere degharịa ntọala dị ugbu a.</string>
+    <string name="settings_export_done">Ebupụla ntọala</string>
+    <string name="settings_export_failed">Enweghị ike ichekwa faịlụ ntọala</string>
+    <string name="settings_import_done">Ebubatara ntọala</string>
+    <string name="settings_import_failed">Faịlụ ntọala ezighi ezi</string>
     <string name="confirm">Kwenye</string>
     <string name="cancel">Kagbuo</string>
     <string name="more_options">Ndị ọzọ</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Nha ederede</string>
     <string name="subtitle_style_background">ndabere</string>
     <string name="subtitle_background_none">Ọ dịghị</string>
-    <string name="subtitle_background_semi">Na-atụgharị</string>
-    <string name="subtitle_background_opaque">Opekempe</string>
+    <string name="subtitle_background_semi">Ọkara nghọta</string>
+    <string name="subtitle_background_opaque">Anaghị ahụ ụzọ</string>
     <string name="subtitle_style_color">Agba ederede</string>
     <string name="subtitle_style_hex">Koodu agba hex</string>
     <string name="subtitle_style_drag_hint">Dọrọ nhụchalụ ka ọ bụrụ nrụgharị</string>
-    <string name="subtitle_style_bold">Obi ike</string>
+    <string name="subtitle_style_bold">Mkpụrụedemede gbara ọkpụrụkpụ</string>
     <string name="subtitle_auto_generated">(akpaaka)</string>
     <string name="reset">Tọgharia</string>
     <string name="share">Kekọrịta</string>
@@ -104,7 +122,7 @@
     <string name="retry">Gbalịa ọzọ</string>
     <string name="segment_intro">Okwu mmalite</string>
     <string name="segment_outro">Egwu</string>
-    <string name="segment_interaction">Dị ka ma denye aha ncheta</string>
+    <string name="segment_interaction">Ncheta mmekọrịta</string>
     <string name="segment_preview">Nhụchalụ</string>
     <string name="segment_music_offtopic">Na-abụghị egwu</string>
     <string name="cast">Gbanye na ngwaọrụ</string>
@@ -114,13 +132,13 @@
     <string name="cast_no_devices_found">Ọnweghị ngwaọrụ mgbasa ozi dakọtara ahụrụ</string>
     <string name="cast_no_devices_hint">Jikọọ ngwaọrụ abụọ ahụ na otu netwọkụ.</string>
     <string name="cast_unavailable">Enweghị nkwanye ngwaọrụ</string>
-    <string name="cast_unavailable_hint">Ngwa nkwanye ngwaọrụ chọrọ ọrụ Google Play.</string>
+    <string name="cast_unavailable_hint">Jikọọ ngwaọrụ abụọ ahụ na otu netwọkụ.</string>
     <string name="cast_section_devices">Ngwa ndị dị</string>
     <string name="cast_section_link">Mepee na ngwaọrụ ọ bụla</string>
     <string name="cast_section_link_hint">Na otu netwọk Wi-Fi.</string>
     <string name="cast_learn_casting">Mụta maka nkwanye ngwaọrụ</string>
     <string name="add_to_queue">Tinye n\'ahịrị</string>
-    <string name="thumbnail">Mbipụta</string>
+    <string name="thumbnail">Obere onyonyo</string>
     <string name="cast_link_connected">Njikọ mepere na ihe nchọgharị</string>
     <string name="cast_link_close">Mechie njikọ</string>
     <string name="cast_link_banner">Mgbasa ozi site na njikọ</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vidiyo</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Nbudata àgwà</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ogo dị elu na-eji data na nchekwa karịa</string>
     <string name="download_size_estimate">Ihe dịka %1$s</string>
     <string name="download_size_unknown">Amaghị nha nha</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Họrọ: %1$d / %2$d</string>
     <string name="download_batch_meta">Ihe: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ọ dịghị ọrụ ọhụrụ</string>
-    <string name="download_snapshot_too_many">Ọtụtụ ihe (max 500).Ọ dịghị ihe e gbuchiri.</string>
-    <string name="download_snapshot_too_large">Foto dị ukwuu karịa 1 MB.Ọ dịghị ihe e gbuchiri.</string>
+    <string name="download_snapshot_too_many">Ọtụtụ ihe. Họrọ ihe na-erughị 500.</string>
+    <string name="download_snapshot_too_large">Ndepụta ahọpụtara karịrị 1 MB. Họrọ ihe ole na ole.</string>
     <string name="download_reason_live">Enweghị ike ibudata iyi dị ndụ</string>
     <string name="download_reason_premiere">Ihe mmalite a ebidobeghị</string>
     <string name="download_reason_no_streams">Ọnweghị iyi faịlụ enwere ike ibudata</string>
@@ -275,5 +294,13 @@
     <string name="info_state_cast">gụgharia</string>
     <string name="info_buffer_count">Nkwụsị / nkeji: %1$d</string>
     <string name="audio_description">Nkọwa ọdịyo</string>
-    <string name="secondary_audio">Ihe onyonyo nke abụọ</string>
+    <string name="secondary_audio">Ụda ọzọ</string>
+    <string name="settings_import_reload_message">Emelitere ntọala. Bugharịa ibe oghe ka itinye mgbanwe. A ga-edobe ọnọdụ ọkpụkpọ gị.</string>
+    <string name="settings_reload_now">Bugharịa ibe ugbu a</string>
+    <string name="settings_reload_later">Emechaa</string>
+    <string name="about_save_logs">Chekwaa ndekọ nyocha ngwa ngwa</string>
+    <string name="about_save_done">echekwabara faịlụ ZIP ngwa ngwa</string>
+    <string name="about_save_cancelled">Kagbuo</string>
+    <string name="about_save_failed">Enweghị ike ịchekwa ndekọ ngwa. Họrọ ebe nchekwa ọzọ wee nwaa ọzọ.</string>
+    <string name="player_live_unavailable">Nkwanye ndụ adịghị. Gbalịa ọzọ ma emechaa.</string>
 </resources>

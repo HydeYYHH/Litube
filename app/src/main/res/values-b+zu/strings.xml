@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Lalela ngemuva</string>
     <string name="back_again_to_exit">Cindezela emuva futhi ukuze uphume</string>
     <string name="navigate_back">Emuva</string>
     <string name="extension">Izandiso</string>
@@ -8,7 +9,7 @@
     <string name="about">Mayelana</string>
     <string name="display_dislikes">Bonisa ukungathandwa</string>
     <string name="display_dislikes_summary">Ithumela omazisi bevidiyo ku-returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Fihla Okufushane</string>
+    <string name="hide_shorts">Fihla Shorts</string>
     <string name="interface_category">Isixhumi esibonakalayo</string>
     <string name="player">Ukudlala</string>
     <string name="gesture">Ukushukuma komzimba</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Kumdlali oshumekiwe</string>
     <string name="enable_in_fullscreen">Kusikrini esigcwele</string>
     <string name="brightness">Ukukhanya</string>
-    <string name="volume">Ivolumu</string>
+    <string name="volume">Izinga lomsindo</string>
     <string name="background_mini_player">Ingemuva nesidlali esincane</string>
     <string name="pip">Isithombe-Esithombeni</string>
     <string name="in_app_mini_player">Isidlali esincane esingaphakathi nohlelo</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Yeqa abaxhasi</string>
     <string name="skip_sponsors_selfpromo">Yeqa ukuzithuthukisa</string>
+    <string name="skip_sponsors_interaction">Yeqa izikhumbuzi zokuxhumana</string>
+    <string name="skip_sponsors_intro">Yeqa izingeniso</string>
+    <string name="skip_sponsors_outro">Yeqa iziphetho</string>
+    <string name="skip_sponsors_preview">Yeqa ukubuka kuqala</string>
+    <string name="skip_sponsors_music_offtopic">Yeqa izingxenye ezingenawo umculo</string>
+    <string name="skip_sponsors_filler">Yeqa izingxenye ezingahlobene nesihloko</string>
     <string name="skip_sponsors_highlight">Yeqa amaphuzu avelele</string>
     <string name="remember_last_position">Khumbula isikhundla</string>
     <string name="remember_quality">Khumbula ikhwalithi yevidiyo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Setha kabusha zonke izilungiselelo</string>
     <string name="reset_extension_title">Setha kabusha izandiso</string>
     <string name="reset_extension_message">Setha kabusha zonke izilungiselelo zesandiso zibe okumisiwe?</string>
+    <string name="settings_backup_restore">Gcina futhi ubuyisele</string>
+    <string name="settings_export">Thumela izilungiselelo</string>
+    <string name="settings_export_summary">Londoloza izilungiselelo zamanje kufayela le-JSON</string>
+    <string name="settings_import">Ngenisa izilungiselelo</string>
+    <string name="settings_import_summary">Buyisela izilungiselelo kusuka kufayela eliyisipele</string>
+    <string name="settings_import_confirm_title">Ngenisa izilungiselelo?</string>
+    <string name="settings_import_confirm_message">Izilungiselelo zamanje zizocishwa isipele.</string>
+    <string name="settings_export_done">Izilungiselelo zithunyelwe</string>
+    <string name="settings_export_failed">Ayikwazanga ukulondoloza ifayela lezilungiselelo</string>
+    <string name="settings_import_done">Izilungiselelo zingenisiwe</string>
+    <string name="settings_import_failed">Ifayela lezilungiselelo elingavumelekile</string>
     <string name="confirm">Qinisekisa</string>
     <string name="cancel">Khansela</string>
     <string name="more_options">Okwengeziwe</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Usayizi wombhalo</string>
     <string name="subtitle_style_background">Isendlalelo</string>
     <string name="subtitle_background_none">Akukho</string>
-    <string name="subtitle_background_semi">Ukukhanya</string>
-    <string name="subtitle_background_opaque">Opaque</string>
+    <string name="subtitle_background_semi">Ukubonakala kancane</string>
+    <string name="subtitle_background_opaque">Okungabonakali ngaphakathi</string>
     <string name="subtitle_style_color">Umbala wombhalo</string>
     <string name="subtitle_style_hex">Ikhodi yombala ye-Hex</string>
     <string name="subtitle_style_drag_hint">Hudula ukubuka kuqala ukuze ubeke kabusha</string>
-    <string name="subtitle_style_bold">Okugqamile</string>
+    <string name="subtitle_style_bold">Umbhalo ogqamile</string>
     <string name="subtitle_auto_generated">(okuzenzakalelayo)</string>
     <string name="reset">Setha kabusha</string>
     <string name="share">Yabelana</string>
@@ -104,7 +122,7 @@
     <string name="retry">Phinda uzame</string>
     <string name="segment_intro">Isingeniso</string>
     <string name="segment_outro">I-Outro</string>
-    <string name="segment_interaction">Thanda futhi ubhalise izikhumbuzi</string>
+    <string name="segment_interaction">Isikhumbuzi sokuxhumana</string>
     <string name="segment_preview">Buka kuqala</string>
     <string name="segment_music_offtopic">Okungewona umculo</string>
     <string name="cast">Sakaza kudivayisi</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Awekho amadivayisi okusakaza ahambisanayo atholiwe</string>
     <string name="cast_no_devices_hint">Xhuma womabili amadivayisi kunethiwekhi efanayo.</string>
     <string name="cast_unavailable">Ukusakaza kwedivayisi akutholakali</string>
-    <string name="cast_unavailable_hint">Ukusakaza-bukhoma kwedivayisi kudinga Amasevisi e-Google Play.</string>
+    <string name="cast_unavailable_hint">Xhuma womabili amadivayisi kunethiwekhi efanayo.</string>
     <string name="cast_section_devices">Amadivayisi atholakalayo</string>
     <string name="cast_section_link">Vula kunoma iyiphi idivayisi</string>
     <string name="cast_section_link_hint">Kunethiwekhi efanayo ye-Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Ividiyo</string>
     <string name="download_audio">Umsindo</string>
     <string name="download_quality">Landa ikhwalithi</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ikhwalithi ephezulu isebenzisa idatha eyengeziwe kanye nesitoreji</string>
     <string name="download_size_estimate">Cishe ku-%1$s</string>
     <string name="download_size_unknown">Usayizi awaziwa</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Okukhethiwe: %1$d / %2$d</string>
     <string name="download_batch_meta">Izinto: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ayikho imisebenzi emisha</string>
-    <string name="download_snapshot_too_many">Izinto eziningi kakhulu (ubukhulu obungu-500).Akukho lutho oluncishisiwe.</string>
-    <string name="download_snapshot_too_large">Isifinyezo sikhulu kuno-1 MB.Akukho lutho oluncishisiwe.</string>
+    <string name="download_snapshot_too_many">Izinto eziningi kakhulu. Khetha okungaphezu kuka-500.</string>
+    <string name="download_snapshot_too_large">Uhlu olukhethiwe ludlula u-1 MB. Khetha izinto ezimbalwa.</string>
     <string name="download_reason_live">Ukusakaza bukhoma akukwazi ukulandwa</string>
     <string name="download_reason_premiere">Lo mdlalo wokuqala awukaqali</string>
     <string name="download_reason_no_streams">Akukho ukusakazwa kwamafayela alandekayo</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Amabhafa/min: %1$d</string>
     <string name="audio_description">Incazelo yomsindo</string>
     <string name="secondary_audio">Umsindo wesibili</string>
+    <string name="settings_import_reload_message">Izilungiselelo zibuyekeziwe. Layisha kabusha amakhasi avuliwe ukuze usebenzise izinguquko. Indawo yakho yokudlala izogcinwa.</string>
+    <string name="settings_reload_now">Layisha kabusha amakhasi manje</string>
+    <string name="settings_reload_later">Kamuva</string>
+    <string name="about_save_logs">Londoloza amalogi okuxilonga wohlelo lokusebenza</string>
+    <string name="about_save_done">Ifayela le-ZIP lokuxilonga lilondoloziwe</string>
+    <string name="about_save_cancelled">Kukhanseliwe</string>
+    <string name="about_save_failed">Ayikwazanga ukulondoloza amalogi ohlelo lokusebenza. Khetha enye indawo yokulondoloza bese uzama futhi.</string>
+    <string name="player_live_unavailable">Ukusakaza bukhoma akutholakali. Zama futhi ngokuhamba kwesikhathi.</string>
 </resources>

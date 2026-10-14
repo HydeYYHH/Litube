@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Dengar di latar belakang</string>
     <string name="back_again_to_exit">Tekan kembali sekali lagi untuk keluar</string>
     <string name="navigate_back">Belakang</string>
     <string name="extension">Sambungan</string>
@@ -8,7 +9,7 @@
     <string name="about">Perihal</string>
     <string name="display_dislikes">Tunjukkan tidak suka</string>
     <string name="display_dislikes_summary">Menghantar ID video ke returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Sembunyikan Seluar Pendek</string>
+    <string name="hide_shorts">Sembunyikan Shorts</string>
     <string name="interface_category">Antara muka</string>
     <string name="player">Main semula</string>
     <string name="gesture">Gerak isyarat</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Dalam pemain terbenam</string>
     <string name="enable_in_fullscreen">Dalam skrin penuh</string>
     <string name="brightness">Kecerahan</string>
-    <string name="volume">Jilid</string>
+    <string name="volume">Kelantangan</string>
     <string name="background_mini_player">Latar belakang &amp; pemain mini</string>
     <string name="pip">Gambar dalam Gambar</string>
     <string name="in_app_mini_player">Pemain mini dalam apl</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Langkau penaja</string>
     <string name="skip_sponsors_selfpromo">Langkau promosi diri</string>
+    <string name="skip_sponsors_interaction">Langkau peringatan interaksi</string>
+    <string name="skip_sponsors_intro">Langkau pembukaan</string>
+    <string name="skip_sponsors_outro">Langkau penutup</string>
+    <string name="skip_sponsors_preview">Langkau pratonton</string>
+    <string name="skip_sponsors_music_offtopic">Langkau bahagian tanpa muzik</string>
+    <string name="skip_sponsors_filler">Langkau bahagian di luar topik</string>
     <string name="skip_sponsors_highlight">Langkau sorotan</string>
     <string name="remember_last_position">Ingat kedudukan</string>
     <string name="remember_quality">Ingat kualiti video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Tetapkan semula semua tetapan</string>
     <string name="reset_extension_title">Tetapkan semula sambungan</string>
     <string name="reset_extension_message">Tetapkan semula semua tetapan sambungan kepada lalai?</string>
+    <string name="settings_backup_restore">Sandaran &amp; pulihkan</string>
+    <string name="settings_export">Tetapan eksport</string>
+    <string name="settings_export_summary">Simpan tetapan semasa ke fail JSON</string>
+    <string name="settings_import">Tetapan import</string>
+    <string name="settings_import_summary">Pulihkan tetapan daripada fail sandaran</string>
+    <string name="settings_import_confirm_title">Tetapan import?</string>
+    <string name="settings_import_confirm_message">Tetapan semasa akan ditimpa oleh sandaran.</string>
+    <string name="settings_export_done">Tetapan dieksport</string>
+    <string name="settings_export_failed">Tidak dapat menyimpan fail tetapan</string>
+    <string name="settings_import_done">Tetapan diimport</string>
+    <string name="settings_import_failed">Fail tetapan tidak sah</string>
     <string name="confirm">Sahkan</string>
     <string name="cancel">Batal</string>
     <string name="more_options">Lagi</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Saiz teks</string>
     <string name="subtitle_style_background">Latar belakang</string>
     <string name="subtitle_background_none">Tiada</string>
-    <string name="subtitle_background_semi">Lutsinar</string>
+    <string name="subtitle_background_semi">Separa lut sinar</string>
     <string name="subtitle_background_opaque">Legap</string>
     <string name="subtitle_style_color">Warna teks</string>
     <string name="subtitle_style_hex">Kod warna heks</string>
     <string name="subtitle_style_drag_hint">Seret pratonton untuk meletakkan semula</string>
-    <string name="subtitle_style_bold">Berani</string>
+    <string name="subtitle_style_bold">Tebal</string>
     <string name="subtitle_auto_generated">(auto)</string>
     <string name="reset">Tetapkan semula</string>
     <string name="share">Kongsi</string>
@@ -104,7 +122,7 @@
     <string name="retry">Cuba semula</string>
     <string name="segment_intro">Pengenalan</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Suka dan langgan peringatan</string>
+    <string name="segment_interaction">Peringatan interaksi</string>
     <string name="segment_preview">Pratonton</string>
     <string name="segment_music_offtopic">Bukan muzik</string>
     <string name="cast">Hantar ke peranti</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Tiada peranti penstriman yang serasi ditemui</string>
     <string name="cast_no_devices_hint">Sambungkan kedua-dua peranti ke rangkaian yang sama.</string>
     <string name="cast_unavailable">Penstriman peranti tidak tersedia</string>
-    <string name="cast_unavailable_hint">Penstriman peranti memerlukan Perkhidmatan Google Play.</string>
+    <string name="cast_unavailable_hint">Sambungkan kedua-dua peranti ke rangkaian yang sama.</string>
     <string name="cast_section_devices">Peranti yang tersedia</string>
     <string name="cast_section_link">Buka pada mana-mana peranti</string>
     <string name="cast_section_link_hint">Pada rangkaian Wi-Fi yang sama.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kualiti muat turun</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Kualiti yang lebih tinggi menggunakan lebih banyak data dan storan</string>
     <string name="download_size_estimate">Kira-kira %1$s</string>
     <string name="download_size_unknown">Saiz tidak diketahui</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Dipilih: %1$d / %2$d</string>
     <string name="download_batch_meta">Item: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Tiada tugasan baharu</string>
-    <string name="download_snapshot_too_many">Terlalu banyak item (maks 500).Tiada apa-apa yang dipotong.</string>
-    <string name="download_snapshot_too_large">Syot kilat lebih besar daripada 1 MB.Tiada apa-apa yang dipotong.</string>
+    <string name="download_snapshot_too_many">Terlalu banyak item. Pilih tidak lebih daripada 500.</string>
+    <string name="download_snapshot_too_large">Senarai yang dipilih melebihi 1 MB. Pilih lebih sedikit item.</string>
     <string name="download_reason_live">Strim langsung tidak boleh dimuat turun</string>
     <string name="download_reason_premiere">Tayangan perdana ini belum bermula</string>
     <string name="download_reason_no_streams">Tiada aliran fail yang boleh dimuat turun</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Penampan/min: %1$d</string>
     <string name="audio_description">Perihalan audio</string>
     <string name="secondary_audio">Audio sekunder</string>
+    <string name="settings_import_reload_message">Tetapan dikemas kini. Muat semula halaman yang terbuka untuk menggunakan perubahan. Kedudukan main balik anda akan dikekalkan.</string>
+    <string name="settings_reload_now">Muat semula halaman sekarang</string>
+    <string name="settings_reload_later">Nanti</string>
+    <string name="about_save_logs">Simpan log diagnostik apl</string>
+    <string name="about_save_done">Fail ZIP diagnostik apl disimpan</string>
+    <string name="about_save_cancelled">Dibatalkan</string>
+    <string name="about_save_failed">Tidak dapat menyimpan log apl. Pilih lokasi simpan lain dan cuba lagi.</string>
+    <string name="player_live_unavailable">Strim langsung tidak tersedia. Cuba lagi nanti.</string>
 </resources>

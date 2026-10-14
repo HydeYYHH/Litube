@@ -62,3 +62,17 @@ test('cross-tab settings closes hash-driven source menus before the tab is opene
   context.history.pushState({}, '', '/select_site');
   assert.equal(events.length, 1);
 });
+
+test('sheets, dialogs and search close on their own hash entry, not the native tab stack', () => {
+  const calls = [], location = { href: 'https://m.youtube.com/shorts/abcdefghijk#bottom-sheet', hash: '#bottom-sheet' };
+  const history = { pushState() {}, replaceState() {},
+    back() { calls.push('web-back'); }, go(delta) { calls.push(['web-go', delta]); } };
+  const context = { URL, location, history, document: { addEventListener() {} },
+    Bridge: { goBack() { calls.push('tab-back'); } } };
+  context.window = context;
+  vm.runInNewContext(fs.readFileSync('app/src/main/assets/script/nav.js', 'utf8'), context);
+  history.back(); history.go(-1);
+  Object.assign(location, { href: 'https://m.youtube.com/shorts/abcdefghijk', hash: '' });
+  history.back();
+  assert.deepEqual(calls, ['web-back', ['web-go', -1], 'tab-back']);
+});

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">পটভূমিত শুনক</string>
     <string name="back_again_to_exit">প্ৰস্থান কৰিবলৈ আকৌ পিছলৈ টিপক</string>
     <string name="navigate_back">পিছলৈ</string>
     <string name="extension">সম্প্ৰসাৰণ</string>
@@ -8,7 +9,7 @@
     <string name="about">এই এপটোৰ বিষয়ে</string>
     <string name="display_dislikes">অপছন্দ দেখুৱাওক</string>
     <string name="display_dislikes_summary">ভিডিঅ\' আইডিসমূহ returnyoutubedislikeapi.com লৈ প্ৰেৰণ কৰে</string>
-    <string name="hide_shorts">চুটি চুটি লুকুৱাওক</string>
+    <string name="hide_shorts">Shorts লুকুৱাওক</string>
     <string name="interface_category">আন্তঃপৃষ্ঠ</string>
     <string name="player">প্লেবেক</string>
     <string name="gesture">ইংগিত</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">এম্বেডেড প্লেয়াৰত</string>
     <string name="enable_in_fullscreen">সম্পূৰ্ণ পৰ্দাত</string>
     <string name="brightness">উজ্জ্বলতা</string>
-    <string name="volume">ভলিউম</string>
+    <string name="volume">শব্দৰ মাত্ৰা</string>
     <string name="background_mini_player">পটভূমি আৰু মিনি প্লেয়াৰ</string>
     <string name="pip">ছবি-চিত্ৰত</string>
     <string name="in_app_mini_player">ইন-এপ মিনি-প্লেয়াৰ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">পৃষ্ঠপোষক এৰি দিয়ক</string>
     <string name="skip_sponsors_selfpromo">আত্ম-প্ৰচাৰ এৰি দিয়ক</string>
+    <string name="skip_sponsors_interaction">লাইক আৰু চাবস্ক্ৰাইবৰ সোঁৱৰণী এৰি দিয়ক</string>
+    <string name="skip_sponsors_intro">আৰম্ভণিৰ অংশ এৰি দিয়ক</string>
+    <string name="skip_sponsors_outro">শেষৰ অংশ এৰি দিয়ক</string>
+    <string name="skip_sponsors_preview">পূৰ্বদৰ্শন এৰি দিয়ক</string>
+    <string name="skip_sponsors_music_offtopic">সংগীতবিহীন অংশ এৰি দিয়ক</string>
+    <string name="skip_sponsors_filler">বিষয়বহিৰ্ভূত অংশ এৰি দিয়ক</string>
     <string name="skip_sponsors_highlight">হাইলাইটসমূহ এৰি দিয়ক</string>
     <string name="remember_last_position">অৱস্থান মনত ৰাখিব</string>
     <string name="remember_quality">ভিডিঅ\'ৰ মান মনত ৰাখিব</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">সকলো সংহতি পুনৰায় সেট কৰক</string>
     <string name="reset_extension_title">সম্প্ৰসাৰণসমূহ পুনৰায় সেট কৰক</string>
     <string name="reset_extension_message">সকলো সম্প্ৰসাৰণ সংহতিসমূহ অবিকল্পিতলৈ পুনৰায় সেট কৰক?</string>
+    <string name="settings_backup_restore">বেকআপ আৰু পুনৰুদ্ধাৰ কৰক</string>
+    <string name="settings_export">ছেটিংছ ৰপ্তানি কৰক</string>
+    <string name="settings_export_summary">বৰ্তমানৰ সংহতিসমূহ এটা JSON নথিপত্ৰত সংৰক্ষণ কৰক</string>
+    <string name="settings_import">ছেটিংছ আমদানি কৰক</string>
+    <string name="settings_import_summary">এটা বেকআপ ফাইলৰ পৰা সংহতিসমূহ পুনৰুদ্ধাৰ কৰক</string>
+    <string name="settings_import_confirm_title">ছেটিংছ আমদানি কৰক?</string>
+    <string name="settings_import_confirm_message">বৰ্তমানৰ সংহতিসমূহ বেকআপৰ দ্বাৰা অভাৰৰাইট কৰা হ\'ব।</string>
+    <string name="settings_export_done">ছেটিংছ ৰপ্তানি কৰা হৈছে</string>
+    <string name="settings_export_failed">ছেটিংছ ফাইল সংৰক্ষণ কৰিব পৰা নগ\'ল</string>
+    <string name="settings_import_done">ছেটিংছ আমদানি কৰা হৈছে</string>
+    <string name="settings_import_failed">অবৈধ সংহতিসমূহ ফাইল</string>
     <string name="confirm">নিশ্চিত কৰক</string>
     <string name="cancel">বাতিল কৰক</string>
     <string name="more_options">অধিক</string>
@@ -91,7 +109,7 @@
     <string name="subtitle_style_color">লিখনীৰ ৰং</string>
     <string name="subtitle_style_hex">হেক্স ৰঙৰ ক\'ড</string>
     <string name="subtitle_style_drag_hint">পুনৰ স্থানলৈ পূৰ্বদৰ্শন টানি নিয়ক</string>
-    <string name="subtitle_style_bold">বল্ড</string>
+    <string name="subtitle_style_bold">গাঢ়</string>
     <string name="subtitle_auto_generated">(স্বয়ংক্ৰিয়)</string>
     <string name="reset">ৰিছেট কৰক</string>
     <string name="share">শ্বেয়াৰ কৰক</string>
@@ -104,7 +122,7 @@
     <string name="retry">পুনৰ চেষ্টা কৰক</string>
     <string name="segment_intro">পৰিচয়</string>
     <string name="segment_outro">আউট্ৰ\'</string>
-    <string name="segment_interaction">লাইক আৰু চাবস্ক্ৰাইব সোঁৱৰাই দিয়া</string>
+    <string name="segment_interaction">লাইক আৰু চাবস্ক্ৰাইবৰ সোঁৱৰণী</string>
     <string name="segment_preview">পূৰ্বদৰ্শন</string>
     <string name="segment_music_offtopic">অসংগীত</string>
     <string name="cast">এটা ডিভাইচলৈ ষ্ট্ৰীম কৰক</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">কোনো সুসংগত ষ্ট্ৰীমিং ডিভাইচ পোৱা নগ\'ল</string>
     <string name="cast_no_devices_hint">দুয়োটা ডিভাইচ একেটা নে\'টৱৰ্কৰ সৈতে সংযোগ কৰক।</string>
     <string name="cast_unavailable">ডিভাইচ ষ্ট্ৰীমিং উপলব্ধ নহয়</string>
-    <string name="cast_unavailable_hint">ডিভাইচ ষ্ট্ৰীমিংৰ বাবে গুগল প্লে সেৱাৰ প্ৰয়োজন।</string>
+    <string name="cast_unavailable_hint">দুয়োটা ডিভাইচ একেটা নে\'টৱৰ্কৰ সৈতে সংযোগ কৰক।</string>
     <string name="cast_section_devices">উপলব্ধ যন্ত্ৰসমূহ</string>
     <string name="cast_section_link">যিকোনো ডিভাইচত খোলক</string>
     <string name="cast_section_link_hint">একেটা ৱাই-ফাই নেটৱৰ্কত।</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ভিডিঅ\'</string>
     <string name="download_audio">অডিঅ\'</string>
     <string name="download_quality">ডাউনলোডৰ মান</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">উচ্চ মানদণ্ডই অধিক তথ্য আৰু সংৰক্ষণ ব্যৱহাৰ কৰে</string>
     <string name="download_size_estimate">প্ৰায় %1$s</string>
     <string name="download_size_unknown">আকাৰ অজ্ঞাত</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">নিৰ্বাচিত: %1$d / %2$d</string>
     <string name="download_batch_meta">বস্তু: %1$d · %2$s</string>
     <string name="download_no_new_tasks">কোনো নতুন কাম নাই</string>
-    <string name="download_snapshot_too_many">অত্যধিক বস্তু (সৰ্বোচ্চ 500)।একোৱেই ছেদ কৰা হোৱা নাছিল।</string>
-    <string name="download_snapshot_too_large">স্নেপশ্বট 1 মেগাবাইটতকৈ ডাঙৰ।একোৱেই ছেদ কৰা হোৱা নাছিল।</string>
+    <string name="download_snapshot_too_many">বহুত বস্তু। ৫০০ তকৈ অধিক নিৰ্বাচন নকৰিব।</string>
+    <string name="download_snapshot_too_large">নিৰ্বাচিত তালিকাখনে ১ মেগাবাইট অতিক্ৰম কৰে। কম বস্তু নিৰ্বাচন কৰক।</string>
     <string name="download_reason_live">লাইভ ষ্ট্ৰিম ডাউনলোড কৰিব নোৱাৰি</string>
     <string name="download_reason_premiere">এই প্ৰিমিয়াৰ আৰম্ভ হোৱা নাই</string>
     <string name="download_reason_no_streams">কোনো ডাউনলোডযোগ্য ফাইল ষ্ট্ৰিম নাই</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">বাফাৰ/মিনিট: %1$d</string>
     <string name="audio_description">অডিঅ\'ৰ বিৱৰণ</string>
     <string name="secondary_audio">গৌণ অডিঅ\'</string>
+    <string name="settings_import_reload_message">ছেটিংছ আপডেট কৰা হৈছে। পৰিৱৰ্তনসমূহ প্ৰয়োগ কৰিবলৈ খোলা পৃষ্ঠাসমূহ পুনৰ লোড কৰক। প্লেবেকৰ অৱস্থান অক্ষুণ্ণ থাকিব।</string>
+    <string name="settings_reload_now">এতিয়াই পৃষ্ঠাসমূহ পুনৰ লোড কৰক</string>
+    <string name="settings_reload_later">পাছত</string>
+    <string name="about_save_logs">এপ ডায়েগনষ্টিক লগসমূহ সংৰক্ষণ কৰক</string>
+    <string name="about_save_done">এপ ডায়েগনষ্টিক জিপ ফাইল সংৰক্ষণ কৰা হৈছে</string>
+    <string name="about_save_cancelled">বাতিল কৰা হৈছে</string>
+    <string name="about_save_failed">এপ লগসমূহ সংৰক্ষণ কৰিব পৰা নগ\'ল। অন্য সংৰক্ষণ স্থান বাছক আৰু পুনৰ চেষ্টা কৰক।</string>
+    <string name="player_live_unavailable">লাইভ ষ্ট্ৰিম উপলব্ধ নহয়। পিছত পুনৰ চেষ্টা কৰক।</string>
 </resources>

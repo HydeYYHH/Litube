@@ -88,7 +88,9 @@
   // Each native tab has its own WebView history. The page header calls
   // history.back(), but a newly opened tab has no entry for its source page.
   // The host walks local history or pops the tab, matching system Back.
+  // Sheets, dialogs and search pop their own #hash entry in-page.
   function nativeBack() {
+    if (location.hash) return false;
     const bridge = window.Bridge;
     if (!bridge || typeof bridge.goBack !== 'function') return false;
     bridge.goBack();

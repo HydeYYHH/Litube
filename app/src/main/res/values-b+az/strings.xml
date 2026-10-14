@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Arxa fonda qulaq asın</string>
     <string name="back_again_to_exit">Çıxmaq üçün yenidən geri basın</string>
     <string name="navigate_back">Geri</string>
     <string name="extension">Genişləndirmələr</string>
@@ -8,7 +9,7 @@
     <string name="about">Haqqında</string>
     <string name="display_dislikes">Bəyənməyənləri göstərin</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com saytına video identifikatorlarını göndərir</string>
-    <string name="hide_shorts">Şortları gizlət</string>
+    <string name="hide_shorts">Shorts-u gizlət</string>
     <string name="interface_category">İnterfeys</string>
     <string name="player">Oynatma</string>
     <string name="gesture">Jestlər</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Daxili pleyerdə</string>
     <string name="enable_in_fullscreen">Tam ekranda</string>
     <string name="brightness">Parlaqlıq</string>
-    <string name="volume">Həcmi</string>
+    <string name="volume">Səs səviyyəsi</string>
     <string name="background_mini_player">Fon və mini pleyer</string>
     <string name="pip">Şəkil içində şəkil</string>
     <string name="in_app_mini_player">Tətbiqdaxili mini-pleyer</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Sponsorları keçin</string>
     <string name="skip_sponsors_selfpromo">Özünü tanıtmaqdan keçin</string>
+    <string name="skip_sponsors_interaction">Bəyənmə və abunə xatırlatmalarını keç</string>
+    <string name="skip_sponsors_intro">Girişləri keç</string>
+    <string name="skip_sponsors_outro">Sonluqları keç</string>
+    <string name="skip_sponsors_preview">Ön baxışları keç</string>
+    <string name="skip_sponsors_music_offtopic">Musiqisiz hissələri keç</string>
+    <string name="skip_sponsors_filler">Mövzudan kənar hissələri keç</string>
     <string name="skip_sponsors_highlight">Vurğulananları keçin</string>
     <string name="remember_last_position">Mövqeyi yadda saxla</string>
     <string name="remember_quality">Video keyfiyyətini yadda saxla</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Bütün parametrləri sıfırlayın</string>
     <string name="reset_extension_title">Genişləndirmələri sıfırlayın</string>
     <string name="reset_extension_message">Bütün artırma parametrləri defolt olaraq sıfırlansın?</string>
+    <string name="settings_backup_restore">Yedəkləyin və bərpa edin</string>
+    <string name="settings_export">Parametrləri ixrac edin</string>
+    <string name="settings_export_summary">Cari parametrləri JSON faylında saxlayın</string>
+    <string name="settings_import">İdxal parametrləri</string>
+    <string name="settings_import_summary">Parametrləri ehtiyat fayldan bərpa edin</string>
+    <string name="settings_import_confirm_title">Parametrlər idxal edilsin?</string>
+    <string name="settings_import_confirm_message">Cari parametrlər ehtiyat nüsxə ilə üzərinə yazılacaq.</string>
+    <string name="settings_export_done">Parametrlər ixrac edildi</string>
+    <string name="settings_export_failed">Parametrlər faylını saxlamaq mümkün olmadı</string>
+    <string name="settings_import_done">Parametrlər idxal edildi</string>
+    <string name="settings_import_failed">Yanlış parametrlər faylı</string>
     <string name="confirm">Təsdiq edin</string>
     <string name="cancel">Ləğv et</string>
     <string name="more_options">Daha çox</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Mətn ölçüsü</string>
     <string name="subtitle_style_background">Fon</string>
     <string name="subtitle_background_none">Yoxdur</string>
-    <string name="subtitle_background_semi">Şəffaf</string>
+    <string name="subtitle_background_semi">Yarı şəffaf</string>
     <string name="subtitle_background_opaque">Qeyri-şəffaf</string>
     <string name="subtitle_style_color">Mətn rəngi</string>
     <string name="subtitle_style_hex">Hex rəng kodu</string>
@@ -104,7 +122,7 @@
     <string name="retry">Yenidən cəhd edin</string>
     <string name="segment_intro">Giriş</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Xatırlatmaları bəyənin və abunə olun</string>
+    <string name="segment_interaction">Qarşılıqlı əlaqə xatırlatması</string>
     <string name="segment_preview">Önizləmə</string>
     <string name="segment_music_offtopic">Qeyri-musiqi</string>
     <string name="cast">Cihaza yayımla</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Uyğun axın cihazları tapılmadı</string>
     <string name="cast_no_devices_hint">Hər iki cihazı eyni şəbəkəyə qoşun.</string>
     <string name="cast_unavailable">Cihaz axını mövcud deyil</string>
-    <string name="cast_unavailable_hint">Cihaz axını üçün Google Play Xidmətləri lazımdır.</string>
+    <string name="cast_unavailable_hint">Hər iki cihazı eyni şəbəkəyə qoşun.</string>
     <string name="cast_section_devices">Mövcud cihazlar</string>
     <string name="cast_section_link">İstənilən cihazda açın</string>
     <string name="cast_section_link_hint">Eyni Wi-Fi şəbəkəsində.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Yükləmə keyfiyyəti</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Daha yüksək keyfiyyət daha çox məlumat və yaddaşdan istifadə edir</string>
     <string name="download_size_estimate">Təxminən %1$s</string>
     <string name="download_size_unknown">Ölçü məlum deyil</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Seçilmiş: %1$d / %2$d</string>
     <string name="download_batch_meta">Əşyalar: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Yeni tapşırıq yoxdur</string>
-    <string name="download_snapshot_too_many">Həddindən artıq çox element (maksimum 500).Heç bir şey kəsilmədi.</string>
-    <string name="download_snapshot_too_large">Snapshot 1 MB-dən böyükdür.Heç bir şey kəsilmədi.</string>
+    <string name="download_snapshot_too_many">Həddindən artıq çox element. 500-dən çox olmayan seçin.</string>
+    <string name="download_snapshot_too_large">Seçilmiş siyahı 1 MB-ı keçir. Daha az element seçin.</string>
     <string name="download_reason_live">Canlı yayımlar endirilə bilməz</string>
     <string name="download_reason_premiere">Bu premyera başlamadı</string>
     <string name="download_reason_no_streams">Yüklənə bilən fayl axını yoxdur</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Tamponlar/dəq: %1$d</string>
     <string name="audio_description">Audio təsvir</string>
     <string name="secondary_audio">İkinci dərəcəli audio</string>
+    <string name="settings_import_reload_message">Parametrlər yeniləndi. Dəyişiklikləri tətbiq etmək üçün açıq səhifələri yenidən yükləyin. Oxutma mövqeyiniz saxlanılacaq.</string>
+    <string name="settings_reload_now">İndi səhifələri yenidən yükləyin</string>
+    <string name="settings_reload_later">Daha sonra</string>
+    <string name="about_save_logs">Tətbiq diaqnostik jurnallarını yadda saxlayın</string>
+    <string name="about_save_done">Tətbiq diaqnostik ZIP faylı saxlanıldı</string>
+    <string name="about_save_cancelled">Ləğv edildi</string>
+    <string name="about_save_failed">Tətbiq qeydlərini saxlamaq mümkün olmadı. Başqa saxlama yeri seçin və yenidən cəhd edin.</string>
+    <string name="player_live_unavailable">Canlı yayım əlçatan deyil. Daha sonra yenidən cəhd edin.</string>
 </resources>

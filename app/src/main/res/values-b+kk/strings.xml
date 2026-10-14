@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Фондық режимде тыңдау</string>
     <string name="back_again_to_exit">Шығу үшін артқа қайта басыңыз</string>
     <string name="navigate_back">Артқа</string>
     <string name="extension">Кеңейтімдер</string>
@@ -8,7 +9,7 @@
     <string name="about">Қолданба туралы</string>
     <string name="display_dislikes">Ұнатпауды көрсету</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com сайтына бейне идентификаторларын жібереді</string>
-    <string name="hide_shorts">Шорттарды жасыру</string>
+    <string name="hide_shorts">Shorts жасыру</string>
     <string name="interface_category">Интерфейс</string>
     <string name="player">Ойнату</string>
     <string name="gesture">Қимылдар</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Енгізілген ойнатқышта</string>
     <string name="enable_in_fullscreen">Толық экранда</string>
     <string name="brightness">Жарықтық</string>
-    <string name="volume">Көлем</string>
+    <string name="volume">Дыбыс деңгейі</string>
     <string name="background_mini_player">Фон және шағын ойнатқыш</string>
     <string name="pip">Суреттегі сурет</string>
     <string name="in_app_mini_player">Қолданбадағы шағын ойнатқыш</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Демеушілерді өткізіп жіберу</string>
     <string name="skip_sponsors_selfpromo">Өзін-өзі жарнамалауды өткізіп жіберу</string>
+    <string name="skip_sponsors_interaction">Ұнату және жазылу еске салғыштарын өткізіп жіберу</string>
+    <string name="skip_sponsors_intro">Кіріспелерді өткізіп жіберу</string>
+    <string name="skip_sponsors_outro">Қорытындыларды өткізіп жіберу</string>
+    <string name="skip_sponsors_preview">Алдын ала көрсетілімдерді өткізіп жіберу</string>
+    <string name="skip_sponsors_music_offtopic">Музыкасыз бөліктерді өткізіп жіберу</string>
+    <string name="skip_sponsors_filler">Тақырыптан тыс бөліктерді өткізіп жіберу</string>
     <string name="skip_sponsors_highlight">Маңызды жерлерді өткізіп жіберу</string>
     <string name="remember_last_position">Позицияны есте сақтаңыз</string>
     <string name="remember_quality">Бейне сапасын есте сақтаңыз</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Барлық параметрлерді қалпына келтіріңіз</string>
     <string name="reset_extension_title">Кеңейтімдерді қалпына келтіру</string>
     <string name="reset_extension_message">Барлық кеңейтім параметрлерін әдепкіге қайтару керек пе?</string>
+    <string name="settings_backup_restore">Сақтық көшірме жасау және қалпына келтіру</string>
+    <string name="settings_export">Параметрлерді экспорттау</string>
+    <string name="settings_export_summary">Ағымдағы параметрлерді JSON файлына сақтаңыз</string>
+    <string name="settings_import">Параметрлерді импорттау</string>
+    <string name="settings_import_summary">Сақтық көшірме файлынан параметрлерді қалпына келтіріңіз</string>
+    <string name="settings_import_confirm_title">Параметрлерді импорттау керек пе?</string>
+    <string name="settings_import_confirm_message">Ағымдағы параметрлер сақтық көшірме арқылы қайта жазылады.</string>
+    <string name="settings_export_done">Параметрлер экспортталды</string>
+    <string name="settings_export_failed">Параметрлер файлын сақтау мүмкін болмады</string>
+    <string name="settings_import_done">Параметрлер импортталды</string>
+    <string name="settings_import_failed">Жарамсыз параметрлер файлы</string>
     <string name="confirm">Растау</string>
     <string name="cancel">Болдырмау</string>
     <string name="more_options">Көбірек</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Мәтін өлшемі</string>
     <string name="subtitle_style_background">Фон</string>
     <string name="subtitle_background_none">Жоқ</string>
-    <string name="subtitle_background_semi">Мөлдір</string>
+    <string name="subtitle_background_semi">Жартылай мөлдір</string>
     <string name="subtitle_background_opaque">Мөлдір емес</string>
     <string name="subtitle_style_color">Мәтін түсі</string>
     <string name="subtitle_style_hex">Он алтылық түс коды</string>
@@ -104,7 +122,7 @@
     <string name="retry">Қайталап көріңіз</string>
     <string name="segment_intro">Кіріспе</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Еске салғыштарды ұнату және жазылу</string>
+    <string name="segment_interaction">Ұнату және жазылу еске салғышы</string>
     <string name="segment_preview">Алдын ала қарау</string>
     <string name="segment_music_offtopic">Музыкалық емес</string>
     <string name="cast">Трансляциялау</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Үйлесімді ағындық құрылғылар табылмады</string>
     <string name="cast_no_devices_hint">Екі құрылғыны да бір желіге қосыңыз.</string>
     <string name="cast_unavailable">Құрылғы ағыны қолжетімсіз</string>
-    <string name="cast_unavailable_hint">Құрылғы ағыны Google Play қызметтерін қажет етеді.</string>
+    <string name="cast_unavailable_hint">Екі құрылғыны да бір желіге қосыңыз.</string>
     <string name="cast_section_devices">Қолжетімді құрылғылар</string>
     <string name="cast_section_link">Кез келген құрылғыда ашыңыз</string>
     <string name="cast_section_link_hint">Бір Wi-Fi желісінде.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Бейне</string>
     <string name="download_audio">Дыбыс</string>
     <string name="download_quality">Жүктеп алу сапасы</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Жоғары сапа көбірек деректер мен жадты пайдаланады</string>
     <string name="download_size_estimate">%1$s туралы</string>
     <string name="download_size_unknown">Өлшем белгісіз</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Таңдалған: %1$d / %2$d</string>
     <string name="download_batch_meta">Элементтер: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Жаңа тапсырмалар жоқ</string>
-    <string name="download_snapshot_too_many">Тым көп элементтер (макс. 500).Ештеңе қысқартылған жоқ.</string>
-    <string name="download_snapshot_too_large">Сурет 1 МБ-тан үлкен.Ештеңе қысқартылған жоқ.</string>
+    <string name="download_snapshot_too_many">Тым көп элементтер. 500-ден көп емес таңдаңыз.</string>
+    <string name="download_snapshot_too_large">Таңдалған тізім 1 МБ-тан асады. Азырақ элементтерді таңдаңыз.</string>
     <string name="download_reason_live">Тікелей ағындарды жүктеп алу мүмкін емес</string>
     <string name="download_reason_premiere">Бұл премьера басталған жоқ</string>
     <string name="download_reason_no_streams">Жүктеп алынатын файл ағындары жоқ</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Буферлер/мин: %1$d</string>
     <string name="audio_description">Аудио сипаттама</string>
     <string name="secondary_audio">Қосымша дыбыс</string>
+    <string name="settings_import_reload_message">Параметрлер жаңартылды. Өзгерістерді қолдану үшін ашық беттерді қайта жүктеңіз. Ойнату орныңыз сақталады.</string>
+    <string name="settings_reload_now">Беттерді қазір қайта жүктеңіз</string>
+    <string name="settings_reload_later">Кейінірек</string>
+    <string name="about_save_logs">Қолданбаны диагностикалау журналдарын сақтаңыз</string>
+    <string name="about_save_done">Қолданба диагностикасының ZIP файлы сақталды</string>
+    <string name="about_save_cancelled">Болдырылды</string>
+    <string name="about_save_failed">Қолданба журналдарын сақтау мүмкін болмады. Басқа сақтау орнын таңдап, әрекетті қайталаңыз.</string>
+    <string name="player_live_unavailable">Тікелей эфир қолжетімсіз. Кейінірек қайталап көріңіз.</string>
 </resources>

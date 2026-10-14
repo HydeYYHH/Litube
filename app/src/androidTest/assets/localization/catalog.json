@@ -468,8 +468,8 @@
     "aliases": [
       "or"
     ],
-    "download": "ଡାଉନଲୋଡ୍ କରନ୍ତୁ |",
-    "haptic_strength": "କମ୍ପନ ଶକ୍ତି |"
+    "download": "ଡାଉନଲୋଡ୍ କରନ୍ତୁ",
+    "haptic_strength": "କମ୍ପନ ଶକ୍ତି"
   },
   {
     "tag": "pa",
@@ -685,7 +685,7 @@
       "zh"
     ],
     "download": "下载",
-    "haptic_strength": "触感强度"
+    "haptic_strength": "触觉反馈强度"
   },
   {
     "tag": "zh-Hant",

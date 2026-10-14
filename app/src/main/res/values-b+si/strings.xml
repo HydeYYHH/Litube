@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">පසුබිමේ සවන් දෙන්න</string>
     <string name="back_again_to_exit">පිටවීමට නැවත ඔබන්න</string>
     <string name="navigate_back">ආපසු</string>
     <string name="extension">දිගු</string>
@@ -8,7 +9,7 @@
     <string name="about">මෙම යෙදුම ගැන</string>
     <string name="display_dislikes">අකමැත්ත පෙන්වන්න</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com වෙත වීඩියෝ ID යවයි</string>
-    <string name="hide_shorts">කෙටි කලිසම් සඟවන්න</string>
+    <string name="hide_shorts">Shorts සඟවන්න</string>
     <string name="interface_category">අතුරු මුහුණත</string>
     <string name="player">නැවත ධාවනය</string>
     <string name="gesture">අභිනයන්</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">කාවැද්දූ වාදකය තුළ</string>
     <string name="enable_in_fullscreen">පූර්ණ තිරයේ</string>
     <string name="brightness">දීප්තිය</string>
-    <string name="volume">පරිමාව</string>
+    <string name="volume">ශබ්ද මට්ටම</string>
     <string name="background_mini_player">පසුබිම සහ කුඩා වාදකය</string>
     <string name="pip">පින්තූරය-තුළ-පින්තූරය</string>
     <string name="in_app_mini_player">යෙදුම තුළ කුඩා ක්‍රීඩකයා</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">අනුග්‍රාහකයන් මඟ හරින්න</string>
     <string name="skip_sponsors_selfpromo">ස්වයං-ප්‍රවර්ධනය මඟ හරින්න</string>
+    <string name="skip_sponsors_interaction">කැමැත්ත සහ දායකත්වය පිළිබඳ මතක් කිරීම් මඟහරින්න</string>
+    <string name="skip_sponsors_intro">ආරම්භක කොටස් මඟහරින්න</string>
+    <string name="skip_sponsors_outro">අවසන් කොටස් මඟහරින්න</string>
+    <string name="skip_sponsors_preview">පෙරදසුන් මඟහරින්න</string>
+    <string name="skip_sponsors_music_offtopic">සංගීතය නැති කොටස් මඟහරින්න</string>
+    <string name="skip_sponsors_filler">මාතෘකාවට අදාළ නොවන කොටස් මඟහරින්න</string>
     <string name="skip_sponsors_highlight">විශේෂ අවස්ථා මඟ හරින්න</string>
     <string name="remember_last_position">ස්ථානය මතක තබා ගන්න</string>
     <string name="remember_quality">වීඩියෝ ගුණත්වය මතක තබා ගන්න</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">සියලු සැකසුම් යළි පිහිටුවන්න</string>
     <string name="reset_extension_title">දිගු යළි පිහිටුවන්න</string>
     <string name="reset_extension_message">සියලුම දිගු සැකසුම් පෙරනිමියට යළි පිහිටුවන්නද?</string>
+    <string name="settings_backup_restore">උපස්ථ සහ ප්‍රතිසාධනය</string>
+    <string name="settings_export">අපනයන සැකසුම්</string>
+    <string name="settings_export_summary">වත්මන් සැකසුම් JSON ගොනුවකට සුරකින්න</string>
+    <string name="settings_import">ආයාත සැකසුම්</string>
+    <string name="settings_import_summary">උපස්ථ ගොනුවකින් සිටුවම් ප්‍රතිසාධනය කරන්න</string>
+    <string name="settings_import_confirm_title">ආයාත සැකසුම්?</string>
+    <string name="settings_import_confirm_message">වත්මන් සැකසුම් උපස්ථය මගින් උඩින් ලියවේ.</string>
+    <string name="settings_export_done">සැකසුම් අපනයනය කරන ලදී</string>
+    <string name="settings_export_failed">සැකසුම් ගොනුව සුරැකීමට නොහැකි විය</string>
+    <string name="settings_import_done">සැකසීම් ආනයනය කරන ලදී</string>
+    <string name="settings_import_failed">වලංගු නොවන සැකසුම් ගොනුව</string>
     <string name="confirm">තහවුරු කරන්න</string>
     <string name="cancel">අවලංගු කරන්න</string>
     <string name="more_options">තවත්</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">පෙළ ප්‍රමාණය</string>
     <string name="subtitle_style_background">පසුබිම</string>
     <string name="subtitle_background_none">කිසිවක් නැත</string>
-    <string name="subtitle_background_semi">පාරභාසක</string>
+    <string name="subtitle_background_semi">අර්ධ පාරදෘශ්‍ය</string>
     <string name="subtitle_background_opaque">පාරාන්ධ</string>
     <string name="subtitle_style_color">පෙළ වර්ණය</string>
     <string name="subtitle_style_hex">Hex වර්ණ කේතය</string>
@@ -104,7 +122,7 @@
     <string name="retry">නැවත උත්සාහ කරන්න</string>
     <string name="segment_intro">හැඳින්වීම</string>
     <string name="segment_outro">අවුට්රෝ</string>
-    <string name="segment_interaction">මතක් කිරීම් වලට කැමති සහ දායක වන්න</string>
+    <string name="segment_interaction">කැමැත්ත සහ දායකත්වය පිළිබඳ මතක් කිරීම</string>
     <string name="segment_preview">පෙරදසුන</string>
     <string name="segment_music_offtopic">සංගීතය නොවන</string>
     <string name="cast">උපාංගයකට ප්‍රවාහ කරන්න</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ගැළපෙන ප්‍රවාහ උපාංග කිසිවක් හමු නොවීය</string>
     <string name="cast_no_devices_hint">උපාංග දෙකම එකම ජාලයකට සම්බන්ධ කරන්න.</string>
     <string name="cast_unavailable">උපාංග ප්‍රවාහය නොමැත</string>
-    <string name="cast_unavailable_hint">උපාංග ප්‍රවාහයට Google Play සේවා අවශ්‍යයි.</string>
+    <string name="cast_unavailable_hint">උපාංග දෙකම එකම ජාලයකට සම්බන්ධ කරන්න.</string>
     <string name="cast_section_devices">පවතින උපාංග</string>
     <string name="cast_section_link">ඕනෑම උපාංගයක විවෘත කරන්න</string>
     <string name="cast_section_link_hint">එකම Wi-Fi ජාලයක.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">වීඩියෝව</string>
     <string name="download_audio">ශ්‍රව්‍ය</string>
     <string name="download_quality">බාගත කිරීමේ ගුණත්වය</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ඉහළ ගුණත්වය වැඩි දත්ත සහ ගබඩා භාවිතා කරයි</string>
     <string name="download_size_estimate">%1$s පමණ</string>
     <string name="download_size_unknown">ප්‍රමාණය නොදනී</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">තෝරාගත්: %1$d / %2$d</string>
     <string name="download_batch_meta">අයිතම: %1$d · %2$s</string>
     <string name="download_no_new_tasks">නව කාර්යයන් නොමැත</string>
-    <string name="download_snapshot_too_many">බොහෝ අයිතම (උපරිම 500).කිසිවක් කපා හැරියේ නැත.</string>
-    <string name="download_snapshot_too_large">Snapshot 1 MB ට වඩා විශාලයි.කිසිවක් කපා හැරියේ නැත.</string>
+    <string name="download_snapshot_too_many">බොහෝ අයිතම. 500 ට නොවැඩි තෝරන්න.</string>
+    <string name="download_snapshot_too_large">තෝරාගත් ලැයිස්තුව 1 MB ඉක්මවයි. අයිතම අඩුවෙන් තෝරන්න.</string>
     <string name="download_reason_live">සජීවී ප්‍රවාහ බාගත කළ නොහැක</string>
     <string name="download_reason_premiere">මෙම මංගල දර්ශනය ආරම්භ වී නැත</string>
     <string name="download_reason_no_streams">බාගත කළ හැකි ගොනු ප්‍රවාහ නොමැත</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">බෆර/විනා: %1$d</string>
     <string name="audio_description">ශ්‍රව්‍ය විස්තරය</string>
     <string name="secondary_audio">ද්විතියික ශ්‍රව්‍ය</string>
+    <string name="settings_import_reload_message">සැකසීම් යාවත්කාලීන කරන ලදී. වෙනස්කම් යෙදීමට විවෘත පිටු නැවත පූරණය කරන්න. ඔබගේ පසුධාවන ස්ථානය තබා ගනු ඇත.</string>
+    <string name="settings_reload_now">දැන් පිටු නැවත පූරණය කරන්න</string>
+    <string name="settings_reload_later">පසුව</string>
+    <string name="about_save_logs">යෙදුම් රෝග විනිශ්චය ලොග සුරකින්න</string>
+    <string name="about_save_done">යෙදුම් රෝග විනිශ්චය ZIP ගොනුව සුරකින ලදී</string>
+    <string name="about_save_cancelled">අවලංගු කරන ලදී</string>
+    <string name="about_save_failed">යෙදුම් ලොග සුරැකීමට නොහැකි විය. වෙනත් සුරැකීමේ ස්ථානයක් තෝරා නැවත උත්සාහ කරන්න.</string>
+    <string name="player_live_unavailable">සජීවී විකාශය ලබාගත නොහැක. පසුව නැවත උත්සාහ කරන්න.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Hlustaðu í bakgrunni</string>
     <string name="back_again_to_exit">Ýttu aftur til baka til að hætta</string>
     <string name="navigate_back">Til baka</string>
     <string name="extension">Viðbætur</string>
@@ -8,7 +9,7 @@
     <string name="about">Um forritið</string>
     <string name="display_dislikes">Sýndu mislíkar</string>
     <string name="display_dislikes_summary">Sendir auðkenni myndskeiða á returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Fela stuttbuxur</string>
+    <string name="hide_shorts">Fela Shorts</string>
     <string name="interface_category">Tengi</string>
     <string name="player">Spilun</string>
     <string name="gesture">Bendingar</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Í innbyggðum spilara</string>
     <string name="enable_in_fullscreen">Á öllum skjánum</string>
     <string name="brightness">Birtustig</string>
-    <string name="volume">Bindi</string>
+    <string name="volume">Hljóðstyrkur</string>
     <string name="background_mini_player">Bakgrunnur og lítill spilari</string>
     <string name="pip">Mynd-í-mynd</string>
     <string name="in_app_mini_player">Smáspilari í forriti</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Slepptu styrktaraðilum</string>
     <string name="skip_sponsors_selfpromo">Slepptu sjálfkynningu</string>
+    <string name="skip_sponsors_interaction">Sleppa áminningum um samskipti</string>
+    <string name="skip_sponsors_intro">Sleppa inngangi</string>
+    <string name="skip_sponsors_outro">Sleppa lokaköflum</string>
+    <string name="skip_sponsors_preview">Sleppa forsýningum</string>
+    <string name="skip_sponsors_music_offtopic">Sleppa köflum án tónlistar</string>
+    <string name="skip_sponsors_filler">Sleppa köflum utan efnis</string>
     <string name="skip_sponsors_highlight">Slepptu hápunktum</string>
     <string name="remember_last_position">Mundu stöðu</string>
     <string name="remember_quality">Mundu myndgæði</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Núllstilla allar stillingar</string>
     <string name="reset_extension_title">Endurstilla viðbætur</string>
     <string name="reset_extension_message">Endurstilla allar viðbætur í sjálfgefnar stillingar?</string>
+    <string name="settings_backup_restore">Afrita og endurheimta</string>
+    <string name="settings_export">Flytja út stillingar</string>
+    <string name="settings_export_summary">Vistaðu núverandi stillingar í JSON skrá</string>
+    <string name="settings_import">Flytja inn stillingar</string>
+    <string name="settings_import_summary">Endurheimtu stillingar úr öryggisafriti</string>
+    <string name="settings_import_confirm_title">Flytja inn stillingar?</string>
+    <string name="settings_import_confirm_message">Núverandi stillingar verða skrifaðar yfir af öryggisafritinu.</string>
+    <string name="settings_export_done">Stillingar fluttar út</string>
+    <string name="settings_export_failed">Gat ekki vistað stillingaskrá</string>
+    <string name="settings_import_done">Stillingar fluttar inn</string>
+    <string name="settings_import_failed">Ógild stillingaskrá</string>
     <string name="confirm">Staðfestu</string>
     <string name="cancel">Hætta við</string>
     <string name="more_options">Meira</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Textastærð</string>
     <string name="subtitle_style_background">Bakgrunnur</string>
     <string name="subtitle_background_none">Engin</string>
-    <string name="subtitle_background_semi">Gegnsætt</string>
+    <string name="subtitle_background_semi">Hálfgagnsætt</string>
     <string name="subtitle_background_opaque">Ógegnsætt</string>
     <string name="subtitle_style_color">Litur texta</string>
     <string name="subtitle_style_hex">Sextán litakóði</string>
     <string name="subtitle_style_drag_hint">Dragðu forskoðunina til að staðsetja hana aftur</string>
-    <string name="subtitle_style_bold">Djarft</string>
+    <string name="subtitle_style_bold">Feitletrað</string>
     <string name="subtitle_auto_generated">(sjálfvirkt)</string>
     <string name="reset">Núllstilla</string>
     <string name="share">Deila</string>
@@ -104,7 +122,7 @@
     <string name="retry">Reyndu aftur</string>
     <string name="segment_intro">Inngangur</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Líkaðu við og gerðu áskrifandi áminningar</string>
+    <string name="segment_interaction">Áminning um samskipti</string>
     <string name="segment_preview">Forskoðun</string>
     <string name="segment_music_offtopic">Ekki tónlist</string>
     <string name="cast">Senda í tæki</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Engin samhæf streymistæki fundust</string>
     <string name="cast_no_devices_hint">Tengdu bæði tækin við sama netið.</string>
     <string name="cast_unavailable">Straumspilun tækis ekki tiltæk</string>
-    <string name="cast_unavailable_hint">Straumspilun tækis þarf Google Play þjónustu.</string>
+    <string name="cast_unavailable_hint">Tengdu bæði tækin við sama netið.</string>
     <string name="cast_section_devices">Tiltæk tæki</string>
     <string name="cast_section_link">Opnaðu í hvaða tæki sem er</string>
     <string name="cast_section_link_hint">Á sama Wi-Fi neti.</string>
@@ -131,7 +149,7 @@
     <string name="jumped_to_segment">Hoppaði í: %1$s</string>
     <string name="sponsor_countdown">Styrktaraðili sleppir niðurtalningu</string>
     <string name="sponsor_skip_in">Sleppt í %1$d s</string>
-    <string name="sponsor_skip_chip">Skip</string>
+    <string name="sponsor_skip_chip">Sleppa</string>
     <string name="show_likes">Sýna nákvæmlega eins tölur</string>
     <string name="info_video_codec">Vídeó merkjamál</string>
     <string name="info_audio_codec">Hljóðmerkjamál</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Myndband</string>
     <string name="download_audio">Hljóð</string>
     <string name="download_quality">Niðurhalsgæði</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Meiri gæði nota fleiri gögn og geymslu</string>
     <string name="download_size_estimate">Um %1$s</string>
     <string name="download_size_unknown">Stærð óþekkt</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Valið: %1$d / %2$d</string>
     <string name="download_batch_meta">Atriði: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Engin ný verkefni</string>
-    <string name="download_snapshot_too_many">Of margir hlutir (hámark 500).Ekkert var klippt.</string>
-    <string name="download_snapshot_too_large">Skyndimynd er stærri en 1 MB.Ekkert var klippt.</string>
+    <string name="download_snapshot_too_many">Of margir hlutir. Veldu ekki fleiri en 500.</string>
+    <string name="download_snapshot_too_large">Valinn listi fer yfir 1 MB. Veldu færri hluti.</string>
     <string name="download_reason_live">Ekki er hægt að hlaða niður straumum í beinni</string>
     <string name="download_reason_premiere">Þessi frumsýning er ekki hafin</string>
     <string name="download_reason_no_streams">Engir skráarstraumar sem hægt er að hlaða niður</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Stuðlarar/mín: %1$d</string>
     <string name="audio_description">Hljóðlýsing</string>
     <string name="secondary_audio">Aukahljóð</string>
+    <string name="settings_import_reload_message">Stillingar uppfærðar. Endurhlaða opnar síður til að beita breytingum. Spilunarstaða þín verður geymd.</string>
+    <string name="settings_reload_now">Endurhlaða síður núna</string>
+    <string name="settings_reload_later">Seinna</string>
+    <string name="about_save_logs">Vistaðu greiningarskrár forrita</string>
+    <string name="about_save_done">App greiningar ZIP skrá vistuð</string>
+    <string name="about_save_cancelled">Hætt við</string>
+    <string name="about_save_failed">Gat ekki vistað forritaskrár. Veldu aðra vistunarstað og reyndu aftur.</string>
+    <string name="player_live_unavailable">Bein útsending er ekki tiltæk. Reyndu aftur síðar.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Ακούστε στο παρασκήνιο</string>
     <string name="back_again_to_exit">Πατήστε ξανά πίσω για έξοδο</string>
     <string name="navigate_back">Πίσω</string>
     <string name="extension">Επεκτάσεις</string>
@@ -8,7 +9,7 @@
     <string name="about">Σχετικά</string>
     <string name="display_dislikes">Εμφάνιση αντιπαθειών</string>
     <string name="display_dislikes_summary">Στέλνει αναγνωριστικά βίντεο στο returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Απόκρυψη σορτς</string>
+    <string name="hide_shorts">Απόκρυψη Shorts</string>
     <string name="interface_category">Διεπαφή</string>
     <string name="player">Αναπαραγωγή</string>
     <string name="gesture">Χειρονομίες</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Σε ενσωματωμένη συσκευή αναπαραγωγής</string>
     <string name="enable_in_fullscreen">Σε πλήρη οθόνη</string>
     <string name="brightness">Φωτεινότητα</string>
-    <string name="volume">Τόμος</string>
+    <string name="volume">Ένταση ήχου</string>
     <string name="background_mini_player">Φόντο &amp; mini player</string>
     <string name="pip">Picture-in-Picture</string>
     <string name="in_app_mini_player">Μίνι πρόγραμμα αναπαραγωγής εντός εφαρμογής</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Παράλειψη χορηγών</string>
     <string name="skip_sponsors_selfpromo">Παράλειψη αυτοπροβολής</string>
+    <string name="skip_sponsors_interaction">Παράλειψη υπενθυμίσεων αλληλεπίδρασης</string>
+    <string name="skip_sponsors_intro">Παράλειψη εισαγωγών</string>
+    <string name="skip_sponsors_outro">Παράλειψη επιλόγων</string>
+    <string name="skip_sponsors_preview">Παράλειψη προεπισκοπήσεων</string>
+    <string name="skip_sponsors_music_offtopic">Παράλειψη ενοτήτων χωρίς μουσική</string>
+    <string name="skip_sponsors_filler">Παράλειψη ενοτήτων εκτός θέματος</string>
     <string name="skip_sponsors_highlight">Παράλειψη επισημάνσεων</string>
     <string name="remember_last_position">Θυμηθείτε τη θέση</string>
     <string name="remember_quality">Θυμηθείτε την ποιότητα του βίντεο</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Επαναφέρετε όλες τις ρυθμίσεις</string>
     <string name="reset_extension_title">Επαναφορά επεκτάσεων</string>
     <string name="reset_extension_message">Επαναφορά όλων των ρυθμίσεων επέκτασης στις προεπιλογές;</string>
+    <string name="settings_backup_restore">Δημιουργία αντιγράφων ασφαλείας και επαναφορά</string>
+    <string name="settings_export">Εξαγωγή ρυθμίσεων</string>
+    <string name="settings_export_summary">Αποθηκεύστε τις τρέχουσες ρυθμίσεις σε ένα αρχείο JSON</string>
+    <string name="settings_import">Ρυθμίσεις εισαγωγής</string>
+    <string name="settings_import_summary">Επαναφέρετε τις ρυθμίσεις από ένα αρχείο αντιγράφου ασφαλείας</string>
+    <string name="settings_import_confirm_title">Εισαγωγή ρυθμίσεων;</string>
+    <string name="settings_import_confirm_message">Οι τρέχουσες ρυθμίσεις θα αντικατασταθούν από το αντίγραφο ασφαλείας.</string>
+    <string name="settings_export_done">Εξάγονται οι ρυθμίσεις</string>
+    <string name="settings_export_failed">Δεν ήταν δυνατή η αποθήκευση του αρχείου ρυθμίσεων</string>
+    <string name="settings_import_done">Οι ρυθμίσεις εισήχθησαν</string>
+    <string name="settings_import_failed">Μη έγκυρο αρχείο ρυθμίσεων</string>
     <string name="confirm">Επιβεβαίωση</string>
     <string name="cancel">Ακύρωση</string>
     <string name="more_options">Περισσότερα</string>
@@ -91,7 +109,7 @@
     <string name="subtitle_style_color">Χρώμα κειμένου</string>
     <string name="subtitle_style_hex">Εξαγωνικός χρωματικός κώδικας</string>
     <string name="subtitle_style_drag_hint">Σύρετε την προεπισκόπηση για επανατοποθέτηση</string>
-    <string name="subtitle_style_bold">Έντονη</string>
+    <string name="subtitle_style_bold">Έντονα</string>
     <string name="subtitle_auto_generated">(αυτόματο)</string>
     <string name="reset">Επαναφορά</string>
     <string name="share">Κοινή χρήση</string>
@@ -104,7 +122,7 @@
     <string name="retry">Επανάληψη</string>
     <string name="segment_intro">Εισαγωγή</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Μου αρέσει και εγγραφείτε στις υπενθυμίσεις</string>
+    <string name="segment_interaction">Υπενθύμιση αλληλεπίδρασης</string>
     <string name="segment_preview">Προεπισκόπηση</string>
     <string name="segment_music_offtopic">Μη μουσική</string>
     <string name="cast">Μετάδοση</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Δεν βρέθηκαν συμβατές συσκευές ροής</string>
     <string name="cast_no_devices_hint">Συνδέστε και τις δύο συσκευές στο ίδιο δίκτυο.</string>
     <string name="cast_unavailable">Μη διαθέσιμη ροή συσκευής</string>
-    <string name="cast_unavailable_hint">Η ροή συσκευής χρειάζεται Υπηρεσίες Google Play.</string>
+    <string name="cast_unavailable_hint">Συνδέστε και τις δύο συσκευές στο ίδιο δίκτυο.</string>
     <string name="cast_section_devices">Διαθέσιμες συσκευές</string>
     <string name="cast_section_link">Ανοιχτό σε οποιαδήποτε συσκευή</string>
     <string name="cast_section_link_hint">Στο ίδιο δίκτυο Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Βίντεο</string>
     <string name="download_audio">Ήχος</string>
     <string name="download_quality">Ποιότητα λήψης</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Η υψηλότερη ποιότητα χρησιμοποιεί περισσότερα δεδομένα και αποθήκευση</string>
     <string name="download_size_estimate">Περίπου %1$s</string>
     <string name="download_size_unknown">Άγνωστο μέγεθος</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Επιλεγμένα: %1$d / %2$d</string>
     <string name="download_batch_meta">Είδη: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Δεν υπάρχουν νέες εργασίες</string>
-    <string name="download_snapshot_too_many">Πάρα πολλά στοιχεία (μέγ. 500).Τίποτα δεν περικόπηκε.</string>
-    <string name="download_snapshot_too_large">Το στιγμιότυπο είναι μεγαλύτερο από 1 MB.Τίποτα δεν περικόπηκε.</string>
+    <string name="download_snapshot_too_many">Πάρα πολλά στοιχεία. Επιλέξτε όχι περισσότερα από 500.</string>
+    <string name="download_snapshot_too_large">Η επιλεγμένη λίστα υπερβαίνει το 1 MB. Επιλέξτε λιγότερα στοιχεία.</string>
     <string name="download_reason_live">Δεν είναι δυνατή η λήψη ζωντανών ροών</string>
     <string name="download_reason_premiere">Αυτή η πρεμιέρα δεν έχει ξεκινήσει</string>
     <string name="download_reason_no_streams">Δεν υπάρχουν ροές αρχείων με δυνατότητα λήψης</string>
@@ -273,7 +292,15 @@
     <string name="info_state_buffering">Προσωρινή αποθήκευση</string>
     <string name="info_state_ended">Τελειώθηκε</string>
     <string name="info_state_cast">Ροή</string>
-    <string name="info_buffer_count">Buffers/min: %1$d</string>
+    <string name="info_buffer_count">Buffer/λεπτό: %1$d</string>
     <string name="audio_description">Ηχητική περιγραφή</string>
     <string name="secondary_audio">Δευτερεύων ήχος</string>
+    <string name="settings_import_reload_message">Οι ρυθμίσεις ενημερώθηκαν. Επαναλάβετε τη φόρτωση ανοιχτών σελίδων για να εφαρμόσετε αλλαγές. Η θέση αναπαραγωγής σας θα διατηρηθεί.</string>
+    <string name="settings_reload_now">Επαναφόρτωση σελίδων τώρα</string>
+    <string name="settings_reload_later">Αργότερα</string>
+    <string name="about_save_logs">Αποθηκεύστε τα αρχεία καταγραφής διαγνωστικών εφαρμογών</string>
+    <string name="about_save_done">Το αρχείο ZIP διαγνωστικού εφαρμογής αποθηκεύτηκε</string>
+    <string name="about_save_cancelled">Ακυρώθηκε</string>
+    <string name="about_save_failed">Δεν ήταν δυνατή η αποθήκευση αρχείων καταγραφής εφαρμογών. Επιλέξτε μια άλλη τοποθεσία αποθήκευσης και δοκιμάστε ξανά.</string>
+    <string name="player_live_unavailable">Η ζωντανή μετάδοση δεν είναι διαθέσιμη. Δοκιμάστε ξανά αργότερα.</string>
 </resources>

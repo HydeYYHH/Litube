@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Arka planda dinle</string>
     <string name="back_again_to_exit">Çıkmak için tekrar geri basın</string>
     <string name="navigate_back">Geri</string>
     <string name="extension">Uzantılar</string>
     <string name="display_dislikes">Beğenmeme sayısını göster</string>
-    <string name="hide_shorts">Shorts’u gizle</string>
+    <string name="hide_shorts">Shorts\'u gizle</string>
     <string name="interface_category">Arayüz</string>
     <string name="player">Oynatma</string>
     <string name="gesture">Hareketler</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Sponsor bölümlerini atla</string>
     <string name="skip_sponsors_selfpromo">Kendi tanıtımını atla</string>
+    <string name="skip_sponsors_interaction">Etkileşim hatırlatmalarını atla</string>
+    <string name="skip_sponsors_intro">Girişleri atla</string>
+    <string name="skip_sponsors_outro">Kapanışları atla</string>
+    <string name="skip_sponsors_preview">Ön izlemeleri atla</string>
+    <string name="skip_sponsors_music_offtopic">Müzik içermeyen bölümleri atla</string>
+    <string name="skip_sponsors_filler">Konu dışı bölümleri atla</string>
     <string name="skip_sponsors_highlight">Öne çıkan anları atla</string>
     <string name="remember_last_position">Konumu hatırla</string>
     <string name="remember_quality">Kaliteyi hatırla</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">Tüm ayarları sıfırla</string>
     <string name="reset_extension_title">Uzantıları sıfırla</string>
     <string name="reset_extension_message">Tüm uzantıları varsayılan ayarlara döndürmek istiyor musunuz?</string>
+    <string name="settings_backup_restore">Yedekleme ve geri yükleme</string>
+    <string name="settings_export">Ayarları dışa aktar</string>
+    <string name="settings_export_summary">Geçerli ayarları bir JSON dosyasına kaydedin</string>
+    <string name="settings_import">Ayarları içe aktar</string>
+    <string name="settings_import_summary">Ayarları bir yedekleme dosyasından geri yükleyin</string>
+    <string name="settings_import_confirm_title">Ayarlar içe aktarılsın mı?</string>
+    <string name="settings_import_confirm_message">Yedekleme, geçerli ayarların üzerine yazılacaktır.</string>
+    <string name="settings_export_done">Ayarlar dışa aktarıldı</string>
+    <string name="settings_export_failed">Ayarlar dosyası kaydedilemedi</string>
+    <string name="settings_import_done">Ayarlar içe aktarıldı</string>
+    <string name="settings_import_failed">Geçersiz ayarlar dosyası</string>
     <string name="confirm">Onayla</string>
     <string name="cancel">İptal</string>
     <string name="open_with">Birlikte aç</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Cast cihazı bulunamadı</string>
     <string name="cast_no_devices_hint">Cihazları aynı ağa bağlayın.</string>
     <string name="cast_unavailable">Yayın kullanılamıyor</string>
-    <string name="cast_unavailable_hint">Google Play Hizmetleri gerekir.</string>
+    <string name="cast_unavailable_hint">Cihazları aynı ağa bağlayın.</string>
     <string name="cast_section_devices">Kullanılabilir cihazlar</string>
     <string name="cast_section_link">Başka cihazda aç</string>
     <string name="cast_section_link_hint">Aynı Wi-Fi ağında.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Ses</string>
     <string name="download_quality">İndirme kalitesi</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Yüksek kalite daha fazla veri ve alan kullanır</string>
     <string name="download_size_estimate">Yaklaşık %1$s</string>
     <string name="download_size_unknown">Boyut bilinmiyor</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Seçili: %1$d / %2$d</string>
     <string name="download_batch_meta">Öğeler: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Yeni indirme yok</string>
-    <string name="download_snapshot_too_many">Çok fazla öğe var (en fazla 500). Liste kısaltılmadı.</string>
-    <string name="download_snapshot_too_large">Liste 1 MB’tan büyük. Liste kısaltılmadı.</string>
+    <string name="download_snapshot_too_many">Çok fazla öğe. En fazla 500\'ü seçin.</string>
+    <string name="download_snapshot_too_large">Seçilen liste 1 MB\'ı aşıyor. Daha az öğe seçin.</string>
     <string name="download_reason_live">Canlı yayınlar indirilemez</string>
     <string name="download_reason_premiere">Bu prömiyer henüz başlamadı</string>
     <string name="download_reason_no_streams">İndirilebilir dosya yok</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Arabellek/dk: %1$d</string>
     <string name="audio_description">Sesli betimleme</string>
     <string name="secondary_audio">İkincil ses</string>
+    <string name="settings_import_reload_message">Ayarlar güncellendi. Değişiklikleri uygulamak için açık sayfaları yeniden yükleyin. Oynatma konumunuz korunacaktır.</string>
+    <string name="settings_reload_now">Sayfaları şimdi yeniden yükle</string>
+    <string name="settings_reload_later">Daha sonra</string>
+    <string name="about_save_logs">Uygulama teşhis günlüklerini kaydedin</string>
+    <string name="about_save_done">Uygulama teşhis ZIP dosyası kaydedildi</string>
+    <string name="about_save_cancelled">İptal edildi</string>
+    <string name="about_save_failed">Uygulama günlükleri kaydedilemedi. Başka bir kaydetme konumu seçip tekrar deneyin.</string>
+    <string name="player_live_unavailable">Canlı yayın kullanılamıyor. Daha sonra tekrar deneyin.</string>
 </resources>

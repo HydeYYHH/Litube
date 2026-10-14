@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Gbọ ni abẹlẹ</string>
     <string name="back_again_to_exit">Tẹ pada lẹẹkansi lati jade</string>
     <string name="navigate_back">Pada</string>
     <string name="extension">Awọn amugbooro</string>
@@ -8,7 +9,7 @@
     <string name="about">Nípa</string>
     <string name="display_dislikes">Ṣe afihan awọn ikorira</string>
     <string name="display_dislikes_summary">Firanṣẹ awọn ID fidio si returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Tọju Awọn kukuru</string>
+    <string name="hide_shorts">Tọju Shorts</string>
     <string name="interface_category">Ni wiwo</string>
     <string name="player">Sisisẹsẹhin</string>
     <string name="gesture">Awọn afarajuwe</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Ni ifibọ player</string>
     <string name="enable_in_fullscreen">Ni kikun iboju</string>
     <string name="brightness">Imọlẹ</string>
-    <string name="volume">Iwọn didun</string>
+    <string name="volume">Ìró ohùn</string>
     <string name="background_mini_player">abẹlẹ &amp; ẹrọ orin kekere</string>
     <string name="pip">Aworan-ni-Aworan</string>
     <string name="in_app_mini_player">Ni-app mini-player</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Rekọja awọn onigbọwọ</string>
     <string name="skip_sponsors_selfpromo">Rekọja igbega ara ẹni</string>
+    <string name="skip_sponsors_interaction">Rekọja awọn olurannileti ibaraenisepo</string>
+    <string name="skip_sponsors_intro">Rekọja awọn apakan ibẹrẹ</string>
+    <string name="skip_sponsors_outro">Rekọja awọn apakan ipari</string>
+    <string name="skip_sponsors_preview">Rekọja awọn awotẹlẹ</string>
+    <string name="skip_sponsors_music_offtopic">Rekọja awọn apakan ti ko ni orin</string>
+    <string name="skip_sponsors_filler">Rekọja awọn apakan ti ko ni ibatan si koko-ọrọ</string>
     <string name="skip_sponsors_highlight">Rekọja awọn ifojusi</string>
     <string name="remember_last_position">Ranti ipo</string>
     <string name="remember_quality">Ranti fidio didara</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Tun gbogbo eto</string>
     <string name="reset_extension_title">Tun awọn amugbooro</string>
     <string name="reset_extension_message">Tun gbogbo eto ifaagun tunto si aiyipada?</string>
+    <string name="settings_backup_restore">Afẹyinti &amp; mu pada</string>
+    <string name="settings_export">Eto okeere</string>
+    <string name="settings_export_summary">Ṣafipamọ awọn eto lọwọlọwọ si faili JSON kan</string>
+    <string name="settings_import">Gbe wọle eto</string>
+    <string name="settings_import_summary">Mu awọn eto pada lati faili afẹyinti</string>
+    <string name="settings_import_confirm_title">Ṣe agbewọle awọn eto bi?</string>
+    <string name="settings_import_confirm_message">Awọn eto lọwọlọwọ yoo jẹ kọ nipasẹ afẹyinti.</string>
+    <string name="settings_export_done">Eto okeere</string>
+    <string name="settings_export_failed">Ko le fi faili eto pamọ</string>
+    <string name="settings_import_done">Eto wole</string>
+    <string name="settings_import_failed">Faili eto ti ko tọ</string>
     <string name="confirm">Jẹrisi</string>
     <string name="cancel">Fagilee</string>
     <string name="more_options">Die e sii</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Iwọn ọrọ</string>
     <string name="subtitle_style_background">abẹlẹ</string>
     <string name="subtitle_background_none">Ko si</string>
-    <string name="subtitle_background_semi">Translucent</string>
-    <string name="subtitle_background_opaque">Opaque</string>
+    <string name="subtitle_background_semi">Àìmọ́ díẹ̀</string>
+    <string name="subtitle_background_opaque">Àìmọ́</string>
     <string name="subtitle_style_color">Awọ ọrọ</string>
     <string name="subtitle_style_hex">Hex awọ koodu</string>
     <string name="subtitle_style_drag_hint">Fa awotẹlẹ lati tunpo</string>
-    <string name="subtitle_style_bold">Igboya</string>
+    <string name="subtitle_style_bold">Lẹ́tà nípọn</string>
     <string name="subtitle_auto_generated">(laifọwọyi)</string>
     <string name="reset">Tunto</string>
     <string name="share">Pinpin</string>
@@ -104,7 +122,7 @@
     <string name="retry">Tun gbiyanju</string>
     <string name="segment_intro">Ọrọ Iṣaaju</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Fẹran ati alabapin awọn olurannileti</string>
+    <string name="segment_interaction">Olurannileti ibaraenisepo</string>
     <string name="segment_preview">Awotẹlẹ</string>
     <string name="segment_music_offtopic">ti kii-orin</string>
     <string name="cast">Sisanwọle si ẹrọ kan</string>
@@ -114,13 +132,13 @@
     <string name="cast_no_devices_found">Ko si awọn ẹrọ ṣiṣanwọle ibaramu ti a rii</string>
     <string name="cast_no_devices_hint">So awọn ẹrọ mejeeji pọ si nẹtiwọki kanna.</string>
     <string name="cast_unavailable">Ṣiṣanwọle ẹrọ ko si</string>
-    <string name="cast_unavailable_hint">Ṣiṣanwọle ẹrọ nilo Awọn iṣẹ Google Play.</string>
+    <string name="cast_unavailable_hint">So awọn ẹrọ mejeeji pọ si nẹtiwọki kanna.</string>
     <string name="cast_section_devices">Awọn ẹrọ to wa</string>
     <string name="cast_section_link">Ṣii sori ẹrọ eyikeyi</string>
     <string name="cast_section_link_hint">Lori kanna Wi-Fi nẹtiwọki.</string>
     <string name="cast_learn_casting">Kọ ẹkọ nipa ṣiṣanwọle ẹrọ</string>
     <string name="add_to_queue">Fi kún ìlà ìdúró</string>
-    <string name="thumbnail">Eekanna atanpako</string>
+    <string name="thumbnail">Àwòrán kékeré</string>
     <string name="cast_link_connected">Ọna asopọ ṣii ni ẹrọ aṣawakiri</string>
     <string name="cast_link_close">Pa ọna asopọ</string>
     <string name="cast_link_banner">Sisanwọle nipasẹ ọna asopọ</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Fidio</string>
     <string name="download_audio">Ohun</string>
     <string name="download_quality">Gbigba didara</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Didara ti o ga julọ nlo data diẹ sii ati ibi ipamọ</string>
     <string name="download_size_estimate">Nipa %1$s</string>
     <string name="download_size_unknown">Iwọn aimọ</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Ti a yan: %1$d / %2$d</string>
     <string name="download_batch_meta">Awọn nkan: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ko si awọn iṣẹ-ṣiṣe tuntun</string>
-    <string name="download_snapshot_too_many">Ju ọpọlọpọ awọn ohun (max 500).Ko si ohun ti a truncated.</string>
-    <string name="download_snapshot_too_large">Aworan ti o tobi ju 1 MB lọ.Ko si ohun ti a truncated.</string>
+    <string name="download_snapshot_too_many">Pupọ awọn nkan. Yan ko ju 500 lọ.</string>
+    <string name="download_snapshot_too_large">Akojọ ti o yan ju 1 MB lọ. Yan awọn nkan diẹ.</string>
     <string name="download_reason_live">Awọn ṣiṣan ifiwe ko le ṣe igbasilẹ</string>
     <string name="download_reason_premiere">Afihan yii ko ti bẹrẹ</string>
     <string name="download_reason_no_streams">Ko si awọn ṣiṣan faili ti a ṣe igbasilẹ</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers / iṣẹju: %1$d</string>
     <string name="audio_description">Audio apejuwe</string>
     <string name="secondary_audio">Atẹle iwe ohun</string>
+    <string name="settings_import_reload_message">Eto imudojuiwọn. Tun awọn oju-iwe ṣiṣi silẹ lati lo awọn ayipada. Ipo ṣiṣiṣẹsẹhin rẹ yoo wa ni ipamọ.</string>
+    <string name="settings_reload_now">Tun gbee si awọn oju-iwe bayi</string>
+    <string name="settings_reload_later">Nigbamii</string>
+    <string name="about_save_logs">Ṣafipamọ awọn akọọlẹ iwadii app</string>
+    <string name="about_save_done">Faili ZIP ti iwadii App ti fipamọ</string>
+    <string name="about_save_cancelled">Fagilee</string>
+    <string name="about_save_failed">Ko le fi awọn akọọlẹ app pamọ. Yan ipo fifipamọ miiran ki o tun gbiyanju lẹẹkansi.</string>
+    <string name="player_live_unavailable">Ìṣànwọlé tààrà kò sí. Gbìyànjú lẹ́ẹ̀kan sí i nígbà míì.</string>
 </resources>

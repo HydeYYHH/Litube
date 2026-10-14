@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Kuuntele taustalla</string>
     <string name="back_again_to_exit">Poistu painamalla takaisin</string>
     <string name="navigate_back">Takaisin</string>
     <string name="extension">Laajennukset</string>
@@ -8,7 +9,7 @@
     <string name="about">Tietoja</string>
     <string name="display_dislikes">Näytä ei-tykkäyksiä</string>
     <string name="display_dislikes_summary">Lähettää videotunnukset osoitteeseen returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Piilota shortsit</string>
+    <string name="hide_shorts">Piilota Shorts</string>
     <string name="interface_category">Käyttöliittymä</string>
     <string name="player">Toisto</string>
     <string name="gesture">Eleet</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Upotetussa soittimessa</string>
     <string name="enable_in_fullscreen">Koko näytön tilassa</string>
     <string name="brightness">Kirkkaus</string>
-    <string name="volume">Volyymi</string>
+    <string name="volume">Äänenvoimakkuus</string>
     <string name="background_mini_player">Tausta ja minisoitin</string>
     <string name="pip">Kuva kuvassa</string>
     <string name="in_app_mini_player">Sovelluksen sisäinen minisoitin</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Ohita sponsorit</string>
     <string name="skip_sponsors_selfpromo">Ohita itsemarkkinointi</string>
+    <string name="skip_sponsors_interaction">Ohita vuorovaikutuskehotukset</string>
+    <string name="skip_sponsors_intro">Ohita alut</string>
+    <string name="skip_sponsors_outro">Ohita loput</string>
+    <string name="skip_sponsors_preview">Ohita esikatselut</string>
+    <string name="skip_sponsors_music_offtopic">Ohita osuudet ilman musiikkia</string>
+    <string name="skip_sponsors_filler">Ohita aiheeseen liittymättömät osuudet</string>
     <string name="skip_sponsors_highlight">Ohita kohokohdat</string>
     <string name="remember_last_position">Muista sijainti</string>
     <string name="remember_quality">Muista videon laatu</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Nollaa kaikki asetukset</string>
     <string name="reset_extension_title">Nollaa laajennukset</string>
     <string name="reset_extension_message">Palautetaanko kaikki laajennusasetukset oletusasetuksiin?</string>
+    <string name="settings_backup_restore">Varmuuskopiointi ja palautus</string>
+    <string name="settings_export">Vie asetukset</string>
+    <string name="settings_export_summary">Tallenna nykyiset asetukset JSON-tiedostoon</string>
+    <string name="settings_import">Tuo asetukset</string>
+    <string name="settings_import_summary">Palauta asetukset varmuuskopiotiedostosta</string>
+    <string name="settings_import_confirm_title">Tuodaanko asetukset?</string>
+    <string name="settings_import_confirm_message">Varmuuskopio korvaa nykyiset asetukset.</string>
+    <string name="settings_export_done">Asetukset viety</string>
+    <string name="settings_export_failed">Asetustiedostoa ei voitu tallentaa</string>
+    <string name="settings_import_done">Asetukset tuotu</string>
+    <string name="settings_import_failed">Virheellinen asetustiedosto</string>
     <string name="confirm">Vahvista</string>
     <string name="cancel">Peruuta</string>
     <string name="more_options">Lisää</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tekstin koko</string>
     <string name="subtitle_style_background">Tausta</string>
     <string name="subtitle_background_none">Ei mitään</string>
-    <string name="subtitle_background_semi">Läpinäkyvä</string>
+    <string name="subtitle_background_semi">Puoliläpinäkyvä</string>
     <string name="subtitle_background_opaque">Läpinäkymätön</string>
     <string name="subtitle_style_color">Tekstin väri</string>
     <string name="subtitle_style_hex">Hex värikoodi</string>
@@ -104,7 +122,7 @@
     <string name="retry">Yritä uudelleen</string>
     <string name="segment_intro">Johdanto</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Tykkää ja tilaa muistutuksia</string>
+    <string name="segment_interaction">Vuorovaikutuskehotus</string>
     <string name="segment_preview">Esikatselu</string>
     <string name="segment_music_offtopic">Ei musiikkia</string>
     <string name="cast">Lähetä laitteeseen</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Yhteensopivia suoratoistolaitteita ei löytynyt</string>
     <string name="cast_no_devices_hint">Yhdistä molemmat laitteet samaan verkkoon.</string>
     <string name="cast_unavailable">Laitteen suoratoisto ei ole käytettävissä</string>
-    <string name="cast_unavailable_hint">Laitteen suoratoisto vaatii Google Play Palvelut.</string>
+    <string name="cast_unavailable_hint">Yhdistä molemmat laitteet samaan verkkoon.</string>
     <string name="cast_section_devices">Käytettävissä olevat laitteet</string>
     <string name="cast_section_link">Avaa millä tahansa laitteella</string>
     <string name="cast_section_link_hint">Samassa Wi-Fi-verkossa.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Ääni</string>
     <string name="download_quality">Latauksen laatu</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Korkeampi laatu käyttää enemmän dataa ja tallennustilaa</string>
     <string name="download_size_estimate">Noin %1$s</string>
     <string name="download_size_unknown">Koko tuntematon</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Valittu: %1$d / %2$d</string>
     <string name="download_batch_meta">Tuotteet: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ei uusia tehtäviä</string>
-    <string name="download_snapshot_too_many">Liian monta kohdetta (max 500).Mitään ei katkaistu.</string>
-    <string name="download_snapshot_too_large">Tilannekuva on suurempi kuin 1 MB.Mitään ei katkaistu.</string>
+    <string name="download_snapshot_too_many">Liian monta kohdetta. Valitse enintään 500.</string>
+    <string name="download_snapshot_too_large">Valitun luettelon koko on yli 1 Mt. Valitse vähemmän kohteita.</string>
     <string name="download_reason_live">Live-lähetyksiä ei voi ladata</string>
     <string name="download_reason_premiere">Tämä ensi-ilta ei ole alkanut</string>
     <string name="download_reason_no_streams">Ei ladattavia tiedostovirtoja</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Puskurit/min: %1$d</string>
     <string name="audio_description">Äänikuvaus</string>
     <string name="secondary_audio">Toissijainen ääni</string>
+    <string name="settings_import_reload_message">Asetukset päivitetty. Lataa avoimet sivut uudelleen ottaaksesi muutokset käyttöön. Toistopaikkasi säilyy.</string>
+    <string name="settings_reload_now">Lataa sivut uudelleen nyt</string>
+    <string name="settings_reload_later">Myöhemmin</string>
+    <string name="about_save_logs">Tallenna sovellusten diagnostiikkalokit</string>
+    <string name="about_save_done">Sovelluksen diagnostiikka ZIP-tiedosto tallennettu</string>
+    <string name="about_save_cancelled">Peruutettu</string>
+    <string name="about_save_failed">Sovelluslokeja ei voitu tallentaa. Valitse toinen tallennuspaikka ja yritä uudelleen.</string>
+    <string name="player_live_unavailable">Suora lähetys ei ole saatavilla. Yritä myöhemmin uudelleen.</string>
 </resources>

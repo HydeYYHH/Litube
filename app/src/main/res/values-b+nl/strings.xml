@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Luister op de achtergrond</string>
     <string name="back_again_to_exit">Druk nogmaals op terug om af te sluiten</string>
     <string name="navigate_back">Terug</string>
     <string name="extension">Uitbreidingen</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Sponsors overslaan</string>
     <string name="skip_sponsors_selfpromo">Zelfpromotie overslaan</string>
+    <string name="skip_sponsors_interaction">Interactieherinneringen overslaan</string>
+    <string name="skip_sponsors_intro">Intro\'s overslaan</string>
+    <string name="skip_sponsors_outro">Afsluitingen overslaan</string>
+    <string name="skip_sponsors_preview">Voorbeelden overslaan</string>
+    <string name="skip_sponsors_music_offtopic">Delen zonder muziek overslaan</string>
+    <string name="skip_sponsors_filler">Delen buiten het onderwerp overslaan</string>
     <string name="skip_sponsors_highlight">Hoogtepunten overslaan</string>
     <string name="remember_last_position">Onthoud positie</string>
     <string name="remember_quality">Onthoud de videokwaliteit</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Reset alle instellingen</string>
     <string name="reset_extension_title">Extensies resetten</string>
     <string name="reset_extension_message">Alle extensie-instellingen terugzetten naar standaard?</string>
+    <string name="settings_backup_restore">Back-up en herstel</string>
+    <string name="settings_export">Instellingen exporteren</string>
+    <string name="settings_export_summary">Sla de huidige instellingen op in een JSON-bestand</string>
+    <string name="settings_import">Instellingen importeren</string>
+    <string name="settings_import_summary">Instellingen herstellen vanaf een back-upbestand</string>
+    <string name="settings_import_confirm_title">Instellingen importeren?</string>
+    <string name="settings_import_confirm_message">De huidige instellingen worden door de back-up overschreven.</string>
+    <string name="settings_export_done">Instellingen geëxporteerd</string>
+    <string name="settings_export_failed">Kon het instellingenbestand niet opslaan</string>
+    <string name="settings_import_done">Instellingen geïmporteerd</string>
+    <string name="settings_import_failed">Ongeldig instellingenbestand</string>
     <string name="confirm">Bevestig</string>
     <string name="cancel">Annuleren</string>
     <string name="more_options">Meer</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tekstgrootte</string>
     <string name="subtitle_style_background">Achtergrond</string>
     <string name="subtitle_background_none">Geen</string>
-    <string name="subtitle_background_semi">Doorschijnend</string>
+    <string name="subtitle_background_semi">Halfdoorzichtig</string>
     <string name="subtitle_background_opaque">Ondoorzichtig</string>
     <string name="subtitle_style_color">Tekstkleur</string>
     <string name="subtitle_style_hex">Hex-kleurcode</string>
@@ -104,7 +122,7 @@
     <string name="retry">Probeer het opnieuw</string>
     <string name="segment_intro">Inleiding</string>
     <string name="segment_outro">Uitro</string>
-    <string name="segment_interaction">Herinneringen voor liken en abonneren</string>
+    <string name="segment_interaction">Interactieherinnering</string>
     <string name="segment_preview">Voorbeeld</string>
     <string name="segment_music_offtopic">Niet-muziek</string>
     <string name="cast">Casten</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Geen compatibele streamingapparaten gevonden</string>
     <string name="cast_no_devices_hint">Verbind beide apparaten met hetzelfde netwerk.</string>
     <string name="cast_unavailable">Apparaatstreaming niet beschikbaar</string>
-    <string name="cast_unavailable_hint">Voor apparaatstreaming zijn Google Play-services nodig.</string>
+    <string name="cast_unavailable_hint">Verbind beide apparaten met hetzelfde netwerk.</string>
     <string name="cast_section_devices">Beschikbare apparaten</string>
     <string name="cast_section_link">Openen op elk apparaat</string>
     <string name="cast_section_link_hint">Op hetzelfde Wi-Fi-netwerk.</string>
@@ -123,7 +141,7 @@
     <string name="thumbnail">Miniatuur</string>
     <string name="cast_link_connected">Link geopend in browser</string>
     <string name="cast_link_close">Link sluiten</string>
-    <string name="cast_link_banner">Streaming via link</string>
+    <string name="cast_link_banner">Streamen via link</string>
     <string name="action_restore_watch">Terug naar video</string>
     <string name="no_subtitles">Geen ondertitels</string>
     <string name="subtitle_unavailable">Ondertiteling niet beschikbaar</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Downloadkwaliteit</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Hogere kwaliteit gebruikt meer gegevens en opslagruimte</string>
     <string name="download_size_estimate">Ongeveer %1$s</string>
     <string name="download_size_unknown">Maat onbekend</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Geselecteerd: %1$d / %2$d</string>
     <string name="download_batch_meta">Artikelen: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Geen nieuwe taken</string>
-    <string name="download_snapshot_too_many">Te veel items (max. 500).Er werd niets ingekort.</string>
-    <string name="download_snapshot_too_large">Momentopname is groter dan 1 MB.Er werd niets ingekort.</string>
+    <string name="download_snapshot_too_many">Te veel artikelen. Selecteer niet meer dan 500.</string>
+    <string name="download_snapshot_too_large">De geselecteerde lijst is groter dan 1 MB. Selecteer minder items.</string>
     <string name="download_reason_live">Livestreams kunnen niet worden gedownload</string>
     <string name="download_reason_premiere">Deze première is nog niet begonnen</string>
     <string name="download_reason_no_streams">Geen downloadbare bestandsstreams</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers/min: %1$d</string>
     <string name="audio_description">Audiobeschrijving</string>
     <string name="secondary_audio">Secundaire audio</string>
+    <string name="settings_import_reload_message">Instellingen bijgewerkt. Laad geopende pagina\'s opnieuw om wijzigingen toe te passen. Uw afspeelpositie blijft behouden.</string>
+    <string name="settings_reload_now">Pagina\'s nu opnieuw laden</string>
+    <string name="settings_reload_later">Later</string>
+    <string name="about_save_logs">Bewaar diagnostische logboeken</string>
+    <string name="about_save_done">App-diagnostisch ZIP-bestand opgeslagen</string>
+    <string name="about_save_cancelled">Geannuleerd</string>
+    <string name="about_save_failed">Could not save app logs. Kies een andere opslaglocatie en probeer het opnieuw.</string>
+    <string name="player_live_unavailable">Livestream niet beschikbaar. Probeer het later opnieuw.</string>
 </resources>

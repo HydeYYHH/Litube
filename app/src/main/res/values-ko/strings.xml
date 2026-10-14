@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">백그라운드에서 듣기</string>
     <string name="back_again_to_exit">뒤로 가기를 한 번 더 누르면 종료됩니다</string>
     <string name="navigate_back">뒤로</string>
     <string name="extension">확장 기능</string>
@@ -17,7 +18,7 @@
     <string name="enable_in_embedded">내장 플레이어에서</string>
     <string name="enable_in_fullscreen">전체 화면에서</string>
     <string name="brightness">밝기</string>
-    <string name="volume">볼륨</string>
+    <string name="volume">음량</string>
     <string name="background_mini_player">백그라운드 및 미니 플레이어</string>
     <string name="pip">화면 속 화면</string>
     <string name="in_app_mini_player">앱 내 미니 플레이어</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">스폰서 구간 건너뛰기</string>
     <string name="skip_sponsors_selfpromo">자체 홍보 건너뛰기</string>
+    <string name="skip_sponsors_interaction">좋아요·구독 안내 건너뛰기</string>
+    <string name="skip_sponsors_intro">도입부 건너뛰기</string>
+    <string name="skip_sponsors_outro">마무리 건너뛰기</string>
+    <string name="skip_sponsors_preview">미리보기 건너뛰기</string>
+    <string name="skip_sponsors_music_offtopic">음악이 없는 부분 건너뛰기</string>
+    <string name="skip_sponsors_filler">주제와 무관한 부분 건너뛰기</string>
     <string name="skip_sponsors_highlight">하이라이트 건너뛰기</string>
     <string name="remember_last_position">재생 위치 기억</string>
     <string name="remember_quality">화질 기억</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">모든 설정 초기화</string>
     <string name="reset_extension_title">확장 기능 초기화</string>
     <string name="reset_extension_message">모든 확장 기능 설정을 기본값으로 되돌릴까요?</string>
+    <string name="settings_backup_restore">백업 및 복원</string>
+    <string name="settings_export">설정 내보내기</string>
+    <string name="settings_export_summary">현재 설정을 JSON 파일로 저장</string>
+    <string name="settings_import">설정 가져오기</string>
+    <string name="settings_import_summary">백업 파일에서 설정 복원</string>
+    <string name="settings_import_confirm_title">설정을 가져오시겠습니까?</string>
+    <string name="settings_import_confirm_message">현재 설정을 백업 파일의 설정으로 덮어씁니다.</string>
+    <string name="settings_export_done">설정을 내보냈습니다</string>
+    <string name="settings_export_failed">설정 파일을 저장할 수 없습니다</string>
+    <string name="settings_import_done">설정을 가져왔습니다</string>
+    <string name="settings_import_failed">설정 파일이 올바르지 않습니다</string>
     <string name="confirm">확인</string>
     <string name="cancel">취소</string>
     <string name="open_with">다른 앱으로 열기</string>
@@ -104,7 +122,7 @@
     <string name="retry">다시 시도</string>
     <string name="segment_intro">인트로</string>
     <string name="segment_outro">아웃트로</string>
-    <string name="segment_interaction">참여 요청</string>
+    <string name="segment_interaction">좋아요·구독 안내</string>
     <string name="segment_preview">미리보기</string>
     <string name="segment_music_offtopic">음악 외 구간</string>
     <string name="cast">전송</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Cast 기기를 찾을 수 없습니다</string>
     <string name="cast_no_devices_hint">기기를 같은 네트워크에 연결하세요.</string>
     <string name="cast_unavailable">전송을 사용할 수 없습니다</string>
-    <string name="cast_unavailable_hint">Google Play 서비스가 필요합니다.</string>
+    <string name="cast_unavailable_hint">기기를 같은 네트워크에 연결하세요.</string>
     <string name="cast_section_devices">사용 가능한 기기</string>
     <string name="cast_section_link">다른 기기에서 열기</string>
     <string name="cast_section_link_hint">같은 Wi-Fi 네트워크에서 사용하세요.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">동영상</string>
     <string name="download_audio">오디오</string>
     <string name="download_quality">다운로드 화질</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">화질이 높을수록 데이터와 저장 공간을 더 사용합니다</string>
     <string name="download_size_estimate">약 %1$s</string>
     <string name="download_size_unknown">크기 알 수 없음</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">선택: %1$d / %2$d</string>
     <string name="download_batch_meta">항목: %1$d · %2$s</string>
     <string name="download_no_new_tasks">새 다운로드가 없습니다</string>
-    <string name="download_snapshot_too_many">항목이 너무 많습니다 (최대 500개). 목록은 잘리지 않았습니다.</string>
-    <string name="download_snapshot_too_large">목록이 1MB를 초과합니다. 내용은 잘리지 않았습니다.</string>
+    <string name="download_snapshot_too_many">항목이 너무 많습니다. 500개 이하를 선택하세요.</string>
+    <string name="download_snapshot_too_large">선택한 목록이 1MB를 초과합니다. 더 적은 수의 항목을 선택하세요.</string>
     <string name="download_reason_live">실시간 스트림은 다운로드할 수 없습니다</string>
     <string name="download_reason_premiere">최초 공개가 아직 시작되지 않았습니다</string>
     <string name="download_reason_no_streams">다운로드할 수 있는 파일이 없습니다</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">분당 버퍼링: %1$d회</string>
     <string name="audio_description">화면 해설</string>
     <string name="secondary_audio">보조 오디오</string>
+    <string name="settings_import_reload_message">설정이 변경되었습니다. 열린 페이지를 새로고침하면 변경 사항이 적용됩니다. 재생 위치는 유지됩니다.</string>
+    <string name="settings_reload_now">지금 새로고침</string>
+    <string name="settings_reload_later">나중에</string>
+    <string name="about_save_logs">진단 로그 저장</string>
+    <string name="about_save_done">진단 로그 ZIP 파일을 저장했습니다</string>
+    <string name="about_save_cancelled">저장을 취소했습니다</string>
+    <string name="about_save_failed">진단 로그를 저장할 수 없습니다. 다른 저장 위치를 선택하고 다시 시도하세요.</string>
+    <string name="player_live_unavailable">실시간 방송을 재생할 수 없습니다. 나중에 다시 시도하세요.</string>
 </resources>

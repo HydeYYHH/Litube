@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಆಲಿಸಿ</string>
     <string name="back_again_to_exit">ನಿರ್ಗಮಿಸಲು ಮತ್ತೆ ಹಿಂದಕ್ಕೆ ಒತ್ತಿರಿ</string>
     <string name="navigate_back">ಹಿಂದೆ</string>
     <string name="extension">ವಿಸ್ತರಣೆಗಳು</string>
@@ -8,7 +9,7 @@
     <string name="about">ಕುರಿತು</string>
     <string name="display_dislikes">ಇಷ್ಟವಿಲ್ಲದವುಗಳನ್ನು ತೋರಿಸಿ</string>
     <string name="display_dislikes_summary">ವೀಡಿಯೋ ಐಡಿಗಳನ್ನು returnyoutubedislikeapi.com ಗೆ ಕಳುಹಿಸುತ್ತದೆ</string>
-    <string name="hide_shorts">ಕಿರುಚಿತ್ರಗಳನ್ನು ಮರೆಮಾಡಿ</string>
+    <string name="hide_shorts">Shorts ಮರೆಮಾಡಿ</string>
     <string name="interface_category">ಇಂಟರ್ಫೇಸ್</string>
     <string name="player">ಪ್ಲೇಬ್ಯಾಕ್</string>
     <string name="gesture">ಸನ್ನೆಗಳು</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ಎಂಬೆಡೆಡ್ ಪ್ಲೇಯರ್‌ನಲ್ಲಿ</string>
     <string name="enable_in_fullscreen">ಪೂರ್ಣಪರದೆಯಲ್ಲಿ</string>
     <string name="brightness">ಪ್ರಕಾಶಮಾನತೆ</string>
-    <string name="volume">ಸಂಪುಟ</string>
+    <string name="volume">ಧ್ವನಿ ಮಟ್ಟ</string>
     <string name="background_mini_player">ಹಿನ್ನೆಲೆ ಮತ್ತು ಮಿನಿ ಪ್ಲೇಯರ್</string>
     <string name="pip">ಪಿಕ್ಚರ್-ಇನ್-ಪಿಕ್ಚರ್</string>
     <string name="in_app_mini_player">ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಮಿನಿ-ಪ್ಲೇಯರ್</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ಪ್ರಾಯೋಜಕರನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
     <string name="skip_sponsors_selfpromo">ಸ್ವಯಂ ಪ್ರಚಾರವನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_interaction">ಲೈಕ್ ಮತ್ತು ಚಂದಾದಾರಿಕೆ ಜ್ಞಾಪನೆಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_intro">ಆರಂಭದ ಭಾಗಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_outro">ಅಂತ್ಯದ ಭಾಗಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_preview">ಪೂರ್ವವೀಕ್ಷಣೆಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_music_offtopic">ಸಂಗೀತವಿಲ್ಲದ ಭಾಗಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
+    <string name="skip_sponsors_filler">ವಿಷಯಕ್ಕೆ ಸಂಬಂಧಿಸದ ಭಾಗಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
     <string name="skip_sponsors_highlight">ಮುಖ್ಯಾಂಶಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಿ</string>
     <string name="remember_last_position">ಸ್ಥಾನವನ್ನು ನೆನಪಿಡಿ</string>
     <string name="remember_quality">ವೀಡಿಯೊ ಗುಣಮಟ್ಟವನ್ನು ನೆನಪಿಡಿ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ಎಲ್ಲಾ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಮರುಹೊಂದಿಸಿ</string>
     <string name="reset_extension_title">ವಿಸ್ತರಣೆಗಳನ್ನು ಮರುಹೊಂದಿಸಿ</string>
     <string name="reset_extension_message">ಎಲ್ಲಾ ವಿಸ್ತರಣೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಡೀಫಾಲ್ಟ್‌ಗೆ ಮರುಹೊಂದಿಸುವುದೇ?</string>
+    <string name="settings_backup_restore">ಬ್ಯಾಕಪ್ ಮತ್ತು ಮರುಸ್ಥಾಪನೆ</string>
+    <string name="settings_export">ರಫ್ತು ಸೆಟ್ಟಿಂಗ್‌ಗಳು</string>
+    <string name="settings_export_summary">ಪ್ರಸ್ತುತ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು JSON ಫೈಲ್‌ಗೆ ಉಳಿಸಿ</string>
+    <string name="settings_import">ಆಮದು ಸೆಟ್ಟಿಂಗ್‌ಗಳು</string>
+    <string name="settings_import_summary">ಬ್ಯಾಕಪ್ ಫೈಲ್‌ನಿಂದ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ</string>
+    <string name="settings_import_confirm_title">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಆಮದು ಮಾಡುವುದೇ?</string>
+    <string name="settings_import_confirm_message">ಪ್ರಸ್ತುತ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಬ್ಯಾಕಪ್‌ನಿಂದ ತಿದ್ದಿ ಬರೆಯಲಾಗುತ್ತದೆ.</string>
+    <string name="settings_export_done">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ರಫ್ತು ಮಾಡಲಾಗಿದೆ</string>
+    <string name="settings_export_failed">ಸೆಟ್ಟಿಂಗ್‌ಗಳ ಫೈಲ್ ಅನ್ನು ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ</string>
+    <string name="settings_import_done">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಆಮದು ಮಾಡಲಾಗಿದೆ</string>
+    <string name="settings_import_failed">ಅಮಾನ್ಯ ಸೆಟ್ಟಿಂಗ್‌ಗಳ ಫೈಲ್</string>
     <string name="confirm">ದೃಢೀಕರಿಸಿ</string>
     <string name="cancel">ರದ್ದುಮಾಡಿ</string>
     <string name="more_options">ಇನ್ನಷ್ಟು</string>
@@ -104,7 +122,7 @@
     <string name="retry">ಮರುಪ್ರಯತ್ನಿಸಿ</string>
     <string name="segment_intro">ಪರಿಚಯ</string>
     <string name="segment_outro">ಔಟ್ರೊ</string>
-    <string name="segment_interaction">ಜ್ಞಾಪನೆಗಳನ್ನು ಇಷ್ಟಪಡಿ ಮತ್ತು ಚಂದಾದಾರರಾಗಿ</string>
+    <string name="segment_interaction">ಲೈಕ್ ಮತ್ತು ಚಂದಾದಾರಿಕೆಯ ಜ್ಞಾಪನೆ</string>
     <string name="segment_preview">ಮುನ್ನೋಟ</string>
     <string name="segment_music_offtopic">ಸಂಗೀತೇತರ</string>
     <string name="cast">ಸಾಧನಕ್ಕೆ ಸ್ಟ್ರೀಮ್ ಮಾಡಿ</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ಯಾವುದೇ ಹೊಂದಾಣಿಕೆಯ ಸ್ಟ್ರೀಮಿಂಗ್ ಸಾಧನಗಳು ಕಂಡುಬಂದಿಲ್ಲ</string>
     <string name="cast_no_devices_hint">ಎರಡೂ ಸಾಧನಗಳನ್ನು ಒಂದೇ ನೆಟ್‌ವರ್ಕ್‌ಗೆ ಸಂಪರ್ಕಪಡಿಸಿ.</string>
     <string name="cast_unavailable">ಸಾಧನ ಸ್ಟ್ರೀಮಿಂಗ್ ಲಭ್ಯವಿಲ್ಲ</string>
-    <string name="cast_unavailable_hint">ಸಾಧನ ಸ್ಟ್ರೀಮಿಂಗ್‌ಗೆ Google Play ಸೇವೆಗಳ ಅಗತ್ಯವಿದೆ.</string>
+    <string name="cast_unavailable_hint">ಎರಡೂ ಸಾಧನಗಳನ್ನು ಒಂದೇ ನೆಟ್‌ವರ್ಕ್‌ಗೆ ಸಂಪರ್ಕಪಡಿಸಿ.</string>
     <string name="cast_section_devices">ಲಭ್ಯವಿರುವ ಸಾಧನಗಳು</string>
     <string name="cast_section_link">ಯಾವುದೇ ಸಾಧನದಲ್ಲಿ ತೆರೆಯಿರಿ</string>
     <string name="cast_section_link_hint">ಅದೇ ವೈ-ಫೈ ನೆಟ್‌ವರ್ಕ್‌ನಲ್ಲಿ.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ವಿಡಿಯೋ</string>
     <string name="download_audio">ಆಡಿಯೋ</string>
     <string name="download_quality">ಡೌನ್‌ಲೋಡ್ ಗುಣಮಟ್ಟ</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ಹೆಚ್ಚಿನ ಗುಣಮಟ್ಟವು ಹೆಚ್ಚಿನ ಡೇಟಾ ಮತ್ತು ಸಂಗ್ರಹಣೆಯನ್ನು ಬಳಸುತ್ತದೆ</string>
     <string name="download_size_estimate">ಸುಮಾರು %1$s</string>
     <string name="download_size_unknown">ಗಾತ್ರ ತಿಳಿದಿಲ್ಲ</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ: %1$d / %2$d</string>
     <string name="download_batch_meta">ಐಟಂಗಳು: %1$d · %2$s</string>
     <string name="download_no_new_tasks">ಯಾವುದೇ ಹೊಸ ಕಾರ್ಯಗಳಿಲ್ಲ</string>
-    <string name="download_snapshot_too_many">ಹಲವಾರು ಐಟಂಗಳು (ಗರಿಷ್ಠ 500).ಯಾವುದನ್ನೂ ಮೊಟಕುಗೊಳಿಸಲಿಲ್ಲ.</string>
-    <string name="download_snapshot_too_large">ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ 1 MB ಗಿಂತ ದೊಡ್ಡದಾಗಿದೆ.ಯಾವುದನ್ನೂ ಮೊಟಕುಗೊಳಿಸಲಿಲ್ಲ.</string>
+    <string name="download_snapshot_too_many">ಹಲವಾರು ವಸ್ತುಗಳು. 500 ಕ್ಕಿಂತ ಹೆಚ್ಚಿಲ್ಲದಂತೆ ಆಯ್ಕೆಮಾಡಿ.</string>
+    <string name="download_snapshot_too_large">ಆಯ್ಕೆಮಾಡಿದ ಪಟ್ಟಿಯು 1 MB ಮೀರಿದೆ. ಕಡಿಮೆ ಐಟಂಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.</string>
     <string name="download_reason_live">ಲೈವ್ ಸ್ಟ್ರೀಮ್‌ಗಳನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ</string>
     <string name="download_reason_premiere">ಈ ಪ್ರೀಮಿಯರ್ ಪ್ರಾರಂಭವಾಗಿಲ್ಲ</string>
     <string name="download_reason_no_streams">ಯಾವುದೇ ಡೌನ್‌ಲೋಡ್ ಮಾಡಬಹುದಾದ ಫೈಲ್ ಸ್ಟ್ರೀಮ್‌ಗಳಿಲ್ಲ</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">ಬಫರ್‌ಗಳು/ನಿಮಿಷ: %1$d</string>
     <string name="audio_description">ಆಡಿಯೋ ವಿವರಣೆ</string>
     <string name="secondary_audio">ಸೆಕೆಂಡರಿ ಆಡಿಯೋ</string>
+    <string name="settings_import_reload_message">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ. ಬದಲಾವಣೆಗಳನ್ನು ಅನ್ವಯಿಸಲು ತೆರೆದ ಪುಟಗಳನ್ನು ಮರುಲೋಡ್ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ಲೇಬ್ಯಾಕ್ ಸ್ಥಾನವನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.</string>
+    <string name="settings_reload_now">ಪುಟಗಳನ್ನು ಈಗ ಮರುಲೋಡ್ ಮಾಡಿ</string>
+    <string name="settings_reload_later">ನಂತರ</string>
+    <string name="about_save_logs">ಅಪ್ಲಿಕೇಶನ್ ಡಯಾಗ್ನೋಸ್ಟಿಕ್ ಲಾಗ್‌ಗಳನ್ನು ಉಳಿಸಿ</string>
+    <string name="about_save_done">ಅಪ್ಲಿಕೇಶನ್ ಡಯಾಗ್ನೋಸ್ಟಿಕ್ ZIP ಫೈಲ್ ಅನ್ನು ಉಳಿಸಲಾಗಿದೆ</string>
+    <string name="about_save_cancelled">ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ</string>
+    <string name="about_save_failed">ಅಪ್ಲಿಕೇಶನ್ ಲಾಗ್‌ಗಳನ್ನು ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೊಂದು ಉಳಿಸುವ ಸ್ಥಳವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</string>
+    <string name="player_live_unavailable">ಲೈವ್ ಸ್ಟ್ರೀಮ್ ಲಭ್ಯವಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Orqa fonda tinglang</string>
     <string name="back_again_to_exit">Chiqish uchun yana orqaga bosing</string>
     <string name="navigate_back">Orqaga</string>
     <string name="extension">Kengaytmalar</string>
@@ -8,7 +9,7 @@
     <string name="about">Ilova haqida</string>
     <string name="display_dislikes">Yoqtirmasliklarni ko\'rsatish</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com saytiga video identifikatorlarini yuboradi</string>
-    <string name="hide_shorts">Shortslarni yashirish</string>
+    <string name="hide_shorts">Shorts videolarini yashirish</string>
     <string name="interface_category">Interfeys</string>
     <string name="player">Ijro</string>
     <string name="gesture">Imo-ishoralar</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">O\'rnatilgan pleyerda</string>
     <string name="enable_in_fullscreen">Toʻliq ekranda</string>
     <string name="brightness">Yorqinlik</string>
-    <string name="volume">Hajmi</string>
+    <string name="volume">Ovoz balandligi</string>
     <string name="background_mini_player">Fon va mini pleer</string>
     <string name="pip">Tasvir ichidagi rasm</string>
     <string name="in_app_mini_player">Ilova ichidagi mini-pleyer</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Homiylarni oʻtkazib yuboring</string>
     <string name="skip_sponsors_selfpromo">Oʻz-oʻzini reklama qilishni oʻtkazib yuboring</string>
+    <string name="skip_sponsors_interaction">Yoqtirish va obuna eslatmalarini o‘tkazib yuborish</string>
+    <string name="skip_sponsors_intro">Kirishlarni o‘tkazib yuborish</string>
+    <string name="skip_sponsors_outro">Yakunlarni o‘tkazib yuborish</string>
+    <string name="skip_sponsors_preview">Oldindan ko‘rishlarni o‘tkazib yuborish</string>
+    <string name="skip_sponsors_music_offtopic">Musiqasiz qismlarni o‘tkazib yuborish</string>
+    <string name="skip_sponsors_filler">Mavzudan tashqari qismlarni o‘tkazib yuborish</string>
     <string name="skip_sponsors_highlight">Asosiy nuqtalarni oʻtkazib yuborish</string>
     <string name="remember_last_position">Lavozimni eslab qoling</string>
     <string name="remember_quality">Video sifatini eslab qoling</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Barcha sozlamalarni tiklash</string>
     <string name="reset_extension_title">Kengaytmalarni tiklash</string>
     <string name="reset_extension_message">Barcha kengaytma sozlamalari asl holatiga qaytarilsinmi?</string>
+    <string name="settings_backup_restore">Zaxiralash va tiklash</string>
+    <string name="settings_export">Sozlamalarni eksport qilish</string>
+    <string name="settings_export_summary">Joriy sozlamalarni JSON fayliga saqlang</string>
+    <string name="settings_import">Import sozlamalari</string>
+    <string name="settings_import_summary">Zaxira faylidan sozlamalarni tiklang</string>
+    <string name="settings_import_confirm_title">Sozlamalar import qilinsinmi?</string>
+    <string name="settings_import_confirm_message">Joriy sozlamalar zaxira nusxasi orqali yoziladi.</string>
+    <string name="settings_export_done">Sozlamalar eksport qilindi</string>
+    <string name="settings_export_failed">Sozlamalar faylini saqlab bo‘lmadi</string>
+    <string name="settings_import_done">Sozlamalar import qilindi</string>
+    <string name="settings_import_failed">Sozlamalar fayli noto‘g‘ri</string>
     <string name="confirm">Tasdiqlang</string>
     <string name="cancel">Bekor qilish</string>
     <string name="more_options">Yana</string>
@@ -86,8 +104,8 @@
     <string name="subtitle_style_text_size">Matn hajmi</string>
     <string name="subtitle_style_background">Fon</string>
     <string name="subtitle_background_none">Yo\'q</string>
-    <string name="subtitle_background_semi">Shaffof</string>
-    <string name="subtitle_background_opaque">Shaffof</string>
+    <string name="subtitle_background_semi">Yarim shaffof</string>
+    <string name="subtitle_background_opaque">Shaffof emas</string>
     <string name="subtitle_style_color">Matn rangi</string>
     <string name="subtitle_style_hex">Hex rang kodi</string>
     <string name="subtitle_style_drag_hint">Qayta joylashtirish uchun oldindan koʻrishni torting</string>
@@ -104,7 +122,7 @@
     <string name="retry">Qayta urinib koʻring</string>
     <string name="segment_intro">Kirish</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Eslatmalarni yoqtirish va obuna bo\'lish</string>
+    <string name="segment_interaction">Yoqtirish va obuna eslatmasi</string>
     <string name="segment_preview">Ko‘rib chiqish</string>
     <string name="segment_music_offtopic">Musiqadan tashqari</string>
     <string name="cast">Uzating</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Mos keladigan oqim qurilmalari topilmadi</string>
     <string name="cast_no_devices_hint">Ikkala qurilmani bir xil tarmoqqa ulang.</string>
     <string name="cast_unavailable">Qurilma oqimi mavjud emas</string>
-    <string name="cast_unavailable_hint">Qurilma oqimi uchun Google Play xizmatlari kerak.</string>
+    <string name="cast_unavailable_hint">Ikkala qurilmani bir xil tarmoqqa ulang.</string>
     <string name="cast_section_devices">Mavjud qurilmalar</string>
     <string name="cast_section_link">Istalgan qurilmada oching</string>
     <string name="cast_section_link_hint">Xuddi shu Wi-Fi tarmog\'ida.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Yuklab olish sifati</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Yuqori sifat koʻproq maʼlumot va xotiradan foydalanadi</string>
     <string name="download_size_estimate">Taxminan %1$s</string>
     <string name="download_size_unknown">Hajmi noma\'lum</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Tanlangan: %1$d / %2$d</string>
     <string name="download_batch_meta">Mahsulotlar: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Yangi vazifalar yo\'q</string>
-    <string name="download_snapshot_too_many">Juda koʻp element (maksimal 500).Hech narsa kesilmadi.</string>
-    <string name="download_snapshot_too_large">Snapshot 1 MB dan katta.Hech narsa kesilmadi.</string>
+    <string name="download_snapshot_too_many">Juda koʻp elementlar. 500 dan oshmasligi kerak.</string>
+    <string name="download_snapshot_too_large">Tanlangan roʻyxat 1 MB dan oshadi. Kamroq elementlarni tanlang.</string>
     <string name="download_reason_live">Jonli oqimlarni yuklab boʻlmaydi</string>
     <string name="download_reason_premiere">Bu premyera boshlanmagan</string>
     <string name="download_reason_no_streams">Yuklab olinadigan fayl oqimlari yo\'q</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buferlar/min: %1$d</string>
     <string name="audio_description">Audio tavsif</string>
     <string name="secondary_audio">Ikkilamchi audio</string>
+    <string name="settings_import_reload_message">Sozlamalar yangilandi. O\'zgarishlarni qo\'llash uchun ochiq sahifalarni qayta yuklang. Sizning ijro joyingiz saqlanib qoladi.</string>
+    <string name="settings_reload_now">Hozir sahifalarni qayta yuklang</string>
+    <string name="settings_reload_later">Keyinchalik</string>
+    <string name="about_save_logs">Ilova diagnostika jurnallarini saqlang</string>
+    <string name="about_save_done">Ilova diagnostikasi ZIP fayli saqlandi</string>
+    <string name="about_save_cancelled">Bekor qilingan</string>
+    <string name="about_save_failed">Ilova jurnallari saqlanmadi. Boshqa saqlash joyini tanlang va qaytadan urining.</string>
+    <string name="player_live_unavailable">Jonli efir mavjud emas. Keyinroq qayta urinib ko‘ring.</string>
 </resources>

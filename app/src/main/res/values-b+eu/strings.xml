@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Entzun atzeko planoan</string>
     <string name="back_again_to_exit">Sakatu atzera berriro irteteko</string>
     <string name="navigate_back">Itzuli</string>
     <string name="extension">Luzapenak</string>
@@ -8,7 +9,7 @@
     <string name="about">Honi buruz</string>
     <string name="display_dislikes">Erakutsi gustatzen ez zaizuna</string>
     <string name="display_dislikes_summary">Bideoen IDak bidaltzen ditu returnyoutubedislikeapi.com helbidera</string>
-    <string name="hide_shorts">Ezkutatu galtza motzak</string>
+    <string name="hide_shorts">Ezkutatu Shorts</string>
     <string name="interface_category">Interfazea</string>
     <string name="player">Erreprodukzioa</string>
     <string name="gesture">Keinuak</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Saltatu babesleak</string>
     <string name="skip_sponsors_selfpromo">Saltatu autopromozioa</string>
+    <string name="skip_sponsors_interaction">Saltatu interakzio-abisuak</string>
+    <string name="skip_sponsors_intro">Saltatu sarrerak</string>
+    <string name="skip_sponsors_outro">Saltatu amaierak</string>
+    <string name="skip_sponsors_preview">Saltatu aurrebistak</string>
+    <string name="skip_sponsors_music_offtopic">Saltatu musikarik gabeko zatiak</string>
+    <string name="skip_sponsors_filler">Saltatu gaiaz kanpoko zatiak</string>
     <string name="skip_sponsors_highlight">Saltatu aipagarrienak</string>
     <string name="remember_last_position">Gogoratu posizioa</string>
     <string name="remember_quality">Gogoratu bideoaren kalitatea</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Berrezarri ezarpen guztiak</string>
     <string name="reset_extension_title">Berrezarri luzapenak</string>
     <string name="reset_extension_message">Luzapenaren ezarpen guztiak lehenetsita berrezarri?</string>
+    <string name="settings_backup_restore">Babeskopia egin eta leheneratu</string>
+    <string name="settings_export">Esportatu ezarpenak</string>
+    <string name="settings_export_summary">Gorde uneko ezarpenak JSON fitxategi batean</string>
+    <string name="settings_import">Inportatu ezarpenak</string>
+    <string name="settings_import_summary">Berrezarri ezarpenak babeskopia fitxategi batetik</string>
+    <string name="settings_import_confirm_title">Ezarpenak inportatu nahi dituzu?</string>
+    <string name="settings_import_confirm_message">Uneko ezarpenak babeskopiak gainidatziko ditu.</string>
+    <string name="settings_export_done">Ezarpenak esportatu dira</string>
+    <string name="settings_export_failed">Ezin izan da ezarpen-fitxategia gorde</string>
+    <string name="settings_import_done">Ezarpenak inportatu dira</string>
+    <string name="settings_import_failed">Ezarpen fitxategi baliogabea</string>
     <string name="confirm">Baieztatu</string>
     <string name="cancel">Utzi</string>
     <string name="more_options">Gehiago</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Testuaren tamaina</string>
     <string name="subtitle_style_background">Aurrekariak</string>
     <string name="subtitle_background_none">Bat ere ez</string>
-    <string name="subtitle_background_semi">zeharrargitsuak</string>
+    <string name="subtitle_background_semi">Erdi-gardena</string>
     <string name="subtitle_background_opaque">Opakua</string>
     <string name="subtitle_style_color">Testuaren kolorea</string>
     <string name="subtitle_style_hex">Kolore-kode hex</string>
@@ -104,7 +122,7 @@
     <string name="retry">Saiatu berriro</string>
     <string name="segment_intro">Sarrera</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Atsegin dut eta harpidetu abisuak</string>
+    <string name="segment_interaction">Interakzio-abisua</string>
     <string name="segment_preview">Aurreikuspena</string>
     <string name="segment_music_offtopic">Ez-musika</string>
     <string name="cast">Igorri</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Ez da aurkitu streaming gailu bateragarririk</string>
     <string name="cast_no_devices_hint">Konektatu bi gailuak sare berera.</string>
     <string name="cast_unavailable">Gailuaren streaming ez dago erabilgarri</string>
-    <string name="cast_unavailable_hint">Gailuaren igorpenak Google Play Zerbitzuak behar ditu.</string>
+    <string name="cast_unavailable_hint">Konektatu bi gailuak sare berera.</string>
     <string name="cast_section_devices">Eskuragarri dauden gailuak</string>
     <string name="cast_section_link">Ireki edozein gailutan</string>
     <string name="cast_section_link_hint">Wi-Fi sare berean.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Bideoa</string>
     <string name="download_audio">Audioa</string>
     <string name="download_quality">Deskargaren kalitatea</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Kalitate handiagoak datu eta biltegiratze gehiago erabiltzen ditu</string>
     <string name="download_size_estimate">%1$s-ri buruz</string>
     <string name="download_size_unknown">Tamaina ezezaguna</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Hautatua: %1$d / %2$d</string>
     <string name="download_batch_meta">Elementuak: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ez dago zeregin berririk</string>
-    <string name="download_snapshot_too_many">Elementu gehiegi (500 gehienez).Ez zen ezer moztu.</string>
-    <string name="download_snapshot_too_large">Argazkia 1 MB baino handiagoa da.Ez zen ezer moztu.</string>
+    <string name="download_snapshot_too_many">Elementu gehiegi. Ez hautatu 500 baino gehiago.</string>
+    <string name="download_snapshot_too_large">Hautatutako zerrendak 1 MB gainditzen ditu. Hautatu elementu gutxiago.</string>
     <string name="download_reason_live">Zuzeneko igorpenak ezin dira deskargatu</string>
     <string name="download_reason_premiere">Estreinaldi hau ez da hasi</string>
     <string name="download_reason_no_streams">Ez dago deskarga daitekeen fitxategi-korronterik</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffer/min: %1$d</string>
     <string name="audio_description">Audio deskribapena</string>
     <string name="secondary_audio">Bigarren mailako audioa</string>
+    <string name="settings_import_reload_message">Ezarpenak eguneratu dira. Kargatu berriro irekitako orriak aldaketak aplikatzeko. Erreprodukzio-posizioa mantenduko da.</string>
+    <string name="settings_reload_now">Kargatu orriak orain</string>
+    <string name="settings_reload_later">Geroago</string>
+    <string name="about_save_logs">Gorde aplikazioaren diagnostiko erregistroak</string>
+    <string name="about_save_done">Aplikazioaren diagnostiko ZIP fitxategia gorde da</string>
+    <string name="about_save_cancelled">Ezeztatuta</string>
+    <string name="about_save_failed">Ezin izan dira gorde aplikazioen erregistroak. Aukeratu beste gordetze-kokapen bat eta saiatu berriro.</string>
+    <string name="player_live_unavailable">Zuzeneko erreprodukzioa ez dago erabilgarri. Saiatu berriro geroago.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ከበስተጀርባ ያዳምጡ</string>
     <string name="back_again_to_exit">ለመውጣት እንደገና ይጫኑ</string>
     <string name="navigate_back">ተመለስ</string>
     <string name="extension">ቅጥያዎች</string>
@@ -8,7 +9,7 @@
     <string name="about">ስለዚህ መተግበሪያ</string>
     <string name="display_dislikes">አለመውደዶችን አሳይ</string>
     <string name="display_dislikes_summary">የቪዲዮ መታወቂያዎችን ወደ returnyoutubedislikeapi.com ይልካል።</string>
-    <string name="hide_shorts">ቁምጣዎችን ደብቅ</string>
+    <string name="hide_shorts">Shorts ደብቅ</string>
     <string name="interface_category">በይነገጽ</string>
     <string name="player">መልሶ ማጫወት</string>
     <string name="gesture">ምልክቶች</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">የተከተተ ተጫዋች ውስጥ</string>
     <string name="enable_in_fullscreen">በሙሉ ስክሪን ውስጥ</string>
     <string name="brightness">ብሩህነት</string>
-    <string name="volume">ጥራዝ</string>
+    <string name="volume">የድምጽ መጠን</string>
     <string name="background_mini_player">ዳራ እና አነስተኛ ተጫዋች</string>
     <string name="pip">ሥዕል-በሥዕል</string>
     <string name="in_app_mini_player">የውስጠ-መተግበሪያ ሚኒ-ተጫዋች</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ስፖንሰሮችን ዝለል</string>
     <string name="skip_sponsors_selfpromo">ራስን ማስተዋወቅን ዝለል</string>
+    <string name="skip_sponsors_interaction">የመውደድና የመመዝገብ ማስታወሻዎችን ዝለል</string>
+    <string name="skip_sponsors_intro">መግቢያዎችን ዝለል</string>
+    <string name="skip_sponsors_outro">መደምደሚያዎችን ዝለል</string>
+    <string name="skip_sponsors_preview">ቅድመ እይታዎችን ዝለል</string>
+    <string name="skip_sponsors_music_offtopic">ሙዚቃ ያልሆኑ ክፍሎችን ዝለል</string>
+    <string name="skip_sponsors_filler">ከርዕሱ ውጭ የሆኑ ክፍሎችን ዝለል</string>
     <string name="skip_sponsors_highlight">ድምቀቶችን ዝለል</string>
     <string name="remember_last_position">ቦታ አስታውስ</string>
     <string name="remember_quality">የቪዲዮ ጥራት አስታውስ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ሁሉንም ቅንብሮች ዳግም ያስጀምሩ</string>
     <string name="reset_extension_title">ቅጥያዎችን ዳግም አስጀምር</string>
     <string name="reset_extension_message">ሁሉም የኤክስቴንሽን ቅንጅቶች ወደ ነባሪ ይመለሱ?</string>
+    <string name="settings_backup_restore">ምትኬ እና እነበረበት መልስ</string>
+    <string name="settings_export">ቅንጅቶችን ወደ ውጪ ላክ</string>
+    <string name="settings_export_summary">የአሁን ቅንብሮችን ወደ JSON ፋይል አስቀምጥ</string>
+    <string name="settings_import">አስመጣ ቅንብሮች</string>
+    <string name="settings_import_summary">ከመጠባበቂያ ፋይል ቅንብሮችን ወደነበሩበት ይመልሱ</string>
+    <string name="settings_import_confirm_title">ቅንጅቶች ያስመጡ?</string>
+    <string name="settings_import_confirm_message">አሁን ያሉት ቅንብሮች በመጠባበቂያው ይገለበጣሉ.</string>
+    <string name="settings_export_done">ቅንብሮች ወደ ውጭ ተልከዋል።</string>
+    <string name="settings_export_failed">የቅንብሮች ፋይል ማስቀመጥ አልተቻለም</string>
+    <string name="settings_import_done">ቅንብሮች መጥተዋል።</string>
+    <string name="settings_import_failed">ልክ ያልሆነ የቅንብሮች ፋይል</string>
     <string name="confirm">አረጋግጥ</string>
     <string name="cancel">ሰርዝ</string>
     <string name="more_options">ተጨማሪ</string>
@@ -78,7 +96,7 @@
     <string name="resize_mode">መጠን ቀይር</string>
     <string name="resize_fit">ለእይታ ተስማሚ</string>
     <string name="resize_fill">ስክሪን ሙላ</string>
-    <string name="resize_zoom">አሳንስ</string>
+    <string name="resize_zoom">አጉላ</string>
     <string name="resize_fixed_width">ቋሚ ስፋት</string>
     <string name="resize_fixed_height">ቋሚ ቁመት</string>
     <string name="subtitle_style">የትርጉም ጽሑፍ ዘይቤ</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">የጽሑፍ መጠን</string>
     <string name="subtitle_style_background">ዳራ</string>
     <string name="subtitle_background_none">ምንም</string>
-    <string name="subtitle_background_semi">አሳላፊ</string>
+    <string name="subtitle_background_semi">ከፊል ግልጽ</string>
     <string name="subtitle_background_opaque">ግልጽ ያልሆነ</string>
     <string name="subtitle_style_color">የጽሑፍ ቀለም</string>
     <string name="subtitle_style_hex">የሄክስ ቀለም ኮድ</string>
     <string name="subtitle_style_drag_hint">ቅድመ እይታውን ወደ ሌላ ቦታ ይጎትቱት።</string>
-    <string name="subtitle_style_bold">ደፋር</string>
+    <string name="subtitle_style_bold">ደማቅ</string>
     <string name="subtitle_auto_generated">(ራስ-ሰር)</string>
     <string name="reset">ዳግም አስጀምር</string>
     <string name="share">አጋራ</string>
@@ -104,7 +122,7 @@
     <string name="retry">እንደገና ይሞክሩ</string>
     <string name="segment_intro">መግቢያ</string>
     <string name="segment_outro">ውጫዊ</string>
-    <string name="segment_interaction">አስታዋሾች ላይክ እና ሰብስክራይብ ያድርጉ</string>
+    <string name="segment_interaction">የመስተጋብር ማስታወሻ</string>
     <string name="segment_preview">ቅድመ እይታ</string>
     <string name="segment_music_offtopic">ሙዚቃ ያልሆነ</string>
     <string name="cast">ወደ መሳሪያ ይልቀቁ</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ምንም ተኳኋኝ የዥረት መሳሪያዎች አልተገኙም።</string>
     <string name="cast_no_devices_hint">ሁለቱንም መሳሪያዎች ከአንድ አውታረ መረብ ጋር ያገናኙ።</string>
     <string name="cast_unavailable">የመሣሪያ ዥረት የለም።</string>
-    <string name="cast_unavailable_hint">የመሣሪያ ዥረት ጎግል ፕሌይ አገልግሎቶችን ይፈልጋል።</string>
+    <string name="cast_unavailable_hint">ሁለቱንም መሳሪያዎች ከአንድ አውታረ መረብ ጋር ያገናኙ።</string>
     <string name="cast_section_devices">የሚገኙ መሣሪያዎች</string>
     <string name="cast_section_link">በማንኛውም መሳሪያ ላይ ክፈት</string>
     <string name="cast_section_link_hint">በተመሳሳይ የWi-Fi አውታረ መረብ ላይ።</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ቪዲዮ</string>
     <string name="download_audio">ኦዲዮ</string>
     <string name="download_quality">የማውረድ ጥራት</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ከፍተኛ ጥራት ተጨማሪ ውሂብ እና ማከማቻ ይጠቀማል</string>
     <string name="download_size_estimate">ስለ %1$s</string>
     <string name="download_size_unknown">መጠኑ አይታወቅም።</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">የተመረጠ፡ %1$d / %2$d</string>
     <string name="download_batch_meta">እቃዎች፡ %1$d · %2$s</string>
     <string name="download_no_new_tasks">ምንም አዲስ ተግባራት የሉም</string>
-    <string name="download_snapshot_too_many">በጣም ብዙ እቃዎች (ከፍተኛ 500)።ምንም ነገር አልተቆረጠም።</string>
-    <string name="download_snapshot_too_large">ቅጽበታዊ ገጽ እይታ ከ1 ሜባ ይበልጣል።ምንም ነገር አልተቆረጠም።</string>
+    <string name="download_snapshot_too_many">በጣም ብዙ እቃዎች። ከ 500 ያልበለጠ ይምረጡ።</string>
+    <string name="download_snapshot_too_large">የተመረጠው ዝርዝር ከ1 ሜባ ይበልጣል። ያነሱ ንጥሎችን ይምረጡ።</string>
     <string name="download_reason_live">የቀጥታ ዥረቶች ሊወርዱ አይችሉም</string>
     <string name="download_reason_premiere">ይህ ፕሪሚየር አልተጀመረም።</string>
     <string name="download_reason_no_streams">ምንም ሊወርዱ የሚችሉ የፋይል ዥረቶች የሉም</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers / ደቂቃ: %1$d</string>
     <string name="audio_description">የድምጽ መግለጫ</string>
     <string name="secondary_audio">ሁለተኛ ድምጽ</string>
+    <string name="settings_import_reload_message">ቅንብሮች ተዘምነዋል። ለውጦቹን ለመተግበር ክፍት ገጾችን እንደገና ይጫኑ። የመልሶ ማጫወት ቦታው ይጠበቃል።</string>
+    <string name="settings_reload_now">ገጾችን አሁን እንደገና ጫን</string>
+    <string name="settings_reload_later">በኋላ</string>
+    <string name="about_save_logs">የመተግበሪያ የምርመራ ምዝግብ ማስታወሻዎችን ያስቀምጡ</string>
+    <string name="about_save_done">የመተግበሪያ ምርመራ ዚፕ ፋይል ተቀምጧል</string>
+    <string name="about_save_cancelled">ተሰርዟል።</string>
+    <string name="about_save_failed">የመተግበሪያ ምዝግብ ማስታወሻዎችን ማስቀመጥ አልተቻለም። ሌላ የማስቀመጫ ቦታ ይምረጡ እና እንደገና ይሞክሩ።</string>
+    <string name="player_live_unavailable">የቀጥታ ስርጭት አይገኝም። ቆይተው እንደገና ይሞክሩ።</string>
 </resources>

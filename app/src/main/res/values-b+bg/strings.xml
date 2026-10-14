@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Слушайте във фонов режим</string>
     <string name="back_again_to_exit">Натиснете отново назад, за да излезете</string>
     <string name="navigate_back">Назад</string>
     <string name="extension">Разширения</string>
@@ -8,7 +9,7 @@
     <string name="about">Относно</string>
     <string name="display_dislikes">Показване на нехаресвания</string>
     <string name="display_dislikes_summary">Изпраща идентификатори на видео към returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Скриване на шорти</string>
+    <string name="hide_shorts">Скриване на Shorts</string>
     <string name="interface_category">Интерфейс</string>
     <string name="player">Възпроизвеждане</string>
     <string name="gesture">Жестове</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Във вграден плейър</string>
     <string name="enable_in_fullscreen">На цял екран</string>
     <string name="brightness">Яркост</string>
-    <string name="volume">Обем</string>
+    <string name="volume">Сила на звука</string>
     <string name="background_mini_player">Фон и мини плейър</string>
     <string name="pip">Картина в картина</string>
     <string name="in_app_mini_player">Мини-плейър в приложението</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Пропускане на спонсори</string>
     <string name="skip_sponsors_selfpromo">Пропуснете саморекламата</string>
+    <string name="skip_sponsors_interaction">Пропускане на напомняния за взаимодействие</string>
+    <string name="skip_sponsors_intro">Пропускане на въведенията</string>
+    <string name="skip_sponsors_outro">Пропускане на заключенията</string>
+    <string name="skip_sponsors_preview">Пропускане на предварителните прегледи</string>
+    <string name="skip_sponsors_music_offtopic">Пропускане на немузикалните части</string>
+    <string name="skip_sponsors_filler">Пропускане на отклоненията от темата</string>
     <string name="skip_sponsors_highlight">Пропускане на акцентите</string>
     <string name="remember_last_position">Запомнете позицията</string>
     <string name="remember_quality">Запомнете качеството на видеото</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Нулирайте всички настройки</string>
     <string name="reset_extension_title">Нулиране на разширенията</string>
     <string name="reset_extension_message">Нулиране на всички настройки на разширението по подразбиране?</string>
+    <string name="settings_backup_restore">Архивиране и възстановяване</string>
+    <string name="settings_export">Експортиране на настройки</string>
+    <string name="settings_export_summary">Запазете текущите настройки в JSON файл</string>
+    <string name="settings_import">Импортиране на настройки</string>
+    <string name="settings_import_summary">Възстановете настройките от архивен файл</string>
+    <string name="settings_import_confirm_title">Импортиране на настройки?</string>
+    <string name="settings_import_confirm_message">Текущите настройки ще бъдат презаписани от архива.</string>
+    <string name="settings_export_done">Настройките са експортирани</string>
+    <string name="settings_export_failed">Файлът с настройки не можа да бъде запазен</string>
+    <string name="settings_import_done">Настройките са импортирани</string>
+    <string name="settings_import_failed">Невалиден файл с настройки</string>
     <string name="confirm">Потвърдете</string>
     <string name="cancel">Отказ</string>
     <string name="more_options">Още</string>
@@ -91,7 +109,7 @@
     <string name="subtitle_style_color">Цвят на текста</string>
     <string name="subtitle_style_hex">Шестнадесетичен код на цвета</string>
     <string name="subtitle_style_drag_hint">Плъзнете визуализацията, за да промените позицията</string>
-    <string name="subtitle_style_bold">Получер</string>
+    <string name="subtitle_style_bold">Удебелен</string>
     <string name="subtitle_auto_generated">(автоматично)</string>
     <string name="reset">Нулиране</string>
     <string name="share">Сподели</string>
@@ -104,7 +122,7 @@
     <string name="retry">Опитайте отново</string>
     <string name="segment_intro">Въведение</string>
     <string name="segment_outro">Изход</string>
-    <string name="segment_interaction">Напомняния за харесване и абониране</string>
+    <string name="segment_interaction">Напомняне за взаимодействие</string>
     <string name="segment_preview">Визуализация</string>
     <string name="segment_music_offtopic">Немузика</string>
     <string name="cast">Предаване</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Няма намерени съвместими устройства за поточно предаване</string>
     <string name="cast_no_devices_hint">Свържете двете устройства към една и съща мрежа.</string>
     <string name="cast_unavailable">Поточното предаване на устройството не е налично</string>
-    <string name="cast_unavailable_hint">Стриймингът на устройството се нуждае от Google Play Services.</string>
+    <string name="cast_unavailable_hint">Свържете двете устройства към една и съща мрежа.</string>
     <string name="cast_section_devices">Налични устройства</string>
     <string name="cast_section_link">Отваряне на всяко устройство</string>
     <string name="cast_section_link_hint">В същата Wi-Fi мрежа.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Видео</string>
     <string name="download_audio">Аудио</string>
     <string name="download_quality">Качество на изтегляне</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">По-високото качество използва повече данни и съхранение</string>
     <string name="download_size_estimate">Около %1$s</string>
     <string name="download_size_unknown">Неизвестен размер</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Избрано: %1$d / %2$d</string>
     <string name="download_batch_meta">Артикули: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Няма нови задачи</string>
-    <string name="download_snapshot_too_many">Твърде много елементи (макс. 500).Нищо не беше съкратено.</string>
-    <string name="download_snapshot_too_large">Моментната снимка е по-голяма от 1 MB.Нищо не беше съкратено.</string>
+    <string name="download_snapshot_too_many">Твърде много елементи. Изберете не повече от 500.</string>
+    <string name="download_snapshot_too_large">Избраният списък надхвърля 1 MB. Изберете по-малко елементи.</string>
     <string name="download_reason_live">Потоците на живо не могат да бъдат изтеглени</string>
     <string name="download_reason_premiere">Тази премиера не е започнала</string>
     <string name="download_reason_no_streams">Няма файлови потоци за изтегляне</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Буфери/мин: %1$d</string>
     <string name="audio_description">Аудио описание</string>
     <string name="secondary_audio">Вторичен звук</string>
+    <string name="settings_import_reload_message">Настройките са актуализирани. Презаредете отворените страници, за да приложите промените. Вашата позиция на възпроизвеждане ще бъде запазена.</string>
+    <string name="settings_reload_now">Презаредете страниците сега</string>
+    <string name="settings_reload_later">По-късно</string>
+    <string name="about_save_logs">Запазване на регистрационни файлове за диагностика на приложения</string>
+    <string name="about_save_done">ZIP файлът за диагностика на приложението е запазен</string>
+    <string name="about_save_cancelled">Отменено</string>
+    <string name="about_save_failed">Регистрационните файлове на приложението не можаха да бъдат запазени. Изберете друго място за запазване и опитайте отново.</string>
+    <string name="player_live_unavailable">Предаването на живо не е достъпно. Опитайте отново по-късно.</string>
 </resources>

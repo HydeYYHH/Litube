@@ -8,6 +8,10 @@ const CORE = fs.readFileSync(
   path.join(__dirname, '../../main/assets/script/core.js'), 'utf8');
 const BRIDGE = fs.readFileSync(
   path.join(__dirname, '../../main/assets/script/download.js'), 'utf8');
+const PLAYER_HOOK = fs.readFileSync(
+  path.join(__dirname, '../../main/assets/script/player-hook.js'), 'utf8');
+const SHORTS_QUALITY = fs.readFileSync(
+  path.join(__dirname, '../../main/assets/script/shorts-quality.js'), 'utf8');
 
 // A just-enough DOM: parent/child links, attribute bag, class/id/tag
 // matching over comma selectors, clone, and an id registry.
@@ -19,6 +23,10 @@ class El {
     this.children = [];
     this.parentNode = null;
     this.style = {};
+    this.dataset = new Proxy({}, {
+      get: (_, key) => this.attrs[dataAttr(key)],
+      set: (_, key, value) => { this.attrs[dataAttr(key)] = String(value); return true; },
+    });
     this.textContent = '';
     this.listeners = {};
     this.shadowRoot = null;
@@ -44,6 +52,8 @@ class El {
     const sibs = this.parentNode ? this.parentNode.children : [];
     return sibs[sibs.indexOf(this) + 1] || null;
   }
+  get nextSibling() { return this.nextElementSibling; }
+  get firstElementChild() { return this.children[0] || null; }
 
   appendChild(node) { return this.insertBefore(node, null); }
   insertBefore(node, ref) {
@@ -83,6 +93,8 @@ class El {
   }
 
   getAttribute(name) { return this.attrs[name] ?? null; }
+  hasAttribute(name) { return name in this.attrs; }
+  getBoundingClientRect() { return { width: 360, height: 48, top: 0, bottom: 48 }; }
   setAttribute(name, value) { this.attrs[name] = String(value); }
   removeAttribute(name) { delete this.attrs[name]; }
 
@@ -141,6 +153,10 @@ class El {
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
 }
 
+function dataAttr(key) {
+  return 'data-' + String(key).replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+}
+
 function descendants(node) {
   const out = [];
   const walk = (n) => { for (const c of n.children) { out.push(c); walk(c); } };
@@ -151,7 +167,7 @@ function descendants(node) {
 function page({
   href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa', live = false,
   withSvg = true, nestedOnly = false, subscribeOnly = false, hydrated = false,
-  c3State = null, withVoteCount = false,
+  c3State = null, withVoteCount = false, scripts = [],
 } = {}) {
   const row = new El('div', 'slim-video-action-bar-actions');
   const avatar = new El('img', 'slim-video-owner-icon');
@@ -289,12 +305,111 @@ function page({
   context.globalThis = context;
   context.top = context;
   context.self = context;
-  vm.runInNewContext(CORE + '\n' + BRIDGE, context);
+  vm.runInNewContext([CORE, ...scripts, BRIDGE].join('\n'), context);
   return { context, row, chip, like, dislike, posted };
 }
 
 function ids(row) {
   return row.children.map((n) => n.id || n.tagName.toLowerCase());
+}
+
+function tap(context, target, types = ['pointerdown', 'click']) {
+  const path = [];
+  for (let node = target; node; node = node.parentNode) path.push(node);
+  let event;
+  for (const type of types) {
+    event = { type, button: 0, target, defaultPrevented: false, stopped: false, composedPath: () => path,
+      preventDefault() { this.defaultPrevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
+    for (const fn of [...(context.listeners[type] || []), ...(context.document.listeners[type] || [])]) {
+      if (event.stopped) break;
+      fn(event);
+    }
+  }
+  return event;
+}
+
+function sheetObserver(context) {
+  const observers = [];
+  context.MutationObserver = class {
+    constructor(fn) { this.fn = fn; observers.push(this); }
+    observe() {} disconnect() {}
+    added(node) { this.fn([{ addedNodes: node ? [node] : [] }]); }
+  };
+  return () => observers[observers.length - 1];
+}
+
+function listSheet(context, labels, values = {}) {
+  const list = new El('div');
+  for (const label of labels) {
+    const item = new El('yt-list-item-view-model');
+    const button = new El('button');
+    const icon = new El('span', 'yt-icon-shape');
+    const svg = new El('svg');
+    svg.appendChild(new El('path'));
+    icon.appendChild(svg);
+    const title = new El('span', 'ytListItemViewModelTitle');
+    title.textContent = label;
+    button.appendChild(icon);
+    button.appendChild(title);
+    if (values[label]) {
+      const value = new El('span', 'ytListItemViewModelSelectionText');
+      value.textContent = values[label];
+      button.appendChild(value);
+    }
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+  const layout = new El('bottom-sheet-layout');
+  layout.appendChild(list);
+  context.document.documentElement.appendChild(layout);
+  return { layout, list, titles: () => list.children.map((n) => n.querySelector('.ytListItemViewModelTitle').textContent) };
+}
+
+function toShorts(context, id = 'bbbbbbbbbbb') {
+  context.location.href = `https://m.youtube.com/shorts/${id}`;
+  context.location.pathname = `/shorts/${id}`;
+}
+
+function shortsSheet(context) {
+  toShorts(context);
+  const sheet = listSheet(context, ['Description', 'Quality', 'Report']);
+  sheet.list.children[1].setAttribute('data-injected', 'shorts-quality');
+  return sheet;
+}
+
+function feedCard(context) {
+  const card = new El('ytm-media-item');
+  const link = new El('a');
+  link.setAttribute('href', '/watch?v=ccccccccccc');
+  const title = new El('h3', 'media-item-headline');
+  title.textContent = 'Card C';
+  link.appendChild(title);
+  const menu = new El('ytm-bottom-sheet-renderer', 'media-item-menu');
+  const trigger = new El('button');
+  menu.appendChild(trigger);
+  card.appendChild(link);
+  card.appendChild(menu);
+  context.document.documentElement.appendChild(card);
+  return trigger;
+}
+
+function feedSheet(context, labels) {
+  const list = new El('div', 'bottom-sheet-media-menu-item');
+  for (const label of labels) {
+    const item = new El('ytm-menu-navigation-item-renderer');
+    const button = new El('button', 'menu-item-button');
+    const text = new El('span', 'ytAttributedStringHost');
+    text.setAttribute('role', 'text');
+    text.textContent = label;
+    button.appendChild(new El('c3-icon'));
+    button.appendChild(text);
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+  const layout = new El('bottom-sheet-layout');
+  layout.appendChild(list);
+  context.document.documentElement.appendChild(layout);
+  return { layout, list, titles: () => list.children.map((n) => n.querySelector('[role="text"]').textContent) };
 }
 
 test('reused action buttons refresh translations without duplicating controls', () => {
@@ -543,3 +658,115 @@ test('playlist snapshots walk page data and DOM without duplicates', () => {
   ]);
 });
 
+test('the Shorts sheet gets one Download row right after Quality that opens the confirm and closes', () => {
+  const { context, posted } = page();
+  const sheet = shortsSheet(context);
+  context.Lite.wake(); context.Lite.wake();
+  assert.deepEqual(sheet.titles(), ['Description', 'Quality', 'Download', 'Report']);
+  const row = sheet.list.children[2];
+  assert.equal(row.getAttribute('data-injected'), 'shorts-download');
+  assert.equal(row.querySelector('button').getAttribute('aria-label'), 'Download');
+  assert.equal(row.querySelector('path').attrs.d.startsWith('M480-320'), true);
+  const closedAfter = [];
+  context.location.hash = '#bottom-sheet';
+  context.history.back = () => closedAfter.push(posted[posted.length - 1].type);
+  assert.equal(tap(context, row.querySelector('button')).defaultPrevented, true);
+  const { type, videoId, title, author } = posted[posted.length - 1];
+  assert.deepEqual({ type, videoId, title, author },
+    { type: 'openConfirm', videoId: 'bbbbbbbbbbb', title: '', author: null });
+  assert.deepEqual(closedAfter, ['openConfirm']);
+  context.location.href = 'https://m.youtube.com/watch?v=aaaaaaaaaaa';
+  context.location.pathname = '/watch';
+  context.Lite.wake();
+  assert.deepEqual(sheet.titles(), ['Description', 'Quality', 'Report']);
+});
+
+test('a button tap runs sheet hooks on the next added nodes', () => {
+  const { context } = page();
+  const sheet = shortsSheet(context);
+  const observer = sheetObserver(context);
+  tap(context, sheet.list.children[0].querySelector('button'));
+  observer().added();
+  assert.deepEqual(sheet.titles(), ['Description', 'Quality', 'Report']);
+  observer().added(sheet.list);
+  assert.deepEqual(sheet.titles(), ['Description', 'Quality', 'Download', 'Report']);
+});
+
+test('the feed ⋮ sheet leads with Add to queue and Download; each acts, then closes the sheet', () => {
+  const { context, posted } = page({ href: 'https://m.youtube.com/results?search_query=c', scripts: [PLAYER_HOOK] });
+  const diagnostics = [];
+  context.__litubeDiagnostic = (...args) => diagnostics.push(args);
+  const observer = sheetObserver(context);
+  tap(context, feedCard(context));
+  const sheet = feedSheet(context, ['Watch later', 'Add to playlist']);
+  observer().added(sheet.layout);
+  observer().added(sheet.layout);
+  assert.deepEqual(sheet.titles(), ['Add to queue', 'Download', 'Watch later', 'Add to playlist']);
+  assert.deepEqual(diagnostics, []);
+  const queued = [], closed = [], before = posted.length;
+  context.Bridge = { addToQueue: (json) => queued.push(JSON.parse(json)) };
+  context.location.hash = '#bottom-sheet';
+  context.history.back = () => closed.push([queued.length, posted.length - before]);
+  tap(context, sheet.list.children[0].querySelector('button'));
+  tap(context, sheet.list.children[1].querySelector('button'));
+  assert.deepEqual(closed, [[1, 0], [1, 1]]);
+  assert.equal(queued[0].videoId, 'ccccccccccc');
+  const { type, videoId, title, author } = posted[posted.length - 1];
+  assert.deepEqual({ type, videoId, title, author },
+    { type: 'openConfirm', videoId: 'ccccccccccc', title: 'Card C', author: null });
+  tap(context, sheet.list.children[2].querySelector('button'));
+  sheet.layout.remove();
+  const share = feedSheet(context, ['Copy link']);
+  observer().added(share.layout);
+  assert.deepEqual(share.titles(), ['Copy link']);
+});
+
+test('on Shorts only the player ⋮ menu gets Quality and Download, a comment ⋮ menu does not', () => {
+  for (const opener of ['ytm-bottom-sheet-renderer', 'ytm-menu-renderer']) {
+    const { context } = page({ scripts: [SHORTS_QUALITY] });
+    const observer = sheetObserver(context);
+    const overlay = new El('ytm-reel-player-overlay-renderer');
+    const menu = new El(opener);
+    menu.appendChild(new El('button'));
+    overlay.appendChild(menu);
+    const comments = new El('ytm-engagement-panel');
+    comments.appendChild(new El(opener));
+    comments.children[0].appendChild(new El('button'));
+    context.document.documentElement.appendChild(overlay);
+    context.document.documentElement.appendChild(comments);
+    toShorts(context);
+    tap(context, comments.querySelector('button'));
+    const comment = listSheet(context, ['Reply', 'Report']);
+    observer().added(comment.layout);
+    context.Lite.wake();
+    assert.deepEqual(comment.titles(), ['Reply', 'Report'], opener);
+    comment.layout.remove();
+    tap(context, menu.children[0]);
+    const player = listSheet(context, ['Description', 'Report']);
+    observer().added(player.layout);
+    assert.deepEqual(player.titles(), ['Description', 'Report', 'Quality', 'Download'], opener);
+  }
+});
+
+test('a Shorts menu opened by a long press gets Quality and Download after its settings', () => {
+  const { context } = page({ scripts: [SHORTS_QUALITY] });
+  const observer = sheetObserver(context);
+  const overlay = new El('ytm-reel-player-overlay-renderer');
+  overlay.appendChild(new El('div'));
+  context.document.documentElement.appendChild(overlay);
+  toShorts(context);
+  tap(context, overlay.children[0], ['pointerdown']);
+  const menu = listSheet(context, ['Description', 'Captions', 'Report'], { Captions: 'Off' });
+  observer().added(menu.layout);
+  assert.deepEqual(menu.titles(), ['Description', 'Captions', 'Quality', 'Download', 'Report']);
+});
+
+test('openConfirm posts the native confirm only for a valid id', () => {
+  const { context, posted } = page();
+  const before = posted.length;
+  context.__download.openConfirm({ videoId: 'ccccccccccc', title: 'T', author: 'A' });
+  context.__download.openConfirm({ videoId: 'bad', title: 'T' });
+  context.__download.openConfirm(null);
+  assert.deepEqual(posted.slice(before).map((m) => [m.type, m.videoId, m.title, m.author]),
+    [['openConfirm', 'ccccccccccc', 'T', 'A']]);
+});

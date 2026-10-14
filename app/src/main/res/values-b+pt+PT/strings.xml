@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Ouvir em segundo plano</string>
     <string name="back_again_to_exit">Toque em Voltar novamente para sair</string>
     <string name="navigate_back">Voltar</string>
     <string name="extension">Extensões</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Pular patrocínios</string>
     <string name="skip_sponsors_selfpromo">Pular autopromoção</string>
+    <string name="skip_sponsors_interaction">Ignorar lembretes de interação</string>
+    <string name="skip_sponsors_intro">Ignorar introduções</string>
+    <string name="skip_sponsors_outro">Ignorar conclusões</string>
+    <string name="skip_sponsors_preview">Ignorar antevisões</string>
+    <string name="skip_sponsors_music_offtopic">Ignorar partes sem música</string>
+    <string name="skip_sponsors_filler">Ignorar partes fora do tema</string>
     <string name="skip_sponsors_highlight">Pular destaques</string>
     <string name="remember_last_position">Lembrar posição</string>
     <string name="remember_quality">Lembrar qualidade</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Repor definições</string>
     <string name="reset_extension_title">Redefinir extensões</string>
     <string name="reset_extension_message">Restaurar os padrões de todas as extensões?</string>
+    <string name="settings_backup_restore">Cópia de segurança e restauro</string>
+    <string name="settings_export">Exportar definições</string>
+    <string name="settings_export_summary">Guardar as definições atuais num ficheiro JSON</string>
+    <string name="settings_import">Importar definições</string>
+    <string name="settings_import_summary">Restaurar as definições de uma cópia de segurança</string>
+    <string name="settings_import_confirm_title">Importar definições?</string>
+    <string name="settings_import_confirm_message">As definições atuais serão substituídas pelas da cópia de segurança.</string>
+    <string name="settings_export_done">Definições exportadas</string>
+    <string name="settings_export_failed">Não foi possível guardar o ficheiro de definições</string>
+    <string name="settings_import_done">Definições importadas</string>
+    <string name="settings_import_failed">Ficheiro de definições inválido</string>
     <string name="confirm">Confirmar</string>
     <string name="cancel">Cancelar</string>
     <string name="more_options">Mais</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tamanho do texto</string>
     <string name="subtitle_style_background">Fundo</string>
     <string name="subtitle_background_none">Nenhum</string>
-    <string name="subtitle_background_semi">Translúcido</string>
+    <string name="subtitle_background_semi">Semitransparente</string>
     <string name="subtitle_background_opaque">Opaco</string>
     <string name="subtitle_style_color">Cor do texto</string>
     <string name="subtitle_style_hex">Código hex</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nenhum dispositivo Cast encontrado</string>
     <string name="cast_no_devices_hint">Configure os dispositivos na mesma rede.</string>
     <string name="cast_unavailable">Transmissão indisponível</string>
-    <string name="cast_unavailable_hint">Requer o Google Play Services.</string>
+    <string name="cast_unavailable_hint">Configure os dispositivos na mesma rede.</string>
     <string name="cast_section_devices">Dispositivos disponíveis</string>
     <string name="cast_section_link">Abrir em outro dispositivo</string>
     <string name="cast_section_link_hint">Na mesma rede Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vídeo</string>
     <string name="download_audio">Áudio</string>
     <string name="download_quality">Qualidade da transferência</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Qualidade maior usa mais dados e espaço</string>
     <string name="download_size_estimate">Cerca de %1$s</string>
     <string name="download_size_unknown">Tamanho desconhecido</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Selecionados: %1$d / %2$d</string>
     <string name="download_batch_meta">Itens: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Nenhuma nova transferência</string>
-    <string name="download_snapshot_too_many">Itens demais (máx. 500). A lista não foi truncada.</string>
-    <string name="download_snapshot_too_large">A lista excede 1 MB. Ela não foi truncada.</string>
+    <string name="download_snapshot_too_many">Muitos itens. Selecione no máximo 500.</string>
+    <string name="download_snapshot_too_large">A lista selecionada excede 1 MB. Selecione menos itens.</string>
     <string name="download_reason_live">Não é possível transferir transmissões ao vivo</string>
     <string name="download_reason_premiere">Esta estreia ainda não começou</string>
     <string name="download_reason_no_streams">Nenhum ficheiro disponível para transferência</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers/min: %1$d</string>
     <string name="audio_description">Audiodescrição</string>
     <string name="secondary_audio">Áudio secundário</string>
+    <string name="settings_import_reload_message">Definições atualizadas. Recarregue as páginas abertas para aplicar as alterações. A posição de reprodução será mantida.</string>
+    <string name="settings_reload_now">Recarregar páginas</string>
+    <string name="settings_reload_later">Mais tarde</string>
+    <string name="about_save_logs">Guardar registos de diagnóstico</string>
+    <string name="about_save_done">Ficheiro ZIP de diagnóstico guardado</string>
+    <string name="about_save_cancelled">Gravação cancelada</string>
+    <string name="about_save_failed">Não foi possível guardar os registos de diagnóstico. Escolha outra localização e tente novamente.</string>
+    <string name="player_live_unavailable">Transmissão em direto indisponível. Tente novamente mais tarde.</string>
 </resources>

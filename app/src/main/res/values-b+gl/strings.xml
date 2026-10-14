@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Escoita en segundo plano</string>
     <string name="back_again_to_exit">Preme cara atrás de novo para saír</string>
     <string name="navigate_back">Atrás</string>
     <string name="extension">Extensións</string>
@@ -8,7 +9,7 @@
     <string name="about">Sobre</string>
     <string name="display_dislikes">Mostrar non me gusta</string>
     <string name="display_dislikes_summary">Envía ID de vídeo a returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Ocultar pantalóns curtos</string>
+    <string name="hide_shorts">Ocultar Shorts</string>
     <string name="interface_category">Interface</string>
     <string name="player">Reprodución</string>
     <string name="gesture">Xestos</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Saltar patrocinadores</string>
     <string name="skip_sponsors_selfpromo">Omitir a autopromoción</string>
+    <string name="skip_sponsors_interaction">Omitir recordatorios de interacción</string>
+    <string name="skip_sponsors_intro">Omitir introducións</string>
+    <string name="skip_sponsors_outro">Omitir finais</string>
+    <string name="skip_sponsors_preview">Omitir avances</string>
+    <string name="skip_sponsors_music_offtopic">Omitir partes sen música</string>
+    <string name="skip_sponsors_filler">Omitir partes fóra de tema</string>
     <string name="skip_sponsors_highlight">Saltar aspectos destacados</string>
     <string name="remember_last_position">Lembra a posición</string>
     <string name="remember_quality">Lembra a calidade do vídeo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Restablecer todos os axustes</string>
     <string name="reset_extension_title">Restablecer extensións</string>
     <string name="reset_extension_message">Restablecer a configuración predeterminada de todas as extensións?</string>
+    <string name="settings_backup_restore">Copia de seguranza e restauración</string>
+    <string name="settings_export">Exportar a configuración</string>
+    <string name="settings_export_summary">Garda a configuración actual nun ficheiro JSON</string>
+    <string name="settings_import">Importar configuración</string>
+    <string name="settings_import_summary">Restaurar a configuración dun ficheiro de copia de seguranza</string>
+    <string name="settings_import_confirm_title">Importar a configuración?</string>
+    <string name="settings_import_confirm_message">A configuración actual sobrescribirase pola copia de seguridade.</string>
+    <string name="settings_export_done">Configuración exportada</string>
+    <string name="settings_export_failed">Non se puido gardar o ficheiro de configuración</string>
+    <string name="settings_import_done">Configuración importada</string>
+    <string name="settings_import_failed">Ficheiro de configuración non válido</string>
     <string name="confirm">Confirmar</string>
     <string name="cancel">Cancelar</string>
     <string name="more_options">Máis información</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tamaño do texto</string>
     <string name="subtitle_style_background">Antecedentes</string>
     <string name="subtitle_background_none">Ningún</string>
-    <string name="subtitle_background_semi">Translúcido</string>
+    <string name="subtitle_background_semi">Semitransparente</string>
     <string name="subtitle_background_opaque">Opaco</string>
     <string name="subtitle_style_color">Cor do texto</string>
     <string name="subtitle_style_hex">Código de cores hexadecimal</string>
@@ -104,7 +122,7 @@
     <string name="retry">Tentar de novo</string>
     <string name="segment_intro">Introdución</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Gústame e subscríbete aos recordatorios</string>
+    <string name="segment_interaction">Recordatorio de interacción</string>
     <string name="segment_preview">Vista previa</string>
     <string name="segment_music_offtopic">Non musical</string>
     <string name="cast">Transmitir</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Non se atoparon dispositivos de transmisión compatibles</string>
     <string name="cast_no_devices_hint">Conecte os dous dispositivos á mesma rede.</string>
     <string name="cast_unavailable">O dispositivo non está dispoñible</string>
-    <string name="cast_unavailable_hint">A transmisión en directo do dispositivo precisa dos servizos de Google Play.</string>
+    <string name="cast_unavailable_hint">Conecte os dous dispositivos á mesma rede.</string>
     <string name="cast_section_devices">Dispositivos dispoñibles</string>
     <string name="cast_section_link">Abre en calquera dispositivo</string>
     <string name="cast_section_link_hint">Na mesma rede wifi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vídeo</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Calidade de descarga</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">A calidade superior usa máis datos e almacenamento</string>
     <string name="download_size_estimate">Sobre %1$s</string>
     <string name="download_size_unknown">Tamaño descoñecido</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Seleccionado: %1$d / %2$d</string>
     <string name="download_batch_meta">Elementos: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Non hai tarefas novas</string>
-    <string name="download_snapshot_too_many">Demasiados elementos (máximo 500).Non se truncou nada.</string>
-    <string name="download_snapshot_too_large">A instantánea ten máis de 1 MB.Non se truncou nada.</string>
+    <string name="download_snapshot_too_many">Demasiados elementos. Seleccione non máis de 500.</string>
+    <string name="download_snapshot_too_large">A lista seleccionada supera os 1 MB. Selecciona menos elementos.</string>
     <string name="download_reason_live">Non se poden descargar emisións en directo</string>
     <string name="download_reason_premiere">Esta estrea non comezou</string>
     <string name="download_reason_no_streams">Non hai fluxos de ficheiros descargables</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Tampóns/min: %1$d</string>
     <string name="audio_description">Audiodescrición</string>
     <string name="secondary_audio">Audio secundario</string>
+    <string name="settings_import_reload_message">Configuración actualizada. Volve cargar as páxinas abertas para aplicar os cambios. Manterase a túa posición de reprodución.</string>
+    <string name="settings_reload_now">Recarga as páxinas agora</string>
+    <string name="settings_reload_later">Máis tarde</string>
+    <string name="about_save_logs">Garda os rexistros de diagnóstico da aplicación</string>
+    <string name="about_save_done">Gardouse o ficheiro ZIP de diagnóstico da aplicación</string>
+    <string name="about_save_cancelled">Cancelado</string>
+    <string name="about_save_failed">Non se puideron gardar os rexistros da aplicación. Escolle outra localización para gardar e téntao de novo.</string>
+    <string name="player_live_unavailable">Emisión en directo non dispoñible. Téntao de novo máis tarde.</string>
 </resources>

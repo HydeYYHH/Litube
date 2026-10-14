@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Sikiliza chinichini</string>
     <string name="back_again_to_exit">Bonyeza nyuma tena ili kuondoka</string>
     <string name="navigate_back">Nyuma</string>
     <string name="extension">Viendelezi</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Katika mchezaji aliyepachikwa</string>
     <string name="enable_in_fullscreen">Katika skrini nzima</string>
     <string name="brightness">Mwangaza</string>
-    <string name="volume">Kiasi</string>
+    <string name="volume">Kiwango cha sauti</string>
     <string name="background_mini_player">Mandharinyuma na kichezaji kidogo</string>
     <string name="pip">Picha-ndani-Picha</string>
     <string name="in_app_mini_player">Kichezaji kidogo cha ndani ya programu</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Ruka wafadhili</string>
     <string name="skip_sponsors_selfpromo">Ruka kujitangaza</string>
+    <string name="skip_sponsors_interaction">Ruka vikumbusho vya mwingiliano</string>
+    <string name="skip_sponsors_intro">Ruka utangulizi</string>
+    <string name="skip_sponsors_outro">Ruka sehemu za mwisho</string>
+    <string name="skip_sponsors_preview">Ruka hakiki</string>
+    <string name="skip_sponsors_music_offtopic">Ruka sehemu zisizo na muziki</string>
+    <string name="skip_sponsors_filler">Ruka sehemu zisizohusiana na mada</string>
     <string name="skip_sponsors_highlight">Ruka mambo muhimu</string>
     <string name="remember_last_position">Kumbuka msimamo</string>
     <string name="remember_quality">Kumbuka ubora wa video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Weka upya mipangilio yote</string>
     <string name="reset_extension_title">Weka upya viendelezi</string>
     <string name="reset_extension_message">Ungependa kuweka upya mipangilio yote ya viendelezi iwe chaguomsingi?</string>
+    <string name="settings_backup_restore">Hifadhi nakala na kurejesha</string>
+    <string name="settings_export">Hamisha mipangilio</string>
+    <string name="settings_export_summary">Hifadhi mipangilio ya sasa kwenye faili ya JSON</string>
+    <string name="settings_import">Ingiza mipangilio</string>
+    <string name="settings_import_summary">Rejesha mipangilio kutoka kwa faili ya chelezo</string>
+    <string name="settings_import_confirm_title">Leta mipangilio?</string>
+    <string name="settings_import_confirm_message">Mipangilio ya sasa itafutwa na hifadhi rudufu.</string>
+    <string name="settings_export_done">Mipangilio imehamishwa</string>
+    <string name="settings_export_failed">Haikuweza kuhifadhi faili ya mipangilio</string>
+    <string name="settings_import_done">Mipangilio imeingizwa</string>
+    <string name="settings_import_failed">Faili ya mipangilio isiyo sahihi</string>
     <string name="confirm">Thibitisha</string>
     <string name="cancel">Ghairi</string>
     <string name="more_options">Zaidi</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Ukubwa wa maandishi</string>
     <string name="subtitle_style_background">Usuli</string>
     <string name="subtitle_background_none">Hakuna</string>
-    <string name="subtitle_background_semi">Uwazi</string>
-    <string name="subtitle_background_opaque">Opaque</string>
+    <string name="subtitle_background_semi">Nusu wazi</string>
+    <string name="subtitle_background_opaque">Isiyo wazi</string>
     <string name="subtitle_style_color">Rangi ya maandishi</string>
     <string name="subtitle_style_hex">Msimbo wa rangi wa Hex</string>
     <string name="subtitle_style_drag_hint">Buruta onyesho la kukagua ili kuweka upya</string>
-    <string name="subtitle_style_bold">Ujasiri</string>
+    <string name="subtitle_style_bold">Herufi nzito</string>
     <string name="subtitle_auto_generated">(otomatiki)</string>
     <string name="reset">Weka upya</string>
     <string name="share">Shiriki</string>
@@ -104,7 +122,7 @@
     <string name="retry">Jaribu tena</string>
     <string name="segment_intro">Utangulizi</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Like na ujiandikishe vikumbusho</string>
+    <string name="segment_interaction">Kikumbusho cha mwingiliano</string>
     <string name="segment_preview">Hakiki</string>
     <string name="segment_music_offtopic">Isiyo ya muziki</string>
     <string name="cast">Tuma kwenye kifaa</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Hakuna vifaa vinavyooana vya utiririshaji vilivyopatikana</string>
     <string name="cast_no_devices_hint">Unganisha vifaa vyote viwili kwenye mtandao mmoja.</string>
     <string name="cast_unavailable">Utiririshaji wa kifaa haupatikani</string>
-    <string name="cast_unavailable_hint">Utiririshaji wa kifaa unahitaji Huduma za Google Play.</string>
+    <string name="cast_unavailable_hint">Unganisha vifaa vyote viwili kwenye mtandao mmoja.</string>
     <string name="cast_section_devices">Vifaa vinavyopatikana</string>
     <string name="cast_section_link">Fungua kwenye kifaa chochote</string>
     <string name="cast_section_link_hint">Kwenye mtandao huo wa Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Sauti</string>
     <string name="download_quality">Ubora wa kupakua</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ubora wa juu zaidi hutumia data na hifadhi zaidi</string>
     <string name="download_size_estimate">Kuhusu %1$s</string>
     <string name="download_size_unknown">Ukubwa haujulikani</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Imechaguliwa: %1$d / %2$d</string>
     <string name="download_batch_meta">Vipengee: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Hakuna kazi mpya</string>
-    <string name="download_snapshot_too_many">Vipengee vingi sana (isizidi 500).Hakuna kitu kilichopunguzwa.</string>
-    <string name="download_snapshot_too_large">Picha ni kubwa kuliko MB 1.Hakuna kitu kilichopunguzwa.</string>
+    <string name="download_snapshot_too_many">Vipengee vingi sana. Chagua si zaidi ya 500.</string>
+    <string name="download_snapshot_too_large">Orodha iliyochaguliwa inazidi MB 1. Chagua vipengee vichache.</string>
     <string name="download_reason_live">Mitiririko ya moja kwa moja haiwezi kupakuliwa</string>
     <string name="download_reason_premiere">Onyesho hili la kwanza halijaanza</string>
     <string name="download_reason_no_streams">Hakuna mitiririko ya faili inayoweza kupakuliwa</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Vipunguzi/dakika: %1$d</string>
     <string name="audio_description">Maelezo ya sauti</string>
     <string name="secondary_audio">Sauti ya pili</string>
+    <string name="settings_import_reload_message">Mipangilio imesasishwa. Pakia upya kurasa zilizofunguliwa ili kutekeleza mabadiliko. Nafasi yako ya kucheza itahifadhiwa.</string>
+    <string name="settings_reload_now">Pakia upya kurasa sasa</string>
+    <string name="settings_reload_later">Baadaye</string>
+    <string name="about_save_logs">Hifadhi kumbukumbu za uchunguzi wa programu</string>
+    <string name="about_save_done">Faili ya ZIP ya uchunguzi wa programu imehifadhiwa</string>
+    <string name="about_save_cancelled">Imeghairiwa</string>
+    <string name="about_save_failed">Haikuweza kuhifadhi kumbukumbu za programu. Chagua eneo lingine la kuhifadhi na ujaribu tena.</string>
+    <string name="player_live_unavailable">Mtiririko wa moja kwa moja haupatikani. Jaribu tena baadaye.</string>
 </resources>

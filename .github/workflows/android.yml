@@ -31,6 +31,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+      - name: Translation catalog and shared labels
+        run: python3 scripts/sync-web-translations.py --check
       - name: Page script tests
         run: node --test app/src/test/script/*.test.cjs
       - name: Unit tests, Lint and debug build

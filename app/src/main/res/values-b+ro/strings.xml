@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Ascultă în fundal</string>
     <string name="back_again_to_exit">Apăsați înapoi din nou pentru a ieși</string>
     <string name="navigate_back">Înapoi</string>
     <string name="extension">Extensii</string>
@@ -8,7 +9,7 @@
     <string name="about">Despre</string>
     <string name="display_dislikes">Afișează antipatiile</string>
     <string name="display_dislikes_summary">Trimite ID-uri video la returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Ascundeți pantaloni scurți</string>
+    <string name="hide_shorts">Ascunde Shorts</string>
     <string name="interface_category">Interfaţă</string>
     <string name="player">Redare</string>
     <string name="gesture">Gesturi</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">În playerul încorporat</string>
     <string name="enable_in_fullscreen">În ecran complet</string>
     <string name="brightness">Luminozitate</string>
-    <string name="volume">Volumul</string>
+    <string name="volume">Volum</string>
     <string name="background_mini_player">Fundal și mini player</string>
     <string name="pip">Imagine în imagine</string>
     <string name="in_app_mini_player">Mini-player în aplicație</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Omite sponsorii</string>
     <string name="skip_sponsors_selfpromo">Omite autopromovarea</string>
+    <string name="skip_sponsors_interaction">Omite mementourile de interacțiune</string>
+    <string name="skip_sponsors_intro">Omite introducerile</string>
+    <string name="skip_sponsors_outro">Omite încheierile</string>
+    <string name="skip_sponsors_preview">Omite previzualizările</string>
+    <string name="skip_sponsors_music_offtopic">Omite părțile fără muzică</string>
+    <string name="skip_sponsors_filler">Omite părțile fără legătură cu subiectul</string>
     <string name="skip_sponsors_highlight">Omiteți evidențierea</string>
     <string name="remember_last_position">Amintiți-vă poziția</string>
     <string name="remember_quality">Amintiți-vă calitatea video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Resetați toate setările</string>
     <string name="reset_extension_title">Resetați extensiile</string>
     <string name="reset_extension_message">Resetați toate setările extensiei la valorile implicite?</string>
+    <string name="settings_backup_restore">Backup și restaurare</string>
+    <string name="settings_export">Exportați setările</string>
+    <string name="settings_export_summary">Salvați setările curente într-un fișier JSON</string>
+    <string name="settings_import">Import setări</string>
+    <string name="settings_import_summary">Restaurați setările dintr-un fișier de rezervă</string>
+    <string name="settings_import_confirm_title">Import setări?</string>
+    <string name="settings_import_confirm_message">Setările curente vor fi suprascrise de backup.</string>
+    <string name="settings_export_done">Setările au fost exportate</string>
+    <string name="settings_export_failed">Nu s-a putut salva fișierul de setări</string>
+    <string name="settings_import_done">Setări importate</string>
+    <string name="settings_import_failed">Fișier de setări nevalid</string>
     <string name="confirm">Confirmați</string>
     <string name="cancel">Anulează</string>
     <string name="more_options">Mai mult</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Dimensiunea textului</string>
     <string name="subtitle_style_background">Context</string>
     <string name="subtitle_background_none">Niciuna</string>
-    <string name="subtitle_background_semi">Translucid</string>
+    <string name="subtitle_background_semi">Semitransparent</string>
     <string name="subtitle_background_opaque">Opac</string>
     <string name="subtitle_style_color">Culoarea textului</string>
     <string name="subtitle_style_hex">Cod de culoare hexadecimal</string>
     <string name="subtitle_style_drag_hint">Trageți previzualizarea pentru a repoziționa</string>
-    <string name="subtitle_style_bold">Îndrăzneț</string>
+    <string name="subtitle_style_bold">Aldin</string>
     <string name="subtitle_auto_generated">(automat)</string>
     <string name="reset">Resetare</string>
     <string name="share">Distribuie</string>
@@ -104,7 +122,7 @@
     <string name="retry">Reîncercați</string>
     <string name="segment_intro">Introducere</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Apreciază și abonează-te la mementouri</string>
+    <string name="segment_interaction">Memento de interacțiune</string>
     <string name="segment_preview">Previzualizare</string>
     <string name="segment_music_offtopic">Nemuzică</string>
     <string name="cast">Transmite</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nu s-au găsit dispozitive de streaming compatibile</string>
     <string name="cast_no_devices_hint">Conectați ambele dispozitive la aceeași rețea.</string>
     <string name="cast_unavailable">Streaming pe dispozitiv indisponibil</string>
-    <string name="cast_unavailable_hint">Streamingul pe dispozitiv necesită Servicii Google Play.</string>
+    <string name="cast_unavailable_hint">Conectați ambele dispozitive la aceeași rețea.</string>
     <string name="cast_section_devices">Dispozitive disponibile</string>
     <string name="cast_section_link">Deschideți pe orice dispozitiv</string>
     <string name="cast_section_link_hint">Pe aceeași rețea Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Calitate descărcare</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">O calitate superioară utilizează mai multe date și stocare</string>
     <string name="download_size_estimate">Aproximativ %1$s</string>
     <string name="download_size_unknown">Dimensiune necunoscută</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Selectat: %1$d / %2$d</string>
     <string name="download_batch_meta">Articole: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Fără sarcini noi</string>
-    <string name="download_snapshot_too_many">Prea multe articole (maxim 500).Nimic nu a fost trunchiat.</string>
-    <string name="download_snapshot_too_large">Instantaneul este mai mare de 1 MB.Nimic nu a fost trunchiat.</string>
+    <string name="download_snapshot_too_many">Prea multe articole. Selectați nu mai mult de 500.</string>
+    <string name="download_snapshot_too_large">Lista selectată depășește 1 MB. Selectați mai puține articole.</string>
     <string name="download_reason_live">Fluxurile live nu pot fi descărcate</string>
     <string name="download_reason_premiere">Această premieră nu a început</string>
     <string name="download_reason_no_streams">Nu există fluxuri de fișiere descărcabile</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Tampoane/min: %1$d</string>
     <string name="audio_description">Descriere audio</string>
     <string name="secondary_audio">Audio secundar</string>
+    <string name="settings_import_reload_message">Setări actualizate. Reîncărcați paginile deschise pentru a aplica modificările. Poziția dvs. de redare va fi păstrată.</string>
+    <string name="settings_reload_now">Reîncărcați paginile acum</string>
+    <string name="settings_reload_later">Mai târziu</string>
+    <string name="about_save_logs">Salvați jurnalele de diagnosticare a aplicației</string>
+    <string name="about_save_done">Fișierul ZIP de diagnosticare a aplicației a fost salvat</string>
+    <string name="about_save_cancelled">Anulat</string>
+    <string name="about_save_failed">Nu s-au putut salva jurnalele aplicației. Alegeți o altă locație de salvare și încercați din nou.</string>
+    <string name="player_live_unavailable">Transmisia în direct nu este disponibilă. Încercați din nou mai târziu.</string>
 </resources>

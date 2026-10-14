@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">მოუსმინეთ ფონზე</string>
     <string name="back_again_to_exit">გასასვლელად დააჭირეთ ისევ უკან</string>
     <string name="navigate_back">უკან</string>
     <string name="extension">გაფართოებები</string>
@@ -8,7 +9,7 @@
     <string name="about">შესახებ</string>
     <string name="display_dislikes">დაწუნებების ჩვენება</string>
     <string name="display_dislikes_summary">აგზავნის ვიდეოს ID-ებს returnyoutubedislikeapi.com-ზე</string>
-    <string name="hide_shorts">შორტების დამალვა</string>
+    <string name="hide_shorts">Shorts-ის დამალვა</string>
     <string name="interface_category">ინტერფეისი</string>
     <string name="player">დაკვრა</string>
     <string name="gesture">ჟესტები</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ჩაშენებულ პლეერში</string>
     <string name="enable_in_fullscreen">სრულ ეკრანზე</string>
     <string name="brightness">სიკაშკაშე</string>
-    <string name="volume">ტომი</string>
+    <string name="volume">ხმის დონე</string>
     <string name="background_mini_player">ფონი და მინი პლეერი</string>
     <string name="pip">სურათი-სურათში</string>
     <string name="in_app_mini_player">აპს-შიდა მინი-პლეერი</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">გამოტოვეთ სპონსორები</string>
     <string name="skip_sponsors_selfpromo">გამოტოვეთ თვითრეკლამირება</string>
+    <string name="skip_sponsors_interaction">ურთიერთქმედების შეხსენებების გამოტოვება</string>
+    <string name="skip_sponsors_intro">შესავლის გამოტოვება</string>
+    <string name="skip_sponsors_outro">დასასრულის გამოტოვება</string>
+    <string name="skip_sponsors_preview">წინასწარი ჩვენებების გამოტოვება</string>
+    <string name="skip_sponsors_music_offtopic">არამუსიკალური ნაწილების გამოტოვება</string>
+    <string name="skip_sponsors_filler">თემასთან დაუკავშირებელი ნაწილების გამოტოვება</string>
     <string name="skip_sponsors_highlight">გამოტოვეთ მომენტები</string>
     <string name="remember_last_position">დაიმახსოვრე პოზიცია</string>
     <string name="remember_quality">დაიმახსოვრე ვიდეოს ხარისხი</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ყველა პარამეტრის გადატვირთვა</string>
     <string name="reset_extension_title">გაფართოებების გადატვირთვა</string>
     <string name="reset_extension_message">გსურთ გაფართოების ყველა პარამეტრის ნაგულისხმევად გადაყენება?</string>
+    <string name="settings_backup_restore">სარეზერვო და აღდგენა</string>
+    <string name="settings_export">ექსპორტის პარამეტრები</string>
+    <string name="settings_export_summary">შეინახეთ მიმდინარე პარამეტრები JSON ფაილში</string>
+    <string name="settings_import">პარამეტრების იმპორტი</string>
+    <string name="settings_import_summary">პარამეტრების აღდგენა სარეზერვო ფაილიდან</string>
+    <string name="settings_import_confirm_title">პარამეტრების იმპორტი?</string>
+    <string name="settings_import_confirm_message">მიმდინარე პარამეტრები გადაიწერება სარეზერვო ასლის მიერ.</string>
+    <string name="settings_export_done">პარამეტრები ექსპორტირებულია</string>
+    <string name="settings_export_failed">პარამეტრების ფაილის შენახვა ვერ მოხერხდა</string>
+    <string name="settings_import_done">პარამეტრები იმპორტირებულია</string>
+    <string name="settings_import_failed">არასწორი პარამეტრების ფაილი</string>
     <string name="confirm">დაადასტურეთ</string>
     <string name="cancel">გაუქმება</string>
     <string name="more_options">მეტი</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">ტექსტის ზომა</string>
     <string name="subtitle_style_background">ფონი</string>
     <string name="subtitle_background_none">არცერთი</string>
-    <string name="subtitle_background_semi">გამჭვირვალე</string>
+    <string name="subtitle_background_semi">ნახევრად გამჭვირვალე</string>
     <string name="subtitle_background_opaque">გაუმჭვირვალე</string>
     <string name="subtitle_style_color">ტექსტის ფერი</string>
     <string name="subtitle_style_hex">თექვსმეტობითი ფერის კოდი</string>
     <string name="subtitle_style_drag_hint">გადაიტანეთ გადახედვა გადახედვისთვის</string>
-    <string name="subtitle_style_bold">თამამი</string>
+    <string name="subtitle_style_bold">გამუქებული</string>
     <string name="subtitle_auto_generated">(ავტო)</string>
     <string name="reset">გადატვირთვა</string>
     <string name="share">გაზიარება</string>
@@ -104,7 +122,7 @@
     <string name="retry">ხელახლა სცადეთ</string>
     <string name="segment_intro">შესავალი</string>
     <string name="segment_outro">აუტრო</string>
-    <string name="segment_interaction">მოიწონეთ და გამოიწერეთ შეხსენებები</string>
+    <string name="segment_interaction">ურთიერთქმედების შეხსენება</string>
     <string name="segment_preview">გადახედვა</string>
     <string name="segment_music_offtopic">არამუსიკა</string>
     <string name="cast">სტრიმინგი მოწყობილობაზე</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">თავსებადი ნაკადის მოწყობილობები ვერ მოიძებნა</string>
     <string name="cast_no_devices_hint">დააკავშირეთ ორივე მოწყობილობა იმავე ქსელში.</string>
     <string name="cast_unavailable">მოწყობილობის ნაკადი მიუწვდომელია</string>
-    <string name="cast_unavailable_hint">მოწყობილობის სტრიმინგს სჭირდება Google Play Services.</string>
+    <string name="cast_unavailable_hint">დააკავშირეთ ორივე მოწყობილობა იმავე ქსელში.</string>
     <string name="cast_section_devices">ხელმისაწვდომი მოწყობილობები</string>
     <string name="cast_section_link">გახსენით ნებისმიერ მოწყობილობაზე</string>
     <string name="cast_section_link_hint">იმავე Wi-Fi ქსელში.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ვიდეო</string>
     <string name="download_audio">აუდიო</string>
     <string name="download_quality">ჩამოტვირთვის ხარისხი</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">უმაღლესი ხარისხი იყენებს მეტ მონაცემს და მეხსიერებას</string>
     <string name="download_size_estimate">დაახლოებით %1$s</string>
     <string name="download_size_unknown">ზომა უცნობია</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">არჩეული: %1$d / %2$d</string>
     <string name="download_batch_meta">ნივთები: %1$d · %2$s</string>
     <string name="download_no_new_tasks">ახალი ამოცანები არ არის</string>
-    <string name="download_snapshot_too_many">ძალიან ბევრი ელემენტი (მაქს. 500).არაფერი იყო შეკვეცილი.</string>
-    <string name="download_snapshot_too_large">სნეპშოტი 1 მბ-ზე მეტია.არაფერი იყო შეკვეცილი.</string>
+    <string name="download_snapshot_too_many">ძალიან ბევრი ელემენტი. აირჩიეთ არაუმეტეს 500.</string>
+    <string name="download_snapshot_too_large">არჩეული სია აღემატება 1 მბაიტს. აირჩიეთ ნაკლები ელემენტი.</string>
     <string name="download_reason_live">პირდაპირი სტრიმინგების ჩამოტვირთვა შეუძლებელია</string>
     <string name="download_reason_premiere">ეს პრემიერა არ დაწყებულა</string>
     <string name="download_reason_no_streams">არ არის ჩამოსატვირთი ფაილის ნაკადები</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">ბუფერები/წთ: %1$d</string>
     <string name="audio_description">აუდიო აღწერა</string>
     <string name="secondary_audio">მეორადი აუდიო</string>
+    <string name="settings_import_reload_message">პარამეტრები განახლებულია. გადატვირთეთ ღია გვერდები ცვლილებების გამოსაყენებლად. თქვენი დაკვრის პოზიცია შენარჩუნდება.</string>
+    <string name="settings_reload_now">გადატვირთეთ გვერდები ახლავე</string>
+    <string name="settings_reload_later">მოგვიანებით</string>
+    <string name="about_save_logs">შეინახეთ აპლიკაციის დიაგნოსტიკური ჟურნალები</string>
+    <string name="about_save_done">აპის დიაგნოსტიკური ZIP ფაილი შენახულია</string>
+    <string name="about_save_cancelled">გაუქმებულია</string>
+    <string name="about_save_failed">აპების ჟურნალის შენახვა ვერ მოხერხდა. აირჩიეთ სხვა შენახვის ადგილი და სცადეთ ხელახლა.</string>
+    <string name="player_live_unavailable">პირდაპირი ტრანსლაცია მიუწვდომელია. სცადეთ მოგვიანებით.</string>
 </resources>

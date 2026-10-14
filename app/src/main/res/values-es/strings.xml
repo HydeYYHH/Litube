@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Escuchar en segundo plano</string>
     <string name="back_again_to_exit">Pulsa Atrás otra vez para salir</string>
     <string name="navigate_back">Atrás</string>
     <string name="extension">Extensiones</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Saltar patrocinios</string>
     <string name="skip_sponsors_selfpromo">Saltar autopromoción</string>
+    <string name="skip_sponsors_interaction">Omitir recordatorios de interacción</string>
+    <string name="skip_sponsors_intro">Omitir introducciones</string>
+    <string name="skip_sponsors_outro">Omitir finales</string>
+    <string name="skip_sponsors_preview">Omitir avances</string>
+    <string name="skip_sponsors_music_offtopic">Omitir partes sin música</string>
+    <string name="skip_sponsors_filler">Omitir partes fuera de tema</string>
     <string name="skip_sponsors_highlight">Saltar momentos destacados</string>
     <string name="remember_last_position">Recordar posición</string>
     <string name="remember_quality">Recordar calidad</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">Restablecer ajustes</string>
     <string name="reset_extension_title">Restablecer extensiones</string>
     <string name="reset_extension_message">¿Restablecer los ajustes de las extensiones?</string>
+    <string name="settings_backup_restore">Copia de seguridad y restauración</string>
+    <string name="settings_export">Exportar ajustes</string>
+    <string name="settings_export_summary">Guardar los ajustes actuales en un archivo JSON</string>
+    <string name="settings_import">Importar ajustes</string>
+    <string name="settings_import_summary">Restaurar los ajustes desde una copia de seguridad</string>
+    <string name="settings_import_confirm_title">¿Importar ajustes?</string>
+    <string name="settings_import_confirm_message">Los ajustes actuales se sustituirán por los de la copia de seguridad.</string>
+    <string name="settings_export_done">Ajustes exportados</string>
+    <string name="settings_export_failed">No se pudo guardar el archivo de ajustes</string>
+    <string name="settings_import_done">Ajustes importados</string>
+    <string name="settings_import_failed">Archivo de ajustes no válido</string>
     <string name="confirm">Confirmar</string>
     <string name="cancel">Cancelar</string>
     <string name="open_with">Abrir con</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Tamaño del texto</string>
     <string name="subtitle_style_background">Fondo</string>
     <string name="subtitle_background_none">Ninguno</string>
-    <string name="subtitle_background_semi">Translúcido</string>
+    <string name="subtitle_background_semi">Semitransparente</string>
     <string name="subtitle_background_opaque">Opaco</string>
     <string name="subtitle_style_color">Color del texto</string>
     <string name="subtitle_style_hex">Código hex</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">No hay dispositivos Cast</string>
     <string name="cast_no_devices_hint">Configura los dispositivos en la misma red.</string>
     <string name="cast_unavailable">Envío no disponible</string>
-    <string name="cast_unavailable_hint">Se necesitan los Servicios de Google Play.</string>
+    <string name="cast_unavailable_hint">Configura los dispositivos en la misma red.</string>
     <string name="cast_section_devices">Dispositivos disponibles</string>
     <string name="cast_section_link">Abrir en otro dispositivo</string>
     <string name="cast_section_link_hint">En la misma red Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vídeo</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Calidad de descarga</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Más calidad consume más datos y espacio</string>
     <string name="download_size_estimate">Aprox. %1$s</string>
     <string name="download_size_unknown">Tamaño desconocido</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Selección: %1$d / %2$d</string>
     <string name="download_batch_meta">Elementos: %1$d · %2$s</string>
     <string name="download_no_new_tasks">No hay descargas nuevas</string>
-    <string name="download_snapshot_too_many">Demasiados elementos (máx. 500). La lista no se ha recortado.</string>
-    <string name="download_snapshot_too_large">La lista supera 1 MB. No se ha recortado.</string>
+    <string name="download_snapshot_too_many">Demasiados artículos. Seleccione no más de 500.</string>
+    <string name="download_snapshot_too_large">La lista seleccionada supera 1 MB. Seleccione menos elementos.</string>
     <string name="download_reason_live">No se pueden descargar directos</string>
     <string name="download_reason_premiere">Este estreno aún no ha empezado</string>
     <string name="download_reason_no_streams">No hay archivos descargables</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Cargas de búfer/min: %1$d</string>
     <string name="audio_description">Audiodescripción</string>
     <string name="secondary_audio">Audio secundario</string>
+    <string name="settings_import_reload_message">Ajustes actualizados. Recarga las páginas abiertas para aplicar los cambios. Se conservará la posición de reproducción.</string>
+    <string name="settings_reload_now">Recargar páginas</string>
+    <string name="settings_reload_later">Más tarde</string>
+    <string name="about_save_logs">Guardar registros de diagnóstico</string>
+    <string name="about_save_done">Archivo ZIP de diagnóstico guardado</string>
+    <string name="about_save_cancelled">Guardado cancelado</string>
+    <string name="about_save_failed">No se pudieron guardar los registros de diagnóstico. Elige otra ubicación e inténtalo de nuevo.</string>
+    <string name="player_live_unavailable">Emisión en directo no disponible. Inténtalo de nuevo más tarde.</string>
 </resources>

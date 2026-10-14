@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">பின்னணியில் கேளுங்கள்</string>
     <string name="back_again_to_exit">வெளியேற மீண்டும் மீண்டும் அழுத்தவும்</string>
     <string name="navigate_back">மீண்டும்</string>
     <string name="extension">நீட்டிப்புகள்</string>
@@ -8,9 +9,9 @@
     <string name="about">அறிமுகம்</string>
     <string name="display_dislikes">பிடிக்காதவற்றைக் காட்டு</string>
     <string name="display_dislikes_summary">வீடியோ ஐடிகளை returnyoutubedislikeapi.com க்கு அனுப்புகிறது</string>
-    <string name="hide_shorts">குறும்படங்களை மறை</string>
+    <string name="hide_shorts">Shorts மறை</string>
     <string name="interface_category">இடைமுகம்</string>
-    <string name="player">பின்னணி</string>
+    <string name="player">இயக்குதல்</string>
     <string name="gesture">சைகைகள்</string>
     <string name="gesture_single_tap">ஒற்றை தட்டு</string>
     <string name="gesture_double_tap">இருமுறை தட்டவும்</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">உட்பொதிக்கப்பட்ட பிளேயரில்</string>
     <string name="enable_in_fullscreen">முழுத்திரையில்</string>
     <string name="brightness">பிரகாசம்</string>
-    <string name="volume">தொகுதி</string>
+    <string name="volume">ஒலி அளவு</string>
     <string name="background_mini_player">பின்னணி &amp; மினி பிளேயர்</string>
     <string name="pip">பிக்சர்-இன்-பிக்சர்</string>
     <string name="in_app_mini_player">இன்-ஆப் மினி-பிளேயர்</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ஸ்பான்சர்களைத் தவிர்க்கவும்</string>
     <string name="skip_sponsors_selfpromo">சுய விளம்பரத்தைத் தவிர்க்கவும்</string>
+    <string name="skip_sponsors_interaction">விருப்பம் மற்றும் சந்தா நினைவூட்டல்களைத் தவிர்</string>
+    <string name="skip_sponsors_intro">தொடக்கப் பகுதிகளைத் தவிர்</string>
+    <string name="skip_sponsors_outro">இறுதிப் பகுதிகளைத் தவிர்</string>
+    <string name="skip_sponsors_preview">முன்னோட்டங்களைத் தவிர்</string>
+    <string name="skip_sponsors_music_offtopic">இசையில்லாத பகுதிகளைத் தவிர்</string>
+    <string name="skip_sponsors_filler">தலைப்புக்குத் தொடர்பில்லாத பகுதிகளைத் தவிர்</string>
     <string name="skip_sponsors_highlight">சிறப்பம்சங்களை தவிர்</string>
     <string name="remember_last_position">நிலையை நினைவில் கொள்ளுங்கள்</string>
     <string name="remember_quality">வீடியோ தரத்தை நினைவில் கொள்ளுங்கள்</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">எல்லா அமைப்புகளையும் மீட்டமைக்கவும்</string>
     <string name="reset_extension_title">நீட்டிப்புகளை மீட்டமைக்கவும்</string>
     <string name="reset_extension_message">எல்லா நீட்டிப்பு அமைப்புகளையும் இயல்புநிலைக்கு மீட்டமைக்கவா?</string>
+    <string name="settings_backup_restore">காப்புப்பிரதி &amp; மீட்டமை</string>
+    <string name="settings_export">ஏற்றுமதி அமைப்புகள்</string>
+    <string name="settings_export_summary">தற்போதைய அமைப்புகளை JSON கோப்பில் சேமிக்கவும்</string>
+    <string name="settings_import">இறக்குமதி அமைப்புகள்</string>
+    <string name="settings_import_summary">காப்பு கோப்பிலிருந்து அமைப்புகளை மீட்டமைக்கவும்</string>
+    <string name="settings_import_confirm_title">அமைப்புகளை இறக்குமதி செய்யவா?</string>
+    <string name="settings_import_confirm_message">தற்போதைய அமைப்புகள் காப்புப்பிரதியால் மேலெழுதப்படும்.</string>
+    <string name="settings_export_done">அமைப்புகள் ஏற்றுமதி செய்யப்பட்டன</string>
+    <string name="settings_export_failed">அமைப்புகள் கோப்பைச் சேமிக்க முடியவில்லை</string>
+    <string name="settings_import_done">அமைப்புகள் இறக்குமதி செய்யப்பட்டன</string>
+    <string name="settings_import_failed">தவறான அமைப்புகள் கோப்பு</string>
     <string name="confirm">உறுதிப்படுத்தவும்</string>
     <string name="cancel">ரத்துசெய்</string>
     <string name="more_options">மேலும்</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">உரை அளவு</string>
     <string name="subtitle_style_background">பின்னணி</string>
     <string name="subtitle_background_none">இல்லை</string>
-    <string name="subtitle_background_semi">ஒளிஊடுருவக்கூடியது</string>
+    <string name="subtitle_background_semi">அரை ஒளிபுகும்</string>
     <string name="subtitle_background_opaque">ஒளிபுகா</string>
     <string name="subtitle_style_color">உரை நிறம்</string>
     <string name="subtitle_style_hex">ஹெக்ஸ் வண்ணக் குறியீடு</string>
@@ -104,7 +122,7 @@
     <string name="retry">மீண்டும் முயற்சிக்கவும்</string>
     <string name="segment_intro">அறிமுகம்</string>
     <string name="segment_outro">அவுட்ரோ</string>
-    <string name="segment_interaction">நினைவூட்டல்களை விரும்பி குழுசேரவும்</string>
+    <string name="segment_interaction">விருப்பம் மற்றும் சந்தா நினைவூட்டல்</string>
     <string name="segment_preview">முன்னோட்டம்</string>
     <string name="segment_music_offtopic">இசை அல்லாதது</string>
     <string name="cast">ஒரு சாதனத்திற்கு ஸ்ட்ரீம் செய்யவும்</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">இணக்கமான ஸ்ட்ரீமிங் சாதனங்கள் எதுவும் இல்லை</string>
     <string name="cast_no_devices_hint">இரண்டு சாதனங்களையும் ஒரே நெட்வொர்க்கில் இணைக்கவும்.</string>
     <string name="cast_unavailable">சாதன ஸ்ட்ரீமிங் கிடைக்கவில்லை</string>
-    <string name="cast_unavailable_hint">சாதன ஸ்ட்ரீமிங்கிற்கு Google Play சேவைகள் தேவை.</string>
+    <string name="cast_unavailable_hint">இரண்டு சாதனங்களையும் ஒரே நெட்வொர்க்கில் இணைக்கவும்.</string>
     <string name="cast_section_devices">கிடைக்கக்கூடிய சாதனங்கள்</string>
     <string name="cast_section_link">எந்த சாதனத்திலும் திறக்கவும்</string>
     <string name="cast_section_link_hint">அதே Wi-Fi நெட்வொர்க்கில்.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">வீடியோ</string>
     <string name="download_audio">ஆடியோ</string>
     <string name="download_quality">பதிவிறக்க தரம்</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">உயர் தரமானது அதிக தரவு மற்றும் சேமிப்பகத்தைப் பயன்படுத்துகிறது</string>
     <string name="download_size_estimate">சுமார் %1$s</string>
     <string name="download_size_unknown">அளவு தெரியவில்லை</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">தேர்ந்தெடுக்கப்பட்டது: %1$d / %2$d</string>
     <string name="download_batch_meta">பொருட்கள்: %1$d · %2$s</string>
     <string name="download_no_new_tasks">புதிய பணிகள் இல்லை</string>
-    <string name="download_snapshot_too_many">அதிகமான பொருட்கள் (அதிகபட்சம் 500).எதுவும் துண்டிக்கப்படவில்லை.</string>
-    <string name="download_snapshot_too_large">ஸ்னாப்ஷாட் 1 MB ஐ விட பெரியது.எதுவும் துண்டிக்கப்படவில்லை.</string>
+    <string name="download_snapshot_too_many">பல பொருட்கள். 500க்கு மேல் இல்லை என்பதைத் தேர்ந்தெடுக்கவும்.</string>
+    <string name="download_snapshot_too_large">தேர்ந்தெடுக்கப்பட்ட பட்டியல் 1 MB ஐ விட அதிகமாக உள்ளது. குறைவான பொருட்களைத் தேர்ந்தெடுக்கவும்.</string>
     <string name="download_reason_live">நேரடி ஸ்ட்ரீம்களைப் பதிவிறக்க முடியாது</string>
     <string name="download_reason_premiere">இந்த பிரீமியர் தொடங்கவில்லை</string>
     <string name="download_reason_no_streams">பதிவிறக்கக்கூடிய கோப்பு ஸ்ட்ரீம்கள் இல்லை</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">இடையகங்கள்/நிமிடம்: %1$d</string>
     <string name="audio_description">ஆடியோ விளக்கம்</string>
     <string name="secondary_audio">இரண்டாம் நிலை ஆடியோ</string>
+    <string name="settings_import_reload_message">அமைப்புகள் புதுப்பிக்கப்பட்டன. மாற்றங்களைப் பயன்படுத்த திறந்த பக்கங்களை மீண்டும் ஏற்றவும். உங்கள் பின்னணி நிலை அப்படியே இருக்கும்.</string>
+    <string name="settings_reload_now">இப்போது பக்கங்களை மீண்டும் ஏற்றவும்</string>
+    <string name="settings_reload_later">பின்னர்</string>
+    <string name="about_save_logs">பயன்பாட்டு கண்டறிதல் பதிவுகளைச் சேமிக்கவும்</string>
+    <string name="about_save_done">ஆப்ஸ் கண்டறியும் ZIP கோப்பு சேமிக்கப்பட்டது</string>
+    <string name="about_save_cancelled">ரத்து செய்யப்பட்டது</string>
+    <string name="about_save_failed">பயன்பாட்டுப் பதிவுகளைச் சேமிக்க முடியவில்லை. மற்றொரு சேமிக்கும் இடத்தைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="player_live_unavailable">நேரலை கிடைக்கவில்லை. பின்னர் மீண்டும் முயற்சிக்கவும்.</string>
 </resources>

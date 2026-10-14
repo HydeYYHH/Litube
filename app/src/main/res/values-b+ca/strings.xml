@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Escolta en segon pla</string>
     <string name="back_again_to_exit">Premeu enrere de nou per sortir</string>
     <string name="navigate_back">Enrere</string>
     <string name="extension">Extensions</string>
@@ -8,7 +9,7 @@
     <string name="about">Quant a</string>
     <string name="display_dislikes">Mostra els no m\'agrada</string>
     <string name="display_dislikes_summary">Envia identificadors de vídeo a returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Amaga pantalons curts</string>
+    <string name="hide_shorts">Amaga Shorts</string>
     <string name="interface_category">Interfície</string>
     <string name="player">Reproducció</string>
     <string name="gesture">Gestos</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Omet els patrocinadors</string>
     <string name="skip_sponsors_selfpromo">Omet l\'autopromoció</string>
+    <string name="skip_sponsors_interaction">Omet els recordatoris d\'interacció</string>
+    <string name="skip_sponsors_intro">Omet les introduccions</string>
+    <string name="skip_sponsors_outro">Omet els finals</string>
+    <string name="skip_sponsors_preview">Omet els avançaments</string>
+    <string name="skip_sponsors_music_offtopic">Omet les parts sense música</string>
+    <string name="skip_sponsors_filler">Omet les parts fora de tema</string>
     <string name="skip_sponsors_highlight">Omet els aspectes destacats</string>
     <string name="remember_last_position">Recorda la posició</string>
     <string name="remember_quality">Recordeu la qualitat del vídeo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Restableix tots els paràmetres</string>
     <string name="reset_extension_title">Restableix les extensions</string>
     <string name="reset_extension_message">Restablir tota la configuració de l\'extensió a la configuració predeterminada?</string>
+    <string name="settings_backup_restore">Còpia de seguretat i restauració</string>
+    <string name="settings_export">Exporta la configuració</string>
+    <string name="settings_export_summary">Desa la configuració actual en un fitxer JSON</string>
+    <string name="settings_import">Importa la configuració</string>
+    <string name="settings_import_summary">Restaura la configuració des d\'un fitxer de còpia de seguretat</string>
+    <string name="settings_import_confirm_title">Voleu importar la configuració?</string>
+    <string name="settings_import_confirm_message">La configuració actual es sobreescriurà per la còpia de seguretat.</string>
+    <string name="settings_export_done">S\'ha exportat la configuració</string>
+    <string name="settings_export_failed">No s\'ha pogut desar el fitxer de configuració</string>
+    <string name="settings_import_done">S\'ha importat la configuració</string>
+    <string name="settings_import_failed">Fitxer de configuració no vàlid</string>
     <string name="confirm">Confirmar</string>
     <string name="cancel">Cancel·la</string>
     <string name="more_options">Més</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Mida del text</string>
     <string name="subtitle_style_background">Antecedents</string>
     <string name="subtitle_background_none">Cap</string>
-    <string name="subtitle_background_semi">Translúcid</string>
+    <string name="subtitle_background_semi">Semitransparent</string>
     <string name="subtitle_background_opaque">Opac</string>
     <string name="subtitle_style_color">Color del text</string>
     <string name="subtitle_style_hex">Codi de color hexadecimal</string>
@@ -104,7 +122,7 @@
     <string name="retry">Torna-ho a provar</string>
     <string name="segment_intro">Introducció</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">M\'agrada i subscriu-te als recordatoris</string>
+    <string name="segment_interaction">Recordatori d\'interacció</string>
     <string name="segment_preview">Vista prèvia</string>
     <string name="segment_music_offtopic">No musical</string>
     <string name="cast">Transmet</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">No s\'han trobat dispositius de transmissió compatibles</string>
     <string name="cast_no_devices_hint">Connecteu els dos dispositius a la mateixa xarxa.</string>
     <string name="cast_unavailable">El dispositiu no està disponible</string>
-    <string name="cast_unavailable_hint">La transmissió en temps real del dispositiu necessita els serveis de Google Play.</string>
+    <string name="cast_unavailable_hint">Connecteu els dos dispositius a la mateixa xarxa.</string>
     <string name="cast_section_devices">Dispositius disponibles</string>
     <string name="cast_section_link">Obre en qualsevol dispositiu</string>
     <string name="cast_section_link_hint">A la mateixa xarxa Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vídeo</string>
     <string name="download_audio">Àudio</string>
     <string name="download_quality">Qualitat de baixada</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Una qualitat més alta utilitza més dades i emmagatzematge</string>
     <string name="download_size_estimate">Al voltant del %1$s</string>
     <string name="download_size_unknown">Mida desconeguda</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Seleccionat: %1$d / %2$d</string>
     <string name="download_batch_meta">Articles: %1$d · %2$s</string>
     <string name="download_no_new_tasks">No hi ha tasques noves</string>
-    <string name="download_snapshot_too_many">Massa elements (màxim 500).No es va truncar res.</string>
-    <string name="download_snapshot_too_large">La instantània és més gran que 1 MB.No es va truncar res.</string>
+    <string name="download_snapshot_too_many">Massa articles. Seleccioneu no més de 500.</string>
+    <string name="download_snapshot_too_large">La llista seleccionada supera 1 MB. Seleccioneu menys elements.</string>
     <string name="download_reason_live">Les reproduccions en directe no es poden baixar</string>
     <string name="download_reason_premiere">Aquesta estrena no ha començat</string>
     <string name="download_reason_no_streams">No hi ha fluxos de fitxers baixables</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Tampons/min: %1$d</string>
     <string name="audio_description">Audiodescripció</string>
     <string name="secondary_audio">Àudio secundari</string>
+    <string name="settings_import_reload_message">S\'ha actualitzat la configuració. Torneu a carregar les pàgines obertes per aplicar els canvis. La vostra posició de reproducció es mantindrà.</string>
+    <string name="settings_reload_now">Torneu a carregar les pàgines ara</string>
+    <string name="settings_reload_later">Més tard</string>
+    <string name="about_save_logs">Desa els registres de diagnòstic de l\'aplicació</string>
+    <string name="about_save_done">S\'ha desat el fitxer ZIP de diagnòstic de l\'aplicació</string>
+    <string name="about_save_cancelled">Cancel·lat</string>
+    <string name="about_save_failed">No s\'han pogut desar els registres de l\'aplicació. Trieu una altra ubicació de desar i torneu-ho a provar.</string>
+    <string name="player_live_unavailable">Emissió en directe no disponible. Torna-ho a provar més tard.</string>
 </resources>

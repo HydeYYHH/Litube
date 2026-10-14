@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Ascolta in background</string>
     <string name="back_again_to_exit">Premere di nuovo Indietro per uscire</string>
     <string name="navigate_back">Indietro</string>
     <string name="extension">Estensioni</string>
@@ -8,7 +9,7 @@
     <string name="about">Informazioni</string>
     <string name="display_dislikes">Mostra antipatie</string>
     <string name="display_dislikes_summary">Invia gli ID video a returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Nascondi pantaloncini</string>
+    <string name="hide_shorts">Nascondi Shorts</string>
     <string name="interface_category">Interfaccia</string>
     <string name="player">Riproduzione</string>
     <string name="gesture">Gesti</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Salta gli sponsor</string>
     <string name="skip_sponsors_selfpromo">Salta l\'autopromozione</string>
+    <string name="skip_sponsors_interaction">Salta i promemoria di interazione</string>
+    <string name="skip_sponsors_intro">Salta le introduzioni</string>
+    <string name="skip_sponsors_outro">Salta le conclusioni</string>
+    <string name="skip_sponsors_preview">Salta le anteprime</string>
+    <string name="skip_sponsors_music_offtopic">Salta le parti senza musica</string>
+    <string name="skip_sponsors_filler">Salta le parti fuori tema</string>
     <string name="skip_sponsors_highlight">Salta le evidenziazioni</string>
     <string name="remember_last_position">Ricorda la posizione</string>
     <string name="remember_quality">Ricorda la qualità del video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Ripristina tutte le impostazioni</string>
     <string name="reset_extension_title">Reimposta interni</string>
     <string name="reset_extension_message">Ripristinare tutte le impostazioni dell\'interno ai valori predefiniti?</string>
+    <string name="settings_backup_restore">Backup e ripristino</string>
+    <string name="settings_export">Esporta impostazioni</string>
+    <string name="settings_export_summary">Salva le impostazioni attuali in un file JSON</string>
+    <string name="settings_import">Importa impostazioni</string>
+    <string name="settings_import_summary">Ripristina le impostazioni da un backup</string>
+    <string name="settings_import_confirm_title">Importare le impostazioni?</string>
+    <string name="settings_import_confirm_message">Le impostazioni attuali saranno sostituite da quelle del backup.</string>
+    <string name="settings_export_done">Impostazioni esportate</string>
+    <string name="settings_export_failed">Impossibile salvare il file delle impostazioni</string>
+    <string name="settings_import_done">Impostazioni importate</string>
+    <string name="settings_import_failed">File delle impostazioni non valido</string>
     <string name="confirm">Conferma</string>
     <string name="cancel">Annulla</string>
     <string name="more_options">Di più</string>
@@ -60,7 +78,7 @@
     <string name="action_next">Successivo</string>
     <string name="action_play">Riproduci</string>
     <string name="action_pause">Pausa</string>
-    <string name="action_replay">Riproduci</string>
+    <string name="action_replay">Riproduci di nuovo</string>
     <string name="player_quality_auto">Automatico</string>
     <string name="player_live">IN DIRETTA</string>
     <string name="player_time_bar">Posizione di riproduzione</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Dimensione del testo</string>
     <string name="subtitle_style_background">Contesto</string>
     <string name="subtitle_background_none">Nessuno</string>
-    <string name="subtitle_background_semi">Traslucido</string>
+    <string name="subtitle_background_semi">Semitrasparente</string>
     <string name="subtitle_background_opaque">Opaco</string>
     <string name="subtitle_style_color">Colore del testo</string>
     <string name="subtitle_style_hex">Codice colore esadecimale</string>
@@ -104,7 +122,7 @@
     <string name="retry">Riprova</string>
     <string name="segment_intro">Introduzione</string>
     <string name="segment_outro">Conclusione</string>
-    <string name="segment_interaction">Metti mi piace e iscriviti ai promemoria</string>
+    <string name="segment_interaction">Invito all\'interazione</string>
     <string name="segment_preview">Anteprima</string>
     <string name="segment_music_offtopic">Non musica</string>
     <string name="cast">Trasmetti</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nessun dispositivo di streaming compatibile trovato</string>
     <string name="cast_no_devices_hint">Collegare entrambi i dispositivi alla stessa rete.</string>
     <string name="cast_unavailable">Streaming del dispositivo non disponibile</string>
-    <string name="cast_unavailable_hint">Lo streaming del dispositivo richiede Google Play Services.</string>
+    <string name="cast_unavailable_hint">Collegare entrambi i dispositivi alla stessa rete.</string>
     <string name="cast_section_devices">Dispositivi disponibili</string>
     <string name="cast_section_link">Apri su qualsiasi dispositivo</string>
     <string name="cast_section_link_hint">Sulla stessa rete Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Qualità del download</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Una qualità superiore utilizza più dati e spazio di archiviazione</string>
     <string name="download_size_estimate">Circa %1$s</string>
     <string name="download_size_unknown">Dimensioni sconosciute</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Selezionato: %1$d / %2$d</string>
     <string name="download_batch_meta">Articoli: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Nessuna nuova attività</string>
-    <string name="download_snapshot_too_many">Troppi elementi (max 500).Niente è stato troncato.</string>
-    <string name="download_snapshot_too_large">L\'istantanea è più grande di 1 MB.Niente è stato troncato.</string>
+    <string name="download_snapshot_too_many">Troppi articoli. Seleziona non più di 500.</string>
+    <string name="download_snapshot_too_large">L\'elenco selezionato supera 1 MB. Seleziona meno elementi.</string>
     <string name="download_reason_live">Gli streaming live non possono essere scaricati</string>
     <string name="download_reason_premiere">Questa première non è iniziata</string>
     <string name="download_reason_no_streams">Nessun flusso di file scaricabile</string>
@@ -260,7 +279,7 @@
     <string name="info_dropped_frames">Fotogrammi persi/totale</string>
     <string name="info_playback_speed">Velocità di riproduzione</string>
     <string name="info_buffer_state">Riproduzione/buffering</string>
-    <string name="info_first_frame">Primo frame temporale</string>
+    <string name="info_first_frame">Tempo al primo fotogramma</string>
     <string name="gallery_zoom">Ingrandire</string>
     <string name="gallery_reset_zoom">Reimposta lo zoom</string>
     <string name="web_downloaded">Scaricato</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffer/min: %1$d</string>
     <string name="audio_description">Descrizione audio</string>
     <string name="secondary_audio">Audio secondario</string>
+    <string name="settings_import_reload_message">Impostazioni aggiornate. Ricarica le pagine aperte per applicare le modifiche. La posizione di riproduzione sarà mantenuta.</string>
+    <string name="settings_reload_now">Ricarica le pagine</string>
+    <string name="settings_reload_later">Più tardi</string>
+    <string name="about_save_logs">Salva i log diagnostici</string>
+    <string name="about_save_done">File ZIP diagnostico salvato</string>
+    <string name="about_save_cancelled">Salvataggio annullato</string>
+    <string name="about_save_failed">Impossibile salvare i log diagnostici. Scegli un\'altra posizione e riprova.</string>
+    <string name="player_live_unavailable">Diretta non disponibile. Riprova più tardi.</string>
 </resources>

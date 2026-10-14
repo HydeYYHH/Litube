@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ฟังในพื้นหลัง</string>
     <string name="back_again_to_exit">กดกลับอีกครั้งเพื่อออก</string>
     <string name="navigate_back">กลับ</string>
     <string name="extension">ส่วนขยาย</string>
@@ -8,7 +9,7 @@
     <string name="about">เกี่ยวกับ</string>
     <string name="display_dislikes">แสดงความไม่ชอบ</string>
     <string name="display_dislikes_summary">ส่งรหัสวิดีโอไปที่ returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">ซ่อนกางเกงขาสั้น</string>
+    <string name="hide_shorts">ซ่อน Shorts</string>
     <string name="interface_category">อินเทอร์เฟซ</string>
     <string name="player">การเล่น</string>
     <string name="gesture">ท่าทาง</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ข้ามผู้สนับสนุน</string>
     <string name="skip_sponsors_selfpromo">ข้ามการโปรโมตตัวเอง</string>
+    <string name="skip_sponsors_interaction">ข้ามการเตือนให้กดถูกใจและติดตาม</string>
+    <string name="skip_sponsors_intro">ข้ามบทนำ</string>
+    <string name="skip_sponsors_outro">ข้ามบทส่งท้าย</string>
+    <string name="skip_sponsors_preview">ข้ามตัวอย่าง</string>
+    <string name="skip_sponsors_music_offtopic">ข้ามส่วนที่ไม่มีดนตรี</string>
+    <string name="skip_sponsors_filler">ข้ามส่วนที่ไม่เกี่ยวข้องกับหัวข้อ</string>
     <string name="skip_sponsors_highlight">ข้ามไฮไลท์</string>
     <string name="remember_last_position">จำตำแหน่ง</string>
     <string name="remember_quality">จดจำคุณภาพวิดีโอ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">รีเซ็ตการตั้งค่าทั้งหมด</string>
     <string name="reset_extension_title">รีเซ็ตส่วนขยาย</string>
     <string name="reset_extension_message">รีเซ็ตการตั้งค่าส่วนขยายทั้งหมดเป็นค่าเริ่มต้นหรือไม่</string>
+    <string name="settings_backup_restore">สำรองและกู้คืน</string>
+    <string name="settings_export">การตั้งค่าการส่งออก</string>
+    <string name="settings_export_summary">บันทึกการตั้งค่าปัจจุบันเป็นไฟล์ JSON</string>
+    <string name="settings_import">นำเข้าการตั้งค่า</string>
+    <string name="settings_import_summary">คืนค่าการตั้งค่าจากไฟล์สำรอง</string>
+    <string name="settings_import_confirm_title">นำเข้าการตั้งค่า?</string>
+    <string name="settings_import_confirm_message">การตั้งค่าปัจจุบันจะถูกเขียนทับโดยข้อมูลสำรอง</string>
+    <string name="settings_export_done">ส่งออกการตั้งค่าแล้ว</string>
+    <string name="settings_export_failed">ไม่สามารถบันทึกไฟล์การตั้งค่าได้</string>
+    <string name="settings_import_done">นำเข้าการตั้งค่าแล้ว</string>
+    <string name="settings_import_failed">ไฟล์การตั้งค่าไม่ถูกต้อง</string>
     <string name="confirm">ยืนยัน</string>
     <string name="cancel">ยกเลิก</string>
     <string name="more_options">เพิ่มเติม</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">ขนาดตัวอักษร</string>
     <string name="subtitle_style_background">พื้นหลัง</string>
     <string name="subtitle_background_none">ไม่มี</string>
-    <string name="subtitle_background_semi">โปร่งแสง</string>
+    <string name="subtitle_background_semi">กึ่งโปร่งใส</string>
     <string name="subtitle_background_opaque">ทึบแสง</string>
     <string name="subtitle_style_color">สีข้อความ</string>
     <string name="subtitle_style_hex">รหัสสีฐานสิบหก</string>
@@ -104,7 +122,7 @@
     <string name="retry">ลองอีกครั้ง</string>
     <string name="segment_intro">บทนำ</string>
     <string name="segment_outro">เอาท์โทร</string>
-    <string name="segment_interaction">การแจ้งเตือนการกดไลค์และติดตาม</string>
+    <string name="segment_interaction">การเตือนให้กดถูกใจและติดตาม</string>
     <string name="segment_preview">ดูตัวอย่าง</string>
     <string name="segment_music_offtopic">ไม่ใช่ดนตรี</string>
     <string name="cast">แคสต์</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ไม่พบอุปกรณ์สตรีมมิ่งที่เข้ากันได้</string>
     <string name="cast_no_devices_hint">เชื่อมต่ออุปกรณ์ทั้งสองเข้ากับเครือข่ายเดียวกัน</string>
     <string name="cast_unavailable">การสตรีมอุปกรณ์ไม่พร้อมใช้งาน</string>
-    <string name="cast_unavailable_hint">การสตรีมอุปกรณ์ต้องใช้บริการ Google Play</string>
+    <string name="cast_unavailable_hint">เชื่อมต่ออุปกรณ์ทั้งสองเข้ากับเครือข่ายเดียวกัน</string>
     <string name="cast_section_devices">อุปกรณ์ที่ใช้ได้</string>
     <string name="cast_section_link">เปิดบนอุปกรณ์ใดก็ได้</string>
     <string name="cast_section_link_hint">บนเครือข่าย Wi-Fi เดียวกัน</string>
@@ -163,6 +181,7 @@
     <string name="download_video">วีดีโอ</string>
     <string name="download_audio">เสียง</string>
     <string name="download_quality">คุณภาพการดาวน์โหลด</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">คุณภาพที่สูงขึ้นจะใช้ข้อมูลและพื้นที่เก็บข้อมูลมากขึ้น</string>
     <string name="download_size_estimate">ประมาณ %1$s</string>
     <string name="download_size_unknown">ไม่ทราบขนาด</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">เลือกแล้ว: %1$d/%2$d</string>
     <string name="download_batch_meta">รายการ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">ไม่มีงานใหม่</string>
-    <string name="download_snapshot_too_many">มีรายการมากเกินไป (สูงสุด 500)ไม่มีอะไรถูกตัดทอน</string>
-    <string name="download_snapshot_too_large">สแนปช็อตมีขนาดใหญ่กว่า 1 MBไม่มีอะไรถูกตัดทอน</string>
+    <string name="download_snapshot_too_many">มีรายการมากเกินไป เลือกไม่เกิน 500</string>
+    <string name="download_snapshot_too_large">รายการที่เลือกมีขนาดเกิน 1 MB เลือกรายการให้น้อยลง</string>
     <string name="download_reason_live">ไม่สามารถดาวน์โหลดสตรีมสดได้</string>
     <string name="download_reason_premiere">รอบปฐมทัศน์นี้ยังไม่ได้เริ่ม</string>
     <string name="download_reason_no_streams">ไม่มีสตรีมไฟล์ที่ดาวน์โหลดได้</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">บัฟเฟอร์/นาที: %1$d</string>
     <string name="audio_description">คำอธิบายเสียง</string>
     <string name="secondary_audio">เสียงรอง</string>
+    <string name="settings_import_reload_message">อัปเดตการตั้งค่าแล้ว โหลดหน้าที่เปิดอยู่ซ้ำเพื่อใช้การเปลี่ยนแปลง ตำแหน่งการเล่นของคุณจะถูกเก็บไว้</string>
+    <string name="settings_reload_now">โหลดหน้าซ้ำทันที</string>
+    <string name="settings_reload_later">ภายหลัง</string>
+    <string name="about_save_logs">บันทึกบันทึกการวินิจฉัยแอป</string>
+    <string name="about_save_done">บันทึกไฟล์ ZIP สำหรับการวินิจฉัยแอปแล้ว</string>
+    <string name="about_save_cancelled">ยกเลิกแล้ว</string>
+    <string name="about_save_failed">ไม่สามารถบันทึกบันทึกแอปได้ เลือกตำแหน่งบันทึกอื่นแล้วลองอีกครั้ง</string>
+    <string name="player_live_unavailable">สตรีมสดไม่พร้อมใช้งาน โปรดลองอีกครั้งในภายหลัง</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">പശ്ചാത്തലത്തിൽ കേൾക്കുക</string>
     <string name="back_again_to_exit">പുറത്തുകടക്കാൻ വീണ്ടും വീണ്ടും അമർത്തുക</string>
     <string name="navigate_back">തിരികെ</string>
     <string name="extension">വിപുലീകരണങ്ങൾ</string>
@@ -8,7 +9,7 @@
     <string name="about">കുറിച്ച്</string>
     <string name="display_dislikes">ഇഷ്ടപ്പെടാത്തവ കാണിക്കുക</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com-ലേക്ക് വീഡിയോ ഐഡികൾ അയയ്ക്കുന്നു</string>
-    <string name="hide_shorts">ഷോർട്ട്സ് മറയ്ക്കുക</string>
+    <string name="hide_shorts">Shorts മറയ്ക്കുക</string>
     <string name="interface_category">ഇൻ്റർഫേസ്</string>
     <string name="player">പ്ലേബാക്ക്</string>
     <string name="gesture">ആംഗ്യങ്ങൾ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ഉൾച്ചേർത്ത പ്ലെയറിൽ</string>
     <string name="enable_in_fullscreen">പൂർണ്ണസ്‌ക്രീനിൽ</string>
     <string name="brightness">തെളിച്ചം</string>
-    <string name="volume">വോളിയം</string>
+    <string name="volume">ശബ്ദനില</string>
     <string name="background_mini_player">പശ്ചാത്തലവും മിനി പ്ലെയറും</string>
     <string name="pip">ചിത്രം-ഇൻ-പിക്ചർ</string>
     <string name="in_app_mini_player">ഇൻ-ആപ്പ് മിനി-പ്ലെയർ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">സ്പോൺസർമാരെ ഒഴിവാക്കുക</string>
     <string name="skip_sponsors_selfpromo">സ്വയം പ്രമോഷൻ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_interaction">ലൈക്കിനും സബ്‌സ്‌ക്രിപ്‌ഷനും വേണ്ടിയുള്ള ഓർമ്മപ്പെടുത്തലുകൾ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_intro">ആമുഖങ്ങൾ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_outro">അവസാന ഭാഗങ്ങൾ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_preview">പ്രിവ്യൂകൾ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_music_offtopic">സംഗീതമില്ലാത്ത ഭാഗങ്ങൾ ഒഴിവാക്കുക</string>
+    <string name="skip_sponsors_filler">വിഷയവുമായി ബന്ധമില്ലാത്ത ഭാഗങ്ങൾ ഒഴിവാക്കുക</string>
     <string name="skip_sponsors_highlight">ഹൈലൈറ്റുകൾ ഒഴിവാക്കുക</string>
     <string name="remember_last_position">സ്ഥാനം ഓർക്കുക</string>
     <string name="remember_quality">വീഡിയോ നിലവാരം ഓർക്കുക</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">എല്ലാ ക്രമീകരണങ്ങളും പുനഃസജ്ജമാക്കുക</string>
     <string name="reset_extension_title">വിപുലീകരണങ്ങൾ പുനഃസജ്ജമാക്കുക</string>
     <string name="reset_extension_message">എല്ലാ വിപുലീകരണ ക്രമീകരണങ്ങളും ഡിഫോൾട്ടിലേക്ക് പുനഃസജ്ജമാക്കണോ?</string>
+    <string name="settings_backup_restore">ബാക്കപ്പ് &amp; പുനഃസ്ഥാപിക്കുക</string>
+    <string name="settings_export">കയറ്റുമതി ക്രമീകരണങ്ങൾ</string>
+    <string name="settings_export_summary">ഒരു JSON ഫയലിലേക്ക് നിലവിലെ ക്രമീകരണങ്ങൾ സംരക്ഷിക്കുക</string>
+    <string name="settings_import">ക്രമീകരണങ്ങൾ ഇറക്കുമതി ചെയ്യുക</string>
+    <string name="settings_import_summary">ഒരു ബാക്കപ്പ് ഫയലിൽ നിന്ന് ക്രമീകരണങ്ങൾ പുനഃസ്ഥാപിക്കുക</string>
+    <string name="settings_import_confirm_title">ക്രമീകരണങ്ങൾ ഇറക്കുമതി ചെയ്യണോ?</string>
+    <string name="settings_import_confirm_message">നിലവിലെ ക്രമീകരണങ്ങൾ ബാക്കപ്പ് ഉപയോഗിച്ച് തിരുത്തിയെഴുതും.</string>
+    <string name="settings_export_done">ക്രമീകരണങ്ങൾ കയറ്റുമതി ചെയ്തു</string>
+    <string name="settings_export_failed">ക്രമീകരണ ഫയൽ സംരക്ഷിക്കാൻ കഴിഞ്ഞില്ല</string>
+    <string name="settings_import_done">ക്രമീകരണങ്ങൾ ഇറക്കുമതി ചെയ്തു</string>
+    <string name="settings_import_failed">അസാധുവായ ക്രമീകരണ ഫയൽ</string>
     <string name="confirm">സ്ഥിരീകരിക്കുക</string>
     <string name="cancel">റദ്ദാക്കുക</string>
     <string name="more_options">കൂടുതൽ</string>
@@ -104,7 +122,7 @@
     <string name="retry">വീണ്ടും ശ്രമിക്കുക</string>
     <string name="segment_intro">ആമുഖം</string>
     <string name="segment_outro">ഔട്ട്റോ</string>
-    <string name="segment_interaction">ഓർമ്മപ്പെടുത്തലുകൾ ലൈക്ക് ചെയ്യുക, സബ്‌സ്‌ക്രൈബ് ചെയ്യുക</string>
+    <string name="segment_interaction">ലൈക്കിനും സബ്‌സ്‌ക്രിപ്‌ഷനും വേണ്ടിയുള്ള ഓർമ്മപ്പെടുത്തൽ</string>
     <string name="segment_preview">പ്രിവ്യൂ</string>
     <string name="segment_music_offtopic">സംഗീതേതര</string>
     <string name="cast">ഒരു ഉപകരണത്തിലേക്ക് സ്ട്രീം ചെയ്യുക</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">അനുയോജ്യമായ സ്ട്രീമിംഗ് ഉപകരണങ്ങളൊന്നും കണ്ടെത്തിയില്ല</string>
     <string name="cast_no_devices_hint">രണ്ട് ഉപകരണങ്ങളും ഒരേ നെറ്റ്‌വർക്കിലേക്ക് ബന്ധിപ്പിക്കുക.</string>
     <string name="cast_unavailable">ഉപകരണ സ്ട്രീമിംഗ് ലഭ്യമല്ല</string>
-    <string name="cast_unavailable_hint">ഉപകരണ സ്ട്രീമിംഗിന് Google Play സേവനങ്ങൾ ആവശ്യമാണ്.</string>
+    <string name="cast_unavailable_hint">രണ്ട് ഉപകരണങ്ങളും ഒരേ നെറ്റ്‌വർക്കിലേക്ക് ബന്ധിപ്പിക്കുക.</string>
     <string name="cast_section_devices">ലഭ്യമായ ഉപകരണങ്ങൾ</string>
     <string name="cast_section_link">ഏത് ഉപകരണത്തിലും തുറക്കുക</string>
     <string name="cast_section_link_hint">ഒരേ Wi-Fi നെറ്റ്‌വർക്കിൽ.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">വീഡിയോ</string>
     <string name="download_audio">ഓഡിയോ</string>
     <string name="download_quality">ഡൗൺലോഡ് നിലവാരം</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ഉയർന്ന നിലവാരം കൂടുതൽ ഡാറ്റയും സംഭരണവും ഉപയോഗിക്കുന്നു</string>
     <string name="download_size_estimate">ഏകദേശം %1$s</string>
     <string name="download_size_unknown">വലിപ്പം അജ്ഞാതമാണ്</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">തിരഞ്ഞെടുത്തത്: %1$d / %2$d</string>
     <string name="download_batch_meta">ഇനങ്ങൾ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">പുതിയ ജോലികളൊന്നുമില്ല</string>
-    <string name="download_snapshot_too_many">വളരെയധികം ഇനങ്ങൾ (പരമാവധി 500).ഒന്നും വെട്ടിച്ചുരുക്കിയില്ല.</string>
-    <string name="download_snapshot_too_large">സ്നാപ്പ്ഷോട്ട് 1 MB-യേക്കാൾ വലുതാണ്.ഒന്നും വെട്ടിച്ചുരുക്കിയില്ല.</string>
+    <string name="download_snapshot_too_many">വളരെയധികം ഇനങ്ങൾ. 500-ൽ കൂടരുത് തിരഞ്ഞെടുക്കുക.</string>
+    <string name="download_snapshot_too_large">തിരഞ്ഞെടുത്ത ലിസ്റ്റ് 1 MB കവിയുന്നു. കുറച്ച് ഇനങ്ങൾ തിരഞ്ഞെടുക്കുക.</string>
     <string name="download_reason_live">തത്സമയ സ്ട്രീമുകൾ ഡൗൺലോഡ് ചെയ്യാൻ കഴിയില്ല</string>
     <string name="download_reason_premiere">ഈ പ്രീമിയർ ആരംഭിച്ചിട്ടില്ല</string>
     <string name="download_reason_no_streams">ഡൗൺലോഡ് ചെയ്യാവുന്ന ഫയൽ സ്ട്രീമുകളൊന്നുമില്ല</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">ബഫറുകൾ/മിനിറ്റ്: %1$d</string>
     <string name="audio_description">ഓഡിയോ വിവരണം</string>
     <string name="secondary_audio">സെക്കൻഡറി ഓഡിയോ</string>
+    <string name="settings_import_reload_message">ക്രമീകരണങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു. മാറ്റങ്ങൾ പ്രയോഗിക്കാൻ തുറന്ന പേജുകൾ വീണ്ടും ലോഡുചെയ്യുക. നിങ്ങളുടെ പ്ലേബാക്ക് സ്ഥാനം നിലനിർത്തും.</string>
+    <string name="settings_reload_now">പേജുകൾ ഇപ്പോൾ റീലോഡ് ചെയ്യുക</string>
+    <string name="settings_reload_later">പിന്നീട്</string>
+    <string name="about_save_logs">ആപ്പ് ഡയഗ്നോസ്റ്റിക് ലോഗുകൾ സംരക്ഷിക്കുക</string>
+    <string name="about_save_done">ആപ്പ് ഡയഗ്നോസ്റ്റിക് ZIP ഫയൽ സംരക്ഷിച്ചു</string>
+    <string name="about_save_cancelled">റദ്ദാക്കി</string>
+    <string name="about_save_failed">ആപ്പ് ലോഗുകൾ സംരക്ഷിക്കാനായില്ല. മറ്റൊരു സേവ് ലൊക്കേഷൻ തിരഞ്ഞെടുത്ത് വീണ്ടും ശ്രമിക്കുക.</string>
+    <string name="player_live_unavailable">തത്സമയ സ്ട്രീം ലഭ്യമല്ല. പിന്നീട് വീണ്ടും ശ്രമിക്കുക.</string>
 </resources>

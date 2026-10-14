@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">पृष्ठभूमिमा सुन्नुहोस्</string>
     <string name="back_again_to_exit">बाहिर निस्कनको लागि फेरि थिच्नुहोस्</string>
     <string name="navigate_back">फिर्ता</string>
     <string name="extension">विस्तारहरू</string>
@@ -8,7 +9,7 @@
     <string name="about">एपबारे</string>
     <string name="display_dislikes">मन नपर्ने देखाउनुहोस्</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com मा भिडियो ID पठाउनुहोस्</string>
-    <string name="hide_shorts">सर्टहरू लुकाउनुहोस्</string>
+    <string name="hide_shorts">Shorts लुकाउनुहोस्</string>
     <string name="interface_category">इन्टरफेस</string>
     <string name="player">प्लेब्याक</string>
     <string name="gesture">इशाराहरू</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">इम्बेडेड प्लेयरमा</string>
     <string name="enable_in_fullscreen">फुलस्क्रिनमा</string>
     <string name="brightness">चमक</string>
-    <string name="volume">मात्रा</string>
+    <string name="volume">आवाजको स्तर</string>
     <string name="background_mini_player">पृष्ठभूमि र मिनी प्लेयर</string>
     <string name="pip">पिक्चर-इन-पिक्चर</string>
     <string name="in_app_mini_player">इन-एप मिनी-प्लेयर</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">प्रायोजकहरू छोड्नुहोस्</string>
     <string name="skip_sponsors_selfpromo">आत्म-पदोन्नति छोड्नुहोस्</string>
+    <string name="skip_sponsors_interaction">लाइक र सदस्यताको सम्झना छोड्नुहोस्</string>
+    <string name="skip_sponsors_intro">सुरुका भागहरू छोड्नुहोस्</string>
+    <string name="skip_sponsors_outro">अन्तिम भागहरू छोड्नुहोस्</string>
+    <string name="skip_sponsors_preview">पूर्वावलोकनहरू छोड्नुहोस्</string>
+    <string name="skip_sponsors_music_offtopic">सङ्गीत नभएका भागहरू छोड्नुहोस्</string>
+    <string name="skip_sponsors_filler">विषयबाहिरका भागहरू छोड्नुहोस्</string>
     <string name="skip_sponsors_highlight">हाइलाइटहरू छोड्नुहोस्</string>
     <string name="remember_last_position">स्थिति सम्झनुहोस्</string>
     <string name="remember_quality">भिडियो गुणस्तर सम्झनुहोस्</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">सबै सेटिङहरू रिसेट गर्नुहोस्</string>
     <string name="reset_extension_title">विस्तारहरू रिसेट गर्नुहोस्</string>
     <string name="reset_extension_message">सबै विस्तार सेटिङहरू पूर्वनिर्धारितमा रिसेट गर्ने हो?</string>
+    <string name="settings_backup_restore">ब्याकअप र पुनर्स्थापना</string>
+    <string name="settings_export">सेटिङहरू निर्यात गर्नुहोस्</string>
+    <string name="settings_export_summary">हालको सेटिङहरू JSON फाइलमा बचत गर्नुहोस्</string>
+    <string name="settings_import">सेटिङ्हरू आयात गर्नुहोस्</string>
+    <string name="settings_import_summary">ब्याकअप फाइलबाट सेटिङहरू पुनर्स्थापित गर्नुहोस्</string>
+    <string name="settings_import_confirm_title">सेटिङ्हरू आयात गर्ने हो?</string>
+    <string name="settings_import_confirm_message">हालको सेटिङहरू ब्याकअपद्वारा अधिलेखन हुनेछन्।</string>
+    <string name="settings_export_done">सेटिङहरू निर्यात गरियो</string>
+    <string name="settings_export_failed">सेटिङ् फाइल बचत गर्न सकिएन</string>
+    <string name="settings_import_done">सेटिङ्हरू आयात गरियो</string>
+    <string name="settings_import_failed">अवैध सेटिङ फाइल</string>
     <string name="confirm">पुष्टि गर्नुहोस्</string>
     <string name="cancel">रद्द गर्नुहोस्</string>
     <string name="more_options">थप</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">पाठ आकार</string>
     <string name="subtitle_style_background">पृष्ठभूमि</string>
     <string name="subtitle_background_none">कुनै पनि छैन</string>
-    <string name="subtitle_background_semi">पारदर्शी</string>
+    <string name="subtitle_background_semi">अर्धपारदर्शी</string>
     <string name="subtitle_background_opaque">अपारदर्शी</string>
     <string name="subtitle_style_color">पाठ रंग</string>
     <string name="subtitle_style_hex">हेक्स रंग कोड</string>
     <string name="subtitle_style_drag_hint">पुन: स्थानमा पूर्वावलोकन तान्नुहोस्</string>
-    <string name="subtitle_style_bold">बोल्ड</string>
+    <string name="subtitle_style_bold">मोटो</string>
     <string name="subtitle_auto_generated">(स्वत:)</string>
     <string name="reset">रिसेट गर्नुहोस्</string>
     <string name="share">साझा गर्नुहोस्</string>
@@ -104,7 +122,7 @@
     <string name="retry">पुन: प्रयास गर्नुहोस्</string>
     <string name="segment_intro">परिचय</string>
     <string name="segment_outro">बाहिर</string>
-    <string name="segment_interaction">लाइक र रिमाइन्डर सदस्यता लिनुहोस्</string>
+    <string name="segment_interaction">लाइक र सदस्यताको सम्झना</string>
     <string name="segment_preview">पूर्वावलोकन</string>
     <string name="segment_music_offtopic">गैर-संगीत</string>
     <string name="cast">यन्त्रमा स्ट्रिम गर्नुहोस्</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">कुनै मिल्दो स्ट्रिमिङ उपकरणहरू फेला परेन</string>
     <string name="cast_no_devices_hint">दुबै यन्त्रहरूलाई एउटै नेटवर्कमा जडान गर्नुहोस्।</string>
     <string name="cast_unavailable">उपकरण स्ट्रिमिङ अनुपलब्ध</string>
-    <string name="cast_unavailable_hint">यन्त्र स्ट्रिमिङका लागि गुगल प्ले सेवाहरू चाहिन्छ।</string>
+    <string name="cast_unavailable_hint">दुबै यन्त्रहरूलाई एउटै नेटवर्कमा जडान गर्नुहोस्।</string>
     <string name="cast_section_devices">उपलब्ध उपकरणहरू</string>
     <string name="cast_section_link">कुनै पनि उपकरणमा खोल्नुहोस्</string>
     <string name="cast_section_link_hint">उही Wi-Fi नेटवर्कमा।</string>
@@ -163,6 +181,7 @@
     <string name="download_video">भिडियो</string>
     <string name="download_audio">अडियो</string>
     <string name="download_quality">गुणस्तर डाउनलोड गर्नुहोस्</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">उच्च गुणस्तरले थप डाटा र भण्डारण प्रयोग गर्दछ</string>
     <string name="download_size_estimate">लगभग %1$s</string>
     <string name="download_size_unknown">आकार अज्ञात</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">चयन गरिएको: %1$d / %2$d</string>
     <string name="download_batch_meta">वस्तुहरू: %1$d · %2$s</string>
     <string name="download_no_new_tasks">कुनै नयाँ कार्यहरू छैनन्</string>
-    <string name="download_snapshot_too_many">धेरै वस्तुहरू (अधिकतम 500)।केही पनि काटिएको छैन।</string>
-    <string name="download_snapshot_too_large">स्न्यापसट 1 एमबी भन्दा ठूलो छ।केही पनि काटिएको छैन।</string>
+    <string name="download_snapshot_too_many">धेरै वस्तुहरू। 500 भन्दा बढी चयन नगर्नुहोस्।</string>
+    <string name="download_snapshot_too_large">चयन गरिएको सूची 1 MB भन्दा बढी छ। थोरै वस्तुहरू चयन गर्नुहोस्।</string>
     <string name="download_reason_live">लाइभ स्ट्रिमहरू डाउनलोड गर्न सकिँदैन</string>
     <string name="download_reason_premiere">यो प्रिमियर सुरु भएको छैन</string>
     <string name="download_reason_no_streams">कुनै डाउनलोड योग्य फाइल स्ट्रिमहरू छैनन्</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">बफर/मिनेट: %1$d</string>
     <string name="audio_description">अडियो विवरण</string>
     <string name="secondary_audio">माध्यमिक अडियो</string>
+    <string name="settings_import_reload_message">सेटिङहरू अद्यावधिक गरिएका छन्। परिवर्तनहरू लागू गर्न खुला पृष्ठहरू पुनः लोड गर्नुहोस्। प्लेब्याकको स्थान कायम रहनेछ।</string>
+    <string name="settings_reload_now">अब पृष्ठहरू पुन: लोड गर्नुहोस्</string>
+    <string name="settings_reload_later">पछि</string>
+    <string name="about_save_logs">एप डायग्नोस्टिक लगहरू बचत गर्नुहोस्</string>
+    <string name="about_save_done">एप डायग्नोस्टिक जिप फाइल सुरक्षित गरियो</string>
+    <string name="about_save_cancelled">रद्द गरियो</string>
+    <string name="about_save_failed">एप लगहरू बचत गर्न सकिएन। अर्को बचत स्थान छान्नुहोस् र फेरि प्रयास गर्नुहोस्।</string>
+    <string name="player_live_unavailable">लाइभ स्ट्रिम उपलब्ध छैन। पछि फेरि प्रयास गर्नुहोस्।</string>
 </resources>

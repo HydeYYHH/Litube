@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Slušajte u pozadini</string>
     <string name="back_again_to_exit">Pritisnite ponovo da izađete</string>
     <string name="navigate_back">Natrag</string>
     <string name="extension">Proširenja</string>
@@ -8,7 +9,7 @@
     <string name="about">O aplikaciji</string>
     <string name="display_dislikes">Pokaži ne sviđa mi se</string>
     <string name="display_dislikes_summary">Šalje ID video zapisa na returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Sakrij kratke hlače</string>
+    <string name="hide_shorts">Sakrij Shorts</string>
     <string name="interface_category">Interfejs</string>
     <string name="player">Reprodukcija</string>
     <string name="gesture">Gestovi</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">U ugrađenom plejeru</string>
     <string name="enable_in_fullscreen">Na cijelom ekranu</string>
     <string name="brightness">Svjetlina</string>
-    <string name="volume">Volumen</string>
+    <string name="volume">Jačina zvuka</string>
     <string name="background_mini_player">Pozadina i mini plejer</string>
     <string name="pip">Slika u slici</string>
     <string name="in_app_mini_player">Mini-player u aplikaciji</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Preskoči sponzore</string>
     <string name="skip_sponsors_selfpromo">Preskočite samopromociju</string>
+    <string name="skip_sponsors_interaction">Preskoči podsjetnike za interakciju</string>
+    <string name="skip_sponsors_intro">Preskoči uvode</string>
+    <string name="skip_sponsors_outro">Preskoči završetke</string>
+    <string name="skip_sponsors_preview">Preskoči najave</string>
+    <string name="skip_sponsors_music_offtopic">Preskoči dijelove bez muzike</string>
+    <string name="skip_sponsors_filler">Preskoči dijelove izvan teme</string>
     <string name="skip_sponsors_highlight">Preskoči istaknute tačke</string>
     <string name="remember_last_position">Zapamti poziciju</string>
     <string name="remember_quality">Zapamti kvalitet videa</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Resetujte sva podešavanja</string>
     <string name="reset_extension_title">Resetujte ekstenzije</string>
     <string name="reset_extension_message">Vratiti sve postavke ekstenzije na zadane vrijednosti?</string>
+    <string name="settings_backup_restore">Sigurnosno kopiranje i vraćanje</string>
+    <string name="settings_export">Izvoz postavki</string>
+    <string name="settings_export_summary">Sačuvajte trenutne postavke u JSON fajl</string>
+    <string name="settings_import">Uvezite postavke</string>
+    <string name="settings_import_summary">Vratite postavke iz sigurnosne kopije</string>
+    <string name="settings_import_confirm_title">Uvesti postavke?</string>
+    <string name="settings_import_confirm_message">Trenutne postavke će biti prepisane sigurnosnom kopijom.</string>
+    <string name="settings_export_done">Postavke su izvezene</string>
+    <string name="settings_export_failed">Nije moguće sačuvati datoteku postavki</string>
+    <string name="settings_import_done">Postavke su uvezene</string>
+    <string name="settings_import_failed">Nevažeći fajl postavki</string>
     <string name="confirm">Potvrdi</string>
     <string name="cancel">Otkaži</string>
     <string name="more_options">Više</string>
@@ -52,7 +70,7 @@
     <string name="playback_end_next">Igraj dalje</string>
     <string name="playback_end_loop">Petlja jedan</string>
     <string name="playback_end_pause">Pauza na kraju</string>
-    <string name="playback_end_shuffle">Shuffle</string>
+    <string name="playback_end_shuffle">Nasumična reprodukcija</string>
     <string name="action_fullscreen">Cijeli ekran</string>
     <string name="action_previous">Prethodno</string>
     <string name="player_channel_name">Kontrole igrača</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Veličina teksta</string>
     <string name="subtitle_style_background">Pozadina</string>
     <string name="subtitle_background_none">Nijedan</string>
-    <string name="subtitle_background_semi">Proziran</string>
+    <string name="subtitle_background_semi">Poluproziran</string>
     <string name="subtitle_background_opaque">Neproziran</string>
     <string name="subtitle_style_color">Boja teksta</string>
     <string name="subtitle_style_hex">Heksadecimalni kod boja</string>
     <string name="subtitle_style_drag_hint">Prevucite pregled da biste ga premjestili</string>
-    <string name="subtitle_style_bold">Bold</string>
+    <string name="subtitle_style_bold">Podebljano</string>
     <string name="subtitle_auto_generated">(auto)</string>
     <string name="reset">Reset</string>
     <string name="share">Dijeli</string>
@@ -104,7 +122,7 @@
     <string name="retry">Pokušaj ponovo</string>
     <string name="segment_intro">Uvod</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Lajkujte i pretplatite se podsjetnici</string>
+    <string name="segment_interaction">Podsjetnik za interakciju</string>
     <string name="segment_preview">Pregled</string>
     <string name="segment_music_offtopic">Bez muzike</string>
     <string name="cast">Emituj</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nisu pronađeni kompatibilni uređaji za striming</string>
     <string name="cast_no_devices_hint">Povežite oba uređaja na istu mrežu.</string>
     <string name="cast_unavailable">Strujanje uređaja nije dostupno</string>
-    <string name="cast_unavailable_hint">Za streaming uređaja su potrebne Google Play usluge.</string>
+    <string name="cast_unavailable_hint">Povežite oba uređaja na istu mrežu.</string>
     <string name="cast_section_devices">Dostupni uređaji</string>
     <string name="cast_section_link">Otvorite na bilo kojem uređaju</string>
     <string name="cast_section_link_hint">Na istoj Wi-Fi mreži.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kvalitet preuzimanja</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Veći kvalitet koristi više podataka i prostora za skladištenje</string>
     <string name="download_size_estimate">Oko %1$s</string>
     <string name="download_size_unknown">Veličina nepoznata</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Odabrano: %1$d / %2$d</string>
     <string name="download_batch_meta">Stavke: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Nema novih zadataka</string>
-    <string name="download_snapshot_too_many">Previše stavki (maks. 500).Ništa nije skraćeno.</string>
-    <string name="download_snapshot_too_large">Snimak je veći od 1 MB.Ništa nije skraćeno.</string>
+    <string name="download_snapshot_too_many">Previše stavki. Odaberite ne više od 500.</string>
+    <string name="download_snapshot_too_large">Odabrana lista premašuje 1 MB. Odaberite manje stavki.</string>
     <string name="download_reason_live">Prenosi uživo se ne mogu preuzeti</string>
     <string name="download_reason_premiere">Ova premijera nije počela</string>
     <string name="download_reason_no_streams">Nema tokova datoteka za preuzimanje</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Puferi/min: %1$d</string>
     <string name="audio_description">Audio opis</string>
     <string name="secondary_audio">Sekundarni audio</string>
+    <string name="settings_import_reload_message">Postavke su ažurirane. Ponovo učitajte otvorene stranice da primijenite promjene. Vaša pozicija reprodukcije će se zadržati.</string>
+    <string name="settings_reload_now">Ponovo učitaj stranice</string>
+    <string name="settings_reload_later">Kasnije</string>
+    <string name="about_save_logs">Sačuvajte dijagnostičke zapise aplikacije</string>
+    <string name="about_save_done">ZIP datoteka za dijagnostiku aplikacije je sačuvana</string>
+    <string name="about_save_cancelled">Otkazano</string>
+    <string name="about_save_failed">Nije moguće sačuvati zapisnike aplikacije. Odaberite drugu lokaciju za spremanje i pokušajte ponovo.</string>
+    <string name="player_live_unavailable">Prijenos uživo nije dostupan. Pokušajte ponovo kasnije.</string>
 </resources>

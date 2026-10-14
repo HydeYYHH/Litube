@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Luister in agtergrond</string>
     <string name="back_again_to_exit">Druk weer terug om uit te gaan</string>
     <string name="navigate_back">Terug</string>
     <string name="extension">Uitbreidings</string>
@@ -8,7 +9,7 @@
     <string name="about">Oor</string>
     <string name="display_dislikes">Wys afkeure</string>
     <string name="display_dislikes_summary">Stuur video-ID\'s na returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Versteek kortbroek</string>
+    <string name="hide_shorts">Versteek Shorts</string>
     <string name="interface_category">Koppelvlak</string>
     <string name="player">Afspeel</string>
     <string name="gesture">Gebare</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Slaan borge oor</string>
     <string name="skip_sponsors_selfpromo">Slaan selfpromosie oor</string>
+    <string name="skip_sponsors_interaction">Slaan interaksieherinneringe oor</string>
+    <string name="skip_sponsors_intro">Slaan inleidings oor</string>
+    <string name="skip_sponsors_outro">Slaan afsluitings oor</string>
+    <string name="skip_sponsors_preview">Slaan voorskoue oor</string>
+    <string name="skip_sponsors_music_offtopic">Slaan nie-musiekgedeeltes oor</string>
+    <string name="skip_sponsors_filler">Slaan onverwante gedeeltes oor</string>
     <string name="skip_sponsors_highlight">Slaan hoogtepunte oor</string>
     <string name="remember_last_position">Onthou posisie</string>
     <string name="remember_quality">Onthou videokwaliteit</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Stel alle instellings terug</string>
     <string name="reset_extension_title">Stel uitbreidings terug</string>
     <string name="reset_extension_message">Stel alle uitbreidingsinstellings terug na verstek?</string>
+    <string name="settings_backup_restore">Rugsteun en herstel</string>
+    <string name="settings_export">Voer instellings uit</string>
+    <string name="settings_export_summary">Stoor huidige instellings in \'n JSON-lêer</string>
+    <string name="settings_import">Voer instellings in</string>
+    <string name="settings_import_summary">Herstel instellings vanaf \'n rugsteunlêer</string>
+    <string name="settings_import_confirm_title">Voer instellings in?</string>
+    <string name="settings_import_confirm_message">Huidige instellings sal deur die rugsteun oorskryf word.</string>
+    <string name="settings_export_done">Instellings uitgevoer</string>
+    <string name="settings_export_failed">Kon nie instellingslêer stoor nie</string>
+    <string name="settings_import_done">Instellings ingevoer</string>
+    <string name="settings_import_failed">Ongeldige instellingslêer</string>
     <string name="confirm">Bevestig</string>
     <string name="cancel">Kanselleer</string>
     <string name="more_options">Meer</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Teksgrootte</string>
     <string name="subtitle_style_background">Agtergrond</string>
     <string name="subtitle_background_none">Geen</string>
-    <string name="subtitle_background_semi">Deurskynend</string>
+    <string name="subtitle_background_semi">Halfdeursigtig</string>
     <string name="subtitle_background_opaque">Ondeursigtig</string>
     <string name="subtitle_style_color">Tekskleur</string>
     <string name="subtitle_style_hex">Hekskleurkode</string>
@@ -104,7 +122,7 @@
     <string name="retry">Probeer weer</string>
     <string name="segment_intro">Inleiding</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Hou van en teken aan onthounotas</string>
+    <string name="segment_interaction">Interaksieherinnering</string>
     <string name="segment_preview">Voorskou</string>
     <string name="segment_music_offtopic">Nie-musiek</string>
     <string name="cast">Stroom na toestel</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Geen versoenbare stroomtoestelle gevind nie</string>
     <string name="cast_no_devices_hint">Koppel albei toestelle aan dieselfde netwerk.</string>
     <string name="cast_unavailable">Toestelstroom nie beskikbaar nie</string>
-    <string name="cast_unavailable_hint">Toestelstroming benodig Google Play Dienste.</string>
+    <string name="cast_unavailable_hint">Koppel albei toestelle aan dieselfde netwerk.</string>
     <string name="cast_section_devices">Beskikbare toestelle</string>
     <string name="cast_section_link">Maak oop op enige toestel</string>
     <string name="cast_section_link_hint">Op dieselfde Wi-Fi-netwerk.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Oudio</string>
     <string name="download_quality">Aflaai kwaliteit</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Hoër kwaliteit gebruik meer data en berging</string>
     <string name="download_size_estimate">Ongeveer %1$s</string>
     <string name="download_size_unknown">Grootte onbekend</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Gekies: %1$d / %2$d</string>
     <string name="download_batch_meta">Items: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Geen nuwe take nie</string>
-    <string name="download_snapshot_too_many">Te veel items (maks. 500).Niks is afgekap nie.</string>
-    <string name="download_snapshot_too_large">Snapshot is groter as 1 MB.Niks is afgekap nie.</string>
+    <string name="download_snapshot_too_many">Te veel items. Kies nie meer as 500 nie.</string>
+    <string name="download_snapshot_too_large">Die geselekteerde lys oorskry 1 MB. Kies minder items.</string>
     <string name="download_reason_live">Regstreekse strome kan nie afgelaai word nie</string>
     <string name="download_reason_premiere">Hierdie première het nie begin nie</string>
     <string name="download_reason_no_streams">Geen aflaaibare lêerstrome nie</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers/min: %1$d</string>
     <string name="audio_description">Oudiobeskrywing</string>
     <string name="secondary_audio">Sekondêre oudio</string>
+    <string name="settings_import_reload_message">Instellings opgedateer. Herlaai oop bladsye om veranderinge toe te pas. Jou afspeelposisie sal behou word.</string>
+    <string name="settings_reload_now">Herlaai bladsye nou</string>
+    <string name="settings_reload_later">Later</string>
+    <string name="about_save_logs">Stoor app diagnostiese logs</string>
+    <string name="about_save_done">App diagnostiese zip-lêer gestoor</string>
+    <string name="about_save_cancelled">Gekanselleer</string>
+    <string name="about_save_failed">Kon nie programloglêers stoor nie. Kies \'n ander stoorplek en probeer weer.</string>
+    <string name="player_live_unavailable">Regstreekse stroom nie beskikbaar nie. Probeer later weer.</string>
 </resources>

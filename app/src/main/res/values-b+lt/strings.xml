@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Klausykitės fone</string>
     <string name="back_again_to_exit">Norėdami išeiti, dar kartą paspauskite atgal</string>
     <string name="navigate_back">Atgal</string>
     <string name="extension">Plėtiniai</string>
@@ -8,7 +9,7 @@
     <string name="about">Apie</string>
     <string name="display_dislikes">Rodyti nepatinkančius dalykus</string>
     <string name="display_dislikes_summary">Siunčia vaizdo įrašų ID adresu returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Slėpti šortus</string>
+    <string name="hide_shorts">Slėpti Shorts</string>
     <string name="interface_category">Sąsaja</string>
     <string name="player">Atkūrimas</string>
     <string name="gesture">Gestai</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Integruotame grotuve</string>
     <string name="enable_in_fullscreen">Viso ekrano režimu</string>
     <string name="brightness">Ryškumas</string>
-    <string name="volume">Apimtis</string>
+    <string name="volume">Garsumas</string>
     <string name="background_mini_player">Fonas ir mini grotuvas</string>
     <string name="pip">Vaizdas paveikslėlyje</string>
     <string name="in_app_mini_player">Mini grotuvas programoje</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Praleisti rėmėjus</string>
     <string name="skip_sponsors_selfpromo">Praleisti savireklamą</string>
+    <string name="skip_sponsors_interaction">Praleisti raginimus sąveikauti</string>
+    <string name="skip_sponsors_intro">Praleisti įžangas</string>
+    <string name="skip_sponsors_outro">Praleisti pabaigas</string>
+    <string name="skip_sponsors_preview">Praleisti peržiūras</string>
+    <string name="skip_sponsors_music_offtopic">Praleisti dalis be muzikos</string>
+    <string name="skip_sponsors_filler">Praleisti su tema nesusijusias dalis</string>
     <string name="skip_sponsors_highlight">Praleisti svarbiausius dalykus</string>
     <string name="remember_last_position">Prisiminti poziciją</string>
     <string name="remember_quality">Prisiminkite vaizdo kokybę</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Iš naujo nustatyti visus nustatymus</string>
     <string name="reset_extension_title">Iš naujo nustatyti plėtinius</string>
     <string name="reset_extension_message">Iš naujo nustatyti visus plėtinio nustatymus į numatytuosius?</string>
+    <string name="settings_backup_restore">Atsarginė kopija ir atkūrimas</string>
+    <string name="settings_export">Eksportuoti nustatymus</string>
+    <string name="settings_export_summary">Išsaugokite esamus nustatymus JSON faile</string>
+    <string name="settings_import">Importuoti nustatymus</string>
+    <string name="settings_import_summary">Atkurti nustatymus iš atsarginės kopijos failo</string>
+    <string name="settings_import_confirm_title">Importuoti nustatymus?</string>
+    <string name="settings_import_confirm_message">Dabartinius nustatymus perrašys atsarginė kopija.</string>
+    <string name="settings_export_done">Nustatymai eksportuoti</string>
+    <string name="settings_export_failed">Nepavyko išsaugoti nustatymų failo</string>
+    <string name="settings_import_done">Nustatymai importuoti</string>
+    <string name="settings_import_failed">Neteisingas nustatymų failas</string>
     <string name="confirm">Patvirtinti</string>
     <string name="cancel">Atšaukti</string>
     <string name="more_options">Daugiau</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Teksto dydis</string>
     <string name="subtitle_style_background">Fonas</string>
     <string name="subtitle_background_none">Nėra</string>
-    <string name="subtitle_background_semi">Permatomas</string>
+    <string name="subtitle_background_semi">Pusiau permatomas</string>
     <string name="subtitle_background_opaque">Nepermatomas</string>
     <string name="subtitle_style_color">Teksto spalva</string>
     <string name="subtitle_style_hex">Šešioliktainis spalvos kodas</string>
@@ -104,7 +122,7 @@
     <string name="retry">Bandykite dar kartą</string>
     <string name="segment_intro">Įvadas</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Priminimai patinka ir prenumeruoti</string>
+    <string name="segment_interaction">Raginimas sąveikauti</string>
     <string name="segment_preview">Peržiūra</string>
     <string name="segment_music_offtopic">Ne muzika</string>
     <string name="cast">Perduoti</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nerasta suderinamų srautinio perdavimo įrenginių</string>
     <string name="cast_no_devices_hint">Prijunkite abu įrenginius prie to paties tinklo.</string>
     <string name="cast_unavailable">Įrenginio srautinis perdavimas nepasiekiamas</string>
-    <string name="cast_unavailable_hint">Įrenginio srautiniam perdavimui reikia „Google Play“ paslaugų.</string>
+    <string name="cast_unavailable_hint">Prijunkite abu įrenginius prie to paties tinklo.</string>
     <string name="cast_section_devices">Galimi įrenginiai</string>
     <string name="cast_section_link">Atidaryti bet kuriame įrenginyje</string>
     <string name="cast_section_link_hint">Tame pačiame „Wi-Fi“ tinkle.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vaizdo įrašas</string>
     <string name="download_audio">Garsas</string>
     <string name="download_quality">Atsisiuntimo kokybė</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Aukštesnė kokybė sunaudoja daugiau duomenų ir saugyklos</string>
     <string name="download_size_estimate">Apie %1$s</string>
     <string name="download_size_unknown">Dydis nežinomas</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Pasirinkta: %1$d / %2$d</string>
     <string name="download_batch_meta">Prekės: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Naujų užduočių nėra</string>
-    <string name="download_snapshot_too_many">Per daug elementų (maks. 500).Niekas nebuvo sutrumpintas.</string>
-    <string name="download_snapshot_too_large">Momentinė nuotrauka yra didesnė nei 1 MB.Niekas nebuvo sutrumpintas.</string>
+    <string name="download_snapshot_too_many">Per daug prekių. Pasirinkite ne daugiau kaip 500.</string>
+    <string name="download_snapshot_too_large">Pasirinktas sąrašas viršija 1 MB. Pasirinkite mažiau prekių.</string>
     <string name="download_reason_live">Tiesioginių srautų atsisiųsti negalima</string>
     <string name="download_reason_premiere">Ši premjera neprasidėjo</string>
     <string name="download_reason_no_streams">Nėra atsisiunčiamų failų srautų</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buferiai/min.: %1$d</string>
     <string name="audio_description">Garso aprašymas</string>
     <string name="secondary_audio">Antrinis garsas</string>
+    <string name="settings_import_reload_message">Nustatymai atnaujinti. Iš naujo įkelkite atidarytus puslapius, kad pritaikytumėte pakeitimus. Jūsų atkūrimo vieta bus išsaugota.</string>
+    <string name="settings_reload_now">Iš naujo įkelti puslapius dabar</string>
+    <string name="settings_reload_later">Vėliau</string>
+    <string name="about_save_logs">Išsaugokite programos diagnostikos žurnalus</string>
+    <string name="about_save_done">Programos diagnostikos ZIP failas išsaugotas</string>
+    <string name="about_save_cancelled">Atšauktas</string>
+    <string name="about_save_failed">Nepavyko išsaugoti programų žurnalų. Pasirinkite kitą išsaugojimo vietą ir bandykite dar kartą.</string>
+    <string name="player_live_unavailable">Tiesioginė transliacija nepasiekiama. Bandykite vėliau.</string>
 </resources>

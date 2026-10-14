@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">האזינו ברקע</string>
     <string name="back_again_to_exit">לחץ שוב אחורה כדי לצאת</string>
     <string name="navigate_back">חזרה</string>
     <string name="extension">הרחבות</string>
@@ -8,7 +9,7 @@
     <string name="about">אודות</string>
     <string name="display_dislikes">הצג דיסלייקים</string>
     <string name="display_dislikes_summary">שולח מזהי וידאו אל returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">הסתר מכנסיים קצרים</string>
+    <string name="hide_shorts">הסתרת Shorts</string>
     <string name="interface_category">ממשק</string>
     <string name="player">השמעה</string>
     <string name="gesture">מחוות</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">בנגן מוטבע</string>
     <string name="enable_in_fullscreen">במסך מלא</string>
     <string name="brightness">בהירות</string>
-    <string name="volume">כרך</string>
+    <string name="volume">עוצמת קול</string>
     <string name="background_mini_player">רקע ונגן מיני</string>
     <string name="pip">תמונה בתוך תמונה</string>
     <string name="in_app_mini_player">מיני נגן בתוך האפליקציה</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">דלג על נותני החסות</string>
     <string name="skip_sponsors_selfpromo">דלג על קידום עצמי</string>
+    <string name="skip_sponsors_interaction">דילוג על תזכורות למעורבות</string>
+    <string name="skip_sponsors_intro">דילוג על פתיחים</string>
+    <string name="skip_sponsors_outro">דילוג על קטעי סיום</string>
+    <string name="skip_sponsors_preview">דילוג על תצוגות מקדימות</string>
+    <string name="skip_sponsors_music_offtopic">דילוג על קטעים ללא מוזיקה</string>
+    <string name="skip_sponsors_filler">דילוג על קטעים שאינם קשורים לנושא</string>
     <string name="skip_sponsors_highlight">דלג על הדגשות</string>
     <string name="remember_last_position">זכור את העמדה</string>
     <string name="remember_quality">זכור איכות וידאו</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">אפס את כל ההגדרות</string>
     <string name="reset_extension_title">אפס הרחבות</string>
     <string name="reset_extension_message">לאפס את כל הגדרות התוסף לברירת המחדל?</string>
+    <string name="settings_backup_restore">גיבוי ושחזור</string>
+    <string name="settings_export">ייצוא הגדרות</string>
+    <string name="settings_export_summary">שמור את ההגדרות הנוכחיות בקובץ JSON</string>
+    <string name="settings_import">הגדרות ייבוא</string>
+    <string name="settings_import_summary">שחזר הגדרות מקובץ גיבוי</string>
+    <string name="settings_import_confirm_title">לייבא הגדרות?</string>
+    <string name="settings_import_confirm_message">ההגדרות הנוכחיות יוחלפו על ידי הגיבוי.</string>
+    <string name="settings_export_done">הגדרות יוצאו</string>
+    <string name="settings_export_failed">לא ניתן לשמור את קובץ ההגדרות</string>
+    <string name="settings_import_done">הגדרות יובאו</string>
+    <string name="settings_import_failed">קובץ הגדרות לא חוקי</string>
     <string name="confirm">אשר</string>
     <string name="cancel">בטל</string>
     <string name="more_options">עוד</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">גודל טקסט</string>
     <string name="subtitle_style_background">רקע</string>
     <string name="subtitle_background_none">אין</string>
-    <string name="subtitle_background_semi">שקוף</string>
+    <string name="subtitle_background_semi">שקוף למחצה</string>
     <string name="subtitle_background_opaque">אטום</string>
     <string name="subtitle_style_color">צבע טקסט</string>
     <string name="subtitle_style_hex">קוד צבע משושה</string>
     <string name="subtitle_style_drag_hint">גרור את התצוגה המקדימה למיקום מחדש</string>
-    <string name="subtitle_style_bold">נועז</string>
+    <string name="subtitle_style_bold">מודגש</string>
     <string name="subtitle_auto_generated">(אוטומטי)</string>
     <string name="reset">איפוס</string>
     <string name="share">שתפו</string>
@@ -104,7 +122,7 @@
     <string name="retry">נסה שוב</string>
     <string name="segment_intro">מבוא</string>
     <string name="segment_outro">אוטרו</string>
-    <string name="segment_interaction">תזכורות לייק והירשם כמנוי</string>
+    <string name="segment_interaction">תזכורת למעורבות</string>
     <string name="segment_preview">תצוגה מקדימה</string>
     <string name="segment_music_offtopic">לא מוזיקה</string>
     <string name="cast">העברה למכשיר</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">לא נמצאו התקני סטרימינג תואמים</string>
     <string name="cast_no_devices_hint">חבר את שני המכשירים לאותה רשת.</string>
     <string name="cast_unavailable">הזרמת מכשיר אינה זמינה</string>
-    <string name="cast_unavailable_hint">הזרמת מכשיר זקוקה לשירותי Google Play.</string>
+    <string name="cast_unavailable_hint">חבר את שני המכשירים לאותה רשת.</string>
     <string name="cast_section_devices">מכשירים זמינים</string>
     <string name="cast_section_link">פתח בכל מכשיר</string>
     <string name="cast_section_link_hint">באותה רשת Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">וידאו</string>
     <string name="download_audio">אודיו</string>
     <string name="download_quality">איכות הורדה</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">איכות גבוהה יותר משתמשת ביותר נתונים ואחסון</string>
     <string name="download_size_estimate">בערך %1$s</string>
     <string name="download_size_unknown">גודל לא ידוע</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">נבחר: %1$d / %2$d</string>
     <string name="download_batch_meta">פריטים: %1$d · %2$s</string>
     <string name="download_no_new_tasks">אין משימות חדשות</string>
-    <string name="download_snapshot_too_many">יותר מדי פריטים (מקסימום 500).שום דבר לא נקטע.</string>
-    <string name="download_snapshot_too_large">תמונת מצב גדולה מ-1 MB.שום דבר לא נקטע.</string>
+    <string name="download_snapshot_too_many">יותר מדי פריטים. בחר לא יותר מ-500.</string>
+    <string name="download_snapshot_too_large">הרשימה שנבחרה עולה על 1 MB. בחר פחות פריטים.</string>
     <string name="download_reason_live">לא ניתן להוריד שידורים חיים</string>
     <string name="download_reason_premiere">הבכורה הזו לא התחילה</string>
     <string name="download_reason_no_streams">אין זרמי קבצים להורדה</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">חוצצים לדקה: %1$d</string>
     <string name="audio_description">תיאור אודיו</string>
     <string name="secondary_audio">אודיו משני</string>
+    <string name="settings_import_reload_message">ההגדרות עודכנו. טען מחדש דפים פתוחים כדי להחיל שינויים. מיקום ההשמעה שלך יישמר.</string>
+    <string name="settings_reload_now">טען מחדש דפים עכשיו</string>
+    <string name="settings_reload_later">מאוחר יותר</string>
+    <string name="about_save_logs">שמור יומני אבחון של אפליקציה</string>
+    <string name="about_save_done">קובץ ZIP לאבחון האפליקציה נשמר</string>
+    <string name="about_save_cancelled">בוטלה</string>
+    <string name="about_save_failed">לא ניתן לשמור את יומני האפליקציה. בחר מיקום שמירה אחר ונסה שוב.</string>
+    <string name="player_live_unavailable">השידור החי אינו זמין. נסו שוב מאוחר יותר.</string>
 </resources>

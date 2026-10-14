@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">گوش دادن در پس‌زمینه</string>
     <string name="back_again_to_exit">برای خروج دوباره به عقب فشار دهید</string>
     <string name="navigate_back">برگشت</string>
     <string name="extension">افزونه‌ها</string>
@@ -8,7 +9,7 @@
     <string name="about">درباره</string>
     <string name="display_dislikes">نمایش موارد نپسندیدن</string>
     <string name="display_dislikes_summary">شناسه‌های ویدیو را به returnyoutubedislikeapi.com ارسال می‌کند</string>
-    <string name="hide_shorts">مخفی کردن شورت</string>
+    <string name="hide_shorts">مخفی کردن Shorts</string>
     <string name="interface_category">رابط</string>
     <string name="player">پخش</string>
     <string name="gesture">حرکات</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">در پخش کننده تعبیه شده</string>
     <string name="enable_in_fullscreen">در تمام صفحه</string>
     <string name="brightness">روشنایی</string>
-    <string name="volume">جلد</string>
+    <string name="volume">بلندی صدا</string>
     <string name="background_mini_player">پس زمینه و مینی پلیر</string>
     <string name="pip">تصویر در تصویر</string>
     <string name="in_app_mini_player">مینی پلیر درون برنامه ای</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">از حامیان مالی رد شوید</string>
     <string name="skip_sponsors_selfpromo">از تبلیغ خود صرف نظر کنید</string>
+    <string name="skip_sponsors_interaction">رد کردن یادآوری‌های تعامل</string>
+    <string name="skip_sponsors_intro">رد کردن مقدمه‌ها</string>
+    <string name="skip_sponsors_outro">رد کردن بخش‌های پایانی</string>
+    <string name="skip_sponsors_preview">رد کردن پیش‌نمایش‌ها</string>
+    <string name="skip_sponsors_music_offtopic">رد کردن بخش‌های غیرموسیقی</string>
+    <string name="skip_sponsors_filler">رد کردن بخش‌های نامرتبط</string>
     <string name="skip_sponsors_highlight">از نکات برجسته بگذرید</string>
     <string name="remember_last_position">موقعیت را به خاطر بسپارید</string>
     <string name="remember_quality">کیفیت ویدیو را به خاطر بسپارید</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">همه تنظیمات را بازنشانی کنید</string>
     <string name="reset_extension_title">پسوندها را بازنشانی کنید</string>
     <string name="reset_extension_message">همه تنظیمات برنامه افزودنی به پیش فرض بازنشانی شود؟</string>
+    <string name="settings_backup_restore">پشتیبان گیری و بازیابی</string>
+    <string name="settings_export">تنظیمات صادرات</string>
+    <string name="settings_export_summary">تنظیمات فعلی را در یک فایل JSON ذخیره کنید</string>
+    <string name="settings_import">تنظیمات وارد کنید</string>
+    <string name="settings_import_summary">تنظیمات را از یک فایل پشتیبان بازیابی کنید</string>
+    <string name="settings_import_confirm_title">تنظیمات واردات؟</string>
+    <string name="settings_import_confirm_message">تنظیمات فعلی توسط نسخه پشتیبان بازنویسی می شود.</string>
+    <string name="settings_export_done">تنظیمات صادر شد</string>
+    <string name="settings_export_failed">فایل تنظیمات ذخیره نشد</string>
+    <string name="settings_import_done">تنظیمات وارد شد</string>
+    <string name="settings_import_failed">فایل تنظیمات نامعتبر است</string>
     <string name="confirm">تایید کنید</string>
     <string name="cancel">لغو</string>
     <string name="more_options">بیشتر</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">اندازه متن</string>
     <string name="subtitle_style_background">پیشینه</string>
     <string name="subtitle_background_none">هیچ کدام</string>
-    <string name="subtitle_background_semi">شفاف</string>
+    <string name="subtitle_background_semi">نیمه‌شفاف</string>
     <string name="subtitle_background_opaque">مات</string>
     <string name="subtitle_style_color">رنگ متن</string>
     <string name="subtitle_style_hex">کد رنگ هگز</string>
@@ -104,7 +122,7 @@
     <string name="retry">دوباره امتحان کنید</string>
     <string name="segment_intro">مقدمه</string>
     <string name="segment_outro">اوترو</string>
-    <string name="segment_interaction">یادآوری‌ها را دوست داشته باشید و مشترک شوید</string>
+    <string name="segment_interaction">یادآوری تعامل</string>
     <string name="segment_preview">پیش نمایش</string>
     <string name="segment_music_offtopic">غیر موسیقی</string>
     <string name="cast">ارسال به دستگاه</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">هیچ دستگاه پخش جریانی سازگاری یافت نشد</string>
     <string name="cast_no_devices_hint">هر دو دستگاه را به یک شبکه وصل کنید.</string>
     <string name="cast_unavailable">پخش جریانی دستگاه در دسترس نیست</string>
-    <string name="cast_unavailable_hint">پخش جریانی دستگاه به خدمات Google Play نیاز دارد.</string>
+    <string name="cast_unavailable_hint">هر دو دستگاه را به یک شبکه وصل کنید.</string>
     <string name="cast_section_devices">دستگاه های موجود</string>
     <string name="cast_section_link">در هر دستگاهی باز شود</string>
     <string name="cast_section_link_hint">در همان شبکه Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ویدئو</string>
     <string name="download_audio">صوتی</string>
     <string name="download_quality">کیفیت دانلود</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">کیفیت بالاتر از داده ها و ذخیره سازی بیشتری استفاده می کند</string>
     <string name="download_size_estimate">حدود %1$s</string>
     <string name="download_size_unknown">اندازه نامشخص است</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">انتخاب شده: %1$d / %2$d</string>
     <string name="download_batch_meta">موارد: %1$d · %2$s</string>
     <string name="download_no_new_tasks">هیچ کار جدیدی وجود ندارد</string>
-    <string name="download_snapshot_too_many">موارد بسیار زیاد (حداکثر 500).هیچ چیز کوتاه نشده بود.</string>
-    <string name="download_snapshot_too_large">عکس فوری بزرگتر از 1 مگابایت است.هیچ چیز کوتاه نشده بود.</string>
+    <string name="download_snapshot_too_many">موارد بسیار زیاد بیش از 500 انتخاب نکنید.</string>
+    <string name="download_snapshot_too_large">لیست انتخابی بیش از 1 مگابایت است. موارد کمتری را انتخاب کنید</string>
     <string name="download_reason_live">پخش جریانی زنده قابل دانلود نیست</string>
     <string name="download_reason_premiere">این نمایش آغاز نشده است</string>
     <string name="download_reason_no_streams">هیچ جریان فایل قابل دانلودی وجود ندارد</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">بافر در دقیقه: %1$d</string>
     <string name="audio_description">توضیحات صوتی</string>
     <string name="secondary_audio">صوتی ثانویه</string>
+    <string name="settings_import_reload_message">تنظیمات به روز شد. برای اعمال تغییرات، صفحات باز را دوباره بارگیری کنید. موقعیت پخش شما حفظ خواهد شد.</string>
+    <string name="settings_reload_now">اکنون صفحات را دوباره بارگیری کنید</string>
+    <string name="settings_reload_later">بعدا</string>
+    <string name="about_save_logs">گزارش‌های تشخیصی برنامه را ذخیره کنید</string>
+    <string name="about_save_done">فایل ZIP تشخیصی برنامه ذخیره شد</string>
+    <string name="about_save_cancelled">لغو شد</string>
+    <string name="about_save_failed">گزارش‌های برنامه ذخیره نشد. مکان ذخیره دیگری را انتخاب کنید و دوباره امتحان کنید.</string>
+    <string name="player_live_unavailable">پخش زنده در دسترس نیست. بعداً دوباره تلاش کنید.</string>
 </resources>

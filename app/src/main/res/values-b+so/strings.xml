@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Dhageyso gadaal</string>
     <string name="back_again_to_exit">Dib u riix markale si aad uga baxdo</string>
     <string name="navigate_back">Dib u noqo</string>
     <string name="extension">Kordhinno</string>
@@ -8,7 +9,7 @@
     <string name="about">Ku saabsan</string>
     <string name="display_dislikes">Muuji nacaybka</string>
     <string name="display_dislikes_summary">Waxay u dirtaa aqoonsiga fiidyowga returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Qari dharka gaaban</string>
+    <string name="hide_shorts">Qari Shorts</string>
     <string name="interface_category">Interface</string>
     <string name="player">dib u ciyaar</string>
     <string name="gesture">Tilmaamaha</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Ciyaartoyga ku dhex jira</string>
     <string name="enable_in_fullscreen">Shaashadda buuxda</string>
     <string name="brightness">Iftiin</string>
-    <string name="volume">Mugga</string>
+    <string name="volume">Heerka codka</string>
     <string name="background_mini_player">Background &amp; ciyaaryahan yar</string>
     <string name="pip">Sawir-Sawirka</string>
     <string name="in_app_mini_player">In-app mini-ciyaaryahan</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Ka bood kafaala-qaadayaasha</string>
     <string name="skip_sponsors_selfpromo">Ka bood is-kobcinta</string>
+    <string name="skip_sponsors_interaction">Ka bood xusuusinta falgalka</string>
+    <string name="skip_sponsors_intro">Ka bood hordhacyada</string>
+    <string name="skip_sponsors_outro">Ka bood gabagabada</string>
+    <string name="skip_sponsors_preview">Ka bood muuqaallada hordhaca ah</string>
+    <string name="skip_sponsors_music_offtopic">Ka bood qaybaha aan muusigga lahayn</string>
+    <string name="skip_sponsors_filler">Ka bood qaybaha aan mawduuca khusayn</string>
     <string name="skip_sponsors_highlight">Ka bood waxyaabaha muhiimka ah</string>
     <string name="remember_last_position">Xusuusnow booska</string>
     <string name="remember_quality">Xusuusnow tayada muuqaalka</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Dib u deji dhammaan dejinta</string>
     <string name="reset_extension_title">Dib u habeyn kordhinta</string>
     <string name="reset_extension_message">Dib u dabeeti dhammaan dejimaha fidinta si ay u noqdaan kuwa default?</string>
+    <string name="settings_backup_restore">Soo-celinta &amp; soo celinta</string>
+    <string name="settings_export">Dejinta dhoofinta</string>
+    <string name="settings_export_summary">Ku keydi dejimaha hadda jira faylka JSON</string>
+    <string name="settings_import">Dejinta soo dejinta</string>
+    <string name="settings_import_summary">Ku soo celi dejinta faylka kaydinta</string>
+    <string name="settings_import_confirm_title">Dejinta soo dejinta?</string>
+    <string name="settings_import_confirm_message">Dejinta hadda waxa lagu beddeli doonaa kaydka</string>
+    <string name="settings_export_done">Dejinta waa la dhoofiyay</string>
+    <string name="settings_export_failed">Ma kaydin karo faylka dejinta</string>
+    <string name="settings_import_done">Dejinta waa la soo dejiyay</string>
+    <string name="settings_import_failed">Faylka dejinta aan sax ahayn</string>
     <string name="confirm">Xaqiiji</string>
     <string name="cancel">Jooji</string>
     <string name="more_options">Wax badan</string>
@@ -67,7 +85,7 @@
     <string name="lock_screen">Quful</string>
     <string name="unlock_screen">Fur</string>
     <string name="audio_track">Track audio</string>
-    <string name="player_audio_default">Defaftirka</string>
+    <string name="player_audio_default">Caadiga ah</string>
     <string name="info">Xog</string>
     <string name="player_info_title">Ciwaanka</string>
     <string name="player_info_author">Abuuray</string>
@@ -78,7 +96,7 @@
     <string name="resize_mode">Cabbirka</string>
     <string name="resize_fit">Ku habboon shaashadda</string>
     <string name="resize_fill">Buuxi shaashadda</string>
-    <string name="resize_zoom">Soo dhawoow</string>
+    <string name="resize_zoom">Weynee</string>
     <string name="resize_fixed_width">Balladh go\'an</string>
     <string name="resize_fixed_height">Dhererka go\'an</string>
     <string name="subtitle_style">Qaab-hoosaadka</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Cabbirka qoraalka</string>
     <string name="subtitle_style_background">Asalkii hore</string>
     <string name="subtitle_background_none">Midna</string>
-    <string name="subtitle_background_semi">Turjumaan</string>
-    <string name="subtitle_background_opaque">Ma-madow</string>
+    <string name="subtitle_background_semi">Nus hufan</string>
+    <string name="subtitle_background_opaque">Aan hufnayn</string>
     <string name="subtitle_style_color">Midabka qoraalka</string>
     <string name="subtitle_style_hex">Hex code code</string>
     <string name="subtitle_style_drag_hint">Jiid horudhaca si aad dib ugu dhigto</string>
-    <string name="subtitle_style_bold">Dhiirran</string>
+    <string name="subtitle_style_bold">Qoraal dhumuc leh</string>
     <string name="subtitle_auto_generated">(oto)</string>
     <string name="reset">Dib u habeyn</string>
     <string name="share">La wadaag</string>
@@ -104,7 +122,7 @@
     <string name="retry">Isku day</string>
     <string name="segment_intro">Hordhac</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Like iyo subscribe xusuusiya</string>
+    <string name="segment_interaction">Xusuusinta falgalka</string>
     <string name="segment_preview">Horudhac</string>
     <string name="segment_music_offtopic">Aan muusig ahayn</string>
     <string name="cast">U gudbi qalab</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Lama helin aaladaha daawashada ku habboon</string>
     <string name="cast_no_devices_hint">Labada qalab ku xidh shabakad isku mid ah.</string>
     <string name="cast_unavailable">Qalab ku shubasho lama heli karo</string>
-    <string name="cast_unavailable_hint">Daawashada aaladaha waxay u baahan tahay adeegyada Google Play.</string>
+    <string name="cast_unavailable_hint">Labada qalab ku xidh shabakad isku mid ah.</string>
     <string name="cast_section_devices">Qalabka la heli karo</string>
     <string name="cast_section_link">Ku fur qalab kasta</string>
     <string name="cast_section_link_hint">Isla shabakadda Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Muuqaal</string>
     <string name="download_audio">Maqal</string>
     <string name="download_quality">Download tayada</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Tayada sare waxay isticmaashaa xog iyo kaydin badan</string>
     <string name="download_size_estimate">Ilaa %1$s</string>
     <string name="download_size_unknown">Xajmiga aan la garanayn</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Waxaa la doortay: %1$d / %2$d</string>
     <string name="download_batch_meta">Waxyaabaha: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Ma jiraan hawlo cusub</string>
-    <string name="download_snapshot_too_many">Alaab aad u badan (ugu badnaan 500).Waxba lama go\'in.</string>
-    <string name="download_snapshot_too_large">Sawirka sawirku wuu ka weyn yahay 1 MB.Waxba lama go\'in.</string>
+    <string name="download_snapshot_too_many">Alaab aad u badan. Dooro wax aan ka badnayn 500.</string>
+    <string name="download_snapshot_too_large">Liiska la doortay ayaa ka badan 1 MB. Dooro walxo ka yar</string>
     <string name="download_reason_live">Socodka tooska ah lama soo dejisan karo</string>
     <string name="download_reason_premiere">Hordhacani ma bilaaban</string>
     <string name="download_reason_no_streams">Ma jiro fayl la soo dejisan karo</string>
@@ -273,7 +292,15 @@
     <string name="info_state_buffering">Baqdin</string>
     <string name="info_state_ended">dhamaaday</string>
     <string name="info_state_cast">Streaming</string>
-    <string name="info_buffer_count">Buffers/min: %1$d</string>
+    <string name="info_buffer_count">Wax kaydiya/daqiiqo: %1$d</string>
     <string name="audio_description">Sharaxaada maqalka</string>
     <string name="secondary_audio">Codka sare</string>
+    <string name="settings_import_reload_message">Dejinta waa la cusboonaysiiyay Dib u soo rar boggaga furan si aad isbeddellada u hirgeliso. Meeshaada ciyaarista waa lagu hayn doonaa</string>
+    <string name="settings_reload_now">Dib u soo rog boggaga hadda</string>
+    <string name="settings_reload_later">Ka dib</string>
+    <string name="about_save_logs">Keydi diiwaannada ogaanshaha abka</string>
+    <string name="about_save_done">Faylka ZIP ee ogaanshaha abka waa la keydiyay</string>
+    <string name="about_save_cancelled">Waa la joojiyay</string>
+    <string name="about_save_failed">Ma kaydin karo diiwaanka abka Dooro meel kale oo kaydin oo isku day mar kale.</string>
+    <string name="player_live_unavailable">Baahinta tooska ah lama heli karo. Isku day mar kale hadhow.</string>
 </resources>

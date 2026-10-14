@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Dengarkan di latar belakang</string>
     <string name="back_again_to_exit">Tekan kembali lagi untuk keluar</string>
     <string name="navigate_back">Kembali</string>
     <string name="extension">Ekstensi</string>
@@ -8,7 +9,7 @@
     <string name="about">Tentang</string>
     <string name="display_dislikes">Tunjukkan ketidaksukaan</string>
     <string name="display_dislikes_summary">Mengirim ID video ke returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Sembunyikan Celana Pendek</string>
+    <string name="hide_shorts">Sembunyikan Shorts</string>
     <string name="interface_category">Antarmuka</string>
     <string name="player">Pemutaran</string>
     <string name="gesture">Gestur</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Di pemutar tertanam</string>
     <string name="enable_in_fullscreen">Dalam layar penuh</string>
     <string name="brightness">Kecerahan</string>
-    <string name="volume">Jilid</string>
+    <string name="volume">Volume suara</string>
     <string name="background_mini_player">Latar belakang &amp; pemutar mini</string>
     <string name="pip">Gambar-dalam-Gambar</string>
     <string name="in_app_mini_player">Pemutar mini dalam aplikasi</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Lewati sponsor</string>
     <string name="skip_sponsors_selfpromo">Lewati promosi diri</string>
+    <string name="skip_sponsors_interaction">Lewati pengingat interaksi</string>
+    <string name="skip_sponsors_intro">Lewati pembuka</string>
+    <string name="skip_sponsors_outro">Lewati penutup</string>
+    <string name="skip_sponsors_preview">Lewati pratinjau</string>
+    <string name="skip_sponsors_music_offtopic">Lewati bagian tanpa musik</string>
+    <string name="skip_sponsors_filler">Lewati bagian di luar topik</string>
     <string name="skip_sponsors_highlight">Lewati sorotan</string>
     <string name="remember_last_position">Ingat posisinya</string>
     <string name="remember_quality">Ingat kualitas video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Reset semua pengaturan</string>
     <string name="reset_extension_title">Setel ulang ekstensi</string>
     <string name="reset_extension_message">Reset semua pengaturan ekstensi ke default?</string>
+    <string name="settings_backup_restore">Cadangkan &amp; pulihkan</string>
+    <string name="settings_export">Ekspor pengaturan</string>
+    <string name="settings_export_summary">Simpan pengaturan saat ini ke file JSON</string>
+    <string name="settings_import">Impor pengaturan</string>
+    <string name="settings_import_summary">Pulihkan pengaturan dari file cadangan</string>
+    <string name="settings_import_confirm_title">Impor pengaturan?</string>
+    <string name="settings_import_confirm_message">Pengaturan saat ini akan ditimpa oleh cadangan.</string>
+    <string name="settings_export_done">Pengaturan diekspor</string>
+    <string name="settings_export_failed">Tidak dapat menyimpan file pengaturan</string>
+    <string name="settings_import_done">Pengaturan diimpor</string>
+    <string name="settings_import_failed">File pengaturan tidak valid</string>
     <string name="confirm">Konfirmasi</string>
     <string name="cancel">Batal</string>
     <string name="more_options">Lebih lanjut</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Ukuran teks</string>
     <string name="subtitle_style_background">Latar Belakang</string>
     <string name="subtitle_background_none">Tidak ada</string>
-    <string name="subtitle_background_semi">Tembus</string>
+    <string name="subtitle_background_semi">Semitransparan</string>
     <string name="subtitle_background_opaque">Buram</string>
     <string name="subtitle_style_color">Warna teks</string>
     <string name="subtitle_style_hex">Kode warna hex</string>
     <string name="subtitle_style_drag_hint">Tarik pratinjau untuk mengubah posisinya</string>
-    <string name="subtitle_style_bold">Berani</string>
+    <string name="subtitle_style_bold">Tebal</string>
     <string name="subtitle_auto_generated">(otomatis)</string>
     <string name="reset">Atur Ulang</string>
     <string name="share">Bagikan</string>
@@ -104,7 +122,7 @@
     <string name="retry">Coba lagi</string>
     <string name="segment_intro">Pendahuluan</string>
     <string name="segment_outro">Luar</string>
-    <string name="segment_interaction">Suka dan berlangganan pengingat</string>
+    <string name="segment_interaction">Pengingat interaksi</string>
     <string name="segment_preview">Pratinjau</string>
     <string name="segment_music_offtopic">Non-musik</string>
     <string name="cast">Transmisikan</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Tidak ditemukan perangkat streaming yang kompatibel</string>
     <string name="cast_no_devices_hint">Hubungkan kedua perangkat ke jaringan yang sama.</string>
     <string name="cast_unavailable">Streaming perangkat tidak tersedia</string>
-    <string name="cast_unavailable_hint">Streaming perangkat memerlukan Layanan Google Play.</string>
+    <string name="cast_unavailable_hint">Hubungkan kedua perangkat ke jaringan yang sama.</string>
     <string name="cast_section_devices">Perangkat yang tersedia</string>
     <string name="cast_section_link">Buka di perangkat apa pun</string>
     <string name="cast_section_link_hint">Di jaringan Wi-Fi yang sama.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kualitas unduhan</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Kualitas yang lebih tinggi menggunakan lebih banyak data dan penyimpanan</string>
     <string name="download_size_estimate">Tentang %1$s</string>
     <string name="download_size_unknown">Ukuran tidak diketahui</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Terpilih: %1$d / %2$d</string>
     <string name="download_batch_meta">Barang: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Tidak ada tugas baru</string>
-    <string name="download_snapshot_too_many">Terlalu banyak item (maks 500).Tidak ada yang terpotong.</string>
-    <string name="download_snapshot_too_large">Snapshot lebih besar dari 1 MB.Tidak ada yang terpotong.</string>
+    <string name="download_snapshot_too_many">Terlalu banyak item. Pilih tidak lebih dari 500.</string>
+    <string name="download_snapshot_too_large">Daftar yang dipilih melebihi 1 MB. Pilih lebih sedikit item.</string>
     <string name="download_reason_live">Streaming langsung tidak dapat diunduh</string>
     <string name="download_reason_premiere">Penayangan perdana ini belum dimulai</string>
     <string name="download_reason_no_streams">Tidak ada aliran file yang dapat diunduh</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffer/mnt: %1$d</string>
     <string name="audio_description">Deskripsi audio</string>
     <string name="secondary_audio">Audio sekunder</string>
+    <string name="settings_import_reload_message">Pengaturan diperbarui. Muat ulang halaman yang terbuka untuk menerapkan perubahan. Posisi pemutaran Anda akan dipertahankan.</string>
+    <string name="settings_reload_now">Muat ulang halaman sekarang</string>
+    <string name="settings_reload_later">Nanti</string>
+    <string name="about_save_logs">Simpan log diagnostik</string>
+    <string name="about_save_done">File ZIP diagnostik aplikasi disimpan</string>
+    <string name="about_save_cancelled">Dibatalkan</string>
+    <string name="about_save_failed">Could not save app logs. Pilih lokasi penyimpanan lain dan coba lagi.</string>
+    <string name="player_live_unavailable">Siaran langsung tidak tersedia. Coba lagi nanti.</string>
 </resources>

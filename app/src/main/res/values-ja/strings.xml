@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">バックグラウンドで聴く</string>
     <string name="back_again_to_exit">もう一度戻ると終了します</string>
     <string name="navigate_back">戻る</string>
     <string name="extension">拡張機能</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">スポンサー部分をスキップ</string>
     <string name="skip_sponsors_selfpromo">自己宣伝をスキップ</string>
+    <string name="skip_sponsors_interaction">高評価・登録の呼びかけをスキップ</string>
+    <string name="skip_sponsors_intro">イントロをスキップ</string>
+    <string name="skip_sponsors_outro">アウトロをスキップ</string>
+    <string name="skip_sponsors_preview">予告をスキップ</string>
+    <string name="skip_sponsors_music_offtopic">音楽以外の部分をスキップ</string>
+    <string name="skip_sponsors_filler">本題と無関係な部分をスキップ</string>
     <string name="skip_sponsors_highlight">ハイライトをスキップ</string>
     <string name="remember_last_position">再生位置を記憶</string>
     <string name="remember_quality">画質を記憶</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">すべての設定をリセット</string>
     <string name="reset_extension_title">拡張機能をリセット</string>
     <string name="reset_extension_message">拡張機能の設定を初期状態に戻しますか？</string>
+    <string name="settings_backup_restore">バックアップと復元</string>
+    <string name="settings_export">設定をエクスポート</string>
+    <string name="settings_export_summary">現在の設定を JSON ファイルに保存</string>
+    <string name="settings_import">設定をインポート</string>
+    <string name="settings_import_summary">バックアップから設定を復元</string>
+    <string name="settings_import_confirm_title">設定をインポートしますか？</string>
+    <string name="settings_import_confirm_message">現在の設定はバックアップの設定で上書きされます。</string>
+    <string name="settings_export_done">設定をエクスポートしました</string>
+    <string name="settings_export_failed">設定ファイルを保存できませんでした</string>
+    <string name="settings_import_done">設定をインポートしました</string>
+    <string name="settings_import_failed">設定ファイルが無効です</string>
     <string name="confirm">確認</string>
     <string name="cancel">キャンセル</string>
     <string name="open_with">他のアプリで開く</string>
@@ -104,7 +122,7 @@
     <string name="retry">再試行</string>
     <string name="segment_intro">イントロ</string>
     <string name="segment_outro">アウトロ</string>
-    <string name="segment_interaction">高評価・登録のお願い</string>
+    <string name="segment_interaction">高評価・登録の呼びかけ</string>
     <string name="segment_preview">プレビュー</string>
     <string name="segment_music_offtopic">音楽以外</string>
     <string name="cast">キャスト</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">キャストできるデバイスがありません</string>
     <string name="cast_no_devices_hint">デバイスを同じネットワークに接続してください。</string>
     <string name="cast_unavailable">キャストを利用できません</string>
-    <string name="cast_unavailable_hint">Google Play 開発者サービスが必要です。</string>
+    <string name="cast_unavailable_hint">デバイスを同じネットワークに接続してください。</string>
     <string name="cast_section_devices">利用可能なデバイス</string>
     <string name="cast_section_link">別のデバイスで開く</string>
     <string name="cast_section_link_hint">同じ Wi-Fi ネットワークで利用できます。</string>
@@ -163,6 +181,7 @@
     <string name="download_video">動画</string>
     <string name="download_audio">音声</string>
     <string name="download_quality">ダウンロード画質</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">高画質ほど通信量と容量が増えます</string>
     <string name="download_size_estimate">約 %1$s</string>
     <string name="download_size_unknown">サイズ不明</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">選択: %1$d / %2$d</string>
     <string name="download_batch_meta">項目: %1$d · %2$s</string>
     <string name="download_no_new_tasks">新しいダウンロードはありません</string>
-    <string name="download_snapshot_too_many">項目が多すぎます（上限 500 件）。リストは省略されていません。</string>
-    <string name="download_snapshot_too_large">リストが 1 MB を超えています。内容は省略されていません。</string>
+    <string name="download_snapshot_too_many">項目が多すぎます。 500 以内を選択してください。</string>
+    <string name="download_snapshot_too_large">選択したリストが 1 MB を超えています。選択する項目を減らします。</string>
     <string name="download_reason_live">ライブ配信はダウンロードできません</string>
     <string name="download_reason_premiere">プレミア公開はまだ始まっていません</string>
     <string name="download_reason_no_streams">ダウンロード可能なファイルがありません</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">毎分のバッファ回数：%1$d</string>
     <string name="audio_description">音声解説</string>
     <string name="secondary_audio">副音声</string>
+    <string name="settings_import_reload_message">設定を更新しました。開いているページを再読み込みすると変更が反映されます。再生位置は保持されます。</string>
+    <string name="settings_reload_now">今すぐ再読み込み</string>
+    <string name="settings_reload_later">後で</string>
+    <string name="about_save_logs">診断ログを保存</string>
+    <string name="about_save_done">診断ログの ZIP ファイルを保存しました</string>
+    <string name="about_save_cancelled">保存をキャンセルしました</string>
+    <string name="about_save_failed">診断ログを保存できませんでした。別の保存先を選んで再試行してください。</string>
+    <string name="player_live_unavailable">ライブ配信を再生できません。しばらくしてから再試行してください。</string>
 </resources>

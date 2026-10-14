@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Écouter en arrière-plan</string>
     <string name="back_again_to_exit">Appuyez à nouveau sur Retour pour quitter</string>
     <string name="navigate_back">Retour</string>
     <string name="extension">Extensions</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Passer les sponsors</string>
     <string name="skip_sponsors_selfpromo">Passer l’autopromotion</string>
+    <string name="skip_sponsors_interaction">Ignorer les rappels d\'interaction</string>
+    <string name="skip_sponsors_intro">Ignorer les introductions</string>
+    <string name="skip_sponsors_outro">Ignorer les conclusions</string>
+    <string name="skip_sponsors_preview">Ignorer les aperçus</string>
+    <string name="skip_sponsors_music_offtopic">Ignorer les passages sans musique</string>
+    <string name="skip_sponsors_filler">Ignorer les passages hors sujet</string>
     <string name="skip_sponsors_highlight">Passer les temps forts</string>
     <string name="remember_last_position">Mémoriser la position</string>
     <string name="remember_quality">Mémoriser la qualité</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">Réinitialiser les paramètres</string>
     <string name="reset_extension_title">Réinitialiser les extensions</string>
     <string name="reset_extension_message">Rétablir les paramètres par défaut des extensions ?</string>
+    <string name="settings_backup_restore">Sauvegarde et restauration</string>
+    <string name="settings_export">Exporter les paramètres</string>
+    <string name="settings_export_summary">Enregistrer les paramètres actuels dans un fichier JSON</string>
+    <string name="settings_import">Importer les paramètres</string>
+    <string name="settings_import_summary">Restaurer les paramètres depuis une sauvegarde</string>
+    <string name="settings_import_confirm_title">Importer les paramètres ?</string>
+    <string name="settings_import_confirm_message">Les paramètres actuels seront remplacés par ceux de la sauvegarde.</string>
+    <string name="settings_export_done">Paramètres exportés</string>
+    <string name="settings_export_failed">Impossible d\'enregistrer le fichier de paramètres</string>
+    <string name="settings_import_done">Paramètres importés</string>
+    <string name="settings_import_failed">Fichier de paramètres invalide</string>
     <string name="confirm">Confirmer</string>
     <string name="cancel">Annuler</string>
     <string name="open_with">Ouvrir avec</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Taille du texte</string>
     <string name="subtitle_style_background">Arrière-plan</string>
     <string name="subtitle_background_none">Aucun</string>
-    <string name="subtitle_background_semi">Translucide</string>
+    <string name="subtitle_background_semi">Semi-transparent</string>
     <string name="subtitle_background_opaque">Opaque</string>
     <string name="subtitle_style_color">Couleur du texte</string>
     <string name="subtitle_style_hex">Code hexadécimal</string>
@@ -104,7 +122,7 @@
     <string name="retry">Réessayer</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Appel à l’action</string>
+    <string name="segment_interaction">Appel à l\'action</string>
     <string name="segment_preview">Aperçu</string>
     <string name="segment_music_offtopic">Sans musique</string>
     <string name="cast">Caster</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Aucun appareil Cast trouvé</string>
     <string name="cast_no_devices_hint">Configurez les appareils sur le même réseau.</string>
     <string name="cast_unavailable">Diffusion indisponible</string>
-    <string name="cast_unavailable_hint">Les services Google Play sont requis.</string>
+    <string name="cast_unavailable_hint">Configurez les appareils sur le même réseau.</string>
     <string name="cast_section_devices">Appareils disponibles</string>
     <string name="cast_section_link">Ouvrir sur un autre appareil</string>
     <string name="cast_section_link_hint">Sur le même réseau Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Vidéo</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Qualité du téléchargement</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Une qualité supérieure utilise plus de données et d’espace</string>
     <string name="download_size_estimate">Environ %1$s</string>
     <string name="download_size_unknown">Taille inconnue</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Sélection: %1$d / %2$d</string>
     <string name="download_batch_meta">Éléments: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Aucun nouveau téléchargement</string>
-    <string name="download_snapshot_too_many">Trop d’éléments (500 max.). La liste n’a pas été tronquée.</string>
-    <string name="download_snapshot_too_large">La liste dépasse 1 Mo. Elle n’a pas été tronquée.</string>
+    <string name="download_snapshot_too_many">Trop d\'articles. N’en sélectionnez pas plus de 500.</string>
+    <string name="download_snapshot_too_large">La liste sélectionnée dépasse 1 Mo. Sélectionnez moins d’éléments.</string>
     <string name="download_reason_live">Les directs ne peuvent pas être téléchargés</string>
     <string name="download_reason_premiere">Cette Première n’a pas encore commencé</string>
     <string name="download_reason_no_streams">Aucun fichier téléchargeable</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Mises en mémoire/min : %1$d</string>
     <string name="audio_description">Audiodescription</string>
     <string name="secondary_audio">Audio secondaire</string>
+    <string name="settings_import_reload_message">Paramètres mis à jour. Actualisez les pages ouvertes pour appliquer les modifications. La position de lecture sera conservée.</string>
+    <string name="settings_reload_now">Actualiser les pages</string>
+    <string name="settings_reload_later">Plus tard</string>
+    <string name="about_save_logs">Enregistrer les journaux de diagnostic</string>
+    <string name="about_save_done">Fichier ZIP de diagnostic enregistré</string>
+    <string name="about_save_cancelled">Enregistrement annulé</string>
+    <string name="about_save_failed">Impossible d\'enregistrer les journaux de diagnostic. Choisissez un autre emplacement et réessayez.</string>
+    <string name="player_live_unavailable">Diffusion en direct indisponible. Réessayez plus tard.</string>
 </resources>

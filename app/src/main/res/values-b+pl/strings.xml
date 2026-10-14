@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Słuchaj w tle</string>
     <string name="back_again_to_exit">Naciśnij ponownie, aby wyjść</string>
     <string name="navigate_back">Powrót</string>
     <string name="extension">Rozszerzenia</string>
@@ -8,7 +9,7 @@
     <string name="about">O aplikacji</string>
     <string name="display_dislikes">Okazuj niechęć</string>
     <string name="display_dislikes_summary">Wysyła identyfikatory wideo do returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Ukryj spodenki</string>
+    <string name="hide_shorts">Ukryj Shorts</string>
     <string name="interface_category">Interfejs</string>
     <string name="player">Odtwarzanie</string>
     <string name="gesture">Gesty</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">We wbudowanym odtwarzaczu</string>
     <string name="enable_in_fullscreen">Na pełnym ekranie</string>
     <string name="brightness">Jasność</string>
-    <string name="volume">Objętość</string>
+    <string name="volume">Głośność</string>
     <string name="background_mini_player">Tło i miniodtwarzacz</string>
     <string name="pip">Obraz w obrazie</string>
     <string name="in_app_mini_player">Miniodtwarzacz w aplikacji</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Pomiń sponsorów</string>
     <string name="skip_sponsors_selfpromo">Pomiń autopromocję</string>
+    <string name="skip_sponsors_interaction">Pomijaj przypomnienia o interakcji</string>
+    <string name="skip_sponsors_intro">Pomijaj wstępy</string>
+    <string name="skip_sponsors_outro">Pomijaj zakończenia</string>
+    <string name="skip_sponsors_preview">Pomijaj zapowiedzi</string>
+    <string name="skip_sponsors_music_offtopic">Pomijaj części bez muzyki</string>
+    <string name="skip_sponsors_filler">Pomijaj części niezwiązane z tematem</string>
     <string name="skip_sponsors_highlight">Pomiń najważniejsze momenty</string>
     <string name="remember_last_position">Zapamiętaj pozycję</string>
     <string name="remember_quality">Pamiętaj o jakości wideo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Zresetuj wszystkie ustawienia</string>
     <string name="reset_extension_title">Zresetuj rozszerzenia</string>
     <string name="reset_extension_message">Zresetować wszystkie ustawienia rozszerzeń do domyślnych?</string>
+    <string name="settings_backup_restore">Kopia zapasowa i przywracanie</string>
+    <string name="settings_export">Eksportuj ustawienia</string>
+    <string name="settings_export_summary">Zapisz bieżące ustawienia w pliku JSON</string>
+    <string name="settings_import">Importuj ustawienia</string>
+    <string name="settings_import_summary">Przywróć ustawienia z pliku kopii zapasowej</string>
+    <string name="settings_import_confirm_title">Zaimportować ustawienia?</string>
+    <string name="settings_import_confirm_message">Bieżące ustawienia zostaną nadpisane przez kopię zapasową.</string>
+    <string name="settings_export_done">Ustawienia wyeksportowane</string>
+    <string name="settings_export_failed">Nie można zapisać pliku ustawień</string>
+    <string name="settings_import_done">Ustawienia zaimportowane</string>
+    <string name="settings_import_failed">Nieprawidłowy plik ustawień</string>
     <string name="confirm">Potwierdź</string>
     <string name="cancel">Anuluj</string>
     <string name="more_options">Więcej</string>
@@ -104,7 +122,7 @@
     <string name="retry">Spróbuj ponownie</string>
     <string name="segment_intro">Wprowadzenie</string>
     <string name="segment_outro">Zakończenie</string>
-    <string name="segment_interaction">Przypomnienia o polubieniu i subskrybowaniu</string>
+    <string name="segment_interaction">Przypomnienie o interakcji</string>
     <string name="segment_preview">Podgląd</string>
     <string name="segment_music_offtopic">Niemuzyczne</string>
     <string name="cast">Przesyłaj</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nie znaleziono kompatybilnych urządzeń do przesyłania strumieniowego</string>
     <string name="cast_no_devices_hint">Podłącz oba urządzenia do tej samej sieci.</string>
     <string name="cast_unavailable">Przesyłanie strumieniowe urządzenia jest niedostępne</string>
-    <string name="cast_unavailable_hint">Przesyłanie strumieniowe z urządzenia wymaga Usług Google Play.</string>
+    <string name="cast_unavailable_hint">Podłącz oba urządzenia do tej samej sieci.</string>
     <string name="cast_section_devices">Dostępne urządzenia</string>
     <string name="cast_section_link">Otwórz na dowolnym urządzeniu</string>
     <string name="cast_section_link_hint">W tej samej sieci Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Wideo</string>
     <string name="download_audio">Dźwięk</string>
     <string name="download_quality">Jakość pobierania</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Wyższa jakość wymaga większej ilości danych i pamięci</string>
     <string name="download_size_estimate">Około %1$s</string>
     <string name="download_size_unknown">Rozmiar nieznany</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Wybrano: %1$d / %2$d</string>
     <string name="download_batch_meta">Pozycje: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Żadnych nowych zadań</string>
-    <string name="download_snapshot_too_many">Za dużo elementów (maks. 500).Nic nie zostało obcięte.</string>
-    <string name="download_snapshot_too_large">Migawka jest większa niż 1 MB.Nic nie zostało obcięte.</string>
+    <string name="download_snapshot_too_many">Za dużo przedmiotów. Wybierz nie więcej niż 500.</string>
+    <string name="download_snapshot_too_large">Wybrana lista przekracza 1 MB. Wybierz mniej elementów.</string>
     <string name="download_reason_live">Nie można pobrać transmisji na żywo</string>
     <string name="download_reason_premiere">Ta premiera się nie rozpoczęła</string>
     <string name="download_reason_no_streams">Brak strumieni plików do pobrania</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Bufory/min: %1$d</string>
     <string name="audio_description">Opis audio</string>
     <string name="secondary_audio">Drugorzędny dźwięk</string>
+    <string name="settings_import_reload_message">Ustawienia zaktualizowane. Załaduj ponownie otwarte strony, aby zastosować zmiany. Twoja pozycja odtwarzania zostanie zachowana.</string>
+    <string name="settings_reload_now">Załaduj ponownie strony teraz</string>
+    <string name="settings_reload_later">Później</string>
+    <string name="about_save_logs">Zapisz dzienniki diagnostyczne aplikacji</string>
+    <string name="about_save_done">Zapisano plik ZIP diagnostyki aplikacji</string>
+    <string name="about_save_cancelled">Anulowano</string>
+    <string name="about_save_failed">Nie udało się zapisać dzienników aplikacji. Wybierz inną lokalizację zapisu i spróbuj ponownie.</string>
+    <string name="player_live_unavailable">Transmisja na żywo jest niedostępna. Spróbuj ponownie później.</string>
 </resources>

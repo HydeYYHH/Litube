@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Gwrandewch yn y cefndir</string>
     <string name="back_again_to_exit">Pwyswch yn ôl eto i ymadael</string>
     <string name="navigate_back">Yn ôl</string>
     <string name="extension">Estyniadau</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Mewn chwaraewr wedi\'i fewnosod</string>
     <string name="enable_in_fullscreen">Mewn sgrin lawn</string>
     <string name="brightness">Disgleirdeb</string>
-    <string name="volume">Cyfrol</string>
+    <string name="volume">Lefel sain</string>
     <string name="background_mini_player">Chwaraewr cefndir a mini</string>
     <string name="pip">Llun-mewn-Llun</string>
     <string name="in_app_mini_player">Chwaraewr mini mewn-app</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Noddwyr sgip</string>
     <string name="skip_sponsors_selfpromo">Hepgor hunan-hyrwyddo</string>
+    <string name="skip_sponsors_interaction">Hepgor anogiadau rhyngweithio</string>
+    <string name="skip_sponsors_intro">Hepgor cyflwyniadau</string>
+    <string name="skip_sponsors_outro">Hepgor diweddgloeon</string>
+    <string name="skip_sponsors_preview">Hepgor rhagolygon</string>
+    <string name="skip_sponsors_music_offtopic">Hepgor adrannau di-gerddoriaeth</string>
+    <string name="skip_sponsors_filler">Hepgor adrannau amherthnasol</string>
     <string name="skip_sponsors_highlight">Sgipio uchafbwyntiau</string>
     <string name="remember_last_position">Cofiwch y sefyllfa</string>
     <string name="remember_quality">Cofiwch ansawdd fideo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Ailosod pob gosodiad</string>
     <string name="reset_extension_title">Ailosod estyniadau</string>
     <string name="reset_extension_message">Ailosod pob gosodiad estyniad i\'r rhagosodiad?</string>
+    <string name="settings_backup_restore">Gwneud copi wrth gefn ac adfer</string>
+    <string name="settings_export">Gosodiadau allforio</string>
+    <string name="settings_export_summary">Cadw gosodiadau cyfredol i ffeil JSON</string>
+    <string name="settings_import">Mewnforio gosodiadau</string>
+    <string name="settings_import_summary">Adfer gosodiadau o ffeil wrth gefn</string>
+    <string name="settings_import_confirm_title">Mewnforio gosodiadau?</string>
+    <string name="settings_import_confirm_message">Bydd y gosodiadau presennol yn cael eu trosysgrifo gan y copi wrth gefn.</string>
+    <string name="settings_export_done">Gosodiadau wedi\'u hallforio</string>
+    <string name="settings_export_failed">Methu cadw\'r ffeil gosodiadau</string>
+    <string name="settings_import_done">Gosodiadau wedi\'u mewnforio</string>
+    <string name="settings_import_failed">Ffeil gosodiadau annilys</string>
     <string name="confirm">Cadarnhau</string>
     <string name="cancel">Diddymu</string>
     <string name="more_options">Mwy</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Maint testun</string>
     <string name="subtitle_style_background">Cefndir</string>
     <string name="subtitle_background_none">Dim</string>
-    <string name="subtitle_background_semi">Tryleu</string>
+    <string name="subtitle_background_semi">Lled-dryloyw</string>
     <string name="subtitle_background_opaque">Afloyw</string>
     <string name="subtitle_style_color">Lliw testun</string>
     <string name="subtitle_style_hex">Cod lliw hecs</string>
     <string name="subtitle_style_drag_hint">Llusgwch y rhagolwg i\'w ail-leoli</string>
-    <string name="subtitle_style_bold">Beiddgar</string>
+    <string name="subtitle_style_bold">Trwm</string>
     <string name="subtitle_auto_generated">(auto)</string>
     <string name="reset">Ailosod</string>
     <string name="share">Rhannu</string>
@@ -104,7 +122,7 @@
     <string name="retry">Ceisiwch eto</string>
     <string name="segment_intro">Rhagarweiniad</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Hoffwch a thanysgrifiwch nodiadau atgoffa</string>
+    <string name="segment_interaction">Anogaeth i ryngweithio</string>
     <string name="segment_preview">Rhagolwg</string>
     <string name="segment_music_offtopic">Di-gerdd</string>
     <string name="cast">Ffrydio i ddyfais</string>
@@ -114,13 +132,13 @@
     <string name="cast_no_devices_found">Ni chanfuwyd unrhyw ddyfeisiau ffrydio cydnaws</string>
     <string name="cast_no_devices_hint">Cysylltwch y ddwy ddyfais â\'r un rhwydwaith.</string>
     <string name="cast_unavailable">Nid yw ffrydio dyfais ar gael</string>
-    <string name="cast_unavailable_hint">Mae angen Google Play Services ar ffrydio dyfais.</string>
+    <string name="cast_unavailable_hint">Cysylltwch y ddwy ddyfais â\'r un rhwydwaith.</string>
     <string name="cast_section_devices">Dyfeisiau sydd ar gael</string>
     <string name="cast_section_link">Agor ar unrhyw ddyfais</string>
     <string name="cast_section_link_hint">Ar yr un rhwydwaith Wi-Fi.</string>
     <string name="cast_learn_casting">Dysgu am ffrydio dyfeisiau</string>
     <string name="add_to_queue">Ychwanegu at y ciw</string>
-    <string name="thumbnail">Bawd</string>
+    <string name="thumbnail">Mân-lun</string>
     <string name="cast_link_connected">Agorwyd y ddolen yn y porwr</string>
     <string name="cast_link_close">Caewch y ddolen</string>
     <string name="cast_link_banner">Ffrydio trwy ddolen</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Fideo</string>
     <string name="download_audio">Sain</string>
     <string name="download_quality">Ansawdd lawrlwytho</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Mae ansawdd uwch yn defnyddio mwy o ddata a storio</string>
     <string name="download_size_estimate">Ynglŷn â %1$s</string>
     <string name="download_size_unknown">Maint anhysbys</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Wedi\'i ddewis: %1$d / %2$d</string>
     <string name="download_batch_meta">Eitemau: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Dim tasgau newydd</string>
-    <string name="download_snapshot_too_many">Gormod o eitemau (uchafswm o 500).Ni chwtogwyd dim.</string>
-    <string name="download_snapshot_too_large">Mae ciplun yn fwy na 1 MB.Ni chwtogwyd dim.</string>
+    <string name="download_snapshot_too_many">Gormod o eitemau. Dewiswch dim mwy na 500.</string>
+    <string name="download_snapshot_too_large">Mae\'r rhestr a ddewiswyd yn fwy nag 1 MB. Dewiswch lai o eitemau.</string>
     <string name="download_reason_live">Nid oes modd lawrlwytho ffrydiau byw</string>
     <string name="download_reason_premiere">Nid yw\'r perfformiad cyntaf hwn wedi dechrau</string>
     <string name="download_reason_no_streams">Dim ffrydiau ffeil y gellir eu lawrlwytho</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Clustogau/munud: %1$d</string>
     <string name="audio_description">Disgrifiad sain</string>
     <string name="secondary_audio">Sain uwchradd</string>
+    <string name="settings_import_reload_message">Gosodiadau wedi\'u diweddaru. Ail-lwythwch dudalennau agored i gymhwyso newidiadau. Bydd eich safle chwarae yn cael ei gadw.</string>
+    <string name="settings_reload_now">Ail-lwytho tudalennau nawr</string>
+    <string name="settings_reload_later">Yn ddiweddarach</string>
+    <string name="about_save_logs">Cadw logiau diagnostig app</string>
+    <string name="about_save_done">Ffeil ZIP diagnostig ap wedi\'i chadw</string>
+    <string name="about_save_cancelled">Wedi\'i ganslo</string>
+    <string name="about_save_failed">Methu cadw logiau ap. Dewiswch leoliad arbed arall a cheisiwch eto.</string>
+    <string name="player_live_unavailable">Nid yw\'r llif byw ar gael. Ceisiwch eto yn nes ymlaen.</string>
 </resources>

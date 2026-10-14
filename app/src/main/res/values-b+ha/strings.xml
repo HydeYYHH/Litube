@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Saurari a bango</string>
     <string name="back_again_to_exit">Danna baya don fita</string>
     <string name="navigate_back">Baya</string>
     <string name="extension">Ƙari</string>
@@ -8,7 +9,7 @@
     <string name="about">Game da</string>
     <string name="display_dislikes">Nuna ƙi</string>
     <string name="display_dislikes_summary">Yana aika ID na bidiyo zuwa returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Boye Shorts</string>
+    <string name="hide_shorts">Ɓoye Shorts</string>
     <string name="interface_category">Interface</string>
     <string name="player">Komawa</string>
     <string name="gesture">Hankali</string>
@@ -20,14 +21,20 @@
     <string name="enable_in_embedded">A cikin ɗan wasa</string>
     <string name="enable_in_fullscreen">A cikin cikakken allo</string>
     <string name="brightness">Haske</string>
-    <string name="volume">girma</string>
+    <string name="volume">Ƙarar sauti</string>
     <string name="background_mini_player">Fage &amp; ƙaramin ɗan wasa</string>
     <string name="pip">Hoto-Hoto</string>
-    <string name="in_app_mini_player">In-app mini-player</string>
+    <string name="in_app_mini_player">Ƙaramin mai kunnawa a cikin manhaja</string>
     <string name="background_play">Komawar bango</string>
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Tsallake masu tallafawa</string>
     <string name="skip_sponsors_selfpromo">Tsallake tallan kai</string>
+    <string name="skip_sponsors_interaction">Tsallake tunatarwar hulɗa</string>
+    <string name="skip_sponsors_intro">Tsallake gabatarwa</string>
+    <string name="skip_sponsors_outro">Tsallake kammalawa</string>
+    <string name="skip_sponsors_preview">Tsallake samfoti</string>
+    <string name="skip_sponsors_music_offtopic">Tsallake sassan da ba su da kiɗa</string>
+    <string name="skip_sponsors_filler">Tsallake sassan da ba su shafi batu ba</string>
     <string name="skip_sponsors_highlight">Tsallake manyan bayanai</string>
     <string name="remember_last_position">Tuna matsayi</string>
     <string name="remember_quality">Ka tuna ingancin bidiyo</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Sake saita duk saituna</string>
     <string name="reset_extension_title">Sake saita kari</string>
     <string name="reset_extension_message">Sake saita duk saitunan tsawo zuwa tsoho?</string>
+    <string name="settings_backup_restore">Ajiyayyen &amp; mayar</string>
+    <string name="settings_export">Saitunan fitarwa</string>
+    <string name="settings_export_summary">Ajiye saitunan yanzu zuwa fayil JSON</string>
+    <string name="settings_import">Shigo da saituna</string>
+    <string name="settings_import_summary">Mayar da saituna daga fayil ɗin madadin</string>
+    <string name="settings_import_confirm_title">Shigo da saituna?</string>
+    <string name="settings_import_confirm_message">Saitunan yanzu za a sake rubuta su ta madadin.</string>
+    <string name="settings_export_done">An fitar da saituna</string>
+    <string name="settings_export_failed">An kasa ajiye fayil ɗin saituna</string>
+    <string name="settings_import_done">An shigo da saituna</string>
+    <string name="settings_import_failed">Fayil ɗin saituna mara inganci</string>
     <string name="confirm">Tabbatar</string>
     <string name="cancel">Soke</string>
     <string name="more_options">Ƙari</string>
@@ -48,7 +66,7 @@
     <string name="application_not_found">Ba a sami aikace-aikacen ba</string>
     <string name="segments">Yankuna</string>
     <string name="no_segments">Babu sassan da za a iya tsallakewa</string>
-    <string name="subtitles">Subtitles</string>
+    <string name="subtitles">Rubutun fassara</string>
     <string name="playback_end_next">Yi wasa na gaba</string>
     <string name="playback_end_loop">Maɗaukaki ɗaya</string>
     <string name="playback_end_pause">Dakata a ƙarshe</string>
@@ -86,15 +104,15 @@
     <string name="subtitle_style_text_size">Girman rubutu</string>
     <string name="subtitle_style_background">Bayani</string>
     <string name="subtitle_background_none">Babu</string>
-    <string name="subtitle_background_semi">Fassara</string>
-    <string name="subtitle_background_opaque">Babba</string>
+    <string name="subtitle_background_semi">Rabin bayyane</string>
+    <string name="subtitle_background_opaque">Mara bayyane</string>
     <string name="subtitle_style_color">Launin rubutu</string>
     <string name="subtitle_style_hex">Hex launi code</string>
     <string name="subtitle_style_drag_hint">Jawo samfoti don sake matsayi</string>
-    <string name="subtitle_style_bold">Karfi</string>
+    <string name="subtitle_style_bold">Rubutu mai kauri</string>
     <string name="subtitle_auto_generated">(moto)</string>
     <string name="reset">Sake saiti</string>
-    <string name="share">Share</string>
+    <string name="share">Raba</string>
     <string name="share_no_link_found">Ba a sami hanyar haɗi ba</string>
     <string name="close">Kusa</string>
     <string name="jump">Tsalle</string>
@@ -104,7 +122,7 @@
     <string name="retry">Sake gwadawa</string>
     <string name="segment_intro">Gabatarwa</string>
     <string name="segment_outro">Daga</string>
-    <string name="segment_interaction">Like and subscribe tunatarwa</string>
+    <string name="segment_interaction">Tunatarwar hulɗa</string>
     <string name="segment_preview">Dubawa</string>
     <string name="segment_music_offtopic">Ba kida ba</string>
     <string name="cast">Yaɗa zuwa na\'ura</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Ba a sami na\'urorin yawo masu jituwa ba</string>
     <string name="cast_no_devices_hint">Haɗa na\'urorin biyu zuwa cibiyar sadarwa iri ɗaya.</string>
     <string name="cast_unavailable">Babu yawo na na\'ura</string>
-    <string name="cast_unavailable_hint">Yawo na\'ura yana buƙatar Sabis na Google Play.</string>
+    <string name="cast_unavailable_hint">Haɗa na\'urorin biyu zuwa cibiyar sadarwa iri ɗaya.</string>
     <string name="cast_section_devices">Akwai na\'urori</string>
     <string name="cast_section_link">Buɗe a kowace na\'ura</string>
     <string name="cast_section_link_hint">A kan hanyar sadarwar Wi-Fi iri ɗaya.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Bidiyo</string>
     <string name="download_audio">Sauti</string>
     <string name="download_quality">Saukar da inganci</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Mafi girma yana amfani da ƙarin bayanai da ajiya</string>
     <string name="download_size_estimate">Kimanin %1$s</string>
     <string name="download_size_unknown">Girman da ba a sani ba</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">An zaɓa: %1$d / %2$d</string>
     <string name="download_batch_meta">Abubuwan: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Babu sababbin ayyuka</string>
-    <string name="download_snapshot_too_many">Abubuwa da yawa (max 500).Babu wani abu da aka yanke.</string>
-    <string name="download_snapshot_too_large">Hoton hoto ya fi 1 MB girma.Babu wani abu da aka yanke.</string>
+    <string name="download_snapshot_too_many">Abubuwa da yawa. Zaɓi fiye da 500.</string>
+    <string name="download_snapshot_too_large">Jerin da aka zaɓa ya wuce 1 MB. Zaɓi ƙananan abubuwa.</string>
     <string name="download_reason_live">Ba za a iya sauke rafukan kai tsaye ba</string>
     <string name="download_reason_premiere">Ba a fara wannan farkon ba</string>
     <string name="download_reason_no_streams">Babu rafukan fayil da za a iya saukewa</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers / min: %1$d</string>
     <string name="audio_description">Bayanin sauti</string>
     <string name="secondary_audio">Sauti na sakandare</string>
+    <string name="settings_import_reload_message">An sabunta saituna. Sake loda buɗaɗɗen shafuka don aiwatar da canje-canje. Za a adana matsayin ku na sake kunnawa.</string>
+    <string name="settings_reload_now">Sake shigar da shafuka yanzu</string>
+    <string name="settings_reload_later">Daga baya</string>
+    <string name="about_save_logs">Ajiye rajistan ayyukan bincike na app</string>
+    <string name="about_save_done">An adana fayil ɗin ZIP na binciken app</string>
+    <string name="about_save_cancelled">An soke</string>
+    <string name="about_save_failed">An kasa ajiye rajistan ayyukan app. Zaɓi wani wurin ajiyewa kuma a sake gwadawa.</string>
+    <string name="player_live_unavailable">Ba a samun watsa shirye-shirye kai tsaye. A sake gwadawa daga baya.</string>
 </resources>

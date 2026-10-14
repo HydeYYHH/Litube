@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Dëgjo në sfond</string>
     <string name="back_again_to_exit">Shtypni përsëri për të dalë</string>
     <string name="navigate_back">Mbrapa</string>
     <string name="extension">Shtesa</string>
@@ -8,7 +9,7 @@
     <string name="about">Rreth</string>
     <string name="display_dislikes">Shfaq mospëlqimet</string>
     <string name="display_dislikes_summary">Dërgon ID-të e videove te returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Fshih pantallonat e shkurtra</string>
+    <string name="hide_shorts">Fshih Shorts</string>
     <string name="interface_category">Ndërfaqja</string>
     <string name="player">Riprodhimi</string>
     <string name="gesture">Gjestet</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Në luajtësin e integruar</string>
     <string name="enable_in_fullscreen">Në ekran të plotë</string>
     <string name="brightness">Shkëlqimi</string>
-    <string name="volume">Vëllimi</string>
+    <string name="volume">Niveli i zërit</string>
     <string name="background_mini_player">Sfondi dhe mini-player</string>
     <string name="pip">Picture-në-Picture</string>
     <string name="in_app_mini_player">Mini-lojtar brenda aplikacionit</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Kapërceni sponsorët</string>
     <string name="skip_sponsors_selfpromo">Kapërceni vetëpromovimin</string>
+    <string name="skip_sponsors_interaction">Kalo kujtesat për ndërveprim</string>
+    <string name="skip_sponsors_intro">Kalo hyrjet</string>
+    <string name="skip_sponsors_outro">Kalo përfundimet</string>
+    <string name="skip_sponsors_preview">Kalo pamjet paraprake</string>
+    <string name="skip_sponsors_music_offtopic">Kalo pjesët pa muzikë</string>
+    <string name="skip_sponsors_filler">Kalo pjesët jashtë teme</string>
     <string name="skip_sponsors_highlight">Kapërceni pikat kryesore</string>
     <string name="remember_last_position">Mbani mend pozicionin</string>
     <string name="remember_quality">Mbani mend cilësinë e videos</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Rivendos të gjitha cilësimet</string>
     <string name="reset_extension_title">Rivendos shtesat</string>
     <string name="reset_extension_message">Të rivendosen të gjitha cilësimet e shtesës në parazgjedhje?</string>
+    <string name="settings_backup_restore">Rezervoni dhe rivendosni</string>
+    <string name="settings_export">Cilësimet e eksportit</string>
+    <string name="settings_export_summary">Ruani cilësimet aktuale në një skedar JSON</string>
+    <string name="settings_import">Cilësimet e importit</string>
+    <string name="settings_import_summary">Rivendosni cilësimet nga një skedar rezervë</string>
+    <string name="settings_import_confirm_title">Të importohen cilësimet?</string>
+    <string name="settings_import_confirm_message">Cilësimet aktuale do të mbishkruhen nga rezervimi.</string>
+    <string name="settings_export_done">Cilësimet u eksportuan</string>
+    <string name="settings_export_failed">Skedari i cilësimeve nuk mund të ruhej</string>
+    <string name="settings_import_done">Cilësimet u importuan</string>
+    <string name="settings_import_failed">Skedar i pavlefshëm i cilësimeve</string>
     <string name="confirm">Konfirmo</string>
     <string name="cancel">Anulo</string>
     <string name="more_options">Më shumë</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Madhësia e tekstit</string>
     <string name="subtitle_style_background">Sfondi</string>
     <string name="subtitle_background_none">Asnjë</string>
-    <string name="subtitle_background_semi">I tejdukshëm</string>
+    <string name="subtitle_background_semi">Gjysmë i tejdukshëm</string>
     <string name="subtitle_background_opaque">E errët</string>
     <string name="subtitle_style_color">Ngjyra e tekstit</string>
     <string name="subtitle_style_hex">Kodi Hex ngjyra</string>
     <string name="subtitle_style_drag_hint">Zvarritni pamjen paraprake për të ripozicionuar</string>
-    <string name="subtitle_style_bold">E guximshme</string>
+    <string name="subtitle_style_bold">Shkronja të trasha</string>
     <string name="subtitle_auto_generated">(auto)</string>
     <string name="reset">Rivendos</string>
     <string name="share">Ndani</string>
@@ -104,7 +122,7 @@
     <string name="retry">Provo sërish</string>
     <string name="segment_intro">Hyrje</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Pëlqejini dhe pajtohuni përkujtuesit</string>
+    <string name="segment_interaction">Kujtesë për ndërveprim</string>
     <string name="segment_preview">Pamje paraprake</string>
     <string name="segment_music_offtopic">Jo-muzikore</string>
     <string name="cast">Transmeto</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nuk u gjetën pajisje të përputhshme transmetimi</string>
     <string name="cast_no_devices_hint">Lidhni të dyja pajisjet në të njëjtin rrjet.</string>
     <string name="cast_unavailable">Transmetimi i pajisjes nuk ofrohet</string>
-    <string name="cast_unavailable_hint">Transmetimi i pajisjes ka nevojë për Shërbimet e Google Play.</string>
+    <string name="cast_unavailable_hint">Lidhni të dyja pajisjet në të njëjtin rrjet.</string>
     <string name="cast_section_devices">Pajisjet e disponueshme</string>
     <string name="cast_section_link">Hapur në çdo pajisje</string>
     <string name="cast_section_link_hint">Në të njëjtin rrjet Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Cilësia e shkarkimit</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Cilësia më e lartë përdor më shumë të dhëna dhe ruajtje</string>
     <string name="download_size_estimate">Rreth %1$s</string>
     <string name="download_size_unknown">Madhësia e panjohur</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Zgjedhur: %1$d / %2$d</string>
     <string name="download_batch_meta">Artikujt: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Asnjë detyrë e re</string>
-    <string name="download_snapshot_too_many">Shumë artikuj (maksimumi 500).Asgjë nuk ishte e cunguar.</string>
-    <string name="download_snapshot_too_large">Fotografia e çastit është më e madhe se 1 MB.Asgjë nuk ishte e cunguar.</string>
+    <string name="download_snapshot_too_many">Shumë artikuj. Zgjidhni jo më shumë se 500.</string>
+    <string name="download_snapshot_too_large">Lista e zgjedhur tejkalon 1 MB. Zgjidhni më pak artikuj.</string>
     <string name="download_reason_live">Transmetimet e drejtpërdrejta nuk mund të shkarkohen</string>
     <string name="download_reason_premiere">Kjo premierë nuk ka filluar</string>
     <string name="download_reason_no_streams">Nuk ka transmetime skedarësh të shkarkueshëm</string>
@@ -273,7 +292,15 @@
     <string name="info_state_buffering">Buffering</string>
     <string name="info_state_ended">Përfundoi</string>
     <string name="info_state_cast">Transmetim</string>
-    <string name="info_buffer_count">Buffers/min: %1$d</string>
+    <string name="info_buffer_count">Buffers/min.: %1$d</string>
     <string name="audio_description">Përshkrimi audio</string>
     <string name="secondary_audio">Audio dytësore</string>
+    <string name="settings_import_reload_message">Cilësimet u përditësuan. Ringarko faqet e hapura për të aplikuar ndryshimet. Pozicioni juaj i riprodhimit do të mbahet.</string>
+    <string name="settings_reload_now">Rifresko faqet tani</string>
+    <string name="settings_reload_later">Më vonë</string>
+    <string name="about_save_logs">Ruani regjistrat e diagnostikimit të aplikacionit</string>
+    <string name="about_save_done">Skedari ZIP diagnostikues i aplikacionit u ruajt</string>
+    <string name="about_save_cancelled">Anuluar</string>
+    <string name="about_save_failed">Regjistrat e aplikacioneve nuk mund të ruheshin. Zgjidh një vend tjetër ruajtjeje dhe provo sërish.</string>
+    <string name="player_live_unavailable">Transmetimi i drejtpërdrejtë nuk ofrohet. Provo sërish më vonë.</string>
 </resources>

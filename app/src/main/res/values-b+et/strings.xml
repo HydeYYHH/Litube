@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Kuulake taustal</string>
     <string name="back_again_to_exit">Väljumiseks vajutage uuesti tagasi</string>
     <string name="navigate_back">Tagasi</string>
     <string name="extension">Laiendused</string>
@@ -8,7 +9,7 @@
     <string name="about">Teave</string>
     <string name="display_dislikes">Näita ei meeldi</string>
     <string name="display_dislikes_summary">Saadab video ID-d aadressile returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Peida lühikesed püksid</string>
+    <string name="hide_shorts">Peida Shorts</string>
     <string name="interface_category">Liides</string>
     <string name="player">Taasesitus</string>
     <string name="gesture">Žestid</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Manustatud pleieris</string>
     <string name="enable_in_fullscreen">Täisekraanil</string>
     <string name="brightness">Heledus</string>
-    <string name="volume">Maht</string>
+    <string name="volume">Helitugevus</string>
     <string name="background_mini_player">Taust ja minipleier</string>
     <string name="pip">Pilt-pildis</string>
     <string name="in_app_mini_player">Rakendusesisene minipleier</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Jäta sponsorid vahele</string>
     <string name="skip_sponsors_selfpromo">Jäta enesereklaam vahele</string>
+    <string name="skip_sponsors_interaction">Jäta suhtlusmeeldetuletused vahele</string>
+    <string name="skip_sponsors_intro">Jäta sissejuhatused vahele</string>
+    <string name="skip_sponsors_outro">Jäta lõpuosad vahele</string>
+    <string name="skip_sponsors_preview">Jäta eelvaated vahele</string>
+    <string name="skip_sponsors_music_offtopic">Jäta muusikata osad vahele</string>
+    <string name="skip_sponsors_filler">Jäta teemavälised osad vahele</string>
     <string name="skip_sponsors_highlight">Jätke esiletõstmised vahele</string>
     <string name="remember_last_position">Jäta positsioon meelde</string>
     <string name="remember_quality">Jäta video kvaliteet meelde</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Lähtestage kõik seaded</string>
     <string name="reset_extension_title">Lähtestage laiendused</string>
     <string name="reset_extension_message">Kas lähtestada kõik laienduse vaikeseaded?</string>
+    <string name="settings_backup_restore">Varundamine ja taastamine</string>
+    <string name="settings_export">Ekspordi seaded</string>
+    <string name="settings_export_summary">Salvestage praegused seaded JSON-faili</string>
+    <string name="settings_import">Impordi seaded</string>
+    <string name="settings_import_summary">Taastage seaded varukoopiafailist</string>
+    <string name="settings_import_confirm_title">Kas importida seaded?</string>
+    <string name="settings_import_confirm_message">Varukoopia kirjutab praegused sätted üle.</string>
+    <string name="settings_export_done">Seaded eksporditi</string>
+    <string name="settings_export_failed">Seadete faili ei saanud salvestada</string>
+    <string name="settings_import_done">Seaded imporditud</string>
+    <string name="settings_import_failed">Kehtetu seadete fail</string>
     <string name="confirm">Kinnitage</string>
     <string name="cancel">Tühista</string>
     <string name="more_options">Veel</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Teksti suurus</string>
     <string name="subtitle_style_background">Taust</string>
     <string name="subtitle_background_none">Mitte ükski</string>
-    <string name="subtitle_background_semi">Läbipaistev</string>
+    <string name="subtitle_background_semi">Poolläbipaistev</string>
     <string name="subtitle_background_opaque">Läbipaistmatu</string>
     <string name="subtitle_style_color">Teksti värv</string>
     <string name="subtitle_style_hex">Hex värvikood</string>
@@ -104,7 +122,7 @@
     <string name="retry">Proovi uuesti</string>
     <string name="segment_intro">Sissejuhatus</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Meeldetuletused meeldivaks meeldivaks ja tellimiseks</string>
+    <string name="segment_interaction">Suhtlusmeeldetuletus</string>
     <string name="segment_preview">Eelvaade</string>
     <string name="segment_music_offtopic">Mittemuusika</string>
     <string name="cast">Edasta seadmesse</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Ühilduvaid voogedastusseadmeid ei leitud</string>
     <string name="cast_no_devices_hint">Ühendage mõlemad seadmed samasse võrku.</string>
     <string name="cast_unavailable">Seadme voogesitus pole saadaval</string>
-    <string name="cast_unavailable_hint">Seadme voogesitus vajab Google Play teenuseid.</string>
+    <string name="cast_unavailable_hint">Ühendage mõlemad seadmed samasse võrku.</string>
     <string name="cast_section_devices">Saadaolevad seadmed</string>
     <string name="cast_section_link">Avatud mis tahes seadmes</string>
     <string name="cast_section_link_hint">Samas Wi-Fi võrgus.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Heli</string>
     <string name="download_quality">Allalaadimise kvaliteet</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Kõrgem kvaliteet kasutab rohkem andmeid ja salvestusruumi</string>
     <string name="download_size_estimate">Umbes %1$s</string>
     <string name="download_size_unknown">Suurus teadmata</string>
@@ -196,13 +215,13 @@
     <string name="download_wifi_only">Allalaadimine ainult WiFi kaudu</string>
     <string name="download_connections">Ühendused: %1$d</string>
     <string name="download_clear_history">Tühjenda ajalugu</string>
-    <string name="download_clear_history_message">Remove finished, failed, and cancelled records?</string>
+    <string name="download_clear_history_message">Kas eemaldada lõpetatud, ebaõnnestunud ja tühistatud kirjed?</string>
     <string name="download_select_all">Valige kõik</string>
     <string name="download_selected_count">Valitud: %1$d / %2$d</string>
     <string name="download_batch_meta">Tooted: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Uusi ülesandeid pole</string>
-    <string name="download_snapshot_too_many">Liiga palju üksusi (max 500).Midagi ei kärbitud.</string>
-    <string name="download_snapshot_too_large">Snapshot on suurem kui 1 MB.Midagi ei kärbitud.</string>
+    <string name="download_snapshot_too_many">Liiga palju üksusi. Valige mitte rohkem kui 500.</string>
+    <string name="download_snapshot_too_large">Valitud loend ületab 1 MB. Valige vähem üksusi.</string>
     <string name="download_reason_live">Otseülekandeid ei saa alla laadida</string>
     <string name="download_reason_premiere">See esilinastus ei ole alanud</string>
     <string name="download_reason_no_streams">Allalaaditavaid failivooge pole</string>
@@ -248,7 +267,7 @@
     <string name="about_export_logs">Ekspordi diagnostikalogid</string>
     <string name="about_cache_cleared">Vahemälu tühjendatud</string>
     <string name="about_export_ready">Diagnostiline arhiiv on valmis</string>
-    <string name="about_development_version">Development build · Latest stable: %1$s</string>
+    <string name="about_development_version">Arendusjärg · Uusim stabiilne: %1$s</string>
     <string name="about_update_available">Saadaval stabiilne väljalase: %1$s</string>
     <string name="about_up_to_date">Viimane stabiilne väljalase: %1$s</string>
     <string name="info_unavailable">Pole saadaval</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Puhvrid/min: %1$d</string>
     <string name="audio_description">Helikirjeldus</string>
     <string name="secondary_audio">Sekundaarne heli</string>
+    <string name="settings_import_reload_message">Seaded uuendatud. Muudatuste rakendamiseks laadige avatud lehed uuesti. Teie esitusasend jäetakse alles.</string>
+    <string name="settings_reload_now">Laadi lehed kohe uuesti</string>
+    <string name="settings_reload_later">Hiljem</string>
+    <string name="about_save_logs">Salvestage rakenduse diagnostikalogid</string>
+    <string name="about_save_done">Rakenduse diagnostika ZIP-fail on salvestatud</string>
+    <string name="about_save_cancelled">Tühistatud</string>
+    <string name="about_save_failed">Rakenduse logisid ei saanud salvestada. Valige mõni muu salvestuskoht ja proovige uuesti.</string>
+    <string name="player_live_unavailable">Otseülekanne pole saadaval. Proovige hiljem uuesti.</string>
 </resources>

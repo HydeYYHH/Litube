@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Hallgassa a háttérben</string>
     <string name="back_again_to_exit">Nyomja meg ismét a vissza gombot a kilépéshez</string>
     <string name="navigate_back">Vissza</string>
     <string name="extension">Bővítmények</string>
@@ -8,7 +9,7 @@
     <string name="about">Névjegy</string>
     <string name="display_dislikes">Nemtetszések megjelenítése</string>
     <string name="display_dislikes_summary">Videóazonosítókat küld a returnyoutubedislikeapi.com címre</string>
-    <string name="hide_shorts">Rövidnadrágok elrejtése</string>
+    <string name="hide_shorts">Shorts elrejtése</string>
     <string name="interface_category">Interfész</string>
     <string name="player">Lejátszás</string>
     <string name="gesture">Gesztusok</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Beágyazott lejátszóban</string>
     <string name="enable_in_fullscreen">Teljes képernyőn</string>
     <string name="brightness">Fényerő</string>
-    <string name="volume">Kötet</string>
+    <string name="volume">Hangerő</string>
     <string name="background_mini_player">Háttér és mini lejátszó</string>
     <string name="pip">Kép a képben</string>
     <string name="in_app_mini_player">Alkalmazáson belüli minilejátszó</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Szponzorok kihagyása</string>
     <string name="skip_sponsors_selfpromo">Az önreklám kihagyása</string>
+    <string name="skip_sponsors_interaction">Interakciós emlékeztetők kihagyása</string>
+    <string name="skip_sponsors_intro">Bevezetők kihagyása</string>
+    <string name="skip_sponsors_outro">Lezárások kihagyása</string>
+    <string name="skip_sponsors_preview">Előzetesek kihagyása</string>
+    <string name="skip_sponsors_music_offtopic">Zene nélküli részek kihagyása</string>
+    <string name="skip_sponsors_filler">Témán kívüli részek kihagyása</string>
     <string name="skip_sponsors_highlight">Kiemelések kihagyása</string>
     <string name="remember_last_position">Emlékezzen a pozícióra</string>
     <string name="remember_quality">Emlékezzen a videó minőségére</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Minden beállítás visszaállítása</string>
     <string name="reset_extension_title">Bővítmények alaphelyzetbe állítása</string>
     <string name="reset_extension_message">Visszaállítja az összes bővítmény beállítást az alapértelmezettre?</string>
+    <string name="settings_backup_restore">Biztonsági mentés és visszaállítás</string>
+    <string name="settings_export">Beállítások exportálása</string>
+    <string name="settings_export_summary">Az aktuális beállítások mentése JSON-fájlba</string>
+    <string name="settings_import">Beállítások importálása</string>
+    <string name="settings_import_summary">Beállítások visszaállítása biztonsági másolatból</string>
+    <string name="settings_import_confirm_title">Importálja a beállításokat?</string>
+    <string name="settings_import_confirm_message">Az aktuális beállításokat a biztonsági mentés felülírja.</string>
+    <string name="settings_export_done">Beállítások exportálva</string>
+    <string name="settings_export_failed">Nem sikerült menteni a beállítási fájlt</string>
+    <string name="settings_import_done">Beállítások importálva</string>
+    <string name="settings_import_failed">Érvénytelen beállításfájl</string>
     <string name="confirm">Erősítse meg</string>
     <string name="cancel">Mégse</string>
     <string name="more_options">Tovább</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Szöveg mérete</string>
     <string name="subtitle_style_background">Háttér</string>
     <string name="subtitle_background_none">Nincs</string>
-    <string name="subtitle_background_semi">Átlátszó</string>
+    <string name="subtitle_background_semi">Félig átlátszó</string>
     <string name="subtitle_background_opaque">Átlátszatlan</string>
     <string name="subtitle_style_color">Szöveg színe</string>
     <string name="subtitle_style_hex">Hexadecimális színkód</string>
@@ -104,7 +122,7 @@
     <string name="retry">Próbálja újra</string>
     <string name="segment_intro">Bevezetés</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Lájkold és iratkozz fel emlékeztetők</string>
+    <string name="segment_interaction">Interakciós emlékeztető</string>
     <string name="segment_preview">Előnézet</string>
     <string name="segment_music_offtopic">Nem zene</string>
     <string name="cast">Átküldés</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nem található kompatibilis streaming eszköz</string>
     <string name="cast_no_devices_hint">Csatlakoztassa mindkét eszközt ugyanahhoz a hálózathoz.</string>
     <string name="cast_unavailable">Az eszköz streamingje nem érhető el</string>
-    <string name="cast_unavailable_hint">Az eszközön történő streameléshez Google Play-szolgáltatások szükségesek.</string>
+    <string name="cast_unavailable_hint">Csatlakoztassa mindkét eszközt ugyanahhoz a hálózathoz.</string>
     <string name="cast_section_devices">Rendelkezésre álló eszközök</string>
     <string name="cast_section_link">Bármilyen eszközön megnyílik</string>
     <string name="cast_section_link_hint">Ugyanazon a Wi-Fi hálózaton.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Videó</string>
     <string name="download_audio">Hang</string>
     <string name="download_quality">Letöltési minőség</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">A jobb minőség több adatot és tárhelyet igényel</string>
     <string name="download_size_estimate">Körülbelül %1$s</string>
     <string name="download_size_unknown">Méret ismeretlen</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Kiválasztva: %1$d / %2$d</string>
     <string name="download_batch_meta">Tételek: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Nincsenek új feladatok</string>
-    <string name="download_snapshot_too_many">Túl sok elem (max. 500).Semmit nem csonkoltak meg.</string>
-    <string name="download_snapshot_too_large">A pillanatfelvétel nagyobb, mint 1 MB.Semmit nem csonkoltak meg.</string>
+    <string name="download_snapshot_too_many">Túl sok elem. Válasszon ki legfeljebb 500-at.</string>
+    <string name="download_snapshot_too_large">A kiválasztott lista meghaladja az 1 MB-ot. Válasszon kevesebb elemet.</string>
     <string name="download_reason_live">Az élő közvetítések nem tölthetők le</string>
     <string name="download_reason_premiere">Ez a premier még nem kezdődött el</string>
     <string name="download_reason_no_streams">Nincs letölthető fájlfolyam</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Puffer/perc: %1$d</string>
     <string name="audio_description">Hangos leírás</string>
     <string name="secondary_audio">Másodlagos hang</string>
+    <string name="settings_import_reload_message">Beállítások frissítve. A módosítások alkalmazásához töltse be újra a megnyitott oldalakat. A lejátszási pozíció megmarad.</string>
+    <string name="settings_reload_now">Oldalak újratöltése most</string>
+    <string name="settings_reload_later">Később</string>
+    <string name="about_save_logs">Alkalmazásdiagnosztikai naplók mentése</string>
+    <string name="about_save_done">Alkalmazásdiagnosztikai ZIP-fájl mentve</string>
+    <string name="about_save_cancelled">Törölve</string>
+    <string name="about_save_failed">Nem sikerült menteni az alkalmazásnaplókat. Válasszon másik mentési helyet, és próbálja újra.</string>
+    <string name="player_live_unavailable">Az élő közvetítés nem érhető el. Próbálja újra később.</string>
 </resources>

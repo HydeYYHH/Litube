@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Makinig sa background</string>
     <string name="back_again_to_exit">Pindutin muli upang lumabas</string>
     <string name="navigate_back">Bumalik</string>
     <string name="extension">Mga extension</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Sa naka-embed na player</string>
     <string name="enable_in_fullscreen">Sa fullscreen</string>
     <string name="brightness">Liwanag</string>
-    <string name="volume">Dami</string>
+    <string name="volume">Lakas ng tunog</string>
     <string name="background_mini_player">Background at mini player</string>
     <string name="pip">Picture-in-Picture</string>
     <string name="in_app_mini_player">In-app na mini-player</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Laktawan ang mga sponsor</string>
     <string name="skip_sponsors_selfpromo">Laktawan ang pag-promote sa sarili</string>
+    <string name="skip_sponsors_interaction">Laktawan ang mga paalala sa pag-like at pag-subscribe</string>
+    <string name="skip_sponsors_intro">Laktawan ang mga pambungad</string>
+    <string name="skip_sponsors_outro">Laktawan ang mga pangwakas</string>
+    <string name="skip_sponsors_preview">Laktawan ang mga preview</string>
+    <string name="skip_sponsors_music_offtopic">Laktawan ang mga bahaging walang musika</string>
+    <string name="skip_sponsors_filler">Laktawan ang mga bahaging wala sa paksa</string>
     <string name="skip_sponsors_highlight">Laktawan ang mga highlight</string>
     <string name="remember_last_position">Tandaan ang posisyon</string>
     <string name="remember_quality">Tandaan ang kalidad ng video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">I-reset ang lahat ng setting</string>
     <string name="reset_extension_title">I-reset ang mga extension</string>
     <string name="reset_extension_message">I-reset ang lahat ng setting ng extension sa default?</string>
+    <string name="settings_backup_restore">I-backup at i-restore</string>
+    <string name="settings_export">Mga setting ng pag-export</string>
+    <string name="settings_export_summary">I-save ang mga kasalukuyang setting sa isang JSON file</string>
+    <string name="settings_import">Mga setting ng pag-import</string>
+    <string name="settings_import_summary">Ibalik ang mga setting mula sa isang backup na file</string>
+    <string name="settings_import_confirm_title">Mga setting ng pag-import?</string>
+    <string name="settings_import_confirm_message">Ang mga kasalukuyang setting ay mapapatungan ng backup.</string>
+    <string name="settings_export_done">Na-export ang mga setting</string>
+    <string name="settings_export_failed">Hindi ma-save ang file ng mga setting</string>
+    <string name="settings_import_done">Na-import ang mga setting</string>
+    <string name="settings_import_failed">Di-wastong file ng mga setting</string>
     <string name="confirm">Kumpirmahin</string>
     <string name="cancel">Kanselahin</string>
     <string name="more_options">Higit pa</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Laki ng text</string>
     <string name="subtitle_style_background">Background</string>
     <string name="subtitle_background_none">Wala</string>
-    <string name="subtitle_background_semi">Translucent</string>
+    <string name="subtitle_background_semi">Bahagyang malinaw</string>
     <string name="subtitle_background_opaque">Malabo</string>
     <string name="subtitle_style_color">Kulay ng teksto</string>
     <string name="subtitle_style_hex">Hex na code ng kulay</string>
     <string name="subtitle_style_drag_hint">I-drag ang preview upang muling iposisyon</string>
-    <string name="subtitle_style_bold">Matapang</string>
+    <string name="subtitle_style_bold">Makapal</string>
     <string name="subtitle_auto_generated">(auto)</string>
     <string name="reset">I-reset</string>
     <string name="share">Ibahagi</string>
@@ -104,7 +122,7 @@
     <string name="retry">Subukan muli</string>
     <string name="segment_intro">Panimula</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">I-like at i-subscribe ang mga paalala</string>
+    <string name="segment_interaction">Paalala sa pag-like at pag-subscribe</string>
     <string name="segment_preview">Silipin</string>
     <string name="segment_music_offtopic">Hindi musika</string>
     <string name="cast">I-cast</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Walang nakitang katugmang mga streaming device</string>
     <string name="cast_no_devices_hint">Ikonekta ang parehong mga aparato sa parehong network.</string>
     <string name="cast_unavailable">Hindi available ang streaming ng device</string>
-    <string name="cast_unavailable_hint">Ang streaming ng device ay nangangailangan ng Mga Serbisyo ng Google Play.</string>
+    <string name="cast_unavailable_hint">Ikonekta ang parehong mga aparato sa parehong network.</string>
     <string name="cast_section_devices">Mga available na device</string>
     <string name="cast_section_link">Buksan sa anumang device</string>
     <string name="cast_section_link_hint">Sa parehong Wi-Fi network.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Audio</string>
     <string name="download_quality">Kalidad ng pag-download</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Ang mas mataas na kalidad ay gumagamit ng mas maraming data at storage</string>
     <string name="download_size_estimate">Tungkol sa %1$s</string>
     <string name="download_size_unknown">Hindi alam ang laki</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Napili: %1$d / %2$d</string>
     <string name="download_batch_meta">Mga Item: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Walang bagong gawain</string>
-    <string name="download_snapshot_too_many">Masyadong maraming item (max 500).Walang naputol.</string>
-    <string name="download_snapshot_too_large">Ang snapshot ay mas malaki sa 1 MB.Walang naputol.</string>
+    <string name="download_snapshot_too_many">Masyadong maraming mga item. Pumili ng hindi hihigit sa 500.</string>
+    <string name="download_snapshot_too_large">Ang napiling listahan ay lumampas sa 1 MB. Pumili ng mas kaunting mga item.</string>
     <string name="download_reason_live">Hindi ma-download ang mga live stream</string>
     <string name="download_reason_premiere">Hindi pa nagsisimula ang premiere na ito</string>
     <string name="download_reason_no_streams">Walang nada-download na mga stream ng file</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Mga Buffer/min: %1$d</string>
     <string name="audio_description">Paglalarawan ng audio</string>
     <string name="secondary_audio">Pangalawang audio</string>
+    <string name="settings_import_reload_message">Na-update ang mga setting. I-reload ang mga bukas na page para ilapat ang mga pagbabago. Ang iyong posisyon sa pag-playback ay pananatilihin.</string>
+    <string name="settings_reload_now">I-reload ang mga pahina ngayon</string>
+    <string name="settings_reload_later">Mamaya</string>
+    <string name="about_save_logs">I-save ang mga diagnostic log ng app</string>
+    <string name="about_save_done">Na-save ang diagnostic ZIP file ng app</string>
+    <string name="about_save_cancelled">Kinansela</string>
+    <string name="about_save_failed">Hindi ma-save ang mga log ng app. Pumili ng isa pang i-save na lokasyon at subukang muli.</string>
+    <string name="player_live_unavailable">Hindi available ang live stream. Subukang muli mamaya.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">बैकग्राउंड में सुनें</string>
     <string name="back_again_to_exit">बाहर निकलने के लिए वापस फिर दबाएँ</string>
     <string name="navigate_back">वापस</string>
     <string name="extension">एक्सटेंशन</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">प्रायोजित हिस्से छोड़ें</string>
     <string name="skip_sponsors_selfpromo">खुद के प्रचार वाले हिस्से छोड़ें</string>
+    <string name="skip_sponsors_interaction">लाइक और सदस्यता के रिमाइंडर छोड़ें</string>
+    <string name="skip_sponsors_intro">शुरुआती हिस्से छोड़ें</string>
+    <string name="skip_sponsors_outro">अंतिम हिस्से छोड़ें</string>
+    <string name="skip_sponsors_preview">पूर्वावलोकन छोड़ें</string>
+    <string name="skip_sponsors_music_offtopic">संगीत रहित हिस्से छोड़ें</string>
+    <string name="skip_sponsors_filler">विषय से हटकर हिस्से छोड़ें</string>
     <string name="skip_sponsors_highlight">खास हिस्से छोड़ें</string>
     <string name="remember_last_position">प्लेबैक की जगह याद रखें</string>
     <string name="remember_quality">वीडियो की क्वालिटी याद रखें</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">सभी सेटिंग रीसेट करें</string>
     <string name="reset_extension_title">एक्सटेंशन रीसेट करें</string>
     <string name="reset_extension_message">सभी एक्सटेंशन की सेटिंग डिफ़ॉल्ट पर रीसेट करें?</string>
+    <string name="settings_backup_restore">बैकअप और पुनर्स्थापना</string>
+    <string name="settings_export">निर्यात सेटिंग्स</string>
+    <string name="settings_export_summary">वर्तमान सेटिंग्स को JSON फ़ाइल में सहेजें</string>
+    <string name="settings_import">सेटिंग आयात करना</string>
+    <string name="settings_import_summary">बैकअप फ़ाइल से सेटिंग्स पुनर्स्थापित करें</string>
+    <string name="settings_import_confirm_title">सेटिंग आयात करना?</string>
+    <string name="settings_import_confirm_message">वर्तमान सेटिंग्स बैकअप द्वारा अधिलेखित कर दी जाएंगी।</string>
+    <string name="settings_export_done">सेटिंग्स निर्यात की गईं</string>
+    <string name="settings_export_failed">सेटिंग फ़ाइल सहेजी नहीं जा सकी</string>
+    <string name="settings_import_done">सेटिंग्स आयात की गईं</string>
+    <string name="settings_import_failed">अमान्य सेटिंग फ़ाइल</string>
     <string name="confirm">पुष्टि करें</string>
     <string name="cancel">रद्द करें</string>
     <string name="open_with">अन्य ऐप से खोलें</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">कोई Cast डिवाइस नहीं मिला</string>
     <string name="cast_no_devices_hint">डिवाइस एक ही नेटवर्क पर सेट करें।</string>
     <string name="cast_unavailable">कास्ट उपलब्ध नहीं</string>
-    <string name="cast_unavailable_hint">Google Play सेवाएँ ज़रूरी हैं।</string>
+    <string name="cast_unavailable_hint">डिवाइस एक ही नेटवर्क पर सेट करें।</string>
     <string name="cast_section_devices">उपलब्ध डिवाइस</string>
     <string name="cast_section_link">दूसरे डिवाइस पर खोलें</string>
     <string name="cast_section_link_hint">एक ही वाई-फ़ाई नेटवर्क पर।</string>
@@ -163,6 +181,7 @@
     <string name="download_video">वीडियो</string>
     <string name="download_audio">ऑडियो</string>
     <string name="download_quality">डाउनलोड की क्वालिटी</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">बेहतर क्वालिटी के लिए ज़्यादा डेटा और स्टोरेज चाहिए</string>
     <string name="download_size_estimate">लगभग %1$s</string>
     <string name="download_size_unknown">आकार पता नहीं</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">चयन: %1$d / %2$d</string>
     <string name="download_batch_meta">आइटम: %1$d · %2$s</string>
     <string name="download_no_new_tasks">कोई नया डाउनलोड नहीं</string>
-    <string name="download_snapshot_too_many">बहुत ज़्यादा आइटम हैं (अधिकतम 500)। सूची काटी नहीं गई।</string>
-    <string name="download_snapshot_too_large">सूची 1 MB से बड़ी है। काटी नहीं गई।</string>
+    <string name="download_snapshot_too_many">बहुत अधिक आइटम। 500 से अधिक का चयन न करें.</string>
+    <string name="download_snapshot_too_large">चयनित सूची 1 एमबी से अधिक है. कम आइटम चुनें.</string>
     <string name="download_reason_live">लाइव स्ट्रीम डाउनलोड नहीं हो सकती</string>
     <string name="download_reason_premiere">प्रीमियर अभी शुरू नहीं हुआ</string>
     <string name="download_reason_no_streams">डाउनलोड करने के लिए फ़ाइल नहीं</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">बफ़रिंग/मिनट: %1$d</string>
     <string name="audio_description">ऑडियो विवरण</string>
     <string name="secondary_audio">दूसरा ऑडियो</string>
+    <string name="settings_import_reload_message">सेटिंग्स अपडेट की गईं. परिवर्तन लागू करने के लिए खुले पृष्ठों को पुनः लोड करें। आपकी प्लेबैक स्थिति बनी रहेगी.</string>
+    <string name="settings_reload_now">अभी पेज पुनः लोड करें</string>
+    <string name="settings_reload_later">बाद में</string>
+    <string name="about_save_logs">ऐप डायग्नोस्टिक लॉग सहेजें</string>
+    <string name="about_save_done">ऐप डायग्नोस्टिक ज़िप फ़ाइल सहेजी गई</string>
+    <string name="about_save_cancelled">रद्द हुआ</string>
+    <string name="about_save_failed">ऐप लॉग सहेजे नहीं जा सके. कोई अन्य सहेजें स्थान चुनें और पुनः प्रयास करें।</string>
+    <string name="player_live_unavailable">लाइव स्ट्रीम उपलब्ध नहीं है। बाद में फिर कोशिश करें।</string>
 </resources>

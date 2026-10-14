@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ຟັງໃນພື້ນຫຼັງ</string>
     <string name="back_again_to_exit">ກົດກັບຄືນອີກຄັ້ງເພື່ອອອກ</string>
     <string name="navigate_back">ກັບຄືນໄປບ່ອນ</string>
     <string name="extension">ສ່ວນຂະຫຍາຍ</string>
@@ -8,7 +9,7 @@
     <string name="about">ກ່ຽວ​ກັບ app ນີ້​</string>
     <string name="display_dislikes">ສະແດງຄວາມບໍ່ມັກ</string>
     <string name="display_dislikes_summary">ສົ່ງ ID ວິດີໂອໄປທີ່ returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">ເຊື່ອງສັ້ນ</string>
+    <string name="hide_shorts">ເຊື່ອງ Shorts</string>
     <string name="interface_category">ການໂຕ້ຕອບ</string>
     <string name="player">ການຫຼິ້ນ</string>
     <string name="gesture">ທ່າທາງ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ໃນ​ຜູ້ນ​ຝັງ​</string>
     <string name="enable_in_fullscreen">ໃນເຕັມຈໍ</string>
     <string name="brightness">ຄວາມສະຫວ່າງ</string>
-    <string name="volume">ປະລິມານ</string>
+    <string name="volume">ລະດັບສຽງ</string>
     <string name="background_mini_player">ພື້ນຫຼັງ &amp; ເຄື່ອງຫຼິ້ນຂະໜາດນ້ອຍ</string>
     <string name="pip">ຮູບພາບໃນຮູບ</string>
     <string name="in_app_mini_player">ໃນແອັບ mini-player</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ຂ້າມຜູ້ສະໜັບສະໜູນ</string>
     <string name="skip_sponsors_selfpromo">ຂ້າມການສົ່ງເສີມຕົນເອງ</string>
+    <string name="skip_sponsors_interaction">ຂ້າມການເຕືອນໃຫ້ກົດຖືກໃຈແລະຕິດຕາມ</string>
+    <string name="skip_sponsors_intro">ຂ້າມພາກເປີດ</string>
+    <string name="skip_sponsors_outro">ຂ້າມພາກຈົບ</string>
+    <string name="skip_sponsors_preview">ຂ້າມການສະແດງຕົວຢ່າງ</string>
+    <string name="skip_sponsors_music_offtopic">ຂ້າມພາກທີ່ບໍ່ມີດົນຕີ</string>
+    <string name="skip_sponsors_filler">ຂ້າມພາກທີ່ບໍ່ກ່ຽວກັບຫົວຂໍ້</string>
     <string name="skip_sponsors_highlight">ຂ້າມຈຸດເດັ່ນ</string>
     <string name="remember_last_position">ຈື່ຈໍາຕໍາແໜ່ງ</string>
     <string name="remember_quality">ຈື່ຄຸນນະພາບວິດີໂອ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ຣີເຊັດການຕັ້ງຄ່າທັງໝົດ</string>
     <string name="reset_extension_title">ຣີເຊັດສ່ວນຂະຫຍາຍ</string>
     <string name="reset_extension_message">ຣີເຊັດການຕັ້ງຄ່າສ່ວນຂະຫຍາຍທັງໝົດເປັນຄ່າເລີ່ມຕົ້ນບໍ?</string>
+    <string name="settings_backup_restore">ສຳຮອງຂໍ້ມູນ &amp; ຟື້ນຟູ</string>
+    <string name="settings_export">ສົ່ງອອກການຕັ້ງຄ່າ</string>
+    <string name="settings_export_summary">ບັນທຶກການຕັ້ງຄ່າປັດຈຸບັນໃສ່ໄຟລ໌ JSON</string>
+    <string name="settings_import">ນໍາເຂົ້າການຕັ້ງຄ່າ</string>
+    <string name="settings_import_summary">ຟື້ນຟູການຕັ້ງຄ່າຈາກໄຟລ໌ສຳຮອງ</string>
+    <string name="settings_import_confirm_title">ນຳເຂົ້າການຕັ້ງຄ່າບໍ?</string>
+    <string name="settings_import_confirm_message">ການຕັ້ງຄ່າປັດຈຸບັນຈະຖືກຂຽນທັບໂດຍການສຳຮອງຂໍ້ມູນ.</string>
+    <string name="settings_export_done">ສົ່ງອອກການຕັ້ງຄ່າແລ້ວ</string>
+    <string name="settings_export_failed">ບໍ່ສາມາດບັນທຶກໄຟລ໌ການຕັ້ງຄ່າໄດ້</string>
+    <string name="settings_import_done">ນຳເຂົ້າການຕັ້ງຄ່າແລ້ວ</string>
+    <string name="settings_import_failed">ໄຟລ໌ການຕັ້ງຄ່າບໍ່ຖືກຕ້ອງ</string>
     <string name="confirm">ຢືນຢັນ</string>
     <string name="cancel">ຍົກເລີກ</string>
     <string name="more_options">ເພີ່ມເຕີມ</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">ຂະໜາດຂໍ້ຄວາມ</string>
     <string name="subtitle_style_background">ຄວາມເປັນມາ</string>
     <string name="subtitle_background_none">ບໍ່ມີ</string>
-    <string name="subtitle_background_semi">ແປ</string>
+    <string name="subtitle_background_semi">ໂປ່ງໃສເຄິ່ງໜຶ່ງ</string>
     <string name="subtitle_background_opaque">ຈືດໆ</string>
     <string name="subtitle_style_color">ສີຂໍ້ຄວາມ</string>
     <string name="subtitle_style_hex">ລະຫັດສີ Hex</string>
     <string name="subtitle_style_drag_hint">ລາກຕົວຢ່າງເພື່ອປ່ຽນຕຳແໜ່ງ</string>
-    <string name="subtitle_style_bold">ກ້າຫານ</string>
+    <string name="subtitle_style_bold">ຕົວໜາ</string>
     <string name="subtitle_auto_generated">(ອັດຕະໂນມັດ)</string>
     <string name="reset">ຣີເຊັດ</string>
     <string name="share">ແບ່ງປັນ</string>
@@ -104,7 +122,7 @@
     <string name="retry">ລອງໃໝ່</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">ມັກແລະຈອງການແຈ້ງເຕືອນ</string>
+    <string name="segment_interaction">ການເຕືອນໃຫ້ກົດຖືກໃຈແລະຕິດຕາມ</string>
     <string name="segment_preview">ຕົວຢ່າງ</string>
     <string name="segment_music_offtopic">ທີ່ບໍ່ແມ່ນດົນຕີ</string>
     <string name="cast">ຖ່າຍທອດໄປຫາອຸປະກອນ</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ບໍ່ພົບອຸປະກອນການຖ່າຍທອດທີ່ເຂົ້າກັນໄດ້</string>
     <string name="cast_no_devices_hint">ເຊື່ອມຕໍ່ທັງສອງອຸປະກອນກັບເຄືອຂ່າຍດຽວກັນ.</string>
     <string name="cast_unavailable">ການຖ່າຍທອດອຸປະກອນບໍ່ສາມາດໃຊ້ໄດ້</string>
-    <string name="cast_unavailable_hint">ການຖ່າຍທອດອຸປະກອນຕ້ອງການການບໍລິການ Google Play.</string>
+    <string name="cast_unavailable_hint">ເຊື່ອມຕໍ່ທັງສອງອຸປະກອນກັບເຄືອຂ່າຍດຽວກັນ.</string>
     <string name="cast_section_devices">ອຸປະກອນທີ່ມີຢູ່</string>
     <string name="cast_section_link">ເປີດໃນອຸປະກອນໃດກໍໄດ້</string>
     <string name="cast_section_link_hint">ໃນເຄືອຂ່າຍ Wi-Fi ດຽວກັນ.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ວິດີໂອ</string>
     <string name="download_audio">ສຽງ</string>
     <string name="download_quality">ຄຸນນະພາບການດາວໂຫຼດ</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ຄຸນ​ນະ​ພາບ​ສູງ​ກວ່າ​ການ​ນໍາ​ໃຊ້​ຂໍ້​ມູນ​ແລະ​ການ​ເກັບ​ຮັກ​ສາ​ເພີ່ມ​ເຕີມ​</string>
     <string name="download_size_estimate">ກ່ຽວກັບ %1$s</string>
     <string name="download_size_unknown">ບໍ່ຮູ້ຂະໜາດ</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ເລືອກ: %1$d / %2$d</string>
     <string name="download_batch_meta">ລາຍການ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">ບໍ່ມີໜ້າວຽກໃໝ່</string>
-    <string name="download_snapshot_too_many">ລາຍການຫຼາຍເກີນໄປ (ສູງສຸດ 500).ບໍ່ມີຫຍັງຖືກຕັດອອກ.</string>
-    <string name="download_snapshot_too_large">Snapshot ມີຂະໜາດໃຫຍ່ກວ່າ 1 MB.ບໍ່ມີຫຍັງຖືກຕັດອອກ.</string>
+    <string name="download_snapshot_too_many">ລາຍການຫຼາຍເກີນໄປ. ເລືອກບໍ່ເກີນ 500.</string>
+    <string name="download_snapshot_too_large">ລາຍຊື່ທີ່ເລືອກເກີນ 1 MB. ເລືອກລາຍການໜ້ອຍລົງ.</string>
     <string name="download_reason_live">ການຖ່າຍທອດສົດບໍ່ສາມາດດາວໂຫຼດໄດ້</string>
     <string name="download_reason_premiere">ການສາຍຮອບປະຖົມມະທັດນີ້ຍັງບໍ່ໄດ້ເລີ່ມຕົ້ນ</string>
     <string name="download_reason_no_streams">ບໍ່ມີໄຟລ໌ທີ່ສາມາດດາວໂຫຼດໄດ້</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Buffers/ນາທີ: %1$d</string>
     <string name="audio_description">ຄຳອະທິບາຍສຽງ</string>
     <string name="secondary_audio">ສຽງສຳຮອງ</string>
+    <string name="settings_import_reload_message">ອັບເດດການຕັ້ງຄ່າແລ້ວ. ໂຫຼດໜ້າທີ່ເປີດຄືນໃໝ່ເພື່ອນຳໃຊ້ການປ່ຽນແປງ. ຕຳແໜ່ງການຫຼິ້ນຂອງທ່ານຈະຖືກຮັກສາໄວ້.</string>
+    <string name="settings_reload_now">ໂຫຼດໜ້າຄືນໃໝ່ດຽວນີ້</string>
+    <string name="settings_reload_later">ຕໍ່ມາ</string>
+    <string name="about_save_logs">ບັນທຶກບັນທຶກການວິນິດໄສຂອງແອັບຯ</string>
+    <string name="about_save_done">ບັນທຶກໄຟລ໌ ZIP ການວິເຄາະແອັບແລ້ວ</string>
+    <string name="about_save_cancelled">ຍົກເລີກ</string>
+    <string name="about_save_failed">ບໍ່ສາມາດບັນທຶກບັນທຶກແອັບຯໄດ້. ເລືອກສະຖານທີ່ບັນທຶກອື່ນ ແລະລອງໃໝ່ອີກ.</string>
+    <string name="player_live_unavailable">ບໍ່ສາມາດເບິ່ງການຖ່າຍທອດສົດໄດ້. ກະລຸນາລອງໃໝ່ພາຍຫຼັງ.</string>
 </resources>

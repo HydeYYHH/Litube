@@ -1,0 +1,413 @@
+{
+  "locales": [
+    {
+      "tag": "af",
+      "resource": "values-b+af"
+    },
+    {
+      "tag": "am",
+      "resource": "values-b+am"
+    },
+    {
+      "tag": "ar",
+      "resource": "values-ar"
+    },
+    {
+      "tag": "as",
+      "resource": "values-b+as"
+    },
+    {
+      "tag": "az",
+      "resource": "values-b+az"
+    },
+    {
+      "tag": "be",
+      "resource": "values-b+be"
+    },
+    {
+      "tag": "bg",
+      "resource": "values-b+bg"
+    },
+    {
+      "tag": "bn",
+      "resource": "values-b+bn"
+    },
+    {
+      "tag": "bs",
+      "resource": "values-b+bs"
+    },
+    {
+      "tag": "ca",
+      "resource": "values-b+ca"
+    },
+    {
+      "tag": "ceb",
+      "resource": "values-b+ceb"
+    },
+    {
+      "tag": "cs",
+      "resource": "values-b+cs"
+    },
+    {
+      "tag": "cy",
+      "resource": "values-b+cy"
+    },
+    {
+      "tag": "da",
+      "resource": "values-b+da"
+    },
+    {
+      "tag": "de",
+      "resource": "values-de"
+    },
+    {
+      "tag": "el",
+      "resource": "values-b+el"
+    },
+    {
+      "tag": "en",
+      "resource": "values"
+    },
+    {
+      "tag": "es",
+      "resource": "values-es"
+    },
+    {
+      "tag": "es-419",
+      "resource": "values-b+es+419",
+      "aliases": [
+        "es-US",
+        "es-MX",
+        "es-AR",
+        "es-CL",
+        "es-CO",
+        "es-PE",
+        "es-VE",
+        "es-EC",
+        "es-BO",
+        "es-PY",
+        "es-UY",
+        "es-CR",
+        "es-PA",
+        "es-DO",
+        "es-GT",
+        "es-HN",
+        "es-SV",
+        "es-NI",
+        "es-CU",
+        "es-PR"
+      ]
+    },
+    {
+      "tag": "et",
+      "resource": "values-b+et"
+    },
+    {
+      "tag": "eu",
+      "resource": "values-b+eu"
+    },
+    {
+      "tag": "fa",
+      "resource": "values-b+fa"
+    },
+    {
+      "tag": "fi",
+      "resource": "values-b+fi"
+    },
+    {
+      "tag": "fil",
+      "resource": "values-b+fil",
+      "aliases": [
+        "tl"
+      ]
+    },
+    {
+      "tag": "fr",
+      "resource": "values-fr"
+    },
+    {
+      "tag": "ga",
+      "resource": "values-b+ga"
+    },
+    {
+      "tag": "gl",
+      "resource": "values-b+gl"
+    },
+    {
+      "tag": "gu",
+      "resource": "values-b+gu"
+    },
+    {
+      "tag": "ha",
+      "resource": "values-b+ha"
+    },
+    {
+      "tag": "he",
+      "resource": "values-iw",
+      "aliases": [
+        "iw"
+      ],
+      "displayTag": "iw"
+    },
+    {
+      "tag": "hi",
+      "resource": "values-hi"
+    },
+    {
+      "tag": "hr",
+      "resource": "values-b+hr"
+    },
+    {
+      "tag": "hu",
+      "resource": "values-b+hu"
+    },
+    {
+      "tag": "hy",
+      "resource": "values-b+hy"
+    },
+    {
+      "tag": "id",
+      "resource": "values-in",
+      "aliases": [
+        "in"
+      ],
+      "displayTag": "in"
+    },
+    {
+      "tag": "ig",
+      "resource": "values-b+ig"
+    },
+    {
+      "tag": "is",
+      "resource": "values-b+is"
+    },
+    {
+      "tag": "it",
+      "resource": "values-b+it"
+    },
+    {
+      "tag": "ja",
+      "resource": "values-ja"
+    },
+    {
+      "tag": "jv",
+      "resource": "values-b+jv",
+      "aliases": [
+        "jw"
+      ]
+    },
+    {
+      "tag": "ka",
+      "resource": "values-b+ka"
+    },
+    {
+      "tag": "kk",
+      "resource": "values-b+kk"
+    },
+    {
+      "tag": "km",
+      "resource": "values-b+km"
+    },
+    {
+      "tag": "kn",
+      "resource": "values-b+kn"
+    },
+    {
+      "tag": "ko",
+      "resource": "values-ko"
+    },
+    {
+      "tag": "ky",
+      "resource": "values-b+ky"
+    },
+    {
+      "tag": "lo",
+      "resource": "values-b+lo"
+    },
+    {
+      "tag": "lt",
+      "resource": "values-b+lt"
+    },
+    {
+      "tag": "lv",
+      "resource": "values-b+lv"
+    },
+    {
+      "tag": "mk",
+      "resource": "values-b+mk"
+    },
+    {
+      "tag": "ml",
+      "resource": "values-b+ml"
+    },
+    {
+      "tag": "mn",
+      "resource": "values-b+mn"
+    },
+    {
+      "tag": "mr",
+      "resource": "values-b+mr"
+    },
+    {
+      "tag": "ms",
+      "resource": "values-b+ms"
+    },
+    {
+      "tag": "my",
+      "resource": "values-b+my"
+    },
+    {
+      "tag": "nb",
+      "resource": "values-b+nb",
+      "aliases": [
+        "no"
+      ]
+    },
+    {
+      "tag": "ne",
+      "resource": "values-b+ne"
+    },
+    {
+      "tag": "nl",
+      "resource": "values-b+nl"
+    },
+    {
+      "tag": "or",
+      "resource": "values-b+or"
+    },
+    {
+      "tag": "pa",
+      "resource": "values-b+pa"
+    },
+    {
+      "tag": "pl",
+      "resource": "values-b+pl"
+    },
+    {
+      "tag": "ps",
+      "resource": "values-b+ps"
+    },
+    {
+      "tag": "pt",
+      "resource": "values-pt",
+      "displayTag": "pt-BR"
+    },
+    {
+      "tag": "pt-PT",
+      "resource": "values-b+pt+PT"
+    },
+    {
+      "tag": "ro",
+      "resource": "values-b+ro"
+    },
+    {
+      "tag": "ru",
+      "resource": "values-ru"
+    },
+    {
+      "tag": "si",
+      "resource": "values-b+si"
+    },
+    {
+      "tag": "sk",
+      "resource": "values-b+sk"
+    },
+    {
+      "tag": "sl",
+      "resource": "values-b+sl"
+    },
+    {
+      "tag": "so",
+      "resource": "values-b+so"
+    },
+    {
+      "tag": "sq",
+      "resource": "values-b+sq"
+    },
+    {
+      "tag": "sr",
+      "resource": "values-b+sr"
+    },
+    {
+      "tag": "sr-Latn",
+      "resource": "values-b+sr+Latn",
+      "aliases": [
+        "sh"
+      ]
+    },
+    {
+      "tag": "su",
+      "resource": "values-b+su"
+    },
+    {
+      "tag": "sv",
+      "resource": "values-b+sv"
+    },
+    {
+      "tag": "sw",
+      "resource": "values-b+sw"
+    },
+    {
+      "tag": "ta",
+      "resource": "values-b+ta"
+    },
+    {
+      "tag": "te",
+      "resource": "values-b+te"
+    },
+    {
+      "tag": "th",
+      "resource": "values-b+th"
+    },
+    {
+      "tag": "tr",
+      "resource": "values-tr"
+    },
+    {
+      "tag": "uk",
+      "resource": "values-b+uk"
+    },
+    {
+      "tag": "ur",
+      "resource": "values-b+ur"
+    },
+    {
+      "tag": "uz",
+      "resource": "values-b+uz"
+    },
+    {
+      "tag": "vi",
+      "resource": "values-b+vi"
+    },
+    {
+      "tag": "yo",
+      "resource": "values-b+yo"
+    },
+    {
+      "tag": "zh",
+      "resource": "values-zh",
+      "displayTag": "zh-Hans",
+      "mirrors": [
+        "values-b+zh+Hans"
+      ]
+    },
+    {
+      "tag": "zh-Hant",
+      "resource": "values-zh-rTW",
+      "mirrors": [
+        "values-b+zh+Hant",
+        "values-zh-rHK",
+        "values-zh-rMO"
+      ],
+      "aliases": [
+        "zh-TW",
+        "zh-HK",
+        "zh-MO"
+      ]
+    },
+    {
+      "tag": "zu",
+      "resource": "values-b+zu"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">په شاليد کې واورئ</string>
     <string name="back_again_to_exit">د وتلو لپاره بیرته فشار ورکړئ</string>
     <string name="navigate_back">شاته</string>
     <string name="extension">غزول</string>
@@ -8,7 +9,7 @@
     <string name="about">د اپ په اړه</string>
     <string name="display_dislikes">ناخوښي ښکاره کړئ</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com ته د ویډیو پېژندپاڼې واستوئ</string>
-    <string name="hide_shorts">شارټونه پټ کړئ</string>
+    <string name="hide_shorts">Shorts پټ کړئ</string>
     <string name="interface_category">انٹرفیس</string>
     <string name="player">پلې بیک</string>
     <string name="gesture">اشارې</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">په سرایت شوي لوبغاړي کې</string>
     <string name="enable_in_fullscreen">په بشپړ سکرین کې</string>
     <string name="brightness">روښانتیا</string>
-    <string name="volume">ټوک</string>
+    <string name="volume">د غږ کچه</string>
     <string name="background_mini_player">شالید او مینی پلیر</string>
     <string name="pip">په انځور کې په انځور کې</string>
     <string name="in_app_mini_player">د اپلیکیشن مینی پلیر</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">سپانسرونه پریږدئ</string>
     <string name="skip_sponsors_selfpromo">د ځان پرمختګ پریږدئ</string>
+    <string name="skip_sponsors_interaction">د خوښولو او ګډون یادونې پرېږدئ</string>
+    <string name="skip_sponsors_intro">د پیل برخې پرېږدئ</string>
+    <string name="skip_sponsors_outro">د پای برخې پرېږدئ</string>
+    <string name="skip_sponsors_preview">مخکتنې پرېږدئ</string>
+    <string name="skip_sponsors_music_offtopic">له موسیقۍ پرته برخې پرېږدئ</string>
+    <string name="skip_sponsors_filler">له موضوع بهر برخې پرېږدئ</string>
     <string name="skip_sponsors_highlight">لوړ ټکي پریږدئ</string>
     <string name="remember_last_position">یاد دریځ</string>
     <string name="remember_quality">د ویډیو کیفیت په یاد ولرئ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ټول ترتیبات بیا تنظیم کړئ</string>
     <string name="reset_extension_title">توسیعونه بیا تنظیم کړئ</string>
     <string name="reset_extension_message">د تمدید ټول ترتیبات ډیفالټ ته بیا تنظیم کړئ؟</string>
+    <string name="settings_backup_restore">بیک اپ او بیا رغونه</string>
+    <string name="settings_export">د صادراتو ترتیبات</string>
+    <string name="settings_export_summary">اوسني ترتیبات د JSON فایل کې خوندي کړئ</string>
+    <string name="settings_import">د واردولو ترتیبات</string>
+    <string name="settings_import_summary">د بیک اپ فایل څخه تنظیمات بحال کړئ</string>
+    <string name="settings_import_confirm_title">امستنې وارد کړئ؟</string>
+    <string name="settings_import_confirm_message">اوسني ترتیبات به د بیک اپ لخوا بیا لیکل کیږي.</string>
+    <string name="settings_export_done">ترتیبات صادر شوي</string>
+    <string name="settings_export_failed">د ترتیباتو فایل خوندي نشو کولی</string>
+    <string name="settings_import_done">ترتیبات وارد شوي</string>
+    <string name="settings_import_failed">د ناسم تنظیماتو فایل</string>
     <string name="confirm">تایید کړه</string>
     <string name="cancel">لغوه کړئ</string>
     <string name="more_options">نور</string>
@@ -64,10 +82,10 @@
     <string name="player_quality_auto">اتومات</string>
     <string name="player_live">ژوندی</string>
     <string name="player_time_bar">د پلې بیک موقعیت</string>
-    <string name="lock_screen">لایک</string>
+    <string name="lock_screen">قلف کړئ</string>
     <string name="unlock_screen">خلاصول</string>
     <string name="audio_track">آډیو ټریک</string>
-    <string name="player_audio_default">مخفف</string>
+    <string name="player_audio_default">تلواله</string>
     <string name="info">معلومات</string>
     <string name="player_info_title">عنوان</string>
     <string name="player_info_author">خالق</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">د متن اندازه</string>
     <string name="subtitle_style_background">شالید</string>
     <string name="subtitle_background_none">هیڅ نه</string>
-    <string name="subtitle_background_semi">شفاف</string>
-    <string name="subtitle_background_opaque">ناپاک</string>
+    <string name="subtitle_background_semi">نیمه روڼ</string>
+    <string name="subtitle_background_opaque">ناشفاف</string>
     <string name="subtitle_style_color">د متن رنګ</string>
     <string name="subtitle_style_hex">د هیکس رنګ کوډ</string>
     <string name="subtitle_style_drag_hint">مخکتنه بیا ځای پرځای کولو لپاره کش کړئ</string>
-    <string name="subtitle_style_bold">بولډ</string>
+    <string name="subtitle_style_bold">پنډ</string>
     <string name="subtitle_auto_generated">(آټو)</string>
     <string name="reset">بیا تنظیمول</string>
     <string name="share">شریکول</string>
@@ -104,7 +122,7 @@
     <string name="retry">بیا هڅه وکړئ</string>
     <string name="segment_intro">پېژندنه</string>
     <string name="segment_outro">اوترو</string>
-    <string name="segment_interaction">یادونه خوښ کړئ او ګډون وکړئ</string>
+    <string name="segment_interaction">د خوښولو او ګډون یادونه</string>
     <string name="segment_preview">مخکتنه</string>
     <string name="segment_music_offtopic">غیر موسیقي</string>
     <string name="cast">یوې وسیلې ته جریان</string>
@@ -114,13 +132,13 @@
     <string name="cast_no_devices_found">هیڅ مطابقت لرونکي سټیمینګ وسایل ونه موندل شول</string>
     <string name="cast_no_devices_hint">دواړه وسیلې له ورته شبکې سره وصل کړئ.</string>
     <string name="cast_unavailable">د وسیلې جریان شتون نلري</string>
-    <string name="cast_unavailable_hint">د وسیلې سټیمینګ د ګوګل پلی خدماتو ته اړتیا لري.</string>
+    <string name="cast_unavailable_hint">دواړه وسیلې له ورته شبکې سره وصل کړئ.</string>
     <string name="cast_section_devices">شته وسایل</string>
     <string name="cast_section_link">په هر وسیله خلاص کړئ</string>
     <string name="cast_section_link_hint">په ورته وای فای شبکه کې.</string>
     <string name="cast_learn_casting">د وسیلې جریان په اړه زده کړه</string>
     <string name="add_to_queue">په کتار کې شامل کړئ</string>
-    <string name="thumbnail">تذکره</string>
+    <string name="thumbnail">کوچنی انځور</string>
     <string name="cast_link_connected">لینک په براوزر کې خلاص شو</string>
     <string name="cast_link_close">لینک بند کړئ</string>
     <string name="cast_link_banner">د لینک له لارې جریان کول</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ویډیو</string>
     <string name="download_audio">آډیو</string>
     <string name="download_quality">کیفیت ډاونلوډ کړئ</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">لوړ کیفیت ډیر ډیټا او ذخیره کاروي</string>
     <string name="download_size_estimate">د %1$s په اړه</string>
     <string name="download_size_unknown">اندازه معلومه نه ده</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ټاکل شوی: %1$d / %2$d</string>
     <string name="download_batch_meta">توکي: %1$d · %2$s</string>
     <string name="download_no_new_tasks">نوې دندې نشته</string>
-    <string name="download_snapshot_too_many">ډیری توکي (زیات 500).هیڅ شی نه دی ټوټه شوی.</string>
-    <string name="download_snapshot_too_large">سنیپ شاټ د 1 MB څخه لوی دی.هیڅ شی نه دی ټوټه شوی.</string>
+    <string name="download_snapshot_too_many">ډیر شیان. له 500 څخه ډیر مه غوره کړئ.</string>
+    <string name="download_snapshot_too_large">ټاکل شوی لیست د 1 MB څخه ډیر دی. لږ توکي غوره کړئ.</string>
     <string name="download_reason_live">ژوندۍ جریانونه نشي ډاونلوډ کیدی</string>
     <string name="download_reason_premiere">دا پریمیر لا نه دی پیل شوی</string>
     <string name="download_reason_no_streams">د ډاونلوډ وړ فایل جریان نشته</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">بفرز/منټ: %1$d</string>
     <string name="audio_description">د آډیو توضیحات</string>
     <string name="secondary_audio">ثانوي غږ</string>
+    <string name="settings_import_reload_message">ترتیبات تازه شوي. د بدلونونو پلي کولو لپاره خلاصې پاڼې بیا پورته کړئ. ستاسو د پلې بیک موقعیت به ساتل کیږي.</string>
+    <string name="settings_reload_now">اوس پاڼې بیا پورته کړئ</string>
+    <string name="settings_reload_later">وروسته</string>
+    <string name="about_save_logs">د ایپ تشخیصی لاګونه خوندي کړئ</string>
+    <string name="about_save_done">د اپلیکیشن تشخیص زپ فایل خوندي شو</string>
+    <string name="about_save_cancelled">لغوه</string>
+    <string name="about_save_failed">د اپلیکیشن لاګونه نشي خوندي کولی. بل خوندي ځای غوره کړئ او بیا هڅه وکړئ.</string>
+    <string name="player_live_unavailable">ژوندۍ خپرونه شتون نه لري. وروسته بیا هڅه وکړئ.</string>
 </resources>

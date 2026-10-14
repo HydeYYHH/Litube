@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Nghe ở chế độ nền</string>
     <string name="back_again_to_exit">Nhấn lại lần nữa để thoát</string>
     <string name="navigate_back">Trở lại</string>
     <string name="extension">Tiện ích</string>
@@ -8,7 +9,7 @@
     <string name="about">Giới thiệu</string>
     <string name="display_dislikes">Hiển thị lượt không thích</string>
     <string name="display_dislikes_summary">Gửi ID video tới returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Giấu Quần Short</string>
+    <string name="hide_shorts">Ẩn Shorts</string>
     <string name="interface_category">Giao diện</string>
     <string name="player">Phát lại</string>
     <string name="gesture">Cử chỉ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Trong trình phát được nhúng</string>
     <string name="enable_in_fullscreen">Ở chế độ toàn màn hình</string>
     <string name="brightness">Độ sáng</string>
-    <string name="volume">Tập</string>
+    <string name="volume">Âm lượng</string>
     <string name="background_mini_player">Nền &amp; trình phát mini</string>
     <string name="pip">Ảnh trong ảnh</string>
     <string name="in_app_mini_player">Trình phát mini trong ứng dụng</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Bỏ qua nhà tài trợ</string>
     <string name="skip_sponsors_selfpromo">Bỏ qua việc tự quảng cáo</string>
+    <string name="skip_sponsors_interaction">Bỏ qua lời nhắc tương tác</string>
+    <string name="skip_sponsors_intro">Bỏ qua phần mở đầu</string>
+    <string name="skip_sponsors_outro">Bỏ qua phần kết</string>
+    <string name="skip_sponsors_preview">Bỏ qua đoạn giới thiệu</string>
+    <string name="skip_sponsors_music_offtopic">Bỏ qua phần không có nhạc</string>
+    <string name="skip_sponsors_filler">Bỏ qua phần ngoài chủ đề</string>
     <string name="skip_sponsors_highlight">Bỏ qua phần nổi bật</string>
     <string name="remember_last_position">Ghi nhớ vị trí</string>
     <string name="remember_quality">Ghi nhớ chất lượng video</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Đặt lại tất cả cài đặt</string>
     <string name="reset_extension_title">Đặt lại phần mở rộng</string>
     <string name="reset_extension_message">Đặt lại tất cả cài đặt tiện ích mở rộng về mặc định?</string>
+    <string name="settings_backup_restore">Sao lưu và khôi phục</string>
+    <string name="settings_export">Xuất cài đặt</string>
+    <string name="settings_export_summary">Lưu cài đặt hiện tại vào tệp JSON</string>
+    <string name="settings_import">Nhập cài đặt</string>
+    <string name="settings_import_summary">Khôi phục cài đặt từ tệp sao lưu</string>
+    <string name="settings_import_confirm_title">Nhập cài đặt?</string>
+    <string name="settings_import_confirm_message">Cài đặt hiện tại sẽ bị ghi đè bởi bản sao lưu.</string>
+    <string name="settings_export_done">Đã xuất cài đặt</string>
+    <string name="settings_export_failed">Không thể lưu tập tin cài đặt</string>
+    <string name="settings_import_done">Đã nhập cài đặt</string>
+    <string name="settings_import_failed">Tệp cài đặt không hợp lệ</string>
     <string name="confirm">Xác nhận</string>
     <string name="cancel">Hủy bỏ</string>
     <string name="more_options">Thêm</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">Kích thước văn bản</string>
     <string name="subtitle_style_background">Bối cảnh</string>
     <string name="subtitle_background_none">Không có</string>
-    <string name="subtitle_background_semi">Trong mờ</string>
+    <string name="subtitle_background_semi">Bán trong suốt</string>
     <string name="subtitle_background_opaque">Đục</string>
     <string name="subtitle_style_color">Màu văn bản</string>
     <string name="subtitle_style_hex">Mã màu hex</string>
     <string name="subtitle_style_drag_hint">Kéo phần xem trước để định vị lại</string>
-    <string name="subtitle_style_bold">đậm</string>
+    <string name="subtitle_style_bold">Đậm</string>
     <string name="subtitle_auto_generated">(tự động)</string>
     <string name="reset">Đặt lại</string>
     <string name="share">Chia sẻ</string>
@@ -104,7 +122,7 @@
     <string name="retry">Thử lại</string>
     <string name="segment_intro">Giới thiệu</string>
     <string name="segment_outro">Kết thúc</string>
-    <string name="segment_interaction">Nhắc nhở thích và đăng ký</string>
+    <string name="segment_interaction">Lời nhắc tương tác</string>
     <string name="segment_preview">Xem trước</string>
     <string name="segment_music_offtopic">Phi âm nhạc</string>
     <string name="cast">Truyền</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Không tìm thấy thiết bị phát trực tuyến tương thích</string>
     <string name="cast_no_devices_hint">Kết nối cả hai thiết bị vào cùng một mạng.</string>
     <string name="cast_unavailable">Truyền phát thiết bị không khả dụng</string>
-    <string name="cast_unavailable_hint">Truyền phát thiết bị cần có Dịch vụ của Google Play.</string>
+    <string name="cast_unavailable_hint">Kết nối cả hai thiết bị vào cùng một mạng.</string>
     <string name="cast_section_devices">Các thiết bị có sẵn</string>
     <string name="cast_section_link">Mở trên mọi thiết bị</string>
     <string name="cast_section_link_hint">Trên cùng một mạng Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Âm thanh</string>
     <string name="download_quality">Chất lượng tải xuống</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Chất lượng cao hơn sử dụng nhiều dữ liệu và bộ nhớ hơn</string>
     <string name="download_size_estimate">Giới thiệu %1$s</string>
     <string name="download_size_unknown">Kích thước không xác định</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Đã chọn: %1$d / %2$d</string>
     <string name="download_batch_meta">Mặt hàng: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Không có nhiệm vụ mới</string>
-    <string name="download_snapshot_too_many">Quá nhiều mục (tối đa 500).Không có gì bị cắt ngắn.</string>
-    <string name="download_snapshot_too_large">Ảnh chụp nhanh lớn hơn 1 MB.Không có gì bị cắt ngắn.</string>
+    <string name="download_snapshot_too_many">Quá nhiều mặt hàng. Chọn không quá 500.</string>
+    <string name="download_snapshot_too_large">Danh sách đã chọn vượt quá 1 MB. Chọn ít mục hơn.</string>
     <string name="download_reason_live">Không thể tải xuống luồng trực tiếp</string>
     <string name="download_reason_premiere">Buổi ra mắt này vẫn chưa bắt đầu</string>
     <string name="download_reason_no_streams">Không có luồng tập tin có thể tải xuống</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Bộ đệm/phút: %1$d</string>
     <string name="audio_description">Mô tả âm thanh</string>
     <string name="secondary_audio">Âm thanh phụ</string>
+    <string name="settings_import_reload_message">Đã cập nhật cài đặt. Tải lại các trang đang mở để áp dụng thay đổi. Vị trí phát lại của bạn sẽ được giữ nguyên.</string>
+    <string name="settings_reload_now">Tải lại trang bây giờ</string>
+    <string name="settings_reload_later">Sau đó</string>
+    <string name="about_save_logs">Lưu nhật ký chẩn đoán</string>
+    <string name="about_save_done">Đã lưu tệp ZIP chẩn đoán ứng dụng</string>
+    <string name="about_save_cancelled">Đã hủy</string>
+    <string name="about_save_failed">Could not save app logs. Hãy chọn một vị trí lưu khác và thử lại.</string>
+    <string name="player_live_unavailable">Không thể phát trực tiếp. Vui lòng thử lại sau.</string>
 </resources>

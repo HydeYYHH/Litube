@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Слухайце ў фонавым рэжыме</string>
     <string name="back_again_to_exit">Каб выйсці, націсніце назад яшчэ раз</string>
     <string name="navigate_back">Назад</string>
     <string name="extension">Пашырэнні</string>
@@ -8,7 +9,7 @@
     <string name="about">Пра праграму</string>
     <string name="display_dislikes">Паказаць антыпатыі</string>
     <string name="display_dislikes_summary">Адпраўляе ідэнтыфікатары відэа на returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Схаваць шорты</string>
+    <string name="hide_shorts">Схаваць Shorts</string>
     <string name="interface_category">Інтэрфейс</string>
     <string name="player">Прайграванне</string>
     <string name="gesture">Жэсты</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Ва ўбудаваным плэеры</string>
     <string name="enable_in_fullscreen">На ўвесь экран</string>
     <string name="brightness">Яркасць</string>
-    <string name="volume">Том</string>
+    <string name="volume">Гучнасць</string>
     <string name="background_mini_player">Фон і міні-плэер</string>
     <string name="pip">Малюнак у малюнку</string>
     <string name="in_app_mini_player">Міні-плэер у дадатку</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Прапусціць спонсараў</string>
     <string name="skip_sponsors_selfpromo">Адмоўцеся ад самарэкламы</string>
+    <string name="skip_sponsors_interaction">Прапускаць напаміны аб узаемадзеянні</string>
+    <string name="skip_sponsors_intro">Прапускаць уступы</string>
+    <string name="skip_sponsors_outro">Прапускаць канцоўкі</string>
+    <string name="skip_sponsors_preview">Прапускаць папярэднія прагляды</string>
+    <string name="skip_sponsors_music_offtopic">Прапускаць немузычныя фрагменты</string>
+    <string name="skip_sponsors_filler">Прапускаць адступленні ад тэмы</string>
     <string name="skip_sponsors_highlight">Прапусціць асноўныя моманты</string>
     <string name="remember_last_position">Запомніць пазіцыю</string>
     <string name="remember_quality">Запомніце якасць відэа</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Скінуць усе налады</string>
     <string name="reset_extension_title">Скінуць пашырэнні</string>
     <string name="reset_extension_message">Скінуць усе налады пашырэння да стандартных?</string>
+    <string name="settings_backup_restore">Рэзервовае капіраванне і аднаўленне</string>
+    <string name="settings_export">Экспарт параметраў</string>
+    <string name="settings_export_summary">Захавайце бягучыя налады ў файл JSON</string>
+    <string name="settings_import">Налады імпарту</string>
+    <string name="settings_import_summary">Аднавіць налады з файла рэзервовай копіі</string>
+    <string name="settings_import_confirm_title">Імпартаваць налады?</string>
+    <string name="settings_import_confirm_message">Бягучыя налады будуць перазапісаны рэзервовай копіяй.</string>
+    <string name="settings_export_done">Налады экспартаваны</string>
+    <string name="settings_export_failed">Не атрымалася захаваць файл налад</string>
+    <string name="settings_import_done">Налады імпартаваны</string>
+    <string name="settings_import_failed">Няправільны файл налад</string>
     <string name="confirm">Пацвердзіць</string>
     <string name="cancel">Адмена</string>
     <string name="more_options">Больш падрабязна</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Памер тэксту</string>
     <string name="subtitle_style_background">Перадгісторыя</string>
     <string name="subtitle_background_none">Ніводнага</string>
-    <string name="subtitle_background_semi">Празрысты</string>
+    <string name="subtitle_background_semi">Напаўпразрысты</string>
     <string name="subtitle_background_opaque">Непразрысты</string>
     <string name="subtitle_style_color">Колер тэксту</string>
     <string name="subtitle_style_hex">Шаснаццатковы код колеру</string>
@@ -104,7 +122,7 @@
     <string name="retry">Паўтарыць</string>
     <string name="segment_intro">Уступ</string>
     <string name="segment_outro">Вынік</string>
-    <string name="segment_interaction">Напаміны пра лайкі і падпіску</string>
+    <string name="segment_interaction">Напамін аб узаемадзеянні</string>
     <string name="segment_preview">Папярэдні прагляд</string>
     <string name="segment_music_offtopic">Немузыка</string>
     <string name="cast">Трансляваць</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Сумяшчальныя струменевыя прылады не знойдзены</string>
     <string name="cast_no_devices_hint">Падключыце абедзве прылады да адной сеткі.</string>
     <string name="cast_unavailable">Трансляцыя прылады недаступная</string>
-    <string name="cast_unavailable_hint">Для струменевай перадачы прылады патрэбны сэрвісы Google Play.</string>
+    <string name="cast_unavailable_hint">Падключыце абедзве прылады да адной сеткі.</string>
     <string name="cast_section_devices">Даступныя прылады</string>
     <string name="cast_section_link">Адкрываць на любой прыладзе</string>
     <string name="cast_section_link_hint">У той жа сетцы Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Відэа</string>
     <string name="download_audio">Аўдыё</string>
     <string name="download_quality">Якасць спампаваць</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Больш высокая якасць выкарыстоўвае больш дадзеных і памяці</string>
     <string name="download_size_estimate">Каля %1$s</string>
     <string name="download_size_unknown">Памер невядомы</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Выбрана: %1$d / %2$d</string>
     <string name="download_batch_meta">Артыкулы: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Няма новых задач</string>
-    <string name="download_snapshot_too_many">Зашмат элементаў (максімум 500).Нічога не абрэзалі.</string>
-    <string name="download_snapshot_too_large">Здымак большы за 1 МБ.Нічога не абрэзалі.</string>
+    <string name="download_snapshot_too_many">Занадта шмат элементаў. Выберыце не больш за 500.</string>
+    <string name="download_snapshot_too_large">Выбраны спіс перавышае 1 МБ. Выберыце менш элементаў.</string>
     <string name="download_reason_live">Немагчыма спампаваць жывыя трансляцыі</string>
     <string name="download_reason_premiere">Гэтая прэм\'ера не пачалася</string>
     <string name="download_reason_no_streams">Няма патокаў файлаў для загрузкі</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Буферы/мін: %1$d</string>
     <string name="audio_description">Аўдыядэскрыпцыя</string>
     <string name="secondary_audio">Другасны аўдыё</string>
+    <string name="settings_import_reload_message">Налады абноўлены. Перазагрузіце адкрытыя старонкі, каб прымяніць змены. Ваша пазіцыя прайгравання будзе захавана.</string>
+    <string name="settings_reload_now">Перазагрузіце старонкі</string>
+    <string name="settings_reload_later">Пазней</string>
+    <string name="about_save_logs">Захаваць журналы дыягностыкі праграмы</string>
+    <string name="about_save_done">ZIP-файл дыягностыкі праграмы захаваны</string>
+    <string name="about_save_cancelled">Адменена</string>
+    <string name="about_save_failed">Не атрымалася захаваць журналы праграмы. Выберыце іншае месца захавання і паўтарыце спробу.</string>
+    <string name="player_live_unavailable">Прамая трансляцыя недаступная. Паўтарыце спробу пазней.</string>
 </resources>

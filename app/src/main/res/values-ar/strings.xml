@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">الاستماع في الخلفية</string>
     <string name="back_again_to_exit">اضغط على رجوع مرة أخرى للخروج</string>
     <string name="navigate_back">رجوع</string>
     <string name="extension">الإضافات</string>
@@ -25,6 +26,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">تخطي مقاطع الرعاية</string>
     <string name="skip_sponsors_selfpromo">تخطي الترويج الذاتي</string>
+    <string name="skip_sponsors_interaction">تخطي تذكيرات التفاعل</string>
+    <string name="skip_sponsors_intro">تخطي المقدمات</string>
+    <string name="skip_sponsors_outro">تخطي الخواتيم</string>
+    <string name="skip_sponsors_preview">تخطي المعاينات</string>
+    <string name="skip_sponsors_music_offtopic">تخطي المقاطع غير الموسيقية</string>
+    <string name="skip_sponsors_filler">تخطي المقاطع الخارجة عن الموضوع</string>
     <string name="skip_sponsors_highlight">تخطي اللقطات البارزة</string>
     <string name="remember_last_position">تذكّر موضع التشغيل</string>
     <string name="remember_quality">تذكّر جودة الفيديو</string>
@@ -33,6 +40,17 @@
     <string name="reset_all_settings">إعادة ضبط جميع الإعدادات</string>
     <string name="reset_extension_title">إعادة ضبط الإضافات</string>
     <string name="reset_extension_message">هل تريد استعادة الإعدادات الافتراضية لجميع الإضافات؟</string>
+    <string name="settings_backup_restore">النسخ الاحتياطي والاستعادة</string>
+    <string name="settings_export">تصدير الإعدادات</string>
+    <string name="settings_export_summary">حفظ الإعدادات الحالية في ملف JSON</string>
+    <string name="settings_import">استيراد الإعدادات</string>
+    <string name="settings_import_summary">استعادة الإعدادات من نسخة احتياطية</string>
+    <string name="settings_import_confirm_title">هل تريد استيراد الإعدادات؟</string>
+    <string name="settings_import_confirm_message">ستُستبدل الإعدادات الحالية بإعدادات النسخة الاحتياطية.</string>
+    <string name="settings_export_done">تم تصدير الإعدادات</string>
+    <string name="settings_export_failed">تعذر حفظ ملف الإعدادات</string>
+    <string name="settings_import_done">تم استيراد الإعدادات</string>
+    <string name="settings_import_failed">ملف الإعدادات غير صالح</string>
     <string name="confirm">تأكيد</string>
     <string name="cancel">إلغاء</string>
     <string name="open_with">فتح باستخدام</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">حجم النص</string>
     <string name="subtitle_style_background">الخلفية</string>
     <string name="subtitle_background_none">بدون</string>
-    <string name="subtitle_background_semi">شبه شفافة</string>
+    <string name="subtitle_background_semi">شبه شفاف</string>
     <string name="subtitle_background_opaque">معتمة</string>
     <string name="subtitle_style_color">لون النص</string>
     <string name="subtitle_style_hex">رمز اللون الست عشري</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">لم يتم العثور على أجهزة Cast</string>
     <string name="cast_no_devices_hint">أعِدّ الأجهزة على الشبكة نفسها.</string>
     <string name="cast_unavailable">البث غير متاح</string>
-    <string name="cast_unavailable_hint">يتطلب خدمات Google Play.</string>
+    <string name="cast_unavailable_hint">أعِدّ الأجهزة على الشبكة نفسها.</string>
     <string name="cast_section_devices">الأجهزة المتاحة</string>
     <string name="cast_section_link">الفتح على جهاز آخر</string>
     <string name="cast_section_link_hint">على شبكة Wi-Fi نفسها.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">فيديو</string>
     <string name="download_audio">صوت</string>
     <string name="download_quality">جودة التنزيل</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">الجودة الأعلى تستهلك بيانات ومساحة أكبر</string>
     <string name="download_size_estimate">حوالي %1$s</string>
     <string name="download_size_unknown">الحجم غير معروف</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">المحدد: %1$d / %2$d</string>
     <string name="download_batch_meta">العناصر: %1$d · %2$s</string>
     <string name="download_no_new_tasks">لا توجد تنزيلات جديدة</string>
-    <string name="download_snapshot_too_many">العناصر كثيرة جدًا (الحد 500). لم يتم اقتطاع القائمة.</string>
-    <string name="download_snapshot_too_large">حجم القائمة يتجاوز 1 MB. لم يتم اقتطاعها.</string>
+    <string name="download_snapshot_too_many">عناصر كثيرة جدًا. اختر ما لا يزيد عن 500.</string>
+    <string name="download_snapshot_too_large">يتجاوز حجم القائمة المحددة 1 ميغابايت. حدد عناصر أقل.</string>
     <string name="download_reason_live">لا يمكن تنزيل البث المباشر</string>
     <string name="download_reason_premiere">لم يبدأ هذا العرض الأول بعد</string>
     <string name="download_reason_no_streams">لا توجد ملفات قابلة للتنزيل</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">التخزين المؤقت/دقيقة: %1$d</string>
     <string name="audio_description">وصف صوتي</string>
     <string name="secondary_audio">صوت ثانوي</string>
+    <string name="settings_import_reload_message">تم تحديث الإعدادات. أعد تحميل الصفحات المفتوحة لتطبيق التغييرات. سيُحفظ موضع التشغيل.</string>
+    <string name="settings_reload_now">إعادة تحميل الصفحات</string>
+    <string name="settings_reload_later">لاحقًا</string>
+    <string name="about_save_logs">حفظ سجلات التشخيص</string>
+    <string name="about_save_done">تم حفظ ملف ZIP لسجلات التشخيص</string>
+    <string name="about_save_cancelled">تم إلغاء الحفظ</string>
+    <string name="about_save_failed">تعذر حفظ سجلات التشخيص. اختر موقع حفظ آخر وحاول مجددًا.</string>
+    <string name="player_live_unavailable">البث المباشر غير متاح. حاول مجددًا لاحقًا.</string>
 </resources>

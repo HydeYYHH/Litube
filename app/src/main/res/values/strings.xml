@@ -2,7 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Litube</string>
     <string name="player_audio_only">Listen in background</string>
-    <string name="back_again_to_exit">Press back again to exit</string>
+    <string name="back_again_to_exit">Press Back again to exit</string>
     <string name="navigate_back">Back</string>
     <string name="extension">Extensions</string>
     <string name="open_with">Open with</string>
@@ -16,25 +16,25 @@
     <string name="gesture_single_tap">Single tap</string>
     <string name="gesture_double_tap">Double tap</string>
     <string name="gesture_long_press_speed">Hold for 2×</string>
-    <string name="gesture_seek">Swipe seek</string>
+    <string name="gesture_seek">Swipe to seek</string>
     <string name="gesture_fullscreen_swipe">Enter/exit fullscreen</string>
     <string name="enable_in_embedded">In embedded player</string>
     <string name="enable_in_fullscreen">In fullscreen</string>
     <string name="brightness">Brightness</string>
     <string name="volume">Volume</string>
     <string name="background_mini_player">Background &amp; mini player</string>
-    <string name="pip">Picture-in-Picture</string>
-    <string name="in_app_mini_player">In-app mini-player</string>
+    <string name="pip">Picture-in-picture</string>
+    <string name="in_app_mini_player">In-app mini player</string>
     <string name="background_play">Background playback</string>
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Skip sponsors</string>
     <string name="skip_sponsors_selfpromo">Skip self-promotion</string>
-    <string name="skip_sponsors_interaction">Skip interaction reminders</string>
+    <string name="skip_sponsors_interaction">Skip engagement reminders</string>
     <string name="skip_sponsors_intro">Skip intros</string>
     <string name="skip_sponsors_outro">Skip outros</string>
     <string name="skip_sponsors_preview">Skip previews</string>
     <string name="skip_sponsors_music_offtopic">Skip non-music sections</string>
-    <string name="skip_sponsors_filler">Skip filler</string>
+    <string name="skip_sponsors_filler">Skip off-topic sections</string>
     <string name="skip_sponsors_highlight">Skip highlights</string>
     <string name="remember_last_position">Remember position</string>
     <string name="remember_quality">Remember video quality</string>
@@ -52,7 +52,7 @@
     <string name="settings_import_confirm_title">Import settings?</string>
     <string name="settings_import_confirm_message">Current settings will be overwritten by the backup.</string>
     <string name="settings_export_done">Settings exported</string>
-    <string name="settings_export_failed">Couldn\'t save settings file</string>
+    <string name="settings_export_failed">Could not save settings file</string>
     <string name="settings_import_done">Settings imported</string>
     <string name="settings_import_failed">Invalid settings file</string>
     <string name="confirm">Confirm</string>
@@ -61,7 +61,7 @@
     <string name="queue">Queue</string>
     <string name="queue_empty">Queue is empty</string>
     <string name="queue_item_added">Added to queue</string>
-    <string name="queue_item_unavailable">Couldn\'t add to queue</string>
+    <string name="queue_item_unavailable">Could not add to queue</string>
 
     <string name="queue_remove">Remove from queue</string>
     <string name="application_not_found">Application not found</string>
@@ -120,7 +120,7 @@
     <string name="jump">Jump</string>
     <string name="clear_queue">Clear queue</string>
     <string name="queue_autoplay">Autoplay</string>
-    <string name="player_error">Couldn\'t play this video</string>
+    <string name="player_error">Could not play this video</string>
     <string name="retry">Retry</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
@@ -134,7 +134,7 @@
     <string name="cast_no_devices_found">No Cast devices found</string>
     <string name="cast_no_devices_hint">Make sure casting is set up on the same network.</string>
     <string name="cast_unavailable">Cast unavailable</string>
-    <string name="cast_unavailable_hint">Cast needs Google Play Services.</string>
+    <string name="cast_unavailable_hint">Make sure casting is set up on the same network.</string>
     <string name="cast_section_devices">Available devices</string>
     <string name="cast_section_link">Open on any device</string>
     <string name="cast_section_link_hint">On the same Wi-Fi network.</string>
@@ -208,7 +208,7 @@
     <string name="download_phase_merging">Merging</string>
     <string name="download_phase_saving">Saving</string>
     <string name="download_waiting_network">Waiting for network. Progress will resume automatically once you reconnect.</string>
-    <string name="download_cancelled">Cancelled</string>
+    <string name="download_cancelled">Canceled</string>
     <string name="download_queued">Queued</string>
     <string name="download_file_not_found">File not found</string>
     <string name="download_settings">Background &amp; downloads</string>
@@ -217,13 +217,13 @@
     <string name="download_wifi_only">Download over Wi-Fi only</string>
     <string name="download_connections">Connections: %1$d</string>
     <string name="download_clear_history">Clear history</string>
-    <string name="download_clear_history_message">Remove finished, failed, and cancelled records?</string>
+    <string name="download_clear_history_message">Remove completed, failed, and canceled records?</string>
     <string name="download_select_all">Select all</string>
     <string name="download_selected_count">Selected: %1$d / %2$d</string>
     <string name="download_batch_meta">Items: %1$d · %2$s</string>
     <string name="download_no_new_tasks">No new tasks</string>
-    <string name="download_snapshot_too_many">Too many items (max 500). Nothing was truncated.</string>
-    <string name="download_snapshot_too_large">Snapshot is larger than 1 MB. Nothing was truncated.</string>
+    <string name="download_snapshot_too_many">Too many items. Select no more than 500.</string>
+    <string name="download_snapshot_too_large">The selected list exceeds 1 MB. Select fewer items.</string>
     <string name="download_reason_live">Live streams cannot be downloaded</string>
     <string name="download_reason_premiere">This premiere has not started</string>
     <string name="download_reason_no_streams">No downloadable file streams</string>
@@ -297,12 +297,12 @@
     <string name="info_buffer_count">Buffers/min: %1$d</string>
     <string name="audio_description">Audio description</string>
     <string name="secondary_audio">Secondary audio</string>
-    <string name="settings_import_reload_message" translatable="false">Settings have been updated. Reload open pages to apply all changes. Your playback position will be kept.</string>
-    <string name="settings_reload_now" translatable="false">Reload pages now</string>
-    <string name="settings_reload_later" translatable="false">Later</string>
-    <string name="about_save_logs" translatable="false">Save diagnostic file</string>
-    <string name="about_save_done" translatable="false">Diagnostic ZIP saved</string>
-    <string name="about_save_cancelled" translatable="false">Save cancelled</string>
-    <string name="about_save_failed" translatable="false">Could not save diagnostics. Choose another location and try again.</string>
-    <string name="player_live_unavailable" translatable="false">No playable live stream is available. Please try again later.</string>
+    <string name="settings_import_reload_message">Settings updated. Reload open pages to apply changes. Your playback position will be kept.</string>
+    <string name="settings_reload_now">Reload pages now</string>
+    <string name="settings_reload_later">Later</string>
+    <string name="about_save_logs">Save diagnostic logs</string>
+    <string name="about_save_done">Diagnostic ZIP file saved</string>
+    <string name="about_save_cancelled">Save canceled</string>
+    <string name="about_save_failed">Could not save diagnostics. Choose another location and try again.</string>
+    <string name="player_live_unavailable">Live stream unavailable. Try again later.</string>
 </resources>

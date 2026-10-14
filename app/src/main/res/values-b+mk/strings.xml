@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Слушајте во позадина</string>
     <string name="back_again_to_exit">Притиснете назад повторно за да излезете</string>
     <string name="navigate_back">Назад</string>
     <string name="extension">Проширувања</string>
@@ -8,7 +9,7 @@
     <string name="about">За апликацијата</string>
     <string name="display_dislikes">Прикажи недопаѓања</string>
     <string name="display_dislikes_summary">Испраќа ID на видео на returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Скриј шорцеви</string>
+    <string name="hide_shorts">Скриј Shorts</string>
     <string name="interface_category">Интерфејс</string>
     <string name="player">Репродукција</string>
     <string name="gesture">Гестови</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Во вграден плеер</string>
     <string name="enable_in_fullscreen">На цел екран</string>
     <string name="brightness">Осветленост</string>
-    <string name="volume">Том</string>
+    <string name="volume">Јачина на звук</string>
     <string name="background_mini_player">Позадина и мини плеер</string>
     <string name="pip">Слика во слика</string>
     <string name="in_app_mini_player">Мини-плеер во апликација</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Прескокнете ги спонзорите</string>
     <string name="skip_sponsors_selfpromo">Прескокнете самопромоција</string>
+    <string name="skip_sponsors_interaction">Прескокни потсетници за интеракција</string>
+    <string name="skip_sponsors_intro">Прескокни воведи</string>
+    <string name="skip_sponsors_outro">Прескокни завршетоци</string>
+    <string name="skip_sponsors_preview">Прескокни најави</string>
+    <string name="skip_sponsors_music_offtopic">Прескокни делови без музика</string>
+    <string name="skip_sponsors_filler">Прескокни делови надвор од темата</string>
     <string name="skip_sponsors_highlight">Прескокнете ги нагласувањата</string>
     <string name="remember_last_position">Запомнете ја позицијата</string>
     <string name="remember_quality">Запомнете го квалитетот на видеото</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Ресетирајте ги сите поставки</string>
     <string name="reset_extension_title">Ресетирајте ги екстензиите</string>
     <string name="reset_extension_message">Да се ресетираат сите поставки за екстензија на стандардни?</string>
+    <string name="settings_backup_restore">Бекап и обновување</string>
+    <string name="settings_export">Извези поставки</string>
+    <string name="settings_export_summary">Зачувајте ги тековните поставки во датотека JSON</string>
+    <string name="settings_import">Увезете поставки</string>
+    <string name="settings_import_summary">Вратете ги поставките од резервна датотека</string>
+    <string name="settings_import_confirm_title">Увезете поставки?</string>
+    <string name="settings_import_confirm_message">Тековните поставки ќе бидат препишани од резервната копија.</string>
+    <string name="settings_export_done">Поставките се извезени</string>
+    <string name="settings_export_failed">Не може да се зачува датотеката со поставки</string>
+    <string name="settings_import_done">Поставките се увезени</string>
+    <string name="settings_import_failed">Неважечка датотека со поставки</string>
     <string name="confirm">Потврди</string>
     <string name="cancel">Откажи</string>
     <string name="more_options">Повеќе</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Големина на текстот</string>
     <string name="subtitle_style_background">Позадина</string>
     <string name="subtitle_background_none">Никој</string>
-    <string name="subtitle_background_semi">Проѕирен</string>
+    <string name="subtitle_background_semi">Полупроѕирен</string>
     <string name="subtitle_background_opaque">Непроѕирно</string>
     <string name="subtitle_style_color">Боја на текстот</string>
     <string name="subtitle_style_hex">Хексадецимален код за боја</string>
@@ -104,7 +122,7 @@
     <string name="retry">Обидете се повторно</string>
     <string name="segment_intro">Вовед</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">Лајкувајте и претплатете се потсетници</string>
+    <string name="segment_interaction">Потсетник за интеракција</string>
     <string name="segment_preview">Преглед</string>
     <string name="segment_music_offtopic">Не-музика</string>
     <string name="cast">Емитувај</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Не се пронајдени компатибилни уреди за стриминг</string>
     <string name="cast_no_devices_hint">Поврзете ги двата уреди на иста мрежа.</string>
     <string name="cast_unavailable">Преносот на уредот е недостапен</string>
-    <string name="cast_unavailable_hint">Преносот на уредот има потреба од услуги на Google Play.</string>
+    <string name="cast_unavailable_hint">Поврзете ги двата уреди на иста мрежа.</string>
     <string name="cast_section_devices">Достапни уреди</string>
     <string name="cast_section_link">Отворете на кој било уред</string>
     <string name="cast_section_link_hint">На истата Wi-Fi мрежа.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Видео</string>
     <string name="download_audio">Аудио</string>
     <string name="download_quality">Квалитет на преземање</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Повисокиот квалитет користи повеќе податоци и складирање</string>
     <string name="download_size_estimate">Околу %1$s</string>
     <string name="download_size_unknown">Непозната големина</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Избрано: %1$d / %2$d</string>
     <string name="download_batch_meta">Ставки: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Нема нови задачи</string>
-    <string name="download_snapshot_too_many">Премногу ставки (макс 500).Ништо не беше скратено.</string>
-    <string name="download_snapshot_too_large">Снимката е поголема од 1 MB.Ништо не беше скратено.</string>
+    <string name="download_snapshot_too_many">Премногу ставки. Изберете не повеќе од 500.</string>
+    <string name="download_snapshot_too_large">Избраниот список надминува 1 MB. Изберете помалку ставки.</string>
     <string name="download_reason_live">Преносите во живо не може да се преземат</string>
     <string name="download_reason_premiere">Оваа премиера не е започната</string>
     <string name="download_reason_no_streams">Нема преноси на датотеки за преземање</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Бафери/мин.: %1$d</string>
     <string name="audio_description">Аудио опис</string>
     <string name="secondary_audio">Секундарно аудио</string>
+    <string name="settings_import_reload_message">Поставките се ажурирани. Повторно вчитајте ги отворените страници за да ги примените промените. Вашата позиција за репродукција ќе се задржи.</string>
+    <string name="settings_reload_now">Повторно вчитајте страници сега</string>
+    <string name="settings_reload_later">Подоцна</string>
+    <string name="about_save_logs">Зачувајте дијагностички дневници за апликации</string>
+    <string name="about_save_done">Зачувана е ZIP-датотеката за дијагностика на апликацијата</string>
+    <string name="about_save_cancelled">Откажан</string>
+    <string name="about_save_failed">Не може да се зачуваат дневниците на апликациите. Изберете друга локација за зачувување и обидете се повторно.</string>
+    <string name="player_live_unavailable">Преносот во живо не е достапен. Обидете се повторно подоцна.</string>
 </resources>

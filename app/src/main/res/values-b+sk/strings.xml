@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">Počúvajte na pozadí</string>
     <string name="back_again_to_exit">Opätovným stlačením späť opustíte ponuku</string>
     <string name="navigate_back">Späť</string>
     <string name="extension">Rozšírenia</string>
@@ -8,7 +9,7 @@
     <string name="about">O aplikácii</string>
     <string name="display_dislikes">Zobraziť nepáči sa mi</string>
     <string name="display_dislikes_summary">Odošle ID videa na returnyoutubedislikeapi.com</string>
-    <string name="hide_shorts">Skryť šortky</string>
+    <string name="hide_shorts">Skryť Shorts</string>
     <string name="interface_category">Rozhranie</string>
     <string name="player">Prehrávanie</string>
     <string name="gesture">Gestá</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">Vo vstavanom prehrávači</string>
     <string name="enable_in_fullscreen">Na celú obrazovku</string>
     <string name="brightness">Jas</string>
-    <string name="volume">Objem</string>
+    <string name="volume">Hlasitosť</string>
     <string name="background_mini_player">Pozadie a mini prehrávač</string>
     <string name="pip">Obraz v obraze</string>
     <string name="in_app_mini_player">Miniprehrávač v aplikácii</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">Preskočiť sponzorov</string>
     <string name="skip_sponsors_selfpromo">Preskočte sebapropagáciu</string>
+    <string name="skip_sponsors_interaction">Preskočiť výzvy na interakciu</string>
+    <string name="skip_sponsors_intro">Preskočiť úvody</string>
+    <string name="skip_sponsors_outro">Preskočiť závery</string>
+    <string name="skip_sponsors_preview">Preskočiť ukážky</string>
+    <string name="skip_sponsors_music_offtopic">Preskočiť časti bez hudby</string>
+    <string name="skip_sponsors_filler">Preskočiť časti mimo témy</string>
     <string name="skip_sponsors_highlight">Preskočiť zvýraznenia</string>
     <string name="remember_last_position">Zapamätajte si polohu</string>
     <string name="remember_quality">Zapamätajte si kvalitu videa</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">Obnoviť všetky nastavenia</string>
     <string name="reset_extension_title">Resetovať rozšírenia</string>
     <string name="reset_extension_message">Obnoviť všetky nastavenia rozšírenia na predvolené?</string>
+    <string name="settings_backup_restore">Zálohovanie a obnovenie</string>
+    <string name="settings_export">Exportovať nastavenia</string>
+    <string name="settings_export_summary">Uložte aktuálne nastavenia do súboru JSON</string>
+    <string name="settings_import">Importovať nastavenia</string>
+    <string name="settings_import_summary">Obnovte nastavenia zo záložného súboru</string>
+    <string name="settings_import_confirm_title">Importovať nastavenia?</string>
+    <string name="settings_import_confirm_message">Aktuálne nastavenia budú prepísané zálohou.</string>
+    <string name="settings_export_done">Nastavenia boli exportované</string>
+    <string name="settings_export_failed">Nepodarilo sa uložiť súbor s nastaveniami</string>
+    <string name="settings_import_done">Nastavenia boli importované</string>
+    <string name="settings_import_failed">Neplatný súbor nastavení</string>
     <string name="confirm">Potvrďte</string>
     <string name="cancel">Zrušiť</string>
     <string name="more_options">Viac</string>
@@ -86,7 +104,7 @@
     <string name="subtitle_style_text_size">Veľkosť textu</string>
     <string name="subtitle_style_background">Pozadie</string>
     <string name="subtitle_background_none">žiadne</string>
-    <string name="subtitle_background_semi">Priesvitný</string>
+    <string name="subtitle_background_semi">Polopriehľadný</string>
     <string name="subtitle_background_opaque">Nepriehľadné</string>
     <string name="subtitle_style_color">Farba textu</string>
     <string name="subtitle_style_hex">Hexadecimálny farebný kód</string>
@@ -104,7 +122,7 @@
     <string name="retry">Skúste to znova</string>
     <string name="segment_intro">Úvod</string>
     <string name="segment_outro">Mimo</string>
-    <string name="segment_interaction">Pripomenutia, ktoré sa mi páčia a odoberajte</string>
+    <string name="segment_interaction">Výzva na interakciu</string>
     <string name="segment_preview">Náhľad</string>
     <string name="segment_music_offtopic">Bez hudby</string>
     <string name="cast">Prenášať</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">Nenašli sa žiadne kompatibilné zariadenia na streamovanie</string>
     <string name="cast_no_devices_hint">Pripojte obe zariadenia k rovnakej sieti.</string>
     <string name="cast_unavailable">Streamovanie zo zariadenia nie je dostupné</string>
-    <string name="cast_unavailable_hint">Streamovanie zo zariadenia vyžaduje služby Google Play.</string>
+    <string name="cast_unavailable_hint">Pripojte obe zariadenia k rovnakej sieti.</string>
     <string name="cast_section_devices">Dostupné zariadenia</string>
     <string name="cast_section_link">Otvoriť na akomkoľvek zariadení</string>
     <string name="cast_section_link_hint">V rovnakej sieti Wi-Fi.</string>
@@ -163,6 +181,7 @@
     <string name="download_video">Video</string>
     <string name="download_audio">Zvuk</string>
     <string name="download_quality">Kvalita sťahovania</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">Vyššia kvalita využíva viac dát a úložného priestoru</string>
     <string name="download_size_estimate">Približne %1$s</string>
     <string name="download_size_unknown">Veľkosť neznáma</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">Vybrané: %1$d / %2$d</string>
     <string name="download_batch_meta">Položky: %1$d · %2$s</string>
     <string name="download_no_new_tasks">Žiadne nové úlohy</string>
-    <string name="download_snapshot_too_many">Príliš veľa položiek (max. 500).Nič nebolo skrátené.</string>
-    <string name="download_snapshot_too_large">Snímka je väčšia ako 1 MB.Nič nebolo skrátené.</string>
+    <string name="download_snapshot_too_many">Príliš veľa položiek. Vyberte nie viac ako 500.</string>
+    <string name="download_snapshot_too_large">Vybratý zoznam presahuje 1 MB. Vyberte menej položiek.</string>
     <string name="download_reason_live">Priame prenosy sa nedajú stiahnuť</string>
     <string name="download_reason_premiere">Táto premiéra sa nezačala</string>
     <string name="download_reason_no_streams">Žiadne toky súborov na stiahnutie</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">Pufry/min: %1$d</string>
     <string name="audio_description">Zvukový popis</string>
     <string name="secondary_audio">Sekundárny zvuk</string>
+    <string name="settings_import_reload_message">Nastavenia boli aktualizované. Ak chcete použiť zmeny, znova načítajte otvorené stránky. Vaša pozícia prehrávania zostane zachovaná.</string>
+    <string name="settings_reload_now">Znovu načítajte stránky</string>
+    <string name="settings_reload_later">Neskôr</string>
+    <string name="about_save_logs">Uložte diagnostické protokoly aplikácie</string>
+    <string name="about_save_done">Diagnostický súbor ZIP aplikácie bol uložený</string>
+    <string name="about_save_cancelled">Zrušené</string>
+    <string name="about_save_failed">Nepodarilo sa uložiť denníky aplikácie. Vyberte iné miesto uloženia a skúste to znova.</string>
+    <string name="player_live_unavailable">Živý prenos nie je dostupný. Skúste to znova neskôr.</string>
 </resources>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">နောက်ခံတွင် နားထောင်ပါ။</string>
     <string name="back_again_to_exit">ထွက်ရန် နောက်တစ်ကြိမ် ပြန်နှိပ်ပါ။</string>
     <string name="navigate_back">နောက်ပြန်</string>
     <string name="extension">တိုးချဲ့မှုများ</string>
@@ -8,7 +9,7 @@
     <string name="about">အကြောင်း</string>
     <string name="display_dislikes">မကြိုက်ကြောင်းပြပါ။</string>
     <string name="display_dislikes_summary">ဗီဒီယို ID များကို returnyoutubedislikeapi.com သို့ ပို့သည်။</string>
-    <string name="hide_shorts">တိုတိုကို ဝှက်ပါ။</string>
+    <string name="hide_shorts">Shorts ကို ဖျောက်ရန်</string>
     <string name="interface_category">အင်တာဖေ့စ်</string>
     <string name="player">ပြန်ဖွင့်ခြင်း။</string>
     <string name="gesture">အမူအယာ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ထည့်သွင်းထားသော ပလေယာ</string>
     <string name="enable_in_fullscreen">မျက်နှာပြင်အပြည့်</string>
     <string name="brightness">တောက်ပမှု</string>
-    <string name="volume">အတွဲ</string>
+    <string name="volume">အသံအတိုးအကျယ်</string>
     <string name="background_mini_player">နောက်ခံနှင့် အသေးစား ပလေယာ</string>
     <string name="pip">ရုပ်ပုံ-တစ်ပုံ</string>
     <string name="in_app_mini_player">အက်ပ်အတွင်း မီနီ-ပလေယာ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">စပွန်ဆာများကို ကျော်ပါ။</string>
     <string name="skip_sponsors_selfpromo">မိမိကိုယ်ကို မြှင့်တင်ခြင်းကို ကျော်ပါ။</string>
+    <string name="skip_sponsors_interaction">နှစ်သက်ခြင်းနှင့် စာရင်းသွင်းခြင်းဆိုင်ရာ သတိပေးချက်များကို ကျော်ရန်</string>
+    <string name="skip_sponsors_intro">အစပိုင်းများကို ကျော်ရန်</string>
+    <string name="skip_sponsors_outro">အဆုံးပိုင်းများကို ကျော်ရန်</string>
+    <string name="skip_sponsors_preview">အစမ်းကြည့်ရှုမှုများကို ကျော်ရန်</string>
+    <string name="skip_sponsors_music_offtopic">ဂီတမပါသော အပိုင်းများကို ကျော်ရန်</string>
+    <string name="skip_sponsors_filler">ခေါင်းစဉ်နှင့် မဆိုင်သော အပိုင်းများကို ကျော်ရန်</string>
     <string name="skip_sponsors_highlight">အထူးအသားပေးများကို ကျော်ပါ။</string>
     <string name="remember_last_position">အနေအထားကို မှတ်ထားပါ။</string>
     <string name="remember_quality">ဗီဒီယိုအရည်အသွေးကို မှတ်ထားပါ။</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ဆက်တင်အားလုံးကို ပြန်လည်သတ်မှတ်ပါ။</string>
     <string name="reset_extension_title">တိုးချဲ့မှုများကို ပြန်လည်သတ်မှတ်ပါ။</string>
     <string name="reset_extension_message">တိုးချဲ့ဆက်တင်များအားလုံးကို မူရင်းအတိုင်း ပြန်လည်သတ်မှတ်မလား။</string>
+    <string name="settings_backup_restore">အရန်သိမ်းပြီး ပြန်လည်ရယူပါ။</string>
+    <string name="settings_export">ဆက်တင်များကို ထုတ်ယူပါ။</string>
+    <string name="settings_export_summary">လက်ရှိဆက်တင်များကို JSON ဖိုင်တွင် သိမ်းဆည်းပါ။</string>
+    <string name="settings_import">ဆက်တင်များကို တင်သွင်းပါ။</string>
+    <string name="settings_import_summary">အရန်ဖိုင်မှ ဆက်တင်များကို ပြန်ယူပါ။</string>
+    <string name="settings_import_confirm_title">ဆက်တင်များကို တင်သွင်းမလား။</string>
+    <string name="settings_import_confirm_message">လက်ရှိဆက်တင်များကို မိတ္တူကူးခြင်းဖြင့် ထပ်ရေးပါမည်။</string>
+    <string name="settings_export_done">ဆက်တင်များကို တင်ပို့ပြီးပါပြီ။</string>
+    <string name="settings_export_failed">ဆက်တင်ဖိုင်ကို မသိမ်းဆည်းနိုင်ပါ။</string>
+    <string name="settings_import_done">ဆက်တင်များကို ထည့်သွင်းခဲ့သည်။</string>
+    <string name="settings_import_failed">မမှန်ကန်သော ဆက်တင်ဖိုင်</string>
     <string name="confirm">အတည်ပြုပါ။</string>
     <string name="cancel">မလုပ်တော့</string>
     <string name="more_options">နောက်ထပ်</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">စာသားအရွယ်အစား</string>
     <string name="subtitle_style_background">နောက်ခံ</string>
     <string name="subtitle_background_none">မရှိပါ။</string>
-    <string name="subtitle_background_semi">Translucent</string>
-    <string name="subtitle_background_opaque">ဒီလိုပါပဲ။</string>
+    <string name="subtitle_background_semi">တစ်ဝက် ကြည်လင်</string>
+    <string name="subtitle_background_opaque">မကြည်လင်</string>
     <string name="subtitle_style_color">စာသားအရောင်</string>
     <string name="subtitle_style_hex">Hex အရောင်ကုဒ်</string>
     <string name="subtitle_style_drag_hint">အကြိုကြည့်ရှုမှုကို ပြန်လည်နေရာချထားရန် ဖိဆွဲပါ။</string>
-    <string name="subtitle_style_bold">ရဲရင့်ခြင်း။</string>
+    <string name="subtitle_style_bold">စာလုံးထူ</string>
     <string name="subtitle_auto_generated">(အော်တို)</string>
     <string name="reset">ပြန်လည်သတ်မှတ်ပါ။</string>
     <string name="share">မျှဝေသည်။</string>
@@ -104,7 +122,7 @@
     <string name="retry">ထပ်စမ်းကြည့်ပါ။</string>
     <string name="segment_intro">နိဒါန်း</string>
     <string name="segment_outro">Outro</string>
-    <string name="segment_interaction">သတိပေးချက်များကို Like နှင့် စာရင်းသွင်းပါ။</string>
+    <string name="segment_interaction">နှစ်သက်ခြင်းနှင့် စာရင်းသွင်းခြင်းဆိုင်ရာ သတိပေးချက်</string>
     <string name="segment_preview">အကြိုကြည့်ရှုခြင်း။</string>
     <string name="segment_music_offtopic">ဂီတမဟုတ်သော</string>
     <string name="cast">စက်ပစ္စည်းတစ်ခုသို့ တိုက်ရိုက်ကြည့်ရှုပါ။</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">တွဲသုံးနိုင်သော streaming စက်များ မတွေ့ပါ။</string>
     <string name="cast_no_devices_hint">စက်ပစ္စည်းနှစ်ခုလုံးကို တူညီသောကွန်ရက်သို့ ချိတ်ဆက်ပါ။</string>
     <string name="cast_unavailable">စက်ပစ္စည်း တိုက်ရိုက်လွှင့်ခြင်းကို မရရှိနိုင်ပါ။</string>
-    <string name="cast_unavailable_hint">စက်ပစ္စည်း တိုက်ရိုက်ကြည့်ရှုခြင်းတွင် Google Play ဝန်ဆောင်မှုများ လိုအပ်သည်။</string>
+    <string name="cast_unavailable_hint">စက်ပစ္စည်းနှစ်ခုလုံးကို တူညီသောကွန်ရက်သို့ ချိတ်ဆက်ပါ။</string>
     <string name="cast_section_devices">ရနိုင်သော စက်များ</string>
     <string name="cast_section_link">မည်သည့်စက်ပစ္စည်းတွင်မဆို ဖွင့်ပါ။</string>
     <string name="cast_section_link_hint">တူညီသော Wi-Fi ကွန်ရက်ပေါ်တွင်။</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ဗီဒီယို</string>
     <string name="download_audio">အသံ</string>
     <string name="download_quality">ဒေါင်းလုဒ်အရည်အသွေး</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">အရည်အသွေးမြင့်သော ဒေတာနှင့် သိုလှောင်မှုကို ပိုမိုအသုံးပြုသည်။</string>
     <string name="download_size_estimate">%1$s အကြောင်း</string>
     <string name="download_size_unknown">အရွယ်အစား မသိပါ။</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ရွေးထားသည်- %1$d / %2$d</string>
     <string name="download_batch_meta">အရာများ- %1$d · %2$s</string>
     <string name="download_no_new_tasks">အလုပ်အသစ်မရှိပါ။</string>
-    <string name="download_snapshot_too_many">ပစ္စည်းများစွာ (အများဆုံး 500)။ဘာမှ ဖြတ်တောက်ခြင်း မရှိခဲ့ပါ။</string>
-    <string name="download_snapshot_too_large">Snapshot သည် 1 MB ထက်ကြီးသည်။ဘာကိုမှ ဖြတ်တောက်ခြင်း မရှိခဲ့ပါ။</string>
+    <string name="download_snapshot_too_many">ပစ္စည်းများ အလွန်များသည်။ 500 ထက်မပိုစေရပါဘူး။</string>
+    <string name="download_snapshot_too_large">ရွေးချယ်ထားသောစာရင်းသည် 1 MB ထက်ကျော်လွန်သည်။ ပစ္စည်းအနည်းငယ်ကို ရွေးပါ။</string>
     <string name="download_reason_live">တိုက်ရိုက်ထုတ်လွှင့်မှုများကို ဒေါင်းလုဒ်လုပ်၍မရပါ။</string>
     <string name="download_reason_premiere">ဤပရီမီယာကို မစတင်ရသေးပါ။</string>
     <string name="download_reason_no_streams">ဒေါင်းလုဒ်လုပ်နိုင်သော ဖိုင်စီးကြောင်းများ မရှိပါ။</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">ကြားခံများ/မိနစ်- %1$d</string>
     <string name="audio_description">အသံဖော်ပြချက်</string>
     <string name="secondary_audio">အလယ်တန်းအသံ</string>
+    <string name="settings_import_reload_message">ဆက်တင်များကို အပ်ဒိတ်လုပ်ထားသည်။ ပြောင်းလဲမှုများကို အသုံးပြုရန် ဖွင့်ထားသော စာမျက်နှာများကို ပြန်လည်စတင်ပါ။ သင်၏ပြန်ဖွင့်သည့် အနေအထားကို ထိန်းသိမ်းထားမည်ဖြစ်သည်။</string>
+    <string name="settings_reload_now">စာမျက်နှာများကို ယခု ပြန်လည်စတင်ပါ။</string>
+    <string name="settings_reload_later">နောက်တော့</string>
+    <string name="about_save_logs">အက်ပ်ရောဂါရှာဖွေရေးမှတ်တမ်းများကို သိမ်းဆည်းပါ။</string>
+    <string name="about_save_done">အက်ပ်ရှာဖွေရေး ZIP ဖိုင်ကို သိမ်းဆည်းပြီးပါပြီ။</string>
+    <string name="about_save_cancelled">ပယ်ဖျက်ထားသည်။</string>
+    <string name="about_save_failed">အက်ပ်မှတ်တမ်းများကို မသိမ်းဆည်းနိုင်ပါ။ အခြားသိမ်းဆည်းမည့်နေရာကို ရွေးပြီး ထပ်စမ်းကြည့်ပါ။</string>
+    <string name="player_live_unavailable">တိုက်ရိုက်ထုတ်လွှင့်မှု မရနိုင်ပါ။ နောက်မှ ထပ်မံကြိုးစားပါ။</string>
 </resources>

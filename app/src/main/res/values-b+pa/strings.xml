@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Litube</string>
+    <string name="player_audio_only">ਪਿਛੋਕੜ ਵਿੱਚ ਸੁਣੋ</string>
     <string name="back_again_to_exit">ਬਾਹਰ ਜਾਣ ਲਈ ਦੁਬਾਰਾ ਦਬਾਓ</string>
     <string name="navigate_back">ਵਾਪਸ</string>
     <string name="extension">ਐਕਸਟੈਂਸ਼ਨਾਂ</string>
@@ -8,7 +9,7 @@
     <string name="about">ਇਸ ਐਪ ਬਾਰੇ</string>
     <string name="display_dislikes">ਨਾਪਸੰਦ ਦਿਖਾਓ</string>
     <string name="display_dislikes_summary">returnyoutubedislikeapi.com \'ਤੇ ਵੀਡੀਓ ਆਈਡੀ ਭੇਜਦਾ ਹੈ</string>
-    <string name="hide_shorts">ਸ਼ਾਰਟਸ ਓਹਲੇ</string>
+    <string name="hide_shorts">Shorts ਲੁਕਾਓ</string>
     <string name="interface_category">ਇੰਟਰਫੇਸ</string>
     <string name="player">ਪਲੇਬੈਕ</string>
     <string name="gesture">ਇਸ਼ਾਰੇ</string>
@@ -20,7 +21,7 @@
     <string name="enable_in_embedded">ਏਮਬੈਡਡ ਪਲੇਅਰ ਵਿੱਚ</string>
     <string name="enable_in_fullscreen">ਪੂਰੀ ਸਕਰੀਨ ਵਿੱਚ</string>
     <string name="brightness">ਚਮਕ</string>
-    <string name="volume">ਵਾਲੀਅਮ</string>
+    <string name="volume">ਆਵਾਜ਼ ਦਾ ਪੱਧਰ</string>
     <string name="background_mini_player">ਬੈਕਗ੍ਰਾਊਂਡ ਅਤੇ ਮਿੰਨੀ ਪਲੇਅਰ</string>
     <string name="pip">ਤਸਵੀਰ-ਵਿੱਚ-ਤਸਵੀਰ</string>
     <string name="in_app_mini_player">ਇਨ-ਐਪ ਮਿਨੀ-ਪਲੇਅਰ</string>
@@ -28,6 +29,12 @@
     <string name="sponsorblock">SponsorBlock</string>
     <string name="skip_sponsors">ਸਪਾਂਸਰ ਛੱਡੋ</string>
     <string name="skip_sponsors_selfpromo">ਸਵੈ-ਪ੍ਰਮੋਸ਼ਨ ਛੱਡੋ</string>
+    <string name="skip_sponsors_interaction">ਪਸੰਦ ਅਤੇ ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਦੀਆਂ ਯਾਦ-ਦਿਹਾਨੀਆਂ ਛੱਡੋ</string>
+    <string name="skip_sponsors_intro">ਸ਼ੁਰੂਆਤੀ ਹਿੱਸੇ ਛੱਡੋ</string>
+    <string name="skip_sponsors_outro">ਅੰਤਲੇ ਹਿੱਸੇ ਛੱਡੋ</string>
+    <string name="skip_sponsors_preview">ਝਲਕੀਆਂ ਛੱਡੋ</string>
+    <string name="skip_sponsors_music_offtopic">ਸੰਗੀਤ ਤੋਂ ਬਿਨਾਂ ਹਿੱਸੇ ਛੱਡੋ</string>
+    <string name="skip_sponsors_filler">ਵਿਸ਼ੇ ਤੋਂ ਬਾਹਰਲੇ ਹਿੱਸੇ ਛੱਡੋ</string>
     <string name="skip_sponsors_highlight">ਹਾਈਲਾਈਟਸ ਛੱਡੋ</string>
     <string name="remember_last_position">ਸਥਿਤੀ ਨੂੰ ਯਾਦ ਰੱਖੋ</string>
     <string name="remember_quality">ਵੀਡੀਓ ਗੁਣਵੱਤਾ ਨੂੰ ਯਾਦ ਰੱਖੋ</string>
@@ -37,6 +44,17 @@
     <string name="reset_all_settings">ਸਾਰੀਆਂ ਸੈਟਿੰਗਾਂ ਰੀਸੈਟ ਕਰੋ</string>
     <string name="reset_extension_title">ਐਕਸਟੈਂਸ਼ਨਾਂ ਨੂੰ ਰੀਸੈਟ ਕਰੋ</string>
     <string name="reset_extension_message">ਸਾਰੀਆਂ ਐਕਸਟੈਂਸ਼ਨ ਸੈਟਿੰਗਾਂ ਨੂੰ ਡਿਫੌਲਟ \'ਤੇ ਰੀਸੈਟ ਕਰੀਏ?</string>
+    <string name="settings_backup_restore">ਬੈਕਅੱਪ ਅਤੇ ਰੀਸਟੋਰ</string>
+    <string name="settings_export">ਨਿਰਯਾਤ ਸੈਟਿੰਗ</string>
+    <string name="settings_export_summary">ਮੌਜੂਦਾ ਸੈਟਿੰਗਾਂ ਨੂੰ JSON ਫਾਈਲ ਵਿੱਚ ਸੁਰੱਖਿਅਤ ਕਰੋ</string>
+    <string name="settings_import">ਸੈਟਿੰਗਾਂ ਆਯਾਤ ਕਰੋ</string>
+    <string name="settings_import_summary">ਬੈਕਅੱਪ ਫਾਈਲ ਤੋਂ ਸੈਟਿੰਗਾਂ ਰੀਸਟੋਰ ਕਰੋ</string>
+    <string name="settings_import_confirm_title">ਸੈਟਿੰਗਾਂ ਆਯਾਤ ਕਰੀਏ?</string>
+    <string name="settings_import_confirm_message">ਮੌਜੂਦਾ ਸੈਟਿੰਗਾਂ ਨੂੰ ਬੈਕਅੱਪ ਦੁਆਰਾ ਓਵਰਰਾਈਟ ਕੀਤਾ ਜਾਵੇਗਾ।</string>
+    <string name="settings_export_done">ਸੈਟਿੰਗਾਂ ਨਿਰਯਾਤ ਕੀਤੀਆਂ ਗਈਆਂ</string>
+    <string name="settings_export_failed">ਸੈਟਿੰਗਜ਼ ਫਾਈਲ ਨੂੰ ਸੁਰੱਖਿਅਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ</string>
+    <string name="settings_import_done">ਸੈਟਿੰਗਾਂ ਆਯਾਤ ਕੀਤੀਆਂ ਗਈਆਂ</string>
+    <string name="settings_import_failed">ਅਵੈਧ ਸੈਟਿੰਗ ਫਾਈਲ</string>
     <string name="confirm">ਪੁਸ਼ਟੀ ਕਰੋ</string>
     <string name="cancel">ਰੱਦ ਕਰੋ</string>
     <string name="more_options">ਹੋਰ</string>
@@ -86,12 +104,12 @@
     <string name="subtitle_style_text_size">ਪਾਠ ਦਾ ਆਕਾਰ</string>
     <string name="subtitle_style_background">ਪਿਛੋਕੜ</string>
     <string name="subtitle_background_none">ਕੋਈ ਨਹੀਂ</string>
-    <string name="subtitle_background_semi">ਪਾਰਦਰਸ਼ੀ</string>
+    <string name="subtitle_background_semi">ਅਰਧ-ਪਾਰਦਰਸ਼ੀ</string>
     <string name="subtitle_background_opaque">ਧੁੰਦਲਾ</string>
     <string name="subtitle_style_color">ਪਾਠ ਰੰਗ</string>
     <string name="subtitle_style_hex">ਹੈਕਸ ਰੰਗ ਕੋਡ</string>
     <string name="subtitle_style_drag_hint">ਪੂਰਵਦਰਸ਼ਨ ਨੂੰ ਮੁੜ ਸਥਿਤੀ ਲਈ ਖਿੱਚੋ</string>
-    <string name="subtitle_style_bold">ਬੋਲਡ</string>
+    <string name="subtitle_style_bold">ਮੋਟਾ</string>
     <string name="subtitle_auto_generated">(ਆਟੋ)</string>
     <string name="reset">ਰੀਸੈਟ</string>
     <string name="share">ਸਾਂਝਾ ਕਰੋ</string>
@@ -104,7 +122,7 @@
     <string name="retry">ਮੁੜ ਕੋਸ਼ਿਸ਼ ਕਰੋ</string>
     <string name="segment_intro">ਜਾਣ-ਪਛਾਣ</string>
     <string name="segment_outro">ਬਾਹਰੋ</string>
-    <string name="segment_interaction">ਰੀਮਾਈਂਡਰ ਨੂੰ ਪਸੰਦ ਕਰੋ ਅਤੇ ਗਾਹਕ ਬਣੋ</string>
+    <string name="segment_interaction">ਪਸੰਦ ਅਤੇ ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਦੀ ਯਾਦ-ਦਿਹਾਨੀ</string>
     <string name="segment_preview">ਝਲਕ</string>
     <string name="segment_music_offtopic">ਗੈਰ-ਸੰਗੀਤ</string>
     <string name="cast">ਇੱਕ ਡਿਵਾਈਸ ਤੇ ਸਟ੍ਰੀਮ ਕਰੋ</string>
@@ -114,7 +132,7 @@
     <string name="cast_no_devices_found">ਕੋਈ ਅਨੁਕੂਲ ਸਟ੍ਰੀਮਿੰਗ ਉਪਕਰਣ ਨਹੀਂ ਮਿਲੇ</string>
     <string name="cast_no_devices_hint">ਦੋਵਾਂ ਡਿਵਾਈਸਾਂ ਨੂੰ ਇੱਕੋ ਨੈੱਟਵਰਕ ਨਾਲ ਕਨੈਕਟ ਕਰੋ।</string>
     <string name="cast_unavailable">ਡਿਵਾਈਸ ਸਟ੍ਰੀਮਿੰਗ ਉਪਲਬਧ ਨਹੀਂ ਹੈ</string>
-    <string name="cast_unavailable_hint">ਡਿਵਾਈਸ ਸਟ੍ਰੀਮਿੰਗ ਲਈ Google Play ਸੇਵਾਵਾਂ ਦੀ ਲੋੜ ਹੁੰਦੀ ਹੈ।</string>
+    <string name="cast_unavailable_hint">ਦੋਵਾਂ ਡਿਵਾਈਸਾਂ ਨੂੰ ਇੱਕੋ ਨੈੱਟਵਰਕ ਨਾਲ ਕਨੈਕਟ ਕਰੋ।</string>
     <string name="cast_section_devices">ਉਪਲਬਧ ਉਪਕਰਨ</string>
     <string name="cast_section_link">ਕਿਸੇ ਵੀ ਡਿਵਾਈਸ \'ਤੇ ਖੋਲ੍ਹੋ</string>
     <string name="cast_section_link_hint">ਉਸੇ ਵਾਈ-ਫਾਈ ਨੈੱਟਵਰਕ \'ਤੇ।</string>
@@ -163,6 +181,7 @@
     <string name="download_video">ਵੀਡੀਓ</string>
     <string name="download_audio">ਆਡੀਓ</string>
     <string name="download_quality">ਗੁਣਵੱਤਾ ਡਾਊਨਲੋਡ ਕਰੋ</string>
+    <string name="download_bitrate">%1$d kbps</string>
     <string name="download_quality_hint">ਉੱਚ ਗੁਣਵੱਤਾ ਵਧੇਰੇ ਡੇਟਾ ਅਤੇ ਸਟੋਰੇਜ ਦੀ ਵਰਤੋਂ ਕਰਦੀ ਹੈ</string>
     <string name="download_size_estimate">%1$s ਬਾਰੇ</string>
     <string name="download_size_unknown">ਆਕਾਰ ਅਣਜਾਣ</string>
@@ -201,8 +220,8 @@
     <string name="download_selected_count">ਚੁਣਿਆ ਗਿਆ: %1$d / %2$d</string>
     <string name="download_batch_meta">ਆਈਟਮਾਂ: %1$d · %2$s</string>
     <string name="download_no_new_tasks">ਕੋਈ ਨਵਾਂ ਕੰਮ ਨਹੀਂ</string>
-    <string name="download_snapshot_too_many">ਬਹੁਤ ਸਾਰੀਆਂ ਚੀਜ਼ਾਂ (ਵੱਧ ਤੋਂ ਵੱਧ 500)।ਕੁਝ ਵੀ ਨਹੀਂ ਕੱਟਿਆ ਗਿਆ।</string>
-    <string name="download_snapshot_too_large">ਸਨੈਪਸ਼ਾਟ 1 MB ਤੋਂ ਵੱਡਾ ਹੈ।ਕੁਝ ਵੀ ਨਹੀਂ ਕੱਟਿਆ ਗਿਆ।</string>
+    <string name="download_snapshot_too_many">ਬਹੁਤ ਸਾਰੀਆਂ ਆਈਟਮਾਂ। 500 ਤੋਂ ਵੱਧ ਨਾ ਚੁਣੋ।</string>
+    <string name="download_snapshot_too_large">ਚੁਣੀ ਗਈ ਸੂਚੀ 1 MB ਤੋਂ ਵੱਧ ਹੈ। ਘੱਟ ਆਈਟਮਾਂ ਚੁਣੋ।</string>
     <string name="download_reason_live">ਲਾਈਵ ਸਟ੍ਰੀਮਾਂ ਨੂੰ ਡਾਊਨਲੋਡ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ</string>
     <string name="download_reason_premiere">ਇਹ ਪ੍ਰੀਮੀਅਰ ਸ਼ੁਰੂ ਨਹੀਂ ਹੋਇਆ ਹੈ</string>
     <string name="download_reason_no_streams">ਕੋਈ ਡਾਊਨਲੋਡ ਕਰਨ ਯੋਗ ਫ਼ਾਈਲ ਸਟ੍ਰੀਮ ਨਹੀਂ</string>
@@ -276,4 +295,12 @@
     <string name="info_buffer_count">ਬਫਰ/ਮਿੰਟ: %1$d</string>
     <string name="audio_description">ਆਡੀਓ ਵਰਣਨ</string>
     <string name="secondary_audio">ਸੈਕੰਡਰੀ ਆਡੀਓ</string>
+    <string name="settings_import_reload_message">ਸੈਟਿੰਗਾਂ ਅੱਪਡੇਟ ਕੀਤੀਆਂ ਗਈਆਂ। ਬਦਲਾਅ ਲਾਗੂ ਕਰਨ ਲਈ ਖੁੱਲ੍ਹੇ ਪੰਨਿਆਂ ਨੂੰ ਰੀਲੋਡ ਕਰੋ। ਤੁਹਾਡੀ ਪਲੇਬੈਕ ਸਥਿਤੀ ਰੱਖੀ ਜਾਵੇਗੀ।</string>
+    <string name="settings_reload_now">ਹੁਣੇ ਪੰਨੇ ਰੀਲੋਡ ਕਰੋ</string>
+    <string name="settings_reload_later">ਬਾਅਦ ਵਿੱਚ</string>
+    <string name="about_save_logs">ਐਪ ਡਾਇਗਨੌਸਟਿਕ ਲੌਗਸ ਨੂੰ ਸੁਰੱਖਿਅਤ ਕਰੋ</string>
+    <string name="about_save_done">ਐਪ ਡਾਇਗਨੌਸਟਿਕ ZIP ਫਾਈਲ ਸੁਰੱਖਿਅਤ ਕੀਤੀ ਗਈ</string>
+    <string name="about_save_cancelled">ਰੱਦ</string>
+    <string name="about_save_failed">ਐਪ ਲੌਗਸ ਨੂੰ ਸੁਰੱਖਿਅਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ। ਕੋਈ ਹੋਰ ਸੁਰੱਖਿਅਤ ਟਿਕਾਣਾ ਚੁਣੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
+    <string name="player_live_unavailable">ਲਾਈਵ ਸਟ੍ਰੀਮ ਉਪਲਬਧ ਨਹੀਂ ਹੈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
 </resources>
