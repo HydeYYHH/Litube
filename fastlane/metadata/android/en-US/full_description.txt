@@ -1,9 +1,13 @@
-Litube is an advanced WebView wrapper for YouTube.
+Litube is an Android video client with an embedded browser, native playback and built-in downloads.
 
 <b>Features</b>
-* <b>Ad-free playback</b>
-* <b>Mini-player support</b>
-* <b>Local queue support</b>
-* <b>Background & Picture-in-Picture support</b>
-* <b>Built-in video & playlist downloader</b>
-* <b>Live stream chat support, etc.</b>
+* Ad-free playback and configurable sponsor segment skipping
+* Native controls for quality, playback speed, subtitles and audio tracks
+* Audio-only playback, background playback, picture-in-picture and a mini-player
+* Local queues, playlist playback and autoplay
+* Video, audio and playlist downloads with quality and language selection
+* Voice search
+* Live streams and live chat
+* Casting through an open-source sender
+* Settings backup and restore
+* Diagnostic reports that can be saved or shared

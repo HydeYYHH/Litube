@@ -1,0 +1,6 @@
+- Add voice search and audio download quality selection.
+- Fix audio track selection across quality and source changes.
+- Fix menus, search navigation and short video playback.
+- Fix picture-in-picture dismissal, autoplay and live source selection.
+- Fix sponsor skipping and settings imports; add diagnostic file saving.
+- Update interface translations.
