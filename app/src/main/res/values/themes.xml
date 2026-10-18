@@ -20,4 +20,12 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <style name="Theme.App.Home" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">#0F0F0F</item>
+    </style>
 </resources>

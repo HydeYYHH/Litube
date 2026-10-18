@@ -22,15 +22,31 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 
-/** Process entry: MMKV, Koin and background download scheduling. */
-class App : Application() {
+/** Lightweight process entry. Browser/playback/download startup is explicitly opt-in. */
+class App : Application(), Configuration.Provider {
+
+    @Volatile var legacyRuntimeStarted = false
+        private set
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(KoinDownloadWorkerFactory()).build()
 
     override fun onCreate() {
         super.onCreate()
         AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
-        Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         MMKV.initialize(this)
+        startKoin {
+            androidLogger(Level.ERROR)
+            androidContext(this@App)
+            modules(appModule)
+        }
+    }
+
+    /** Initializes browser and download services when their entry points are opened. */
+    @Synchronized fun startLegacyRuntime() {
+        if (legacyRuntimeStarted) return
+        Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
         MMKV.defaultMMKV().let { kv ->
             if (!kv.decodeBool("youtube-engine-v1-migrated", false)) {
@@ -39,17 +55,7 @@ class App : Application() {
                 kv.encode("youtube-engine-v1-migrated", true)
             }
         }
-        startKoin {
-            androidLogger(Level.ERROR)
-            androidContext(this@App)
-            modules(appModule)
-        }
-        WorkManager.initialize(
-            this,
-            Configuration.Builder()
-                .setWorkerFactory(KoinDownloadWorkerFactory())
-                .build(),
-        )
+        WorkManager.getInstance(this)
         Promise.DEFAULT_SCOPE.launch {
             PlayerDataSource.precache(this@App)
         }
@@ -58,5 +64,6 @@ class App : Application() {
         }
         get<DownloadNotificationWatcher>().start()
         DownloadNetworkRestore.start(this)
+        legacyRuntimeStarted = true
     }
 }

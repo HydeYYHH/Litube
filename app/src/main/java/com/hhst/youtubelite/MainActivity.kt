@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as App).startLegacyRuntime()
         enableEdgeToEdge()
         PipAutoEnter.register(this)
         ContextCompat.registerReceiver(this, pipActionsReceiver,

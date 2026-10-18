@@ -24,6 +24,7 @@ class DownloadShareActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as com.hhst.youtubelite.App).startLegacyRuntime()
         pipHandle = PipAutoEnter.suppress()
         if (savedInstanceState == null) {
             handle(intent)

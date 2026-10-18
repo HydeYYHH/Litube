@@ -26,8 +26,8 @@ android {
         applicationId = "com.hhst.litube"
         minSdk = 23
         targetSdk = 36
-        versionCode = 303
-        versionName = "3.0.3"
+        versionCode = 400
+        versionName = "4.0.0-preview01"
         buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
         buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};NewPipe=${libs.newpipe.extractor.get().version}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -134,6 +134,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
@@ -163,6 +164,7 @@ dependencies {
     implementation(libs.nanohttpd)
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     add("minifiedDebugImplementation", libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)

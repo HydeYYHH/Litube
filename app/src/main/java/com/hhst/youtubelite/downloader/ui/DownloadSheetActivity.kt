@@ -36,6 +36,7 @@ class DownloadSheetActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as com.hhst.youtubelite.App).startLegacyRuntime()
         enableEdgeToEdge()
         val videoId = intent.getStringExtra(DownloadUi.EXTRA_VIDEO_ID)
         val snapshotId = intent.getStringExtra(DownloadUi.EXTRA_SNAPSHOT_ID)
