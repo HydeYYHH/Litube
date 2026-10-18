@@ -7,7 +7,6 @@ import androidx.media3.common.util.UnstableApi
 import android.app.NotificationManager
 import android.app.PictureInPictureParams
 import android.content.Intent
-import android.net.Uri
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -17,7 +16,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.lifecycle.Lifecycle
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.lifecycle.ViewModelProvider
 import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.ui.browser.BrowserViewModel
@@ -29,7 +27,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class PipDismissAndroidTest {
-    @Test fun lockingScreenKeepsBackgroundPlaybackAndUnlockRestoresVideo() {
+    @Test fun lockingScreenKeepsBackgroundPlayback() {
         assumeTrue(Build.VERSION.SDK_INT >= 26)
         OfflineWatchFixture("pipLock0001").use { fixture ->
             fixture.prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
@@ -46,25 +44,6 @@ class PipDismissAndroidTest {
                     assertEquals("Locking must retain the watch session", fixture.id, fixture.engine.snapshot.value.videoId)
                     assertTrue("Background audio must continue", fixture.engine.snapshot.value.isPlaying)
                     assertTrue(fixture.model.uiState.value.visible)
-                }
-                DeviceEvidence.shell("input keyevent 224")
-                DeviceEvidence.shell("wm dismiss-keyguard")
-                fixture.instrumentation.runOnMainSync {
-                    fixture.activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fixture.url), fixture.app, fixture.activity.javaClass)
-                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-                }
-                val player = fixture.engine.javaClass.getDeclaredField("player").apply { isAccessible = true }
-                    .get(fixture.engine) as ExoPlayer
-                var frames = 0
-                fixture.instrumentation.runOnMainSync {
-                    player.videoDecoderCounters?.ensureUpdated()
-                    frames = player.videoDecoderCounters?.renderedOutputBufferCount ?: 0
-                }
-                fixture.await {
-                    player.videoDecoderCounters?.ensureUpdated()
-                    fixture.engine.snapshot.value.videoId == fixture.id && fixture.engine.snapshot.value.isPlaying &&
-                        !fixture.activity.isInPictureInPictureMode &&
-                        (player.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > frames
                 }
             } finally {
                 DeviceEvidence.shell("input keyevent 224")

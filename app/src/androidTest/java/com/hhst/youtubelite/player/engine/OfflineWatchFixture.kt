@@ -124,7 +124,13 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
             model.onMiniClose(); engine.stop()
             if (::activity.isInitialized && !activity.isFinishing) activity.finish()
         }
-        try { scenario?.close() } finally {
+        // PiP can leave the activity PAUSED and block ActivityScenario.destroy.
+        runCatching {
+            Runtime.getRuntime().exec(arrayOf("am", "force-stop", app.packageName)).waitFor()
+        }
+        try { scenario?.close() } catch (_: Exception) {
+            // Process was force-stopped; remaining teardown still runs below.
+        } finally {
             instrumentation.runOnMainSync {
                 extractorField.set(engine, originalExtractor)
                 oldPreferences.forEach { (key, enabled) -> prefs.setEnabled(key, enabled) }
