@@ -14,6 +14,7 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -50,6 +51,9 @@ class NamedAudioAndroidTest {
                 app, MainActivity::class.java))
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
         try {
+            instrumentation.runOnMainSync {
+                GlobalContext.get().get<PlayerViewModel>().playVideo(VideoId.watchUrl(id), PageOrigin.HOST)
+            }
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 60_000
             while (!ready && SystemClock.elapsedRealtime() < deadline) {
@@ -62,6 +66,10 @@ class NamedAudioAndroidTest {
             assertTrue("Real multilingual video did not become playable: ${engine.snapshot.value}", ready)
             val original = engine.snapshot.value.audioTrackKey
             assertNotNull("Original identity must be known", original)
+            val originalChoice = engine.snapshot.value.audioTracks.single { it.key == original }
+            assertTrue("Expected original audio: $originalChoice",
+                engine.snapshot.value.audioFormat?.let(AudioTrackIdentity::isOriginal) == true ||
+                    originalChoice.label.contains("original", ignoreCase = true))
             val dub = engine.snapshot.value.audioTracks.first { it.key != original }
             instrumentation.runOnMainSync { engine.setAudioTrack(dub.key) }
             val switchDeadline = SystemClock.elapsedRealtime() + 20_000
@@ -80,8 +88,22 @@ class NamedAudioAndroidTest {
             }
             assertTrue("Live dub failed", switched)
             instrumentation.runOnMainSync { engine.setAudioTrack(null) }
+            var returned = false
+            val returnDeadline = SystemClock.elapsedRealtime() + 20_000
+            while (!returned && SystemClock.elapsedRealtime() < returnDeadline) {
+                instrumentation.runOnMainSync {
+                    val selected = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                        .flatMap { group -> (0 until group.length).filter(group::isTrackSelected).map { group.getTrackFormat(it) } }
+                    returned = engine.snapshot.value.audioTrackKey == original && player.isPlaying &&
+                        (!original!!.startsWith("hls:") || selected.any {
+                            AudioTrackIdentity.renditionKey(it.language, it.label) == original })
+                }
+                if (!returned) Thread.sleep(100)
+            }
+            assertTrue("Returning to original audio failed", returned)
             DeviceEvidence.writeJson("issue-337-live-switch.json", Gson().toJson(mapOf("videoId" to id,
-                "tracks" to engine.snapshot.value.audioTracks.size, "original" to original, "dub" to dub.key, "switched" to switched)))
+                "tracks" to engine.snapshot.value.audioTracks.size, "original" to original, "dub" to dub.key,
+                "switched" to switched, "returned" to returned)))
         } finally {
             instrumentation.runOnMainSync { GlobalContext.get().get<PlayerViewModel>().onMiniClose(); engine.stop() }
             scenario.close()

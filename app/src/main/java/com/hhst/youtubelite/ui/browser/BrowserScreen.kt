@@ -472,7 +472,7 @@ fun BrowserScreen(
     // Mini-player close drops the suspended watch tab; restore revives it.
     DisposableEffect(playerViewModel, viewModel) {
         playerViewModel.onRestoreWatch = { viewModel.restoreWatchTab(it) }
-        playerViewModel.onWatchClosed = { viewModel.dropSuspendedWatch() }
+        playerViewModel.onWatchClosed = { viewModel.closeWatchTab() }
         onDispose {
             playerViewModel.onRestoreWatch = null
             playerViewModel.onWatchClosed = null

@@ -73,10 +73,17 @@ class PlayerDataSource private constructor(
         @Synchronized
         fun getCache(context: Context): SimpleCache {
             return cache ?: SimpleCache(
-                File(context.noBackupFilesDir, CACHE_DIR),
+                cacheDirectory(context),
                 LeastRecentlyUsedCacheEvictor(CACHE_BYTES),
                 StandaloneDatabaseProvider(context),
             ).also { cache = it }
+        }
+
+        internal fun cacheDirectory(context: Context): File {
+            val directory = File(context.cacheDir, CACHE_DIR)
+            val legacy = File(context.noBackupFilesDir, CACHE_DIR)
+            if (legacy.isDirectory && !legacy.renameTo(directory)) legacy.deleteRecursively()
+            return directory
         }
 
         /** Builds the cache off the main thread before playback needs it. */

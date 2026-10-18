@@ -33,7 +33,7 @@ internal class PageScript(
                 (() => {
                   const h = location.hostname.toLowerCase();
                   if (h === 'accounts.youtube.com' || h === 'consent.youtube.com' ||
-                      /^\/signin(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(location.pathname)) return;
+                      /^\/(?:signin|sorry)(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(location.pathname)) return;
                   ${reporter(asset.substringAfterLast('/').substringBefore('.'))}
                   try { $script } catch(e) { window.__litubeDiagnostic('script_failed', 'exception'); }
                 })();

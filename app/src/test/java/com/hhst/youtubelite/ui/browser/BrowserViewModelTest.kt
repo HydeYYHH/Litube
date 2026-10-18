@@ -308,15 +308,26 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun dropSuspendedWatch_forgetsTab() {
+    fun closeWatchTab_forgetsSuspendedTab() {
         val vm = vm(miniEnabled = true, playerShowing = true)
         vm.openTab("https://m.youtube.com/watch?v=1")
         vm.onBack(webCanGoBack = false)
 
-        vm.dropSuspendedWatch()
+        vm.closeWatchTab()
 
         assertNull(vm.uiState.value.suspendedWatchId)
         assertEquals(Constants.PAGE_HOME, activeKind(vm))
+    }
+
+    @Test fun closingActiveWatchReturnsToFeedWithEitherMiniSetting() {
+        for (mini in listOf(false, true)) {
+            val model = vm(miniEnabled = mini, playerShowing = false)
+            model.openTab("https://m.youtube.com/watch?v=aaaaaaaaaaa")
+            model.closeWatchTab()
+            assertEquals(Constants.PAGE_HOME, activeKind(model))
+            assertEquals(1, model.uiState.value.tabs.size)
+            assertNull(model.uiState.value.suspendedWatchId)
+        }
     }
 
     // -- watch <-> shorts --

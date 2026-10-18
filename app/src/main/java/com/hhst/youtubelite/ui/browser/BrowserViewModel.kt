@@ -190,10 +190,14 @@ class BrowserViewModel(
         }
     }
 
-    /** Mini-player close: drop the suspended watch tab so Back skips it. */
-    fun dropSuspendedWatch() {
-        if (uiState.value.suspendedWatchId == null) return
-        publish(tabs.dropSuspendedWatch(), resetLoading = false)
+    fun closeWatchTab() {
+        val suspended = uiState.value.suspendedWatchId != null
+        val state = when {
+            suspended -> tabs.dropSuspendedWatch()
+            PageKind.of(uiState.value.url) == Constants.PAGE_WATCH -> tabs.pop() ?: return
+            else -> return
+        }
+        publish(state, resetLoading = !suspended, forward = if (suspended) null else false)
     }
 
     /** True when leaving the active watch tab for [targetKind] should suspend it. */

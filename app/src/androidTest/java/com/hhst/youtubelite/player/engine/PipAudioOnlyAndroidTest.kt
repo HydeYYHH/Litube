@@ -69,6 +69,7 @@ class PipAudioOnlyAndroidTest {
         val queue = GlobalContext.get().get<QueueRepository>()
         val previousQueue = queue.state.value
         val keys = listOf(PreferenceKeys.ENABLE_PIP, PreferenceKeys.ENABLE_BACKGROUND_PLAY,
+            PreferenceKeys.REMEMBER_QUALITY,
             PreferenceKeys.REMEMBER_LAST_POSITION,
             PreferenceKeys.SKIP_SPONSORS, PreferenceKeys.SKIP_SELF_PROMO,
             PreferenceKeys.SKIP_POI_HIGHLIGHT)

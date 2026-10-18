@@ -1,8 +1,11 @@
 package com.hhst.youtubelite.browser
 
 import android.net.Uri
+import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.test.ext.junit.rules.ActivityScenarioRule
@@ -76,6 +79,48 @@ class LoginWebViewAndroidTest {
     private fun close() = instrumentation.runOnMainSync { scope.cancel(); host?.webView?.let {
         it.loadUrl("about:blank"); it.stopLoading(); it.destroy()
     } }
+
+    @Test fun trafficChallengeAndReturnStayInTheSameScriptlessWebView() {
+        try {
+            create("about:blank")
+            instrumentation.runOnMainSync {
+                val client = host!!.webView.webViewClient
+                host!!.webView.webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) =
+                        WebResourceResponse("text/html", "UTF-8", "<html><body>Challenge</body></html>".byteInputStream())
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) =
+                        client.shouldOverrideUrlLoading(view, request)
+                    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = client.onPageStarted(view, url, favicon)
+                    override fun onPageFinished(view: WebView, url: String) = client.onPageFinished(view, url)
+                }
+            }
+            for (base in listOf("https://m.youtube.com/sorry/", "https://www.google.com/sorry/index")) {
+                instrumentation.runOnMainSync {
+                    host!!.webView.loadUrl(base)
+                }
+                val page = poll("JSON.stringify({url:location.href,ready:document.readyState==='complete',hooks:!!(window.Lite||window.__nav||window.__ads)})") {
+                    it.optBoolean("ready") && it.optString("url") == base
+                }
+                assertEquals(base, page.optString("url"))
+                assertFalse(page.toString(), page.optBoolean("hooks"))
+                instrumentation.runOnMainSync {
+                    assertEquals(base, host!!.webView.url)
+                    for (url in listOf(base, "https://m.youtube.com/watch?v=5jTx_DY_m1w")) {
+                        val request = object : WebResourceRequest {
+                            override fun getUrl() = Uri.parse(url)
+                            override fun isForMainFrame() = true
+                            override fun isRedirect() = true
+                            override fun hasGesture() = false
+                            override fun getMethod() = "GET"
+                            override fun getRequestHeaders(): Map<String, String> = emptyMap()
+                        }
+                        assertFalse(url, host!!.webView.webViewClient.shouldOverrideUrlLoading(host!!.webView, request))
+                    }
+                }
+            }
+            assertTrue(routed.isEmpty())
+        } finally { close() }
+    }
 
     @Test fun loginEntryLoadsWithoutPageHooksAndPreservesRedirectOwnership() {
         assumeTrue("Supply -e network=1 for live-web login acceptance",

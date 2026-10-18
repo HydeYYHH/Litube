@@ -66,6 +66,7 @@ class YoutubePlaybackAndroidTest {
                 observedPlayer = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
                 observedPlayer!!.addListener(listener)
                 engine.setVideoSurface(host.surface)
+                engine.setVideoVisible(true)
                 engine.play("aqz-KE-bpKQ")
             }
             assertTrue("Production first frame timed out", frames.await(45, TimeUnit.SECONDS))
@@ -106,7 +107,7 @@ class YoutubePlaybackAndroidTest {
         } finally {
             instrumentation.runOnMainSync {
                 observedPlayer?.removeListener(listener)
-                engine.stop(); engine.setVideoSurface(null)
+                engine.stop(); engine.setVideoSurface(null); engine.setVideoVisible(false)
             }
             prefs.setEnabled(key, remembered)
             if (oldQuality == null) cache.invalidate("player:quality") else cache.put("player:quality", oldQuality, 86_400_000)

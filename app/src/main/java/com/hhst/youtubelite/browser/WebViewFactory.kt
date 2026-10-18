@@ -258,6 +258,7 @@ private class BrowserWebViewClient(
             return openExternal(view.context, uri)
         }
         val current = view.url
+        if (UrlPolicy.isTrafficChallenge(current) || UrlPolicy.isTrafficChallenge(url)) return false
         if (login.keepInTab(current, url)) return false
         if (!current.isNullOrBlank()) {
             val nextKind = PageKind.of(url)

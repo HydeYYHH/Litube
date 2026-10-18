@@ -12,7 +12,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.DeviceEvidence
-import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalog
 import com.hhst.youtubelite.downloader.resolve.DownloadCatalogSource
 import com.hhst.youtubelite.downloader.ui.SingleVideoConfirmSheet
@@ -42,13 +41,13 @@ class DownloadOptionsAndroidTest {
             override suspend fun refresh(videoId: String) = catalog(videoId)
         }
         val harness = DownloadAndroidHarness(source)
-        harness.viewModel.prefs.setLastConfig(DownloadConfig(audioOnly = true))
         var submitted = false
         compose.setContent {
             AppTheme(darkTheme = true, dynamicColor = false) {
                 SingleVideoConfirmSheet("abcdefghijk", "Audio quality", null, null, harness.viewModel, {}, { submitted = true })
             }
         }
+        compose.onNodeWithText(compose.activity.getString(R.string.download_audio)).performScrollTo().performClick()
         compose.waitUntil(8_000) { compose.onAllNodesWithText(compose.activity.getString(R.string.player_quality_auto)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(compose.activity.getString(R.string.download_quality)).performClick()
         compose.onNodeWithText("64 kbps").performClick()
@@ -77,7 +76,6 @@ class DownloadOptionsAndroidTest {
         compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         compose.waitForIdle()
         val h = DownloadAndroidHarness()
-        h.viewModel.prefs.setLastConfig(DownloadConfig(videoQuality = "1080p"))
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
@@ -111,7 +109,6 @@ class DownloadOptionsAndroidTest {
             override suspend fun refresh(videoId: String) = catalog(videoId)
         }
         val h = DownloadAndroidHarness(source)
-        h.viewModel.prefs.setLastConfig(DownloadConfig(videoQuality = "1080p"))
         var submitted = false
         compose.setContent {
             AppTheme(darkTheme = true, dynamicColor = false) {

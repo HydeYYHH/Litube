@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import android.content.res.Configuration
 import android.os.Build
+import android.os.PowerManager
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Rational
@@ -203,6 +204,7 @@ class MainActivity : ComponentActivity() {
     private fun closeStoppedPip() {
         // PiP mode can remain set after the window is dismissed.
         if (!pipWasActive || isChangingConfigurations || playerViewModel.audioOnlyBackground) return
+        if (!isFinishing && getSystemService(PowerManager::class.java)?.isInteractive == false) return
         pipWasActive = false
         playerViewModel.onPipDismissed()
     }

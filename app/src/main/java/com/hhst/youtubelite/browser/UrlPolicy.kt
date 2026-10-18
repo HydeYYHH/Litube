@@ -34,8 +34,17 @@ object UrlPolicy {
         if (scheme == "file" || scheme == "about" || scheme == "data" || scheme == "javascript") {
             return true
         }
-        return isAllowedUrl(url)
+        return isAllowedUrl(url) || isTrafficChallenge(url)
     }
+
+    fun isTrafficChallenge(url: String?): Boolean = try {
+        val uri = URI(url ?: "")
+        val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+        uri.scheme.equals("https", ignoreCase = true) && uri.userInfo == null &&
+            uri.port in setOf(-1, 443) &&
+            (host in setOf("google.com", "www.google.com") || isYoutubeHost(host)) &&
+            (uri.path == "/sorry" || uri.path.orEmpty().startsWith("/sorry/"))
+    } catch (_: Exception) { false }
 
     fun isLoginUrl(url: String?): Boolean {
         if (!isAllowedUrl(url)) return false
@@ -48,7 +57,7 @@ object UrlPolicy {
             })
     }
 
-    fun shouldInject(url: String?): Boolean = isAllowedUrl(url) && !isLoginUrl(url) &&
+    fun shouldInject(url: String?): Boolean = isAllowedUrl(url) && !isLoginUrl(url) && !isTrafficChallenge(url) &&
         hostOf(url!!)?.lowercase(Locale.ROOT)?.let { isYoutubeHost(it) || it == "youtu.be" } == true
 
     // Login hosts match exactly: regional Google sign-in domains are
