@@ -31,15 +31,22 @@ class FixtureHomeRepository(private val scenario: HomeScenario = HomeScenario.Em
         fun samplePage() = HomePage(listOf(
             FeedItem.Video("bunny", "Big Buck Bunny | A short film by the Blender Foundation", "Blender", "12M views · 2 years ago", "bunny", "9:56", "blender", progress = 0.28f),
             FeedItem.Video("dream", "Elephants Dream — the world's first open movie", "Blender Studio", "4.8M views · 3 years ago", "dream", "10:53", "studio"),
-            FeedItem.Mix("mix", "Mix – A little room to breathe", "Blender Studio, Open Movies, and more", "sintel"),
+            FeedItem.Mix("mix", "Mix – A little room to breathe", "Blender Studio, Open Movies, and more", "sintel",
+                ThumbnailPalette(0xFF937E76.toInt(), 0xCC331C14.toInt())),
             FeedItem.Video("sintel", "Sintel | An adventure beyond the mountains", "Blender", "7.2M views · 4 years ago", "sintel", "14:48", "blender"),
             FeedItem.Shorts("shorts", listOf(
-                FeedItem.Video("short-1", "A whole world in a single frame", "Blender", "128K views", "bunny", "0:38", "blender"),
-                FeedItem.Video("short-2", "The art behind the story", "Blender", "92K views", "sintel", "0:24", "blender"),
-                FeedItem.Video("short-3", "Behind the scenes", "Studio", "240K views", "dream", "0:41", "studio"),
+                FeedItem.Video("short-1", "A whole world in a single frame", "Blender", "128K views", "bunny", "0:38", "blender", isNew = true),
+                FeedItem.Video("short-2", "The art behind the story", "Blender", "92K views", "dream", "0:24", "blender", isNew = true),
+                FeedItem.Video("short-3", "Behind the scenes", "Studio", "240K views", "dream", "0:41", "studio", age = "1 week ago"),
+                FeedItem.Video("short-4", "Every detail tells a story", "Blender", "38K views", "bunny", "0:28", "blender"),
+                FeedItem.Video("short-5", "A moment in the mountains", "Studio", "75K views", "dream", "0:32", "studio"),
+                FeedItem.Video("short-6", "From sketches to the screen", "Blender", "12K views", "dream", "0:45", "blender"),
+                FeedItem.Video("short-7", "A little adventure", "Studio", "96K views", "bunny", "0:30", "studio"),
+                FeedItem.Video("short-8", "Finding the perfect light", "Blender", "53K views", "dream", "0:22", "blender"),
             )),
             FeedItem.Video("live", "Open movie studio — animation and art", "Blender Studio", "1.2K watching", "dream", "LIVE", "studio", live = true),
-            FeedItem.Post("post", "Blender Studio", "2 days ago", "A new story starts with a little curiosity. Which open movie would you watch again?", "sintel"),
+            FeedItem.Post("post", "Blender Studio", "2 days ago", "A new story starts with a little curiosity. Which open movie would you watch again?", "sintel",
+                listOf("sintel", "bunny", "dream"), "1.2K", "42"),
         ), nextKey = "fixture-page-2")
     }
 }

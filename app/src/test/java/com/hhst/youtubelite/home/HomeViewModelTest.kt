@@ -17,6 +17,44 @@ class HomeViewModelTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
 
+    @Test fun menuKindsRejectActionsThatDoNotBelongToTheContent() = runTest {
+        val vm = HomeViewModel(repository { _, _ -> HomePage(emptyList()) }, SavedStateHandle())
+        for (kind in FeedMenuKind.entries) {
+            vm.onAction(HomeAction.OpenMenu("item", kind))
+            val invalid = FeedMenuAction.entries.first { it !in kind.actions }
+            vm.onAction(HomeAction.MenuSelected(invalid))
+            assertEquals(HomeOverlay.Menu("item", kind), vm.uiState.value.overlay)
+            vm.onAction(HomeAction.MenuSelected(kind.actions.first()))
+            assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+            assertEquals(HomeNavigationRequest.MenuAction("item", kind.actions.first()), vm.navigationRequests.first())
+        }
+    }
+
+    @Test fun failedInitialRequestCanRecoverWithTheSameFilter() = runTest {
+        var fail = true
+        val filters = mutableListOf<String>()
+        val vm = HomeViewModel(repository { filter, _ ->
+            filters += filter
+            if (fail) error("offline")
+            FixtureHomeRepository.samplePage()
+        }, SavedStateHandle())
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        assertEquals(HomeContent.Failed, vm.uiState.value.content)
+        fail = false
+        vm.onAction(HomeAction.Refresh)
+        assertEquals(HomeContent.Loading, vm.uiState.value.content)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is HomeContent.Feed)
+        assertEquals(listOf("All", "All"), filters)
+    }
+
+    @Test fun shortsColumnsRespectTheNarrowShelfBoundary() {
+        listOf(320f to 2, 527f to 2, 528f to 2, 599f to 2, 600f to 4, 993f to 4,
+            994f to 6, 1319f to 6, 1320f to 8, 1645f to 8, 1646f to 10, 1971f to 10, 1972f to 12)
+            .forEach { (width, count) -> assertEquals("width=$width", count, HomeLayout.shortsColumns(width)) }
+    }
+
     private fun repository(block: suspend (String, String?) -> HomePage) = object : HomeRepository {
         override suspend fun loadHome(filter: String, continuation: String?) = block(filter, continuation)
     }
@@ -81,7 +119,7 @@ class HomeViewModelTest {
     @Test fun lateFilterReplyCannotReplaceNewerSelection() = runTest {
         val vm = HomeViewModel(repository { filter, _ ->
             withContext(NonCancellable) { delay(if (filter == "Music") 100 else 10) }
-            HomePage(listOf(FeedItem.Mix(filter, filter, "", "bunny")))
+            HomePage(listOf(FeedItem.Mix(filter, filter, "", "bunny", ThumbnailPalette(0, 0))))
         }, SavedStateHandle(), HomeScenario.Feed)
         vm.onAction(HomeAction.SelectChip("Music"))
         runCurrent()
@@ -133,6 +171,15 @@ class HomeViewModelTest {
         vm.onAction(HomeAction.LoadNext)
         advanceUntilIdle()
         assertEquals(1, calls)
+    }
+
+    @Test fun menuFollowsAspectRatioAndWidthBoundaries() {
+        listOf(
+            Triple(390f, 844f, 374f), Triple(500f, 844f, 484f), Triple(600f, 960f, 584f),
+            Triple(840f, 1000f, 824f), Triple(1280f, 800f, 400f),
+            Triple(415f, 280f, 399f), Triple(416f, 288f, 400f), Triple(520f, 360f, 400f), Triple(520f, 360.5f, 504f),
+            Triple(840f, 600f, 824f), Triple(930f, 900f, 914f), Triple(931f, 900f, 400f),
+        ).forEach { (width, height, expected) -> assertEquals("$width × $height", expected, HomeLayout.menuWidth(width, height), 0.01f) }
     }
 
     @Test fun websiteColumnBoundariesDoNotDependOnOrientation() {

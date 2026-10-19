@@ -49,9 +49,10 @@ class HomeViewModel(
                 _state.update { it.copy(selectedChip = action.chip) }
                 load(append = false)
             }
-            is HomeAction.OpenMenu -> overlay(HomeOverlay.Menu(action.itemId))
+            is HomeAction.OpenMenu -> overlay(HomeOverlay.Menu(action.itemId, action.kind))
             is HomeAction.MenuSelected -> {
                 val menu = uiState.value.overlay as? HomeOverlay.Menu ?: return
+                if (action.action !in menu.kind.actions) return
                 overlay(HomeOverlay.None)
                 navigation.trySend(HomeNavigationRequest.MenuAction(menu.itemId, action.action))
             }

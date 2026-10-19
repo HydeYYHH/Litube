@@ -19,11 +19,18 @@ sealed interface FeedItem {
         val channelId: String,
         val live: Boolean = false,
         val progress: Float? = null,
+        val age: String? = null,
+        val isNew: Boolean = false,
     ) : FeedItem
-    data class Mix(override val id: String, val title: String, val authors: String, val artwork: String) : FeedItem
+    data class Mix(override val id: String, val title: String, val authors: String, val artwork: String, val palette: ThumbnailPalette) : FeedItem
     data class Shorts(override val id: String, val videos: List<Video>) : FeedItem
-    data class Post(override val id: String, val author: String, val age: String, val text: String, val artwork: String) : FeedItem
+    data class Post(
+        override val id: String, val author: String, val age: String, val text: String,
+        val artwork: String, val images: List<String>, val likes: String, val comments: String,
+    ) : FeedItem
 }
+
+data class ThumbnailPalette(val stackColor: Int, val badgeColor: Int)
 
 interface HomeRepository {
     suspend fun loadHome(filter: String, continuation: String? = null): HomePage
@@ -40,7 +47,7 @@ sealed interface HomeContent {
 sealed interface HomeOverlay {
     data object None : HomeOverlay
     data object Search : HomeOverlay
-    data class Menu(val itemId: String) : HomeOverlay
+    data class Menu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeOverlay
 }
 
 data class HomeUiState(
@@ -59,6 +66,15 @@ enum class HomeDestination(val label: String) { Home("Home"), Shorts("Shorts"), 
 enum class FeedMenuAction(val label: String) {
     WatchLater("Save to Watch later"), SaveToPlaylist("Save to playlist"), Share("Share"),
     NotInterested("Not interested"), DontRecommend("Don't recommend channel"),
+    SendFeedback("Send feedback"), ShowFewerShorts("Show fewer Shorts"), Report("Report"), SaveToLibrary("Save to Library"),
+}
+
+enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
+    Video(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share, FeedMenuAction.NotInterested, FeedMenuAction.DontRecommend)),
+    Short(listOf(FeedMenuAction.NotInterested, FeedMenuAction.SendFeedback)),
+    Shorts(listOf(FeedMenuAction.ShowFewerShorts)),
+    Post(listOf(FeedMenuAction.Report)),
+    Mix(listOf(FeedMenuAction.SaveToLibrary, FeedMenuAction.Share, FeedMenuAction.NotInterested)),
 }
 
 /** Navigation and operation requests handled by the host. */
@@ -81,14 +97,14 @@ sealed interface HomeAction {
     data class QueryChanged(val query: String) : HomeAction
     data class SubmitSearch(val query: String) : HomeAction
     data class SelectChip(val chip: String) : HomeAction
-    data class OpenMenu(val itemId: String) : HomeAction
+    data class OpenMenu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeAction
     data class MenuSelected(val action: FeedMenuAction) : HomeAction
     data class Navigate(val request: HomeNavigationRequest) : HomeAction
     data object Refresh : HomeAction
     data object LoadNext : HomeAction
 }
 
-/** Column counts follow the available width in dp. */
+/** Layout dimensions use the available window bounds in dp. */
 object HomeLayout {
     fun columns(width: Float): Int = when {
         width < 528f -> 1
@@ -99,5 +115,9 @@ object HomeLayout {
         else -> 6
     }
     fun outerPadding(width: Float): Float = if (width < 528f) 0f else 16f
+    fun shortsColumns(width: Float): Int = if (width < 600f) 2 else columns(width) * 2
+    fun menuWidth(width: Float, height: Float): Float =
+        if (width >= 416f && width > height && (width * 9 >= height * 13 || width >= 931f)) 400f
+        else (width - 16f).coerceAtLeast(0f)
     val chips = listOf("All", "Music", "Mixes", "Gaming", "Live", "Nature", "Podcasts", "Recently uploaded", "New to you")
 }

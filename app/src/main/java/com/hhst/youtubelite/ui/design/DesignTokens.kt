@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
@@ -97,6 +98,30 @@ fun AppText(
         maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
+fun Modifier.headerShadow() = drawWithCache {
+    val blur = ((1.dp.toPx() - 0.5f) / 0.57735f).coerceAtLeast(0.01f)
+    val padding = ceil(blur * 2).toInt()
+    val bitmap = android.graphics.Bitmap.createBitmap(ceil(size.width).toInt() + 2 * padding,
+        ceil(size.height).toInt() + 2 * padding + 4.dp.roundToPx(), android.graphics.Bitmap.Config.ARGB_8888)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x33000000
+        maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
+    }
+    val origin = padding.toFloat()
+    android.graphics.Canvas(bitmap).drawRect(origin + 2.dp.toPx(), origin + 6.dp.toPx(),
+        origin + size.width - 2.dp.toPx(), origin + size.height + 2.dp.toPx(), paint)
+    val shadow = bitmap.asImageBitmap()
+    onDrawBehind { drawImage(shadow, topLeft = androidx.compose.ui.geometry.Offset(-origin, -origin)) }
+}
+
+@Composable
+fun ShortsLogo(modifier: Modifier = Modifier) {
+    Box(modifier.size(24.dp)) {
+        AppIcon(AppIcon.ShortsBody, color = DesignTokens.Red)
+        AppIcon(AppIcon.ShortsPlay, color = Color.White)
+    }
+}
+
 @Composable
 fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignTokens.Ink) {
     val paths = remember(icon) { icon.paths.map { PathParser().parsePathString(it).toPath().asAndroidPath() } }
@@ -115,7 +140,7 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
 @Composable
 fun AppIconButton(
     icon: AppIcon, description: String, modifier: Modifier = Modifier,
-    diameter: Dp = 48.dp, background: Color = Color.Transparent, onClick: () -> Unit,
+    diameter: Dp = 48.dp, background: Color = Color.Transparent, color: Color = DesignTokens.Ink, onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
@@ -123,7 +148,7 @@ fun AppIconButton(
         .background(if (hovered) DesignTokens.Border else background)
         .hoverable(interactions)
         .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
-        .semantics { contentDescription = description }, contentAlignment = Alignment.Center) { AppIcon(icon) }
+        .semantics { contentDescription = description }, contentAlignment = Alignment.Center) { AppIcon(icon, color = color) }
 }
 
 @Composable
@@ -133,9 +158,11 @@ fun LitubeMark(modifier: Modifier = Modifier) {
 
 @Composable
 fun LitubeBrand(modifier: Modifier = Modifier) {
+    CompositionLocalProvider(LocalDensity provides androidx.compose.ui.unit.Density(LocalDensity.current.density, 1f)) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         LitubeMark(Modifier.size(28.dp))
         Spacer(Modifier.width(3.dp))
         AppText("Litube", size = 22, line = 28, weight = FontWeight.Black)
+    }
     }
 }

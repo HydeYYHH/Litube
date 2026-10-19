@@ -7,11 +7,16 @@ import android.os.Process
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.view.KeyEvent
 import android.webkit.WebView
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.hhst.youtubelite.App
@@ -75,6 +80,55 @@ class HomeScreenAndroidTest {
         compose.onNodeWithTag("search-input").assertTextEquals("open movies")
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithTag("home-empty").assertIsDisplayed()
+    }
+
+    @Test fun suggestionsEditOrSubmitWithoutInventingResultsAndScrimCloses() {
+        val host = launch()
+        compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
+        compose.onNodeWithTag("search-input").performTextInput("nature")
+        compose.onNodeWithContentDescription("Use suggestion nature documentary").performClick()
+        compose.onNodeWithTag("search-input").assertTextEquals("nature documentary")
+        host.onActivity { assertNull(it.lastNavigationRequest) }
+        compose.onNodeWithTag("suggestion-0").performClick()
+        host.onActivity { assertEquals(HomeNavigationRequest.Search("nature documentary"), it.lastNavigationRequest) }
+        compose.onNodeWithTag("home-screen").performTouchInput { click(center.copy(y = height - 20f)) }
+        compose.onNodeWithTag("search-overlay").assertDoesNotExist()
+        compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
+        compose.onNodeWithTag("search-input").assertTextEquals("nature documentary")
+    }
+
+    @Test fun systemBackDismissesKeyboardBeforeSearch() {
+        val host = launch()
+        compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
+        fun keyboardVisible(): Boolean {
+            var visible = false
+            host.onActivity { visible = ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+            return visible
+        }
+        compose.waitUntil(5_000) { keyboardVisible() }
+        compose.onNodeWithTag("search-input").performTextInput("nature")
+        compose.onNodeWithTag("suggestion-3").assertIsDisplayed()
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitUntil(5_000) { !keyboardVisible() }
+        compose.onNodeWithTag("search-overlay").assertIsDisplayed()
+        compose.onNodeWithTag("search-input").assertTextEquals("nature")
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.onNodeWithTag("search-overlay").assertDoesNotExist()
+        compose.onNodeWithTag("home-empty").assertIsDisplayed()
+    }
+
+    @Test fun menuScrimAndHandleDismissWithoutSendingAnOperation() {
+        val host = launch(HomeScenario.Feed)
+        fun open() = compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation").performClick()
+        open()
+        compose.onNodeWithTag("home-screen").performTouchInput { click(androidx.compose.ui.geometry.Offset(10f, 10f)) }
+        compose.onNodeWithTag("video-menu").assertDoesNotExist()
+        open()
+        compose.onNodeWithTag("menu-handle").performTouchInput { swipe(center, center.copy(y = center.y + 20.dp.toPx()), 300) }
+        compose.onNodeWithTag("video-menu").assertIsDisplayed()
+        compose.onNodeWithTag("menu-handle").performTouchInput { swipe(center, center.copy(y = center.y + 200.dp.toPx()), 300) }
+        compose.onNodeWithTag("video-menu").assertDoesNotExist()
+        host.onActivity { assertNull(it.lastNavigationRequest) }
     }
 
     @Test fun feedMenuClosesBeforeHomeAndEmitsARequestOnly() {
