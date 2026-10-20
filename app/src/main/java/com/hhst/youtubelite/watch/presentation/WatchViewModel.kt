@@ -21,12 +21,17 @@ class WatchViewModel(
     scenario: WatchScenario = WatchScenario.Content,
 ) : ViewModel() {
     private val restoredId = savedState.get<String>("videoId") ?: videoId
+    private val restoredOverlay = when (savedState.get<String>("overlay")) {
+        "search" -> WatchOverlay.Search
+        "menu" -> savedState.get<String>("menuVideo")?.let { WatchOverlay.ItemMenu(it) }
+        else -> WatchOverlay.None
+    } ?: WatchOverlay.None
     private val _state = MutableStateFlow(
         WatchUiState(
             videoId = restoredId,
             content = scenario.initialContent(),
             descriptionExpanded = savedState["descriptionExpanded"] ?: false,
-            searchOpen = savedState["searchOpen"] ?: false,
+            overlay = restoredOverlay,
             draftQuery = savedState["draftQuery"] ?: "",
             commentsOpen = savedState["commentsOpen"] ?: false,
         )
@@ -39,6 +44,7 @@ class WatchViewModel(
 
     init {
         savedState["videoId"] = _state.value.videoId
+        persistOverlay(restoredOverlay)
         if (scenario.loadsContent() && _state.value.content is WatchContent.Loading) load()
     }
 
@@ -73,19 +79,49 @@ class WatchViewModel(
             }
             is WatchAction.OpenChannel -> navigation.trySend(WatchNavigationRequest.Channel(action.channelId))
             is WatchAction.OpenComments -> {
+                overlay(WatchOverlay.None)
                 editComments(true)
                 navigation.trySend(WatchNavigationRequest.Comments(action.videoId))
             }
             WatchAction.CloseComments -> editComments(false)
             is WatchAction.OpenRelated -> navigation.trySend(WatchNavigationRequest.Watch(action.videoId))
-            is WatchAction.OpenItemMenu -> navigation.trySend(WatchNavigationRequest.ItemMenu(action.videoId))
+            is WatchAction.OpenItemMenu -> overlay(WatchOverlay.ItemMenu(action.videoId))
+            WatchAction.CloseOverlay -> overlay(WatchOverlay.None)
+            is WatchAction.MenuAction -> {
+                val menu = uiState.value.overlay as? WatchOverlay.ItemMenu ?: return
+                overlay(WatchOverlay.None)
+                if (action.action == WatchVideoMenuAction.Share) {
+                    navigation.trySend(WatchNavigationRequest.Share(menu.videoId))
+                } else {
+                    navigation.trySend(WatchNavigationRequest.MenuAction(menu.videoId, action.action))
+                }
+            }
         }
     }
 
     private fun editSearch(open: Boolean, query: String) {
-        savedState["searchOpen"] = open
         savedState["draftQuery"] = query
-        _state.update { it.copy(searchOpen = open, draftQuery = query) }
+        _state.update { it.copy(overlay = if (open) WatchOverlay.Search else WatchOverlay.None, draftQuery = query) }
+        persistOverlay(uiState.value.overlay)
+    }
+
+    private fun overlay(next: WatchOverlay) {
+        _state.update { it.copy(overlay = next) }
+        persistOverlay(next)
+    }
+
+    private fun persistOverlay(overlay: WatchOverlay) {
+        savedState["overlay"] = when (overlay) {
+            WatchOverlay.Search -> "search"
+            is WatchOverlay.ItemMenu -> {
+                savedState["menuVideo"] = overlay.videoId
+                "menu"
+            }
+            WatchOverlay.None -> {
+                savedState.remove<String>("menuVideo")
+                "none"
+            }
+        }
     }
 
     private fun editComments(open: Boolean) {

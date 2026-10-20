@@ -56,7 +56,22 @@ data class CommentsUiState(
     val content: CommentsContent = CommentsContent.Loading,
     val expanded: Set<String> = emptySet(),
     val total: String = "",
+    val overlay: CommentsOverlay = CommentsOverlay.None,
 )
+
+/**
+ * One panel overlay at a time. Menus keep the panel, its expansion set and its scroll
+ * position alive underneath.
+ */
+sealed interface CommentsOverlay {
+    data object None : CommentsOverlay
+    data object SortMenu : CommentsOverlay
+    data class ThreadMenu(val threadId: String) : CommentsOverlay
+    data class ReplyMenu(val threadId: String, val replyId: String) : CommentsOverlay
+}
+
+/** Public comment actions only; owner-only edit/delete are never offered for anonymous samples. */
+enum class CommentMenuAction(val label: String) { Reply("Reply"), Report("Report") }
 
 /**
  * Typed boundaries for interactions this screen does not implement. The host records
@@ -66,8 +81,9 @@ sealed interface CommentNavigationRequest {
     data class Compose(val videoId: String) : CommentNavigationRequest
     data class LikeComment(val videoId: String, val commentId: String) : CommentNavigationRequest
     data class DislikeComment(val videoId: String, val commentId: String) : CommentNavigationRequest
-    data class ReportComment(val videoId: String, val commentId: String) : CommentNavigationRequest
-    data class OpenCommentMenu(val videoId: String, val commentId: String) : CommentNavigationRequest
+    data class ReportComment(val videoId: String, val threadId: String, val commentId: String) : CommentNavigationRequest
+    data class OpenCommentMenu(val videoId: String, val threadId: String) : CommentNavigationRequest
+    data class OpenReplyMenu(val videoId: String, val threadId: String, val replyId: String) : CommentNavigationRequest
     data class Reply(val videoId: String, val threadId: String, val commentId: String) : CommentNavigationRequest
     data class OpenAuthor(val channelId: String) : CommentNavigationRequest
 }
@@ -76,6 +92,9 @@ sealed interface CommentAction {
     data object Retry : CommentAction
     data object LoadMore : CommentAction
     data class SelectSort(val sort: CommentSort) : CommentAction
+    data object OpenSortMenu : CommentAction
+    data object CloseMenu : CommentAction
+    data class MenuAction(val action: CommentMenuAction) : CommentAction
     data class ToggleReplies(val commentId: String) : CommentAction
     data object Compose : CommentAction
     data class LikeThread(val commentId: String) : CommentAction

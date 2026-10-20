@@ -21,6 +21,7 @@ import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.search.domain.SearchNavigationRequest
 import com.hhst.youtubelite.watch.data.WatchScenario
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
+import com.hhst.youtubelite.watch.domain.WatchVideoMenuAction
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -144,6 +145,8 @@ class WatchScreenAndroidTest {
     @Test fun watchChromeActionsOnlyEmitTypedRequests() {
         launchWatch()
         awaitReady()
+        // Share hands off to the system chooser; keep the host in front for the semantic checks.
+        watch?.onActivity { it.shareGateway.launchChooser = false }
 
         fun clickScrolled(node: SemanticsNodeInteraction, expected: WatchNavigationRequest) {
             node.performScrollTo().performClick()
@@ -177,10 +180,12 @@ class WatchScreenAndroidTest {
             compose.onAllNodesWithTag("comments-panel").fetchSemanticsNodes().isEmpty()
         }
         // The page itself has no kebab; item menus come from the related cards.
-        clickScrolled(
-            compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour"),
-            WatchNavigationRequest.ItemMenu("harbour"),
-        )
+        compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour")
+            .performScrollTo().performClick()
+        compose.onNodeWithTag("watch-video-menu").assertIsDisplayed()
+        compose.onNodeWithText("Save to Watch later").performClick()
+        assertWatchRequest(WatchNavigationRequest.MenuAction("harbour", WatchVideoMenuAction.WatchLater))
+        compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
         // The fixed top bar sits outside the scroll container.
         clickFixed(compose.onNodeWithContentDescription("More options"), WatchNavigationRequest.PageMenu)
 
@@ -195,6 +200,42 @@ class WatchScreenAndroidTest {
         awaitReady()
         compose.onNodeWithTag("watch-title", useUnmergedTree = true)
             .assertTextEquals("Big Buck Bunny | A short film by the Blender Foundation")
+    }
+
+    @Test fun backClosesRelatedMenuBeforeLeavingAndRestoresItOnRecreation() {
+        val host = launchWatch()
+        awaitReady()
+        compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour")
+            .performScrollTo().performClick()
+        compose.onNodeWithTag("watch-video-menu").assertIsDisplayed()
+        host.recreate()
+        awaitNode("watch-video-menu")
+        host.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
+        awaitReady()
+        host.onActivity { assertFalse(it.isFinishing) }
+    }
+
+    @Test fun relatedMenuShareReachesTheSystemBoundaryAndLeavesThePageIntact() {
+        val host = launchWatch()
+        awaitReady()
+        host.onActivity { it.shareGateway.launchChooser = false }
+        compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour")
+            .performScrollTo().performClick()
+        compose.onNodeWithTag("watch-video-menu").assertIsDisplayed()
+        compose.onNodeWithText("Share").performClick()
+        assertWatchRequest(WatchNavigationRequest.Share("harbour"))
+        host.onActivity {
+            val intent = it.shareGateway.lastShareIntent
+            assertNotNull(intent)
+            assertEquals(android.content.Intent.ACTION_SEND, intent!!.action)
+            assertEquals("text/plain", intent.type)
+            assertEquals("https://youtu.be/TLkA0RELQ1g", intent.getStringExtra(android.content.Intent.EXTRA_TEXT))
+        }
+        compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
+        compose.onNodeWithTag("watch-title", useUnmergedTree = true)
+            .assertTextEquals("Big Buck Bunny | A short film by the Blender Foundation")
+        host.onActivity { assertFalse(it.isFinishing) }
     }
 
     @Test fun channelAndSearchRoundTripsKeepTheWatchState() {
@@ -274,6 +315,15 @@ class WatchScreenAndroidTest {
         SystemClock.sleep(1200)
         if (sent >= 0) assertEquals("Watch page sent network data", sent, TrafficStats.getUidTxBytes(Process.myUid()))
         if (received >= 0) assertEquals("Watch page received network data", received, TrafficStats.getUidRxBytes(Process.myUid()))
+    }
+
+    @Test fun deviceScreenshotOfRelatedCardMenu() {
+        launchWatch()
+        awaitReady()
+        compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour")
+            .performScrollTo().performClick()
+        awaitNode("watch-video-menu")
+        DeviceEvidence.captureScene("watch-video-menu-device")
     }
 
     @Test fun deviceScreenshotOfTheWatchPage() {

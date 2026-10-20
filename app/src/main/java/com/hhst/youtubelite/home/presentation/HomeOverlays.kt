@@ -32,40 +32,25 @@ internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit) {
 
 @Composable
 internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video) {
-    var drag by remember { mutableFloatStateOf(0f) }
-    val density = LocalDensity.current.density
-    Box(Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onAction(HomeAction.CloseOverlay) }
-        .semantics { contentDescription = "Close menu" })
-    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-        Column(Modifier.padding(bottom = 24.dp).width(HomeLayout.menuWidth(maxWidth.value, maxHeight.value).dp)
-            .offset(y = (drag / density).dp).clip(RoundedCornerShape(12.dp)).background(Color.White)
-            .testTag("video-menu").semantics { paneTitle = "Video actions"
-                customActions = listOf(CustomAccessibilityAction("Close menu") { onAction(HomeAction.CloseOverlay); true })
-            }) {
-            Box(Modifier.fillMaxWidth().height(13.dp).testTag("menu-handle").pointerInput(Unit) { detectVerticalDragGestures(
-                onVerticalDrag = { change, amount -> change.consume(); drag = (drag + amount).coerceAtLeast(0f) },
-                onDragCancel = { drag = 0f }, onDragEnd = { if (drag > 48 * density) onAction(HomeAction.CloseOverlay); drag = 0f },
-            ) }, contentAlignment = Alignment.BottomCenter) {
-                Box(Modifier.padding(bottom = 1.dp).size(40.dp, 4.dp).background(DesignTokens.Ink.copy(alpha = 0.15f), CircleShape))
-            }
-            Column(Modifier.verticalScroll(rememberScrollState()).testTag("menu-actions")) {
-            kind.actions.forEach { action ->
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onAction(HomeAction.MenuSelected(action)) }
-                    .padding(horizontal = 22.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppIcon(when (action) {
-                        FeedMenuAction.WatchLater -> AppIcon.Clock; FeedMenuAction.SaveToPlaylist -> AppIcon.Bookmark
-                        FeedMenuAction.Share -> AppIcon.Share; FeedMenuAction.NotInterested -> AppIcon.Block
-                        FeedMenuAction.DontRecommend -> AppIcon.Close; FeedMenuAction.ShowFewerShorts -> AppIcon.Dismiss
-                        FeedMenuAction.SendFeedback -> AppIcon.Feedback; FeedMenuAction.Report -> AppIcon.Report
-                        FeedMenuAction.SaveToLibrary -> AppIcon.Bookmark
-                    })
-                    Spacer(Modifier.width(18.dp))
-                    AppText(action.label, size = 16, line = 22)
-                }
-            }
-            }
-        }
-    }
+    MenuBottomSheet(
+        items = kind.actions.map { MenuSheetItem(it.icon(), it.label) },
+        onDismiss = { onAction(HomeAction.CloseOverlay) },
+        onSelect = { index -> onAction(HomeAction.MenuSelected(kind.actions[index])) },
+        tag = "video-menu",
+        paneTitle = "Video actions",
+    )
+}
+
+private fun FeedMenuAction.icon(): AppIcon = when (this) {
+    FeedMenuAction.WatchLater -> AppIcon.Clock
+    FeedMenuAction.SaveToPlaylist -> AppIcon.Bookmark
+    FeedMenuAction.Share -> AppIcon.Share
+    FeedMenuAction.NotInterested -> AppIcon.Block
+    FeedMenuAction.DontRecommend -> AppIcon.Close
+    FeedMenuAction.ShowFewerShorts -> AppIcon.Dismiss
+    FeedMenuAction.SendFeedback -> AppIcon.Feedback
+    FeedMenuAction.Report -> AppIcon.Report
+    FeedMenuAction.SaveToLibrary -> AppIcon.Bookmark
 }
 
 @Composable

@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.comments.presentation
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +31,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -45,16 +44,20 @@ import kotlin.math.roundToInt
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentAuthor
+import com.hhst.youtubelite.comments.domain.CommentMenuAction
 import com.hhst.youtubelite.comments.domain.CommentReply
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentThread
 import com.hhst.youtubelite.comments.domain.CommentsContent
 import com.hhst.youtubelite.comments.domain.CommentsLayout
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsUiState
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import com.hhst.youtubelite.ui.design.MenuBottomSheet
+import com.hhst.youtubelite.ui.design.MenuSheetItem
 import com.hhst.youtubelite.ui.design.messageCardShadow
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import androidx.compose.runtime.snapshotFlow
@@ -135,13 +138,12 @@ private fun CommentsSurface(
 ) {
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    var sortMenuOpen by rememberSaveable(state.videoId) { mutableStateOf(false) }
-    BackHandler(enabled = sortMenuOpen) { sortMenuOpen = false }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     DisposableEffect(Unit) { onDispose { focusManager.clearFocus() } }
 
     val shape = if (compact) RoundedCornerShape(topStart = CommentsLayout.SheetRadius.dp, topEnd = CommentsLayout.SheetRadius.dp)
     else RectangleShape
+    val modal = state.overlay is CommentsOverlay.ThreadMenu || state.overlay is CommentsOverlay.ReplyMenu
     BoxWithConstraints(modifier) {
         Column(
             Modifier.fillMaxSize().background(Color.White, shape)
@@ -150,37 +152,57 @@ private fun CommentsSurface(
                 .testTag("comments-panel"),
         ) {
             if (compact) HandleStrip() else Spacer(Modifier.height(CommentsLayout.HeaderTopGap.dp))
-            CommentsHeader(
-                sort = state.sort,
-                count = commentCount,
-                panelWidth = panelWidth,
-                docked = !compact,
-                showSort = state.content !is CommentsContent.Disabled,
-                onSort = { sortMenuOpen = true },
-                onClose = onClose,
-            )
-            CommentsBody(state = state, listState = listState, onAction = onAction)
+            // The modal sheet owns the gesture and the semantics above the panel.
+            Box(Modifier.weight(1f).fillMaxWidth().then(if (modal) Modifier.clearAndSetSemantics {} else Modifier)) {
+                Column(Modifier.fillMaxSize()) {
+                    CommentsHeader(
+                        sort = state.sort,
+                        count = commentCount,
+                        panelWidth = panelWidth,
+                        docked = !compact,
+                        showSort = state.content !is CommentsContent.Disabled,
+                        onSort = {
+                            onAction(
+                                if (state.overlay == CommentsOverlay.SortMenu) CommentAction.CloseMenu
+                                else CommentAction.OpenSortMenu,
+                            )
+                        },
+                        onClose = onClose,
+                    )
+                    CommentsBody(state = state, listState = listState, onAction = onAction)
+                }
+            }
         }
-        if (sortMenuOpen) {
-            val menuTop = minOf(81.dp, (maxHeight - 112.dp).coerceAtLeast(0.dp))
-            Box(
-                Modifier.fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { sortMenuOpen = false }
-                    .testTag("comments-sort-dismiss"),
+        when (state.overlay) {
+            CommentsOverlay.SortMenu -> {
+                val menuTop = minOf(81.dp, (maxHeight - 112.dp).coerceAtLeast(0.dp))
+                Box(
+                    Modifier.fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onAction(CommentAction.CloseMenu) }
+                        .testTag("comments-sort-dismiss"),
+                )
+                SortMenu(
+                    selected = state.sort,
+                    onSelect = { onAction(CommentAction.SelectSort(it)) },
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .padding(top = menuTop, end = 8.dp)
+                        .heightIn(max = maxHeight - menuTop),
+                )
+            }
+            is CommentsOverlay.ThreadMenu, is CommentsOverlay.ReplyMenu -> MenuBottomSheet(
+                items = listOf(
+                    MenuSheetItem(AppIcon.Comment, CommentMenuAction.Reply.label, "comment-menu-reply"),
+                    MenuSheetItem(AppIcon.Report, CommentMenuAction.Report.label, "comment-menu-report"),
+                ),
+                onDismiss = { onAction(CommentAction.CloseMenu) },
+                onSelect = { index -> onAction(CommentAction.MenuAction(CommentMenuAction.entries[index])) },
+                tag = "comments-menu",
+                paneTitle = "Comment actions",
             )
-            SortMenu(
-                selected = state.sort,
-                onSelect = {
-                    sortMenuOpen = false
-                    onAction(CommentAction.SelectSort(it))
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-                    .padding(top = menuTop, end = 8.dp)
-                    .heightIn(max = maxHeight - menuTop),
-            )
+            CommentsOverlay.None -> Unit
         }
     }
 }

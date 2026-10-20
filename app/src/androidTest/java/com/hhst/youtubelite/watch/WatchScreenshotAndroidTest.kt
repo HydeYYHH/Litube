@@ -370,6 +370,44 @@ class WatchScreenshotAndroidTest {
         }
     }
 
+    /** The related-card action sheet uses the measured 400 / inset geometry. */
+    @Test fun relatedCardMenuSurfaceMatchesTheSheetGeometry() {
+        var width by mutableIntStateOf(390)
+        var height by mutableIntStateOf(844)
+        var overlay by mutableStateOf<WatchOverlay>(WatchOverlay.ItemMenu("harbour"))
+        compose.setContent {
+            Viewport(width, height) {
+                WatchScreen(
+                    state = WatchUiState(
+                        videoId = "bunny",
+                        content = contentOf("content"),
+                        overlay = overlay,
+                    ),
+                    onAction = {},
+                    onBack = {},
+                    playerSlot = { slot -> Box(slot.background(Color.Black)) },
+                )
+            }
+        }
+        val output = File(compose.activity.getExternalFilesDir(null), "watch-acceptance").apply { mkdirs() }
+        val sheet = compose.onNodeWithTag("watch-video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(8f, sheet.left, 0.5f)
+        assertEquals(844f - 24f, sheet.bottom, 0.5f)
+        assertEquals(48f, compose.onNodeWithTag("watch-menu-Share").fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        capture("video-menu-390", output, true, emptySet())
+
+        compose.runOnIdle { width = 1280; height = 800 }
+        val wideSheet = compose.onNodeWithTag("watch-video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(400f, wideSheet.width, 0.5f)
+        assertEquals(440f, wideSheet.left, 0.5f)
+        assertEquals(800f - 24f, wideSheet.bottom, 0.5f)
+        capture("video-menu-1280", output, true, emptySet())
+
+        compose.runOnIdle { overlay = WatchOverlay.None }
+        compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
+    }
+
     @Test fun viewportAndStateMatrixMatchesGoldens() {
         var width by mutableIntStateOf(390)
         var height by mutableIntStateOf(844)

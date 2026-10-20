@@ -83,7 +83,6 @@ class WatchViewModelTest {
             WatchAction.OpenChannel("studio") to WatchNavigationRequest.Channel("studio"),
             WatchAction.OpenComments("harbour") to WatchNavigationRequest.Comments("harbour"),
             WatchAction.OpenRelated("meadow") to WatchNavigationRequest.Watch("meadow"),
-            WatchAction.OpenItemMenu("studio") to WatchNavigationRequest.ItemMenu("studio"),
         )
         for ((action, expected) in expectations) {
             vm.onAction(action)
@@ -93,6 +92,43 @@ class WatchViewModelTest {
         // Every emission is a request only: the page itself never changed.
         assertTrue(vm.uiState.value.content is WatchContent.Ready)
         assertEquals("harbour", vm.uiState.value.videoId)
+    }
+
+    @Test fun relatedCardMenuIsPageStateAndItsShareRowIsTheOnlyExit() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "harbour")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu("studio"))
+        assertEquals(WatchOverlay.ItemMenu("studio"), vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.Share))
+        assertEquals(WatchNavigationRequest.Share("studio"), vm.navigationRequests.first())
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+        vm.onAction(WatchAction.OpenItemMenu("meadow"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.WatchLater))
+        assertEquals(WatchNavigationRequest.MenuAction("meadow", WatchVideoMenuAction.WatchLater), vm.navigationRequests.first())
+        vm.onAction(WatchAction.OpenItemMenu("orbit"))
+        vm.onAction(WatchAction.CloseOverlay)
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun relatedCardMenuRestoresThroughSavedState() = runTest {
+        val handle = SavedStateHandle()
+        val vm = WatchViewModel(FixtureWatchRepository(), handle, "harbour")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu("studio"))
+        var restored = WatchViewModel(
+            FixtureWatchRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "ignored",
+        )
+        assertEquals(WatchOverlay.ItemMenu("studio"), restored.uiState.value.overlay)
+        vm.onAction(WatchAction.CloseOverlay)
+        restored = WatchViewModel(
+            FixtureWatchRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "ignored",
+        )
+        assertEquals(WatchOverlay.None, restored.uiState.value.overlay)
     }
 
     @Test fun subscribeWithoutLoadedContentEmitsNothing() = runTest {

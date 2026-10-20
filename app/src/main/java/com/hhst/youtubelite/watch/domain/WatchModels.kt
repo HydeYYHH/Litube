@@ -49,10 +49,28 @@ data class WatchUiState(
     val videoId: String = "",
     val content: WatchContent = WatchContent.Loading,
     val descriptionExpanded: Boolean = false,
-    val searchOpen: Boolean = false,
+    val overlay: WatchOverlay = WatchOverlay.None,
     val draftQuery: String = "",
     val commentsOpen: Boolean = false,
-)
+) {
+    val searchOpen: Boolean get() = overlay == WatchOverlay.Search
+}
+
+/** At most one page-level overlay is active; the comments panel owns its own menus. */
+sealed interface WatchOverlay {
+    data object None : WatchOverlay
+    data object Search : WatchOverlay
+    data class ItemMenu(val videoId: String) : WatchOverlay
+}
+
+/** Ordinary-video menu rows. Share is the only row this build performs; the rest stay typed exits. */
+enum class WatchVideoMenuAction(val label: String) {
+    WatchLater("Save to Watch later"),
+    SaveToPlaylist("Save to playlist"),
+    Share("Share"),
+    NotInterested("Not interested"),
+    DontRecommend("Don't recommend channel"),
+}
 
 /** Typed boundaries only: every entry is recorded by the host, never simulated as a success. */
 sealed interface WatchNavigationRequest {
@@ -63,6 +81,7 @@ sealed interface WatchNavigationRequest {
     data class Comments(val videoId: String) : WatchNavigationRequest
     data class Watch(val videoId: String) : WatchNavigationRequest
     data class ItemMenu(val videoId: String) : WatchNavigationRequest
+    data class MenuAction(val videoId: String, val action: WatchVideoMenuAction) : WatchNavigationRequest
     data class Like(val videoId: String) : WatchNavigationRequest
     data class Dislike(val videoId: String) : WatchNavigationRequest
     data class Subscribe(val channelId: String) : WatchNavigationRequest
@@ -97,6 +116,8 @@ sealed interface WatchAction {
     data object CloseComments : WatchAction
     data class OpenRelated(val videoId: String) : WatchAction
     data class OpenItemMenu(val videoId: String) : WatchAction
+    data object CloseOverlay : WatchAction
+    data class MenuAction(val action: WatchVideoMenuAction) : WatchAction
 }
 
 /** Which related-feed geometry the sampled breakpoints call for. */

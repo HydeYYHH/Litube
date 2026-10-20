@@ -23,8 +23,10 @@ import androidx.compose.ui.unit.dp
 import androidx.test.filters.SdkSuppress
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentMenuAction
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsUiState
 import com.hhst.youtubelite.comments.presentation.CommentsPanel
 import org.junit.Assert.*
@@ -39,6 +41,7 @@ class CommentsPanelAndroidTest {
     private var panelContent by mutableStateOf<CommentsContent>(ready())
     private var panelSort by mutableStateOf(CommentSort.Top)
     private var panelExpanded by mutableStateOf<Set<String>>(emptySet())
+    private var panelOverlay by mutableStateOf<CommentsOverlay>(CommentsOverlay.None)
     private var panelCount by mutableStateOf("5.2K")
     private var viewportWidth by mutableStateOf(390)
     private var viewportHeight by mutableStateOf(844)
@@ -83,18 +86,25 @@ class CommentsPanelAndroidTest {
                         sort = panelSort,
                         content = panelContent,
                         expanded = panelExpanded,
+                        overlay = panelOverlay,
                     ),
                     commentCount = panelCount,
                     onAction = { action ->
                         actions += action
                         when (action) {
+                            CommentAction.OpenSortMenu -> panelOverlay = CommentsOverlay.SortMenu
+                            CommentAction.CloseMenu -> panelOverlay = CommentsOverlay.None
                             is CommentAction.SelectSort -> {
+                                panelOverlay = CommentsOverlay.None
                                 panelSort = action.sort
                                 panelContent = CommentsContent.Ready(
                                     FixtureCommentsRepository.sampleThreads(action.sort).take(4),
                                     null,
                                 )
                             }
+                            is CommentAction.OpenThreadMenu -> panelOverlay = CommentsOverlay.ThreadMenu(action.commentId)
+                            is CommentAction.OpenReplyMenu -> panelOverlay = CommentsOverlay.ReplyMenu(action.commentId, action.replyId)
+                            is CommentAction.MenuAction -> panelOverlay = CommentsOverlay.None
                             is CommentAction.ToggleReplies -> panelExpanded =
                                 if (action.commentId in panelExpanded) panelExpanded - action.commentId
                                 else panelExpanded + action.commentId
@@ -249,17 +259,15 @@ class CommentsPanelAndroidTest {
         assertTrue(actions.contains(CommentAction.SelectSort(CommentSort.Newest)))
     }
 
-    @Test fun backPressClosesTheSortMenuBeforeThePanel() {
+    @Test fun sortMenuDismissScrimClosesItWithoutClosingThePanel() {
         render()
         compose.onNodeWithTag("comments-sort").performClick()
         assertTrue(hasTag("comments-sort-menu"))
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("comments-sort-dismiss").performClick()
         compose.waitForIdle()
         assertFalse(hasTag("comments-sort-menu"))
         assertEquals(0, closes)
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.waitForIdle()
-        assertEquals("the host owns panel visibility", 0, closes)
+        compose.onNodeWithTag("comments-panel").assertExists()
     }
 
     @Test fun scrimTapAsksTheHostToClose() {
@@ -319,19 +327,90 @@ class CommentsPanelAndroidTest {
         render()
         compose.onNodeWithTag("comment-c1-like").performClick()
         compose.onNodeWithTag("comment-c1-dislike").performClick()
-        compose.onNodeWithTag("comment-c1-more").performClick()
         compose.onNodeWithTag("comments-input").performClick()
+        compose.onNodeWithTag("comment-c1-more").performClick()
         compose.waitForIdle()
         assertEquals(
             listOf(
                 CommentAction.LikeThread("c1"),
                 CommentAction.DislikeThread("c1"),
-                CommentAction.OpenThreadMenu("c1"),
                 CommentAction.Compose,
+                CommentAction.OpenThreadMenu("c1"),
             ),
             actions,
         )
         assertEquals(ready(), panelContent)
+    }
+
+    @Test fun threadMenuOffersThePublicRowsAndKeepsThePanelState() {
+        panelExpanded = setOf("c1")
+        render()
+        compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(CommentsOverlay.ThreadMenu("c1"), panelOverlay)
+        compose.onNodeWithTag("comments-menu").assertIsDisplayed()
+        compose.onNodeWithTag("comment-menu-reply").assertIsDisplayed()
+        compose.onNodeWithTag("comment-menu-report").assertIsDisplayed()
+        assertEquals("Reply", compose.onNodeWithTag("comment-menu-reply").fetchSemanticsNode()
+            .config[SemanticsProperties.Text].first().text)
+        assertEquals("Report", compose.onNodeWithTag("comment-menu-report").fetchSemanticsNode()
+            .config[SemanticsProperties.Text].first().text)
+
+        compose.onNodeWithTag("comment-menu-report").performClick()
+        compose.waitForIdle()
+        assertEquals(CommentsOverlay.None, panelOverlay)
+        assertFalse(hasTag("comments-menu"))
+        assertEquals(listOf(CommentAction.OpenThreadMenu("c1"), CommentAction.MenuAction(CommentMenuAction.Report)), actions)
+        assertEquals(ready(), panelContent)
+        assertEquals(setOf("c1"), panelExpanded)
+        compose.onNodeWithTag("comments-panel").assertExists()
+        compose.onNodeWithTag("comment-c1-replies", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun replyMenuCarriesTheReplyIdentity() {
+        panelExpanded = setOf("c1")
+        render()
+        compose.onNodeWithTag("reply-c1r1-more").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(CommentsOverlay.ReplyMenu("c1", "c1r1"), panelOverlay)
+        compose.onNodeWithTag("comment-menu-reply").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(CommentAction.OpenReplyMenu("c1", "c1r1"), CommentAction.MenuAction(CommentMenuAction.Reply)), actions)
+        assertFalse(hasTag("comments-menu"))
+    }
+
+    @Test fun menuDismissalKeepsTheListScrollPositionAndExpandedReplies() {
+        panelExpanded = setOf("c1")
+        render()
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("comment-c1-reply-toggle"))
+        val before = bounds("comment-c1")
+        compose.onNodeWithTag("comment-c1-more").performClick()
+        compose.waitForIdle()
+        assertTrue(hasTag("comments-menu"))
+        compose.onNodeWithContentDescription("Close menu").performClick()
+        compose.waitForIdle()
+        assertFalse(hasTag("comments-menu"))
+        assertEquals(before, bounds("comment-c1"))
+        compose.onNodeWithTag("comment-c1-replies", useUnmergedTree = true).assertExists()
+        assertEquals(0, closes)
+    }
+
+    @Test fun shortWindowAtLargeFontKeepsBothMenuRowsReachable() {
+        viewportWidth = 320
+        viewportHeight = 240
+        fontScale = 2f
+        panelOverlay = CommentsOverlay.ThreadMenu("c1")
+        render()
+        compose.onNodeWithTag("comments-menu").assertIsDisplayed()
+        compose.onNodeWithTag("comment-menu-reply").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("comment-menu-report").performScrollTo().assertIsDisplayed()
+        val sheet = bounds("comments-menu")
+        val panel = bounds("comments-panel")
+        assertTrue(sheet.right <= panel.right)
+        assertTrue(sheet.bottom <= panel.bottom)
+        assertTrue(sheet.top >= panel.top)
+        compose.onNodeWithTag("comment-menu-report").performClick()
+        compose.onNodeWithTag("comments-panel").assertExists()
     }
 
     @Test fun largeFontScaleKeepsTheCloseControlReachable() {
@@ -370,6 +449,8 @@ class CommentsPanelAndroidTest {
         compose.onNodeWithTag("reply-c1r1-more").performScrollTo().assertIsDisplayed().performClick()
         assertTrue(bounds("reply-c1r1-more").right <= bounds("comments-panel").right)
         assertTrue(actions.contains(CommentAction.OpenReplyMenu("c1", "c1r1")))
+        compose.onNodeWithContentDescription("Close menu").performClick()
+        compose.waitForIdle()
         compose.onNodeWithTag("comments-close").assertIsDisplayed()
         compose.onNodeWithTag("comments-sort").performClick()
         compose.onNodeWithTag("comments-sort-newest").performScrollTo().performClick()

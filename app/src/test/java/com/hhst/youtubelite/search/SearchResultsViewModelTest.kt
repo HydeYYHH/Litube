@@ -25,7 +25,7 @@ class SearchResultsViewModelTest {
     @After fun cleanup() { Dispatchers.resetMain() }
 
     private fun repository(block: suspend (String) -> SearchPage) = object : SearchRepository {
-        override suspend fun search(query: String) = block(query)
+        override suspend fun search(query: String, filters: SearchFilters) = block(query)
     }
 
     @Test fun ordinaryEntryLoadsTheLocalResultsForTheSubmittedQuery() = runTest {
@@ -90,17 +90,117 @@ class SearchResultsViewModelTest {
         val vm = SearchResultsViewModel(repository { SearchPage(it, FixtureSearchRepository.sampleResults()) }, SavedStateHandle(), "open movie")
         advanceUntilIdle()
         vm.onAction(SearchAction.OpenItemMenu("studio"))
-        assertEquals(SearchNavigationRequest.ItemMenu("studio"), vm.navigationRequests.first())
+        assertEquals(SearchOverlay.ItemMenu("studio"), vm.uiState.value.overlay)
+        vm.onAction(SearchAction.CloseItemMenu)
+        assertEquals(SearchOverlay.None, vm.uiState.value.overlay)
         vm.onAction(SearchAction.SelectDestination(SearchDestination.Subscriptions))
         assertEquals(SearchNavigationRequest.Destination(SearchDestination.Subscriptions), vm.navigationRequests.first())
         vm.onAction(SearchAction.SelectDestination(SearchDestination.Home))
         assertEquals(SearchNavigationRequest.Destination(SearchDestination.Home), vm.navigationRequests.first())
         vm.onAction(SearchAction.OpenFilters)
         assertEquals(SearchNavigationRequest.Filters, vm.navigationRequests.first())
+        assertTrue(vm.uiState.value.filtersOpen)
         vm.onAction(SearchAction.VoiceSearch)
         assertEquals(SearchNavigationRequest.VoiceSearch, vm.navigationRequests.first())
         vm.onAction(SearchAction.OpenPageMenu)
         assertEquals(SearchNavigationRequest.PageMenu, vm.navigationRequests.first())
+    }
+
+    @Test fun uploadDateAppliesImmediatelyAndReloadsWithTheFilter() = runTest {
+        val seen = mutableListOf<SearchFilters>()
+        val vm = SearchResultsViewModel(object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters): SearchPage {
+                seen += filters
+                return FixtureSearchRepository().search(query, filters)
+            }
+        }, SavedStateHandle(), "open movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.SelectUploadDate(SearchUploadDate.ThisYear))
+        advanceUntilIdle()
+        assertEquals(SearchUploadDate.ThisYear, vm.uiState.value.filters.uploaded)
+        assertEquals(SearchFilters(uploaded = SearchUploadDate.ThisYear), seen.last())
+        assertTrue(vm.uiState.value.content is SearchContent.Results)
+        vm.onAction(SearchAction.SelectUploadDate(SearchUploadDate.Today))
+        advanceUntilIdle()
+        assertEquals(SearchFilters(uploaded = SearchUploadDate.Today), seen.last())
+        assertEquals(SearchContent.Empty("open movie"), vm.uiState.value.content)
+    }
+
+    @Test fun typeAllAppliesButChannelsAndPlaylistsStayTypedExits() = runTest {
+        val seen = mutableListOf<SearchFilters>()
+        val vm = SearchResultsViewModel(object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters): SearchPage {
+                seen += filters
+                return FixtureSearchRepository().search(query, filters)
+            }
+        }, SavedStateHandle(), "open movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.SelectResultType(SearchResultType.All))
+        advanceUntilIdle()
+        assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
+        vm.onAction(SearchAction.SelectResultType(SearchResultType.Channels))
+        assertEquals(SearchNavigationRequest.UnsupportedType(SearchResultType.Channels), vm.navigationRequests.first())
+        assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
+        vm.onAction(SearchAction.SelectResultType(SearchResultType.Playlists))
+        assertEquals(SearchNavigationRequest.UnsupportedType(SearchResultType.Playlists), vm.navigationRequests.first())
+        assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
+        assertTrue(vm.uiState.value.content is SearchContent.Results)
+        assertEquals(SearchFilters(), seen.last())
+    }
+
+    @Test fun itemMenuShareExitsAndOtherRowsStayTypedRequests() = runTest {
+        val vm = SearchResultsViewModel(repository { SearchPage(it, FixtureSearchRepository.sampleResults()) }, SavedStateHandle(), "open movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.Share))
+        assertEquals(SearchNavigationRequest.Share("harbour"), vm.navigationRequests.first())
+        assertEquals(SearchOverlay.None, vm.uiState.value.overlay)
+        vm.onAction(SearchAction.OpenItemMenu("studio"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.WatchLater))
+        assertEquals(SearchNavigationRequest.MenuAction("studio", SearchVideoMenuAction.WatchLater), vm.navigationRequests.first())
+    }
+
+    @Test fun inlineFiltersStayOpenUnderMenusAndSearch() = runTest {
+        val vm = SearchResultsViewModel(FixtureSearchRepository(), SavedStateHandle(), "open movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenFilters)
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        assertTrue(vm.uiState.value.filtersOpen)
+        vm.onAction(SearchAction.CloseItemMenu)
+        assertTrue(vm.uiState.value.filtersOpen)
+        vm.onAction(SearchAction.OpenSearch)
+        vm.onAction(SearchAction.CloseSearch)
+        assertTrue(vm.uiState.value.filtersOpen)
+    }
+
+    @Test fun filterMenuAndSearchOverlaysRestoreThroughSavedState() = runTest {
+        val handle = SavedStateHandle()
+        val vm = SearchResultsViewModel(FixtureSearchRepository(), handle, "open movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenFilters)
+        vm.onAction(SearchAction.SelectUploadDate(SearchUploadDate.ThisMonth))
+        var restored = SearchResultsViewModel(
+            FixtureSearchRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "intent",
+        )
+        assertTrue(restored.uiState.value.filtersOpen)
+        assertEquals(SearchUploadDate.ThisMonth, restored.uiState.value.filters.uploaded)
+        vm.onAction(SearchAction.CloseFilters)
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        restored = SearchResultsViewModel(
+            FixtureSearchRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "intent",
+        )
+        assertEquals(SearchOverlay.ItemMenu("harbour"), restored.uiState.value.overlay)
+        vm.onAction(SearchAction.CloseItemMenu)
+        restored = SearchResultsViewModel(
+            FixtureSearchRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "intent",
+        )
+        assertEquals(SearchOverlay.None, restored.uiState.value.overlay)
     }
 
     @Test fun querySurvivesSavedStateReconstruction() {

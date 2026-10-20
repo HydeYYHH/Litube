@@ -7,6 +7,13 @@ import com.hhst.youtubelite.search.domain.*
 
 private const val QUERY = "open movie"
 
+@Preview(name = "Filters", widthDp = 390, heightDp = 844)
+@Preview(name = "Filters · Large text", widthDp = 320, heightDp = 844, fontScale = 2f)
+@Composable private fun FiltersPreview() { SearchResultsScreen(results().copy(filtersOpen = true), {}, {}) }
+
+@Preview(name = "Video actions", widthDp = 390, heightDp = 844)
+@Composable private fun VideoActionsPreview() { SearchResultsScreen(results().copy(overlay = SearchOverlay.ItemMenu("harbour")), {}, {}) }
+
 private fun results() = SearchUiState(query = QUERY, content = SearchContent.Results(SearchPage(QUERY, FixtureSearchRepository.sampleResults())))
 
 @Preview(name = "Results · 390", widthDp = 390, heightDp = 844)

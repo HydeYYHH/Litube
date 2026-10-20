@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.text.BasicText
@@ -52,6 +53,8 @@ fun WatchScreen(
     modifier: Modifier = Modifier,
     fullscreen: Boolean = false,
     playerSlot: @Composable (Modifier) -> Unit = { WatchPlayer(it, onBack) },
+    menuContent: @Composable () -> Unit = { WatchVideoMenu(state, onAction) },
+    sidebarCovered: Boolean = false,
 ) {
     val mainScroll = rememberScrollState()
     val sidebarMainScroll = rememberScrollState()
@@ -59,7 +62,11 @@ fun WatchScreen(
     val wideRelatedScroll = rememberLazyListState()
     AppTheme {
         Box(modifier.fillMaxSize().background(Color.White).testTag("watch-screen")) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                Modifier.fillMaxSize().then(
+                    if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier,
+                ),
+            ) {
                 val width = maxWidth.value
                 val height = maxHeight.value
                 val sidebarMode = WatchLayout.sidebar(width, height)
@@ -94,7 +101,9 @@ fun WatchScreen(
                                 }
                             }
                         }
-                        WatchSidebarPane(state, width, if (WatchLayout.sidebarWidth(width) >= WatchLayout.SidebarWideWidth) wideRelatedScroll else compactRelatedScroll, onAction)
+                        Box(if (sidebarCovered) Modifier.clearAndSetSemantics {} else Modifier) {
+                            WatchSidebarPane(state, width, if (WatchLayout.sidebarWidth(width) >= WatchLayout.SidebarWideWidth) wideRelatedScroll else compactRelatedScroll, onAction)
+                        }
                     }
                 } else {
                     WatchMainBody(
@@ -123,8 +132,30 @@ fun WatchScreen(
                 // Transparent fixed bar: content scrolls beneath it, exactly like the sampled page.
                 WatchTopBar(onAction, onBack)
             }
+            menuContent()
         }
     }
+}
+
+@Composable
+internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit) {
+    if (state.overlay is WatchOverlay.ItemMenu) MenuBottomSheet(
+        items = WatchVideoMenuAction.entries.map {
+            MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
+        },
+        onDismiss = { onAction(WatchAction.CloseOverlay) },
+        onSelect = { index -> onAction(WatchAction.MenuAction(WatchVideoMenuAction.entries[index])) },
+        tag = "watch-video-menu",
+        paneTitle = "Video actions",
+    )
+}
+
+private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
+    WatchVideoMenuAction.WatchLater -> AppIcon.Clock
+    WatchVideoMenuAction.SaveToPlaylist -> AppIcon.Bookmark
+    WatchVideoMenuAction.Share -> AppIcon.Share
+    WatchVideoMenuAction.NotInterested -> AppIcon.Block
+    WatchVideoMenuAction.DontRecommend -> AppIcon.Close
 }
 
 @Composable

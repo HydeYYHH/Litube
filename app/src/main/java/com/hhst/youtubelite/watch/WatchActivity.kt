@@ -51,11 +51,16 @@ import com.hhst.youtubelite.ui.design.SearchPanel
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
 import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
+import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.watch.domain.WatchLayout
+import com.hhst.youtubelite.watch.domain.WatchOverlay
 import com.hhst.youtubelite.watch.presentation.WatchPlayer
 import com.hhst.youtubelite.watch.presentation.WatchScreen
+import com.hhst.youtubelite.watch.presentation.WatchVideoMenu
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -66,6 +71,7 @@ class WatchActivity : ComponentActivity() {
         private set
     lateinit var commentsViewModel: CommentsViewModel
         private set
+    val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     var lastNavigationRequest: WatchNavigationRequest? = null
         private set
     var lastCommentRequest: CommentNavigationRequest? = null
@@ -113,6 +119,7 @@ class WatchActivity : ComponentActivity() {
                         is WatchNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
                         is WatchNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@WatchActivity, request.query))
                         is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId))
+                        is WatchNavigationRequest.Share -> shareGateway.share(request.videoId)
                         else -> Unit
                     }
                 }
@@ -139,12 +146,27 @@ class WatchActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(fullscreen, state.commentsOpen) {
-                if (fullscreen && state.commentsOpen) watchViewModel.onAction(WatchAction.CloseComments)
+                if (fullscreen && state.commentsOpen) {
+                    commentsViewModel.onAction(CommentAction.CloseMenu)
+                    watchViewModel.onAction(WatchAction.CloseComments)
+                }
+            }
+            LaunchedEffect(fullscreen, state.overlay) {
+                if (fullscreen && state.overlay is WatchOverlay.ItemMenu) {
+                    watchViewModel.onAction(WatchAction.CloseOverlay)
+                }
+            }
+            val closeComments = {
+                commentsViewModel.onAction(CommentAction.CloseMenu)
+                watchViewModel.onAction(WatchAction.CloseComments)
             }
             val back: () -> Unit = {
                 when {
+                    state.overlay is WatchOverlay.ItemMenu -> watchViewModel.onAction(WatchAction.CloseOverlay)
                     state.searchOpen -> watchViewModel.onAction(WatchAction.CloseSearch)
-                    state.commentsOpen && !fullscreen -> watchViewModel.onAction(WatchAction.CloseComments)
+                    state.commentsOpen && !fullscreen && commentsState.overlay != CommentsOverlay.None ->
+                        commentsViewModel.onAction(CommentAction.CloseMenu)
+                    state.commentsOpen && !fullscreen -> closeComments()
                     else -> when (PlayerUi.nextBackStep(playerState.locked, fullscreen)) {
                         PlayerUi.BackStep.Unlock -> playerViewModel.setLocked(false)
                         PlayerUi.BackStep.ExitFullscreen -> playerViewModel.setFullscreen(false)
@@ -155,7 +177,7 @@ class WatchActivity : ComponentActivity() {
             BackHandler(onBack = back)
             Box(Modifier.fillMaxSize().background(ComposeColor.White)) {
                 BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                    val hideWatchControls = state.searchOpen ||
+                    val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
                         (state.commentsOpen && !fullscreen && !WatchLayout.sidebar(maxWidth.value, maxHeight.value))
                     WatchScreen(
                         state = state,
@@ -165,6 +187,8 @@ class WatchActivity : ComponentActivity() {
                             if (hideWatchControls) Modifier.clearAndSetSemantics {} else Modifier,
                         ),
                         fullscreen = fullscreen,
+                        menuContent = {},
+                        sidebarCovered = state.commentsOpen && !fullscreen && !state.searchOpen,
                     )
                 }
                 if (fullscreen) {
@@ -189,15 +213,20 @@ class WatchActivity : ComponentActivity() {
                         CommentsContent.Disabled -> ""
                         else -> commentsState.total.ifBlank { (state.content as? WatchContent.Ready)?.page?.video?.commentCount.orEmpty() }
                     }
-                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("comments-panel-host")) {
+                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                        .then(if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier)
+                        .testTag("comments-panel-host")) {
                         CommentsPanel(
                             state = commentsState,
                             commentCount = commentCount,
                             onAction = commentsViewModel::onAction,
-                            onClose = { watchViewModel.onAction(WatchAction.CloseComments) },
+                            onClose = closeComments,
                             listState = commentsListState,
                         )
                     }
+                }
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    WatchVideoMenu(state, watchViewModel::onAction)
                 }
             }
         }

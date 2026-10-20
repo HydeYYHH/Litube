@@ -6,6 +6,15 @@ import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
 import com.hhst.youtubelite.comments.domain.CommentsUiState
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
+
+@Preview(name = "Comment actions", widthDp = 390, heightDp = 844, showBackground = true)
+@Composable
+private fun CommentActionsPreview() {
+    CommentsPanel(CommentsUiState(content = CommentsContent.Ready(
+        FixtureCommentsRepository.sampleThreads(CommentSort.Top),
+    ), overlay = CommentsOverlay.ThreadMenu("c1")), "5.2K", {}, {})
+}
 
 @Preview(widthDp = 390, heightDp = 844, showBackground = true)
 @Composable

@@ -161,6 +161,28 @@ class HomeScreenAndroidTest {
         compose.onNodeWithText("Saved").assertDoesNotExist()
     }
 
+    @Test fun feedMenuShareReachesTheSystemBoundaryWithoutOpeningAnotherScreen() {
+        val host = launch(HomeScenario.Feed)
+        host.onActivity { it.shareGateway.launchChooser = false }
+        compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation").performClick()
+        compose.onNodeWithText("Share").performClick()
+        compose.waitUntil(5_000) {
+            var request: HomeNavigationRequest? = null
+            host.onActivity { request = it.lastNavigationRequest }
+            request == HomeNavigationRequest.MenuAction("bunny", FeedMenuAction.Share)
+        }
+        host.onActivity {
+            val intent = it.shareGateway.lastShareIntent
+            assertNotNull(intent)
+            assertEquals(Intent.ACTION_SEND, intent!!.action)
+            assertEquals("text/plain", intent.type)
+            assertEquals("https://youtu.be/aqz-KE-bpKQ", intent.getStringExtra(Intent.EXTRA_TEXT))
+        }
+        compose.onNodeWithTag("video-menu").assertDoesNotExist()
+        compose.onNodeWithTag("home-screen").assertIsDisplayed()
+        host.onActivity { assertFalse(it.isFinishing) }
+    }
+
     @Test fun feedScrollPositionSurvivesSearchAndRecreation() {
         val host = launch(HomeScenario.Feed)
         compose.onNodeWithTag("home-feed").performScrollToIndex(3)

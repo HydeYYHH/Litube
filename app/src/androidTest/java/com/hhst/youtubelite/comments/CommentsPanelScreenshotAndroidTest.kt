@@ -27,6 +27,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsUiState
 import com.hhst.youtubelite.comments.presentation.CommentsPanel
 import java.io.File
@@ -126,6 +127,46 @@ class CommentsPanelScreenshotAndroidTest {
             compose.runOnIdle { width = 320; height = 844; fontScale = 2f }
             capture("comments-font2-320", output, record, setOf())
         }
+    }
+
+    /** The public comment menu reuses the measured sheet inside the panel. */
+    @Test fun commentMenuSurfaceMatchesTheSheetGeometry() {
+        val record = InstrumentationRegistry.getArguments().getString("recordMenuGoldens") == "true"
+        val goldens = setOf("comments-menu-390", "comments-menu-1280")
+        var width by mutableStateOf(390)
+        var height by mutableStateOf(844)
+        var overlay by mutableStateOf<CommentsOverlay>(CommentsOverlay.ThreadMenu("c1"))
+        compose.setContent {
+            Viewport(width, height, 1f) {
+                CommentsPanel(
+                    state = CommentsUiState(
+                        videoId = "bunny",
+                        content = CommentsContent.Ready(FixtureCommentsRepository.sampleThreads(CommentSort.Top), "4"),
+                        overlay = overlay,
+                    ),
+                    commentCount = "5.2K",
+                    onAction = {},
+                    onClose = {},
+                )
+            }
+        }
+        val output = File(compose.activity.getExternalFilesDir(null), "comments-acceptance").apply { mkdirs() }
+        var panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
+        var sheet = compose.onNodeWithTag("comments-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
+        assertEquals(48f, compose.onNodeWithTag("comment-menu-reply").fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        capture("comments-menu-390", output, record, goldens)
+
+        compose.runOnIdle { width = 1280; height = 800; overlay = CommentsOverlay.ReplyMenu("c1", "c1r1") }
+        panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
+        sheet = compose.onNodeWithTag("comments-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(500f, panel.width, 0.5f)
+        assertEquals(panel.width - 16f, sheet.width, 0.5f)
+        assertEquals(panel.right - 8f, sheet.right, 0.5f)
+        assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
+        capture("comments-menu-1280", output, record, goldens)
     }
 
     private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {

@@ -13,10 +13,43 @@ data class SearchResult(
     val artwork: String,
     val badge: String? = null,
     val progress: Float? = null,
+    /** Fixture-only age used by the upload-date filter; production data would carry this separately. */
+    val uploadedDays: Int? = null,
 )
 
+/** The two groups the mobile results page exposes behind its filter button. */
+enum class SearchResultType(val label: String) { All("All"), Channels("Channels"), Playlists("Playlists") }
+
+enum class SearchUploadDate(val label: String, val maxAgeDays: Int?) {
+    Anytime("Anytime", null),
+    Today("Today", 1),
+    ThisWeek("This week", 7),
+    ThisMonth("This month", 31),
+    ThisYear("This year", 365),
+}
+
+data class SearchFilters(
+    val type: SearchResultType = SearchResultType.All,
+    val uploaded: SearchUploadDate = SearchUploadDate.Anytime,
+)
+
+/** Menu rows measured on the ordinary-video action sheet. Non-share rows stay typed requests. */
+enum class SearchVideoMenuAction(val label: String) {
+    WatchLater("Save to Watch later"),
+    SaveToPlaylist("Save to playlist"),
+    Share("Share"),
+    NotInterested("Not interested"),
+    DontRecommend("Don't recommend channel"),
+}
+
+sealed interface SearchOverlay {
+    data object None : SearchOverlay
+    data object Search : SearchOverlay
+    data class ItemMenu(val videoId: String) : SearchOverlay
+}
+
 interface SearchRepository {
-    suspend fun search(query: String): SearchPage
+    suspend fun search(query: String, filters: SearchFilters = SearchFilters()): SearchPage
 }
 
 sealed interface SearchContent {
@@ -30,9 +63,13 @@ data class SearchUiState(
     val query: String = "",
     val content: SearchContent = SearchContent.Loading,
     val signedInPreview: Boolean = true,
-    val searchOpen: Boolean = false,
+    val overlay: SearchOverlay = SearchOverlay.None,
     val draftQuery: String = query,
-)
+    val filters: SearchFilters = SearchFilters(),
+    val filtersOpen: Boolean = false,
+) {
+    val searchOpen: Boolean get() = overlay == SearchOverlay.Search
+}
 
 enum class SearchDestination(val label: String) {
     Home("Home"), Shorts("Shorts"), Subscriptions("Subscriptions"), You("You"),
@@ -43,6 +80,10 @@ sealed interface SearchNavigationRequest {
     data class Channel(val channelId: String) : SearchNavigationRequest
     data class Destination(val destination: SearchDestination) : SearchNavigationRequest
     data class ItemMenu(val videoId: String) : SearchNavigationRequest
+    data class MenuAction(val videoId: String, val action: SearchVideoMenuAction) : SearchNavigationRequest
+    data class Share(val videoId: String) : SearchNavigationRequest
+    /** A result type this build does not render; the host records the request instead of faking a screen. */
+    data class UnsupportedType(val type: SearchResultType) : SearchNavigationRequest
     data object Filters : SearchNavigationRequest
     data object VoiceSearch : SearchNavigationRequest
     data object PageMenu : SearchNavigationRequest
@@ -57,7 +98,12 @@ sealed interface SearchAction {
     data class OpenChannel(val channelId: String) : SearchAction
     data class SelectDestination(val destination: SearchDestination) : SearchAction
     data class OpenItemMenu(val videoId: String) : SearchAction
+    data class MenuAction(val action: SearchVideoMenuAction) : SearchAction
+    data object CloseItemMenu : SearchAction
     data object OpenFilters : SearchAction
+    data object CloseFilters : SearchAction
+    data class SelectResultType(val type: SearchResultType) : SearchAction
+    data class SelectUploadDate(val date: SearchUploadDate) : SearchAction
     data object VoiceSearch : SearchAction
     data object OpenPageMenu : SearchAction
     data object Retry : SearchAction
@@ -66,6 +112,20 @@ sealed interface SearchAction {
 object SearchResultsLayout {
     const val TopBarHeight = 48f
     const val NavigationHeight = 56f
+
+    /** Inline filter strip sampled at 390 and 1280: padding 12, 50-high select boxes, 1px divider. */
+    const val FilterBarPadding = 12f
+    const val FilterBarHeight = 75f
+    const val FilterGroupHeight = 50f
+    const val FilterTypeMinWidth = 104f
+    const val FilterDateMinWidth = 117f
+    const val FilterGroupGap = 4f
+    const val FilterGroupRadius = 8f
+    const val FilterGroupPadding = 10f
+    const val FilterIconSize = 24f
+    const val FilterTextSize = 14f
+    const val FilterLineHeight = 48f
+    const val FilterDividerAlpha = 0.2f
 
     const val ColumnMaxWidth = 840f
 

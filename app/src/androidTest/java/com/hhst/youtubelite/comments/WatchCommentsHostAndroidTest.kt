@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.comments.data.CommentsScenario
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.watch.WatchActivity
 import org.junit.After
 import org.junit.Assert.*
@@ -120,6 +121,73 @@ class WatchCommentsHostAndroidTest {
         awaitGone("comments-panel")
         assertTrue(scrim.height > 0f)
         host.onActivity { assertFalse(it.isFinishing) }
+    }
+
+    @Test fun commentAndReplyMenusCrossTheHostBoundaryWithTheirIdentities() {
+        val host = launch()
+        awaitNode("watch-metadata")
+        openPanel()
+
+        compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+        compose.onNodeWithTag("comment-menu-reply").performClick()
+        compose.waitUntil(10_000) {
+            var request: CommentNavigationRequest? = null
+            host.onActivity { request = it.lastCommentRequest }
+            request == CommentNavigationRequest.Reply("bunny", "c1", "c1")
+        }
+        awaitGone("comments-menu")
+        compose.onNodeWithTag("comments-panel").assertExists()
+
+        compose.onNodeWithTag("comment-c1-reply-toggle").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("reply-c1r1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+        compose.onNodeWithTag("comment-menu-report").performClick()
+        compose.waitUntil(10_000) {
+            var request: CommentNavigationRequest? = null
+            host.onActivity { request = it.lastCommentRequest }
+            request == CommentNavigationRequest.ReportComment("bunny", "c1", "c1r1")
+        }
+        awaitGone("comments-menu")
+        compose.onNodeWithTag("comment-c1-replies", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("comments-panel").assertExists()
+    }
+
+    @Test fun backClosesTheCommentMenuBeforeThePanel() {
+        val host = launch()
+        awaitNode("watch-metadata")
+        openPanel()
+        compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+
+        compose.runOnUiThread { host.onActivity { it.onBackPressedDispatcher.onBackPressed() } }
+        awaitGone("comments-menu")
+        compose.waitForIdle()
+        compose.onNodeWithTag("comments-panel").assertExists()
+        host.onActivity { assertFalse(it.isFinishing) }
+
+        compose.runOnUiThread { host.onActivity { it.onBackPressedDispatcher.onBackPressed() } }
+        awaitGone("comments-panel")
+        compose.onNodeWithTag("watch-screen").assertExists()
+        host.onActivity { assertFalse(it.isFinishing) }
+    }
+
+    @Test fun openCommentMenuSurvivesActivityRecreationAndKeepsThePanel() {
+        val host = launch()
+        awaitNode("watch-metadata")
+        openPanel()
+        compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+
+        host.recreate()
+        awaitNode("comments-panel")
+        awaitNode("comments-menu")
+        compose.onNodeWithTag("comment-menu-reply").assertIsDisplayed()
+        compose.onNodeWithTag("comment-menu-report").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close menu").performClick()
+        awaitGone("comments-menu")
+        compose.onNodeWithTag("comments-panel").assertExists()
     }
 
     @Test fun sortAndExpandedRepliesSurviveRecreation() {
@@ -236,6 +304,15 @@ class WatchCommentsHostAndroidTest {
         host.recreate()
         awaitNode("comments-list")
         assertEquals(before, offset(), 1f)
+    }
+
+    @Test fun deviceScreenshotOfCommentMenu() {
+        launch()
+        awaitNode("watch-metadata")
+        openPanel()
+        compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+        DeviceEvidence.captureScene("comments-menu-device")
     }
 
     @Test fun closingADebugOpenedPanelStaysClosedAfterRecreation() {

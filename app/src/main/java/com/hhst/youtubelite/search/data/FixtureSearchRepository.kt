@@ -1,35 +1,37 @@
 package com.hhst.youtubelite.search.data
 
-import com.hhst.youtubelite.search.domain.SearchContent
-import com.hhst.youtubelite.search.domain.SearchPage
-import com.hhst.youtubelite.search.domain.SearchRepository
-import com.hhst.youtubelite.search.domain.SearchResult
+import com.hhst.youtubelite.search.domain.*
 import kotlinx.coroutines.delay
 
 /** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureSearchRepository(private val scenario: SearchScenario = SearchScenario.Results) : SearchRepository {
-    override suspend fun search(query: String): SearchPage {
+    override suspend fun search(query: String, filters: SearchFilters): SearchPage {
         delay(140)
         if (scenario == SearchScenario.Error) throw java.io.IOException("Local error scenario")
         if (scenario == SearchScenario.Empty) return SearchPage(query, emptyList())
-        return SearchPage(query, sampleResults())
+        val results = sampleResults().filter { result ->
+            val days = result.uploadedDays ?: return@filter filters.uploaded == SearchUploadDate.Anytime
+            val limit = filters.uploaded.maxAgeDays ?: return@filter true
+            days <= limit
+        }
+        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList())
     }
 
     companion object {
         /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
         fun sampleResults() = listOf(
             SearchResult("harbour", "City light trails — a night walk through the old harbour",
-                "Northlight Films", "northlight", "1.4M views", "3 weeks ago", "8:12", "dream", progress = 0.35f),
+                "Northlight Films", "northlight", "1.4M views", "3 weeks ago", "8:12", "dream", progress = 0.35f, uploadedDays = 21),
             SearchResult("studio", "Inside the studio: building a scene from scratch",
-                "Northlight Studio", "northlight", "428K views", "2 months ago", "12:04", "bunny"),
+                "Northlight Studio", "northlight", "428K views", "2 months ago", "12:04", "bunny", uploadedDays = 60),
             SearchResult("meadow", "Meadow at dawn — a short nature film",
-                "Open Field", "openfield", "92K views", "1 year ago", "5:37", "sintel", badge = "4K"),
+                "Open Field", "openfield", "92K views", "1 year ago", "5:37", "sintel", badge = "4K", uploadedDays = 365),
             SearchResult("workshop", "Workshop diaries: shaping wood by hand",
-                "Handmade Channel", "handmade", "2.1M views", "8 months ago", "17:45", "bunny"),
+                "Handmade Channel", "handmade", "2.1M views", "8 months ago", "17:45", "bunny", uploadedDays = 240),
             SearchResult("orbit", "Orbit — an animated short about leaving home",
-                "Northlight Animation", "northlight", "6.7M views", "2 years ago", "9:56", "sintel"),
+                "Northlight Animation", "northlight", "6.7M views", "2 years ago", "9:56", "sintel", uploadedDays = 730),
             SearchResult("river", "River sound — one hour of calm water",
-                "Quiet Place", "quietplace", "315K views", "5 months ago", "1:02:18", "dream"),
+                "Quiet Place", "quietplace", "315K views", "5 months ago", "1:02:18", "dream", uploadedDays = 150),
         )
     }
 }

@@ -1,19 +1,38 @@
 package com.hhst.youtubelite.search.presentation
 
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import android.app.AlertDialog
+import android.graphics.drawable.ColorDrawable
+import android.view.ContextThemeWrapper
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.CheckedTextView
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +44,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,14 +64,29 @@ fun SearchResultsScreen(
         BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("search-results")) {
             val width = maxWidth.value
             val height = maxHeight.value
-            Column(Modifier.fillMaxSize().then(if (state.searchOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
+            val listState = rememberLazyListState()
+            // A new query or filter starts a new list; restoring the page keeps its scroll.
+            var appliedQuery by remember { mutableStateOf(state.query) }
+            var appliedFilters by remember { mutableStateOf(state.filters) }
+            LaunchedEffect(state.query, state.filters) {
+                if (state.query != appliedQuery || state.filters != appliedFilters) {
+                    appliedQuery = state.query
+                    appliedFilters = state.filters
+                    if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+                        listState.scrollToItem(0)
+                    }
+                }
+            }
+            val backgroundHidden = state.searchOpen || state.overlay is SearchOverlay.ItemMenu
+            Column(Modifier.fillMaxSize().then(if (backgroundHidden) Modifier.clearAndSetSemantics {} else Modifier)) {
                 SearchTopBar(state.query, onAction, onBack)
+                if (state.filtersOpen) SearchFilterBar(state.filters, onAction)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (val content = state.content) {
                         SearchContent.Loading -> SearchSkeleton(width, height)
                         SearchContent.Failed -> SearchFailed(onAction)
                         is SearchContent.Empty -> SearchNoResults(content.query)
-                        is SearchContent.Results -> SearchList(content.page.results, width, height, onAction)
+                        is SearchContent.Results -> SearchList(content.page.results, width, height, listState, onAction)
                     }
                 }
                 SearchNavigationBar(state.signedInPreview, onAction)
@@ -67,6 +102,145 @@ fun SearchResultsScreen(
                 onClose = { onAction(SearchAction.CloseSearch) },
                 onVoiceSearch = { onAction(SearchAction.VoiceSearch) },
             )
+            if (state.overlay is SearchOverlay.ItemMenu) MenuBottomSheet(
+                items = SearchVideoMenuAction.entries.map {
+                    MenuSheetItem(it.icon(), it.label, "search-menu-${it.name}")
+                },
+                onDismiss = { onAction(SearchAction.CloseItemMenu) },
+                onSelect = { index ->
+                    onAction(SearchAction.MenuAction(SearchVideoMenuAction.entries[index]))
+                },
+                tag = "search-video-menu",
+                paneTitle = "Video actions",
+            )
+        }
+    }
+}
+
+private fun SearchVideoMenuAction.icon(): AppIcon = when (this) {
+    SearchVideoMenuAction.WatchLater -> AppIcon.Clock
+    SearchVideoMenuAction.SaveToPlaylist -> AppIcon.Bookmark
+    SearchVideoMenuAction.Share -> AppIcon.Share
+    SearchVideoMenuAction.NotInterested -> AppIcon.Block
+    SearchVideoMenuAction.DontRecommend -> AppIcon.Close
+}
+
+/** Inline dual-select strip sampled below the 48-high bar; selections apply immediately. */
+@Composable
+private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> Unit) {
+    val density = LocalDensity.current
+    val textHeight = with(density) { SearchResultsLayout.FilterTextSize.sp.toDp() }
+    val chipHeight = maxOf(SearchResultsLayout.FilterGroupHeight.dp, textHeight + 28.dp)
+    val barHeight = chipHeight + 25.dp
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val barWidth = minOf(maxWidth.value, SearchResultsLayout.ColumnMaxWidth)
+        Box(Modifier.fillMaxWidth().height(barHeight).testTag("search-filter-bar-host"),
+            contentAlignment = Alignment.TopCenter) {
+            Box(
+                Modifier.width(barWidth.dp).fillMaxHeight().testTag("search-filter-bar"),
+            ) {
+                Row(
+                    Modifier.fillMaxSize().padding(SearchResultsLayout.FilterBarPadding.dp)
+                        .horizontalScroll(rememberScrollState()).testTag("search-filter-groups"),
+                    horizontalArrangement = Arrangement.spacedBy(SearchResultsLayout.FilterGroupGap.dp),
+                ) {
+                    FilterGroup(
+                        tag = "search-filter-type",
+                        selected = filters.type,
+                        options = SearchResultType.entries,
+                        labelOf = { it.label },
+                        minWidth = SearchResultsLayout.FilterTypeMinWidth,
+                        chipHeight = chipHeight,
+                        onSelect = { onAction(SearchAction.SelectResultType(it)) },
+                    )
+                    FilterGroup(
+                        tag = "search-filter-date",
+                        selected = filters.uploaded,
+                        options = SearchUploadDate.entries,
+                        labelOf = { it.label },
+                        minWidth = SearchResultsLayout.FilterDateMinWidth,
+                        chipHeight = chipHeight,
+                        onSelect = { onAction(SearchAction.SelectUploadDate(it)) },
+                    )
+                }
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp)
+                        .background(Color.Black.copy(alpha = SearchResultsLayout.FilterDividerAlpha))
+                        .testTag("search-filter-divider"),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> FilterGroup(
+    tag: String,
+    selected: T,
+    options: List<T>,
+    labelOf: (T) -> String,
+    minWidth: Float,
+    chipHeight: Dp,
+    onSelect: (T) -> Unit,
+) {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = DesignTokens.text(SearchResultsLayout.FilterTextSize.toInt(), 20)
+    val width = remember(options, style, density) {
+        val labelWidth = options.maxOf { measurer.measure(labelOf(it), style).size.width / density.density }
+        maxOf(minWidth, labelWidth + 46f)
+    }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val select by rememberUpdatedState(onSelect)
+    Box {
+        Row(
+            Modifier.width(width.dp).height(chipHeight).testTag(tag)
+                .clip(RoundedCornerShape(SearchResultsLayout.FilterGroupRadius.dp))
+                .background(Color(0xFFF1F1F1))
+                .border(
+                    1.dp, Color.Black.copy(alpha = SearchResultsLayout.FilterDividerAlpha),
+                    RoundedCornerShape(SearchResultsLayout.FilterGroupRadius.dp),
+                )
+                .clickable(role = Role.Button) { expanded = true }
+                .semantics { contentDescription = labelOf(selected) }
+                .padding(start = 11.dp, end = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppText(
+                labelOf(selected), Modifier.weight(1f).testTag("$tag-label"), size = SearchResultsLayout.FilterTextSize.toInt(),
+                line = 20, maxLines = 1,
+            )
+            AppIcon(AppIcon.ChevronDown, Modifier.size(SearchResultsLayout.FilterIconSize.dp).testTag("$tag-icon"))
+        }
+        if (expanded) DisposableEffect(context, options, selected) {
+            val pickerContext = ContextThemeWrapper(context, android.R.style.Theme_Material_Light_Dialog_Alert)
+            val scale = pickerContext.resources.displayMetrics.density
+            val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, options.map(labelOf)) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                    (super.getView(position, convertView, parent) as CheckedTextView).apply {
+                        textSize = 20f
+                        minimumHeight = (64 * scale).toInt()
+                        val inset = (12 * scale).toInt()
+                        setPadding(inset, inset, inset, inset)
+                    }
+            }
+            val dialog = AlertDialog.Builder(pickerContext)
+                .setSingleChoiceItems(adapter, options.indexOf(selected)) { picker, index ->
+                    expanded = false
+                    select(options[index])
+                    picker.dismiss()
+                }
+                .setOnDismissListener { expanded = false }
+                .create()
+            dialog.show()
+            dialog.listView.setPadding(0, 0, 0, 0)
+            dialog.listView.divider = ColorDrawable(android.graphics.Color.rgb(221, 221, 221))
+            dialog.listView.dividerHeight = scale.toInt().coerceAtLeast(1)
+            onDispose {
+                dialog.setOnDismissListener(null)
+                dialog.dismiss()
+            }
         }
     }
 }
@@ -135,12 +309,14 @@ private fun SearchList(
     results: List<SearchResult>,
     width: Float,
     height: Float,
+    listState: LazyListState,
     onAction: (SearchAction) -> Unit,
 ) {
     val viewport = rememberUpdatedState(width to height)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             Modifier.widthIn(max = SearchResultsLayout.ColumnMaxWidth.dp).fillMaxSize().testTag("search-results-list"),
+            state = listState,
             contentPadding = PaddingValues(
                 start = 0.dp, end = 0.dp,
                 top = SearchResultsLayout.listTopInset(width).dp,

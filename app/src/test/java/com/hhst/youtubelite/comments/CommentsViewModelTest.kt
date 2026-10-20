@@ -3,9 +3,11 @@ package com.hhst.youtubelite.comments
 import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentMenuAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsPage
 import com.hhst.youtubelite.comments.domain.CommentsRepository
 import com.hhst.youtubelite.comments.presentation.CommentsViewModel
@@ -136,15 +138,15 @@ class CommentsViewModelTest {
             CommentAction.Compose to CommentNavigationRequest.Compose("bunny"),
             CommentAction.LikeThread("c1") to CommentNavigationRequest.LikeComment("bunny", "c1"),
             CommentAction.DislikeThread("c1") to CommentNavigationRequest.DislikeComment("bunny", "c1"),
-            CommentAction.ReportThread("c1") to CommentNavigationRequest.ReportComment("bunny", "c1"),
+            CommentAction.ReportThread("c1") to CommentNavigationRequest.ReportComment("bunny", "c1", "c1"),
             CommentAction.OpenThreadMenu("c1") to CommentNavigationRequest.OpenCommentMenu("bunny", "c1"),
             CommentAction.Reply("c1") to CommentNavigationRequest.Reply("bunny", "c1", "c1"),
             CommentAction.Reply("c1", "c1r1") to CommentNavigationRequest.Reply("bunny", "c1", "c1r1"),
             CommentAction.OpenAuthor("blender") to CommentNavigationRequest.OpenAuthor("blender"),
             CommentAction.LikeReply("c1", "c1r1") to CommentNavigationRequest.LikeComment("bunny", "c1r1"),
             CommentAction.DislikeReply("c1", "c1r1") to CommentNavigationRequest.DislikeComment("bunny", "c1r1"),
-            CommentAction.ReportReply("c1", "c1r1") to CommentNavigationRequest.ReportComment("bunny", "c1r1"),
-            CommentAction.OpenReplyMenu("c1", "c1r1") to CommentNavigationRequest.OpenCommentMenu("bunny", "c1r1"),
+            CommentAction.ReportReply("c1", "c1r1") to CommentNavigationRequest.ReportComment("bunny", "c1", "c1r1"),
+            CommentAction.OpenReplyMenu("c1", "c1r1") to CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"),
         )
         for ((action, expected) in expectations) {
             vm.onAction(action)
@@ -214,5 +216,61 @@ class CommentsViewModelTest {
         assertTrue(cancelled)
         assertEquals(CommentSort.Newest, vm.uiState.value.sort)
         assertEquals(4, (vm.uiState.value.content as CommentsContent.Ready).threads.size)
+    }
+
+    @Test fun threadAndReplyMenusKeepTheThreadAndCommentIdentitiesApart() = runTest {
+        val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        assertEquals(CommentsOverlay.ThreadMenu("c1"), vm.uiState.value.overlay)
+        assertEquals(CommentNavigationRequest.OpenCommentMenu("bunny", "c1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Reply))
+        assertEquals(CommentNavigationRequest.Reply("bunny", "c1", "c1"), vm.navigationRequests.first())
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        assertEquals(CommentNavigationRequest.OpenCommentMenu("bunny", "c1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Report))
+        assertEquals(CommentNavigationRequest.ReportComment("bunny", "c1", "c1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.OpenReplyMenu("c1", "c1r1"))
+        assertEquals(CommentsOverlay.ReplyMenu("c1", "c1r1"), vm.uiState.value.overlay)
+        assertEquals(CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Reply))
+        assertEquals(CommentNavigationRequest.Reply("bunny", "c1", "c1r1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.OpenReplyMenu("c1", "c1r1"))
+        assertEquals(CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Report))
+        assertEquals(CommentNavigationRequest.ReportComment("bunny", "c1", "c1r1"), vm.navigationRequests.first())
+    }
+
+    @Test fun closingTheMenuKeepsThePanelExpansionAndLoadedPages() = runTest {
+        val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.ToggleReplies("c1"))
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        vm.onAction(CommentAction.CloseMenu)
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+        assertTrue("c1" in vm.uiState.value.expanded)
+        val ready = vm.uiState.value.content as CommentsContent.Ready
+        assertEquals(4, ready.threads.size)
+    }
+
+    @Test fun openMenuSurvivesSavedStateReconstruction() = runTest {
+        val handle = SavedStateHandle()
+        val vm = CommentsViewModel(FixtureCommentsRepository(), handle, "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.OpenReplyMenu("c2", "c2r1"))
+        var restored = CommentsViewModel(
+            FixtureCommentsRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "ignored",
+        )
+        assertEquals(CommentsOverlay.ReplyMenu("c2", "c2r1"), restored.uiState.value.overlay)
+        vm.onAction(CommentAction.CloseMenu)
+        restored = CommentsViewModel(
+            FixtureCommentsRepository(),
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }),
+            "ignored",
+        )
+        assertEquals(CommentsOverlay.None, restored.uiState.value.overlay)
     }
 }

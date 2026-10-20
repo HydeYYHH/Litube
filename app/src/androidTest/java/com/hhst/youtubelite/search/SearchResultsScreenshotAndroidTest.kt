@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import com.hhst.youtubelite.core.NativeChoicePicker
 import com.hhst.youtubelite.search.data.FixtureSearchRepository
 import com.hhst.youtubelite.search.domain.*
 import com.hhst.youtubelite.search.presentation.SearchResultsScreen
@@ -400,6 +401,87 @@ class SearchResultsScreenshotAndroidTest {
             assertEquals(titleX, title.left, 0.5f)
             assertEquals(titleWidth, title.width, 0.5f)
         }
+    }
+
+    /** The inline filter strip and the ordinary-video sheet at both sampled widths. */
+    @Test fun filterAndCardMenuSurfacesFollowTheMeasuredGeometry() {
+        val record = InstrumentationRegistry.getArguments().getString("recordMenuGoldens") == "true"
+        val goldens = setOf("filters-390", "filters-1280", "video-menu-390", "video-menu-1280")
+        var width by mutableIntStateOf(390)
+        var height by mutableIntStateOf(844)
+        var state by mutableStateOf(
+            SearchUiState(query = QUERY, content = results(), filtersOpen = true),
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                Box(Modifier.requiredSize(width.dp, height.dp)) { SearchResultsScreen(state, {}, {}) }
+            }
+        }
+        val output = File(compose.activity.getExternalFilesDir(null), "search-acceptance").apply { mkdirs() }
+
+        val bar = compose.onNodeWithTag("search-filter-bar").fetchSemanticsNode().boundsInRoot
+        assertEquals(0f, bar.left, 0.5f)
+        assertEquals(390f, bar.width, 0.5f)
+        assertEquals(75f, bar.height, 0.5f)
+        val type = compose.onNodeWithTag("search-filter-type").fetchSemanticsNode().boundsInRoot
+        val date = compose.onNodeWithTag("search-filter-date").fetchSemanticsNode().boundsInRoot
+        assertEquals(104f, type.width, 0.5f)
+        assertEquals(117f, date.width, 0.5f)
+        assertEquals(12f, type.left - bar.left, 0.5f)
+        assertEquals(12f, type.top - bar.top, 0.5f)
+        assertEquals(4f, date.left - type.right, 0.5f)
+        assertEquals(87f, compose.onNodeWithTag("search-filter-type-icon", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left, 0.5f)
+        assertEquals(208f, compose.onNodeWithTag("search-filter-date-icon", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left, 0.5f)
+        capture("filters-390", output, record, goldens)
+
+        compose.runOnIdle { width = 1280; height = 800 }
+        val wideBar = compose.onNodeWithTag("search-filter-bar").fetchSemanticsNode().boundsInRoot
+        assertEquals(220f, wideBar.left, 0.5f)
+        assertEquals(840f, wideBar.width, 0.5f)
+        assertEquals(75f, wideBar.height, 0.5f)
+        capture("filters-1280", output, record, goldens)
+
+        compose.runOnIdle {
+            width = 390; height = 844
+            state = state.copy(filtersOpen = false, overlay = SearchOverlay.ItemMenu("harbour"))
+        }
+        val sheet = compose.onNodeWithTag("search-video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(8f, sheet.left, 0.5f)
+        assertEquals(844f - 24f, sheet.bottom, 0.5f)
+        val shareRow = compose.onNodeWithTag("search-menu-Share").fetchSemanticsNode().boundsInRoot
+        assertEquals(48f, shareRow.height, 0.5f)
+        capture("video-menu-390", output, record, goldens)
+
+        compose.runOnIdle { width = 1280; height = 800 }
+        val wideSheet = compose.onNodeWithTag("search-video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals(400f, wideSheet.width, 0.5f)
+        assertEquals(440f, wideSheet.left, 0.5f)
+        assertEquals(800f - 24f, wideSheet.bottom, 0.5f)
+        capture("video-menu-1280", output, record, goldens)
+    }
+
+    @Test fun largeTextFiltersCanScrollToEveryControlInNarrowWindows() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                Box(Modifier.requiredSize(240.dp, 320.dp)) {
+                    SearchResultsScreen(SearchUiState(query = QUERY, content = results(), filtersOpen = true), {}, {})
+                }
+            }
+        }
+        for (tag in listOf("search-filter-type", "search-filter-date")) {
+            compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithTag("$tag-label", useUnmergedTree = true)
+                .fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            assertFalse(layouts.first().isLineEllipsized(0))
+            compose.onNodeWithTag(tag).performClick()
+            compose.waitForIdle()
+            val option = if (tag.endsWith("type")) "Playlists" else "This year"
+            NativeChoicePicker.choose(option)
+        }
+        val output = File(compose.activity.getExternalFilesDir(null), "search-acceptance").apply { mkdirs() }
+        capture("filters-240-font2", output, true, emptySet())
     }
 
     private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {

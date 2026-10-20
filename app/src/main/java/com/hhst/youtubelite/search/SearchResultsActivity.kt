@@ -31,6 +31,8 @@ import com.hhst.youtubelite.search.data.SearchScenario
 import com.hhst.youtubelite.search.domain.SearchAction
 import com.hhst.youtubelite.search.domain.SearchDestination
 import com.hhst.youtubelite.search.domain.SearchNavigationRequest
+import com.hhst.youtubelite.search.domain.SearchOverlay
+import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.channel.ChannelActivity
 import com.hhst.youtubelite.search.presentation.SearchResultsScreen
 import com.hhst.youtubelite.search.presentation.SearchResultsViewModel
@@ -41,6 +43,7 @@ import kotlinx.coroutines.launch
 class SearchResultsActivity : ComponentActivity() {
     lateinit var searchViewModel: SearchResultsViewModel
         private set
+    val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     var lastNavigationRequest: SearchNavigationRequest? = null
         private set
 
@@ -67,13 +70,19 @@ class SearchResultsActivity : ComponentActivity() {
                     if (request is SearchNavigationRequest.Channel) {
                         startActivity(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))
                     }
+                    if (request is SearchNavigationRequest.Share) shareGateway.share(request.videoId)
                 }
             }
         }
         setContent {
             val state by searchViewModel.uiState.collectAsStateWithLifecycle()
             val back = {
-                if (state.searchOpen) searchViewModel.onAction(SearchAction.CloseSearch) else finish()
+                when {
+                    state.overlay is SearchOverlay.ItemMenu -> searchViewModel.onAction(SearchAction.CloseItemMenu)
+                    state.searchOpen -> searchViewModel.onAction(SearchAction.CloseSearch)
+                    state.filtersOpen -> searchViewModel.onAction(SearchAction.CloseFilters)
+                    else -> finish()
+                }
             }
             BackHandler(onBack = back)
             SearchResultsScreen(

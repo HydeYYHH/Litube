@@ -4,10 +4,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentMenuAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
 import com.hhst.youtubelite.comments.domain.CommentThread
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentsUiState
 import kotlinx.coroutines.CancellationException
@@ -33,9 +35,19 @@ class CommentsViewModel(
     }.getOrDefault(CommentSort.Top)
     private val expanded = savedState.get<ArrayList<String>>(KEY_EXPANDED)?.toSet() ?: emptySet()
     private val videoId = savedState.get<String>(KEY_VIDEO) ?: videoId
+    private val restoredOverlay: CommentsOverlay = when (savedState.get<String>(KEY_OVERLAY)) {
+        "sort" -> CommentsOverlay.SortMenu
+        "thread" -> savedState.get<String>(KEY_THREAD)?.let { CommentsOverlay.ThreadMenu(it) }
+        "reply" -> {
+            val thread = savedState.get<String>(KEY_THREAD)
+            val reply = savedState.get<String>(KEY_REPLY)
+            if (thread != null && reply != null) CommentsOverlay.ReplyMenu(thread, reply) else null
+        }
+        else -> null
+    } ?: CommentsOverlay.None
 
     private val _state = MutableStateFlow(
-        CommentsUiState(videoId = this.videoId, sort = sort, expanded = expanded),
+        CommentsUiState(videoId = this.videoId, sort = sort, expanded = expanded, overlay = restoredOverlay),
     )
     val uiState = _state.asStateFlow()
 
@@ -50,6 +62,7 @@ class CommentsViewModel(
         savedState[KEY_VIDEO] = this.videoId
         savedState[KEY_SORT] = sort.name
         savedState[KEY_EXPANDED] = ArrayList(expanded)
+        persistOverlay(restoredOverlay)
         load()
     }
 
@@ -57,19 +70,92 @@ class CommentsViewModel(
         when (action) {
             CommentAction.Retry -> load()
             CommentAction.LoadMore -> loadMore()
-            is CommentAction.SelectSort -> selectSort(action.sort)
+            is CommentAction.SelectSort -> {
+                overlay(CommentsOverlay.None)
+                selectSort(action.sort)
+            }
+            CommentAction.OpenSortMenu -> overlay(CommentsOverlay.SortMenu)
+            CommentAction.CloseMenu -> overlay(CommentsOverlay.None)
+            is CommentAction.MenuAction -> selectMenuAction(action.action)
             is CommentAction.ToggleReplies -> toggleReplies(action.commentId)
             CommentAction.Compose -> navigation.trySend(CommentNavigationRequest.Compose(videoId))
             is CommentAction.LikeThread -> navigation.trySend(CommentNavigationRequest.LikeComment(videoId, action.commentId))
             is CommentAction.DislikeThread -> navigation.trySend(CommentNavigationRequest.DislikeComment(videoId, action.commentId))
-            is CommentAction.ReportThread -> navigation.trySend(CommentNavigationRequest.ReportComment(videoId, action.commentId))
-            is CommentAction.OpenThreadMenu -> navigation.trySend(CommentNavigationRequest.OpenCommentMenu(videoId, action.commentId))
+            is CommentAction.ReportThread -> navigation.trySend(
+                CommentNavigationRequest.ReportComment(videoId, action.commentId, action.commentId),
+            )
+            is CommentAction.OpenThreadMenu -> {
+                overlay(CommentsOverlay.ThreadMenu(action.commentId))
+                navigation.trySend(CommentNavigationRequest.OpenCommentMenu(videoId, action.commentId))
+            }
             is CommentAction.OpenAuthor -> navigation.trySend(CommentNavigationRequest.OpenAuthor(action.channelId))
             is CommentAction.Reply -> navigation.trySend(CommentNavigationRequest.Reply(videoId, action.threadId, action.commentId))
             is CommentAction.LikeReply -> navigation.trySend(CommentNavigationRequest.LikeComment(videoId, action.replyId))
             is CommentAction.DislikeReply -> navigation.trySend(CommentNavigationRequest.DislikeComment(videoId, action.replyId))
-            is CommentAction.ReportReply -> navigation.trySend(CommentNavigationRequest.ReportComment(videoId, action.replyId))
-            is CommentAction.OpenReplyMenu -> navigation.trySend(CommentNavigationRequest.OpenCommentMenu(videoId, action.replyId))
+            is CommentAction.ReportReply -> navigation.trySend(
+                CommentNavigationRequest.ReportComment(videoId, action.commentId, action.replyId),
+            )
+            is CommentAction.OpenReplyMenu -> {
+                overlay(CommentsOverlay.ReplyMenu(action.commentId, action.replyId))
+                navigation.trySend(CommentNavigationRequest.OpenReplyMenu(videoId, action.commentId, action.replyId))
+            }
+        }
+    }
+
+    /**
+     * Both menu kinds share two public rows, but their typed requests keep the thread and
+     * the concrete comment identity separate.
+     */
+    private fun selectMenuAction(action: CommentMenuAction) {
+        when (val current = uiState.value.overlay) {
+            is CommentsOverlay.ThreadMenu -> {
+                overlay(CommentsOverlay.None)
+                when (action) {
+                    CommentMenuAction.Reply -> navigation.trySend(
+                        CommentNavigationRequest.Reply(videoId, current.threadId, current.threadId),
+                    )
+                    CommentMenuAction.Report -> navigation.trySend(
+                        CommentNavigationRequest.ReportComment(videoId, current.threadId, current.threadId),
+                    )
+                }
+            }
+            is CommentsOverlay.ReplyMenu -> {
+                overlay(CommentsOverlay.None)
+                when (action) {
+                    CommentMenuAction.Reply -> navigation.trySend(
+                        CommentNavigationRequest.Reply(videoId, current.threadId, current.replyId),
+                    )
+                    CommentMenuAction.Report -> navigation.trySend(
+                        CommentNavigationRequest.ReportComment(videoId, current.threadId, current.replyId),
+                    )
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    private fun overlay(next: CommentsOverlay) {
+        _state.update { it.copy(overlay = next) }
+        persistOverlay(next)
+    }
+
+    private fun persistOverlay(overlay: CommentsOverlay) {
+        savedState[KEY_OVERLAY] = when (overlay) {
+            CommentsOverlay.SortMenu -> "sort"
+            is CommentsOverlay.ThreadMenu -> {
+                savedState[KEY_THREAD] = overlay.threadId
+                "thread"
+            }
+            is CommentsOverlay.ReplyMenu -> {
+                savedState[KEY_THREAD] = overlay.threadId
+                savedState[KEY_REPLY] = overlay.replyId
+                "reply"
+            }
+            CommentsOverlay.None -> {
+                savedState.remove<String>(KEY_THREAD)
+                savedState.remove<String>(KEY_REPLY)
+                "none"
+            }
         }
     }
 
@@ -176,5 +262,8 @@ class CommentsViewModel(
         const val KEY_SORT = "commentsSort"
         const val KEY_EXPANDED = "commentsExpanded"
         const val KEY_LOADED = "commentsLoadedCount"
+        const val KEY_OVERLAY = "commentsOverlay"
+        const val KEY_THREAD = "commentsMenuThread"
+        const val KEY_REPLY = "commentsMenuReply"
     }
 }
