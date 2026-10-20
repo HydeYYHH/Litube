@@ -78,6 +78,26 @@
             </intent-filter>
         </activity>
 
+        <!-- Local search results page; it opens a typed request for every later destination. -->
+        <activity
+            android:name=".search.SearchResultsActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.App.Home" />
+
+        <!-- Standard video watch page; local fixtures only, typed requests for every action. -->
+        <activity
+            android:name=".watch.WatchActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App.Home" />
+
+        <!-- Local channel page; it opens a typed request for every later destination. -->
+        <activity
+            android:name=".channel.ChannelActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.App.Home" />
+
         <!-- Internal browser, playback and download host. -->
         <activity android:name=".MainActivity" android:exported="false"
             android:launchMode="singleTask" android:supportsPictureInPicture="true"

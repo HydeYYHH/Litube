@@ -140,6 +140,21 @@ class ChannelReferenceAndroidTest {
         }
     }
 
+    @Test fun collectMidWidthIdentityReference() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("network") == "1")
+        val original = originalGeometry()
+        try {
+            for (width in (InstrumentationRegistry.getArguments().getString("referenceWidths") ?: "600,840").split(",").map(String::toInt)) {
+                applyViewport("identity-" + width, width, 1000)
+                sample("https://m.youtube.com/@blenderguru/videos?hl=en", "channel-review-identity",
+                    VIDEOS_READY, false, width, IDENTITY_COLLECT)
+            }
+        } finally {
+            DeviceEvidence.shell("wm density ${original.second}")
+            DeviceEvidence.shell("wm size ${original.first}")
+        }
+    }
+
     private companion object {
         /** Deep header descendants rendered on the videos tab header; sampling happens there, not on the home tab. */
         const val VIDEOS_READY =
@@ -155,7 +170,7 @@ class ChannelReferenceAndroidTest {
             const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
             const R = e => { const r = e.getBoundingClientRect(); return {x:Math.round(r.x*100)/100, y:Math.round(r.y*100)/100, width:Math.round(r.width*100)/100, height:Math.round(r.height*100)/100}; };
             const S = e => { const s = getComputedStyle(e); return {fontSize:s.fontSize,fontWeight:s.fontWeight,lineHeight:s.lineHeight,
-              fontFamily:s.fontFamily,padding:s.padding,margin:s.margin,color:s.color,backgroundColor:s.backgroundColor,
+              fontFamily:s.fontFamily,fontVariationSettings:s.fontVariationSettings,padding:s.padding,margin:s.margin,color:s.color,backgroundColor:s.backgroundColor,
               borderRadius:s.borderRadius,display:s.display,maxHeight:s.maxHeight,maxWidth:s.maxWidth,gap:s.gap,
               boxSizing:s.boxSizing,overflow:s.overflow,textOverflow:s.textOverflow,webkitLineClamp:s.webkitLineClamp,
               letterSpacing:s.letterSpacing,textDecorationLine:s.textDecorationLine,border:s.border,position:s.position,alignItems:s.alignItems,
@@ -168,6 +183,16 @@ class ChannelReferenceAndroidTest {
               document.querySelector('[class*=pageHeaderRendererHost]') || document.querySelector('ytm-profile-page-renderer');
             const out = {url: location.href, ready: __READY__,
               viewport: {width: innerWidth, height: innerHeight, dpr: devicePixelRatio}};
+            out.fontResources = performance.getEntriesByType('resource').map(e => e.name).filter(n => /woff|ttf|font/i.test(n));
+            out.fonts = [...document.fonts].map(f => ({family:f.family,weight:f.weight,stretch:f.stretch,status:f.status}));
+            out.fontFaceRules = [];
+            const fontRules = rules => {
+              for (const rule of rules) {
+                if (rule.type === CSSRule.FONT_FACE_RULE) out.fontFaceRules.push(rule.cssText);
+                else if (!rule.selectorText && rule.cssRules) fontRules(rule.cssRules);
+              }
+            };
+            for (const sheet of document.styleSheets) { try { fontRules(sheet.cssRules); } catch(e) {} }
             if (header) {
               out.header = {tag: header.tagName, cls: String(header.className).slice(0, 120), rect: R(header),
                 style: {padding: getComputedStyle(header).padding, margin: getComputedStyle(header).margin, background: getComputedStyle(header).backgroundColor},
@@ -205,7 +230,7 @@ class ChannelReferenceAndroidTest {
             const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
             const R = e => { const r = e.getBoundingClientRect(); return {x:r.x, y:r.y, width:r.width, height:r.height}; };
             const S = e => { const s = getComputedStyle(e); return {fontSize:s.fontSize,fontWeight:s.fontWeight,lineHeight:s.lineHeight,
-              fontFamily:s.fontFamily,padding:s.padding,margin:s.margin,color:s.color,backgroundColor:s.backgroundColor,
+              fontFamily:s.fontFamily,fontVariationSettings:s.fontVariationSettings,padding:s.padding,margin:s.margin,color:s.color,backgroundColor:s.backgroundColor,
               borderRadius:s.borderRadius,display:s.display,aspectRatio:s.aspectRatio,overflow:s.overflow,textOverflow:s.textOverflow,
               maxHeight:s.maxHeight,maxWidth:s.maxWidth,gap:s.gap,boxShadow:s.boxShadow,alignItems:s.alignItems,flexDirection:s.flexDirection,
               position:s.position,top:s.top,left:s.left,width:s.width,height:s.height,minWidth:s.minWidth,textAlign:s.textAlign,

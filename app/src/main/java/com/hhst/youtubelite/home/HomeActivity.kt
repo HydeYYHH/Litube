@@ -27,6 +27,9 @@ import com.hhst.youtubelite.home.data.HomeScenario
 import com.hhst.youtubelite.home.domain.*
 import com.hhst.youtubelite.home.presentation.HomeScreen
 import com.hhst.youtubelite.home.presentation.HomeViewModel
+import com.hhst.youtubelite.channel.ChannelActivity
+import com.hhst.youtubelite.search.SearchResultsActivity
+import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the home screen and observes its navigation requests. */
@@ -49,7 +52,13 @@ class HomeActivity : ComponentActivity() {
         })[HomeViewModel::class.java]
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                homeViewModel.navigationRequests.collect { lastNavigationRequest = it }
+                homeViewModel.navigationRequests.collect { request ->
+                    lastNavigationRequest = request
+                    // The results and watch pages are the implemented destinations; everything else stays a request.
+                    if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
+                    if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
+                    if (request is HomeNavigationRequest.Channel) startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
+                }
             }
         }
         setContent {

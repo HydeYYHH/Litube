@@ -33,9 +33,16 @@ class HomeScreenAndroidTest {
 
     private fun launch(scene: HomeScenario = HomeScenario.Empty): ActivityScenario<HomeActivity> {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        return ActivityScenario.launch<HomeActivity>(Intent(context, HomeActivity::class.java).putExtra(HomeActivity.EXTRA_SCENARIO, scene.argument)).also { scenario = it }
+        return ActivityScenario.launch<HomeActivity>(Intent(context, HomeActivity::class.java).putExtra(HomeActivity.EXTRA_SCENARIO, scene.argument)).also {
+            scenario = it
+            // Host tests hand over between activities; wait for this window before touching it.
+            compose.waitUntil(15_000) { runCatching { compose.onAllNodesWithTag("home-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty() }
+        }
     }
-    @After fun close() { scenario?.close() }
+    @After fun close() {
+        scenario?.close()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+    }
 
     @Test fun firstVisitIsNativeAndDoesNotStartNetworkingOrLegacyRuntime() {
         val sent = TrafficStats.getUidTxBytes(Process.myUid())
@@ -91,6 +98,14 @@ class HomeScreenAndroidTest {
         host.onActivity { assertNull(it.lastNavigationRequest) }
         compose.onNodeWithTag("suggestion-0").performClick()
         host.onActivity { assertEquals(HomeNavigationRequest.Search("nature documentary"), it.lastNavigationRequest) }
+        // Submitting opens the local results page; it never invents home feed content.
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("search-results").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("search-query").assertTextEquals("nature documentary")
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(15_000) { runCatching { compose.onAllNodesWithTag("home-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty() }
+        compose.onNodeWithTag("home-empty").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
+        compose.onNodeWithTag("search-input").assertTextEquals("nature documentary")
         compose.onNodeWithTag("home-screen").performTouchInput { click(center.copy(y = height - 20f)) }
         compose.onNodeWithTag("search-overlay").assertDoesNotExist()
         compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()

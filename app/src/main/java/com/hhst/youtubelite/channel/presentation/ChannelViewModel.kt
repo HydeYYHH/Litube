@@ -20,11 +20,12 @@ class ChannelViewModel(
     channelId: String,
     scenario: ChannelScenario = ChannelScenario.Content,
 ) : ViewModel() {
+    private val restoredId = savedState.get<String>("channelId") ?: channelId
     private val _state = MutableStateFlow(
         ChannelUiState(
-            channelId = channelId,
-            content = scenario.initialContent(),
-            selectedTab = savedState.get<String>("tab")?.let { name -> ChannelTab.entries.firstOrNull { it.name == name } } ?: ChannelTab.Home,
+            channelId = restoredId,
+            content = scenario.initialContent(restoredId),
+            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos).firstOrNull { it.name == name } } ?: ChannelTab.Home,
         )
     )
     val uiState = _state.asStateFlow()
@@ -34,13 +35,16 @@ class ChannelViewModel(
     private var generation = 0
 
     init {
+        savedState["channelId"] = restoredId
         if (scenario.loadsContent() && _state.value.content is ChannelContent.Loading) load()
     }
 
     fun onAction(action: ChannelAction) {
         when (action) {
             ChannelAction.Retry -> load()
+            is ChannelAction.SelectDestination -> navigation.trySend(ChannelNavigationRequest.Destination(action.destination))
             is ChannelAction.SelectTab -> selectTab(action.tab)
+            is ChannelAction.OpenItemMenu -> navigation.trySend(ChannelNavigationRequest.ItemMenu(action.videoId))
             is ChannelAction.OpenVideo -> navigation.trySend(ChannelNavigationRequest.Watch(action.videoId))
             ChannelAction.Subscribe -> navigation.trySend(ChannelNavigationRequest.Subscribe(uiState.value.channelId))
             ChannelAction.Share -> navigation.trySend(ChannelNavigationRequest.Share)

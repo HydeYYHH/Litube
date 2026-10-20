@@ -14,6 +14,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.selected
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,8 +31,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -37,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.channel.domain.ChannelDestination
 import com.hhst.youtubelite.channel.domain.ChannelAction
 import com.hhst.youtubelite.channel.domain.ChannelContent
 import com.hhst.youtubelite.channel.domain.ChannelLayout
@@ -49,15 +59,8 @@ import com.hhst.youtubelite.ui.design.*
 
 private val SubscribeForeground = Color(0xFFF1F1F1)
 
-/** m.youtube renders its website links in this blue; the app tokens don't need it elsewhere. */
 private val ChannelLink = Color(0xFF065FD4)
 
-/**
- * Local channel page: top bar, banner, identity, description, subscribe, tab bar and the
- * Home/Videos tabs with fixed fixture content. Every other reference surface (other tabs,
- * account-bound subscribe, description expansion, per-video actions) stays a typed
- * ChannelNavigationRequest. Geometry anchors live in ChannelLayout.
- */
 @Composable
 fun ChannelScreen(
     state: ChannelUiState,
@@ -82,6 +85,30 @@ fun ChannelScreen(
                             else -> ChannelVideosTab(content.page, width, videosState, onAction)
                         }
                     }
+                }
+                ChannelNavigationBar(onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelNavigationBar(onAction: (ChannelAction) -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag("channel-navigation")) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
+        Row(Modifier.fillMaxWidth().height(56.dp)) {
+            ChannelDestination.entries.forEach { destination ->
+                Column(Modifier.weight(1f).fillMaxHeight()
+                    .clickable(role = Role.Tab) { onAction(ChannelAction.SelectDestination(destination)) }
+                    .testTag("channel-nav-" + destination.name),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center) {
+                    AppIcon(when (destination) {
+                        ChannelDestination.Home -> AppIcon.HomeOutline
+                        ChannelDestination.Shorts -> AppIcon.Shorts
+                        ChannelDestination.You -> AppIcon.You
+                    })
+                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
                 }
             }
         }
@@ -117,7 +144,7 @@ private fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Uni
                 val isSelected = tab == selected
                 Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
                     .widthIn(min = ChannelLayout.TabMinWidth.dp)
-                    .testTag("channel-tab-${tab.name}")
+                    .testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
                     .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
                     contentAlignment = Alignment.Center) {
                     AppText(tab.label, size = 14, line = 20, maxLines = 1,
@@ -151,12 +178,13 @@ private fun ChannelHomeTab(
     onAction: (ChannelAction) -> Unit,
 ) {
     val shelf = page.videos.filter { it.homeShelf }
+    val viewport = rememberUpdatedState(width)
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-home-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, width, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction) }
         // The sampled page scrolls the tab row with the channel header and pins it once
         // the header is gone, so tabs stay reachable from every scroll depth.
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Home, onAction) }
@@ -175,7 +203,7 @@ private fun ChannelHomeTab(
             }
             items(shelf, key = { it.id }) { video ->
                 Box(Modifier.padding(horizontal = ChannelLayout.ListRowInset.dp)) {
-                    ChannelVideoRow(video, ChannelLayout.menuSize(width).dp, onAction)
+                    ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction)
                 }
             }
         }
@@ -189,25 +217,25 @@ private fun ChannelVideosTab(
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
 ) {
+    val viewport = rememberUpdatedState(width)
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-videos-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, width, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Videos, onAction) }
         if (page.videos.isEmpty()) {
             item { ChannelNoVideos() }
         } else {
-            val columns = ChannelLayout.gridColumns(width)
+            val columns = ChannelLayout.gridColumns(viewport.value)
             if (columns == 1) {
                 items(page.videos, key = { it.id }) { video ->
                     Box(Modifier.padding(horizontal = ChannelLayout.ListRowInset.dp)) {
-                        ChannelVideoRow(video, ChannelLayout.menuSize(width).dp, onAction)
+                        ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction)
                     }
                 }
             } else {
-                val cardWidth = ChannelLayout.cardWidth(width)
                 items(
                     page.videos.chunked(columns),
                     key = { row -> row.joinToString("-") { it.id } },
@@ -215,7 +243,7 @@ private fun ChannelVideosTab(
                     Row(Modifier.fillMaxWidth().padding(horizontal = ChannelLayout.PageInset.dp),
                         horizontalArrangement = Arrangement.spacedBy(ChannelLayout.PageInset.dp)) {
                         row.forEach { video ->
-                            ChannelVideoRow(video, ChannelLayout.menuSize(width).dp, onAction, cardWidth)
+                            ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction, ChannelLayout.cardWidth(viewport.value))
                         }
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
@@ -225,7 +253,6 @@ private fun ChannelVideosTab(
     }
 }
 
-/** Compact lockup sampled on the channel list: 160×90 thumb raised 12, dark meta, right-flush menu. */
 @Composable
 private fun ChannelVideoRow(
     video: ChannelVideo,
@@ -235,7 +262,7 @@ private fun ChannelVideoRow(
 ) {
     Row(Modifier
         .then(if (cellWidth != null) Modifier.width(cellWidth.dp) else Modifier.fillMaxWidth())
-        .height(ChannelLayout.VideoRowHeight.dp)
+        .heightIn(min = ChannelLayout.VideoRowHeight.dp)
         .testTag("channel-video-${video.id}")) {
         Box(Modifier.padding(top = 12.dp).size(ChannelLayout.ThumbnailWidth.dp, ChannelLayout.ThumbnailHeight.dp)
             .clip(RoundedCornerShape(ChannelLayout.ThumbnailRadius.dp))
@@ -267,20 +294,20 @@ private fun ChannelVideoRow(
             }
         }
         AppIconButton(AppIcon.More, "More actions for ${video.title}", diameter = menuDiameter) {
-            onAction(ChannelAction.OpenSectionMenu)
+            onAction(ChannelAction.OpenItemMenu(video.id))
         }
     }
 }
 
-private val VideoMeta = DesignTokens.Ink
+private val VideoMeta = DesignTokens.Secondary
 
-/** Banner with the sampled 6.2:1 box; a missing banner leaves only the layout gap. */
 @Composable
 private fun ChannelBanner(asset: String?, width: Float) {
     if (asset != null) {
         Box(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)
             .fillMaxWidth()
             .height(((width - ChannelLayout.PageInset * 2f) / ChannelLayout.BannerAspect).dp)
+            .clip(RoundedCornerShape(12.dp))
             .testTag("channel-banner")) { Artwork(asset, Modifier.fillMaxSize()) }
     }
 }
@@ -304,97 +331,142 @@ private fun BylineIdentity(text: String, fontSize: Int) {
         color = DesignTokens.Secondary, maxLines = 1)
 }
 
-/** Header stack: banner → identity → description → links → subscribe, per the sampled rhythm. */
 @Composable
 private fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAction) -> Unit) {
     val profile = page.profile
     val wide = ChannelLayout.wide(width)
-    val fontSize = ChannelLayout.identityFontSize(width).toInt()
+    val compact = width < 600f
     Column(Modifier.fillMaxWidth().testTag("channel-header")) {
         Spacer(Modifier.height(ChannelLayout.HeaderTopGap.dp))
         ChannelBanner(profile.banner, width)
         Spacer(Modifier.height(ChannelLayout.HeaderTopGap.dp))
         Row(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
-            if (wide) {
-                Column(Modifier.width((ChannelLayout.identityStart(width) - ChannelLayout.PageInset).dp)) {
-                    Spacer(Modifier.height(18.dp))
-                    ChannelIdentityAvatar(profile.avatar, ChannelLayout.avatarSize(width))
-                }
-            } else {
+            Box(Modifier.padding(top = if (wide) (if (width >= 1148f) 18.dp else 15.dp) else 0.dp)) {
                 ChannelIdentityAvatar(profile.avatar, ChannelLayout.avatarSize(width))
-                Spacer(Modifier.width(ChannelLayout.PageInset.dp))
             }
-            Column(Modifier.weight(1f).widthIn(max = 600.dp).testTag("channel-identity")) {
-                AppText(profile.name, Modifier.fillMaxWidth().testTag("channel-name"),
-                    size = ChannelLayout.nameFontSize(width).toInt(), line = ChannelLayout.nameLineHeight(width).toInt(),
-                    weight = FontWeight.Bold, maxLines = 2)
-                Spacer(Modifier.height(ChannelLayout.identityNameGap(width).dp))
-                if (ChannelLayout.mergesIdentityRows(width)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppText(profile.handle, Modifier.testTag("channel-handle"),
-                            size = fontSize, line = ChannelLayout.identityLine(fontSize.toFloat()),
-                            weight = FontWeight.Medium, maxLines = 1)
-                        Spacer(Modifier.width(4.dp))
-                        BylineDot(fontSize)
-                        Spacer(Modifier.width(4.dp))
-                        BylineIdentity(profile.subscribers, fontSize)
-                        Spacer(Modifier.width(4.dp))
-                        BylineDot(fontSize)
-                        Spacer(Modifier.width(4.dp))
-                        BylineIdentity("${page.videos.size} videos", fontSize)
-                    }
-                } else {
-                    AppText(profile.handle, Modifier.fillMaxWidth().testTag("channel-handle"),
-                        size = fontSize, line = ChannelLayout.identityLine(fontSize.toFloat()),
-                        weight = FontWeight.Medium, maxLines = 1)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        BylineIdentity(profile.subscribers, fontSize)
-                        Spacer(Modifier.width(4.dp))
-                        BylineDot(fontSize)
-                        Spacer(Modifier.width(4.dp))
-                        BylineIdentity("${page.videos.size} videos", fontSize)
-                    }
+            Spacer(Modifier.width(ChannelLayout.PageInset.dp))
+            Column(Modifier.weight(1f).padding(top = if (!compact && !wide) 10.dp else 0.dp)) {
+                ChannelIdentity(page, width)
+                if (!compact) {
+                    Spacer(Modifier.height(12.dp))
+                    if (wide) {
+                        ChannelDetails(profile, width, onAction)
+                        Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
+                        ChannelSubscribe(true, onAction)
+                    } else ChannelDescription(profile.description, width, onAction)
                 }
             }
         }
-        Spacer(Modifier.height(ChannelLayout.IdentityDescriptionGap.dp))
-        val paragraphStart = if (wide) ChannelLayout.identityStart(width) else ChannelLayout.PageInset
-        Column(Modifier
-            .padding(start = paragraphStart.dp, end = ChannelLayout.PageInset.dp)
-            .widthIn(max = 600.dp)) {
-            ChannelDescription(profile.description, width, onAction)
-            Spacer(Modifier.height(ChannelLayout.descriptionLinksGap(width).dp))
-            ChannelLinks(profile, width, onAction)
-        }
-        // The narrow subscribe pill ignores the 600 text cap: below 700 it is the full row width.
-        Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-        Box(Modifier.padding(start = paragraphStart.dp, end = ChannelLayout.PageInset.dp)) {
-            ChannelSubscribe(wide, onAction)
+        if (compact) {
+            Spacer(Modifier.height(ChannelLayout.IdentityDescriptionGap.dp))
+            Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
+                ChannelDetails(profile, width, onAction)
+                Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
+                ChannelSubscribe(false, onAction)
+            }
+        } else if (!wide) {
+            Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
+                if (profile.links.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    ChannelLinks(profile, width, onAction)
+                }
+                Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
+                ChannelSubscribe(false, onAction)
+            }
         }
         Spacer(Modifier.height(ChannelLayout.subscribeTabBarGap(width).dp))
     }
 }
 
-/**
- * Description summary with the sampled inline `...more`; taps stay a typed request. The
- * fixture text and tail are sized so the tail renders inline at the sampled widths.
- */
+@Composable
+private fun ChannelIdentity(page: ChannelPage, width: Float) {
+    val profile = page.profile
+    val fontSize = ChannelLayout.identityFontSize(width).toInt()
+    Column(Modifier.fillMaxWidth().testTag("channel-identity")) {
+        ChannelName(profile.name, width)
+        Spacer(Modifier.height(ChannelLayout.identityNameGap(width).dp))
+        if (ChannelLayout.mergesIdentityRows(width)) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                AppText(profile.handle, Modifier.testTag("channel-handle"), size = fontSize,
+                    line = ChannelLayout.identityLine(fontSize.toFloat()), weight = FontWeight.Medium, maxLines = 1)
+                Spacer(Modifier.width(4.dp))
+                BylineDot(fontSize)
+                Spacer(Modifier.width(4.dp))
+                BylineIdentity(profile.subscribers, fontSize)
+                Spacer(Modifier.width(4.dp))
+                BylineDot(fontSize)
+                Spacer(Modifier.width(4.dp))
+                BylineIdentity(page.videos.size.toString() + " videos", fontSize)
+            }
+        } else {
+            AppText(profile.handle, Modifier.fillMaxWidth().testTag("channel-handle"), size = fontSize,
+                line = ChannelLayout.identityLine(fontSize.toFloat()), weight = FontWeight.Medium, maxLines = 1)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                BylineIdentity(profile.subscribers, fontSize)
+                Spacer(Modifier.width(4.dp))
+                BylineDot(fontSize)
+                Spacer(Modifier.width(4.dp))
+                BylineIdentity(page.videos.size.toString() + " videos", fontSize)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+private fun ChannelName(name: String, width: Float) {
+    val size = ChannelLayout.nameFontSize(width)
+    val family = remember(size) {
+        FontFamily(Font(R.font.channel_heading, FontWeight.SemiBold,
+            variationSettings = FontVariation.Settings(
+                FontVariation.Setting("wght", 600f),
+                FontVariation.Setting("wdth", 25f),
+                FontVariation.Setting("opsz", size),
+            )))
+    }
+    BasicText(name, Modifier.fillMaxWidth().testTag("channel-name"),
+        style = DesignTokens.text(size.toInt(), ChannelLayout.nameLineHeight(width).toInt(), FontWeight.SemiBold).copy(fontFamily = family),
+        maxLines = 2, overflow = TextOverflow.Ellipsis)
+}
+
+@Composable
+private fun ChannelDetails(profile: ChannelProfile, width: Float, onAction: (ChannelAction) -> Unit) {
+    Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
+        ChannelDescription(profile.description, width, onAction)
+        if (profile.links.isNotEmpty()) {
+            Spacer(Modifier.height(ChannelLayout.descriptionLinksGap(width).dp))
+            ChannelLinks(profile, width, onAction)
+        }
+    }
+}
+
 @Composable
 private fun ChannelDescription(description: String, width: Float, onAction: (ChannelAction) -> Unit) {
     val fontSize = ChannelLayout.identityFontSize(width).toInt()
     val lineHeight = ChannelLayout.identityLine(fontSize.toFloat())
-    val annotated = buildAnnotatedString {
-        withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = DesignTokens.Secondary)) { append(description) }
-        append(" ")
-        withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = DesignTokens.Ink)) { append("...more") }
-    }
-    Box(Modifier.fillMaxWidth().testTag("channel-description")
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = DesignTokens.text(fontSize, lineHeight, color = DesignTokens.Secondary)
+    BoxWithConstraints(Modifier.fillMaxWidth().testTag("channel-description")
         .clickable(role = Role.Button) { onAction(ChannelAction.OpenFullDescription) }) {
-        BasicText(annotated,
-            style = TextStyle(fontSize = fontSize.sp, lineHeight = lineHeight.sp,
-                fontWeight = FontWeight.Normal, color = DesignTokens.Secondary,
-                fontFamily = DesignTokens.Font, platformStyle = PlatformTextStyle(includeFontPadding = false)),
-            maxLines = ChannelLayout.descriptionLines(width), overflow = TextOverflow.Ellipsis)
+        val limit = ChannelLayout.descriptionLines(width)
+        val text = remember(description, constraints.maxWidth, style, density.fontScale) {
+            fun summary(end: Int) = buildAnnotatedString {
+                append(description.take(end).trimEnd())
+                if (end > 0) append(" ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = DesignTokens.Ink)) { append("...more") }
+            }
+            var low = 0
+            var high = description.length
+            while (low < high) {
+                val middle = (low + high + 1) / 2
+                val result = measurer.measure(summary(middle), style, maxLines = limit,
+                    constraints = androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth))
+                if (result.hasVisualOverflow) high = middle - 1 else low = middle
+            }
+            summary(low)
+        }
+        BasicText(text, style = style, maxLines = limit, overflow = TextOverflow.Clip)
     }
 }
 
@@ -406,7 +478,7 @@ private fun ChannelLinks(profile: ChannelProfile, width: Float, onAction: (Chann
     Row(Modifier.fillMaxWidth().testTag("channel-links")
         .clickable(role = Role.Button) { onAction(ChannelAction.OpenFullDescription) },
         verticalAlignment = Alignment.CenterVertically) {
-        AppText(first, size = fontSize, line = lineHeight, color = ChannelLink, maxLines = 1)
+        AppText(first, Modifier.weight(1f, fill = false), size = fontSize, line = lineHeight, color = ChannelLink, maxLines = 1)
         val extra = profile.links.size - 1
         if (extra > 0) {
             Spacer(Modifier.width(4.dp))
@@ -440,11 +512,10 @@ private fun ChannelNoVideos() {
     }
 }
 
-/** Loading skeleton with the banner, identity and first rows of the sampled geometry. */
 @Composable
 private fun ChannelSkeleton(width: Float) {
     val bannerHeight = ((width - ChannelLayout.PageInset * 2f) / ChannelLayout.BannerAspect).dp
-    Column(Modifier.fillMaxSize().testTag("channel-skeleton")) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("channel-skeleton")) {
         Spacer(Modifier.height(ChannelLayout.HeaderTopGap.dp))
         Box(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)
             .fillMaxWidth().height(bannerHeight).background(DesignTokens.Ghost))
@@ -452,12 +523,12 @@ private fun ChannelSkeleton(width: Float) {
         Row(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
             Box(Modifier.size(ChannelLayout.avatarSize(width).dp).background(DesignTokens.Ghost, CircleShape))
             Spacer(Modifier.width(ChannelLayout.PageInset.dp))
-            Column(Modifier.padding(top = 8.dp)) {
-                Box(Modifier.width(180.dp).height(24.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
+            Column(Modifier.weight(1f).padding(top = 8.dp)) {
+                Box(Modifier.widthIn(max = 180.dp).fillMaxWidth().height(24.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
                 Spacer(Modifier.height(10.dp))
-                Box(Modifier.width(140.dp).height(18.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
+                Box(Modifier.fillMaxWidth(0.85f).height(18.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
                 Spacer(Modifier.height(6.dp))
-                Box(Modifier.width(120.dp).height(18.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
+                Box(Modifier.fillMaxWidth(0.7f).height(18.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
             }
         }
         repeat(3) { index ->

@@ -1,20 +1,15 @@
 package com.hhst.youtubelite.channel.domain
 
-/** App-owned models for the local channel page; every asset is a bundled fixture. */
 data class ChannelProfile(
     val channelId: String = "blender",
     val name: String,
     val handle: String,
     val avatar: String,
     val banner: String?,
-    /** The one-line stats rendered next to the name, e.g. subscribers. */
     val subscribers: String,
-    /** First description sentence shown before the inline expansion affordance. */
     val description: String,
-        /** Account context shown beside the name; fixture-only, no real account data. */
-        val memberBadge: String? = null,
-        /** Described website links of the channel; the row shows the first plus a count of the rest. */
-        val links: List<String> = emptyList(),
+    val memberBadge: String? = null,
+    val links: List<String> = emptyList(),
 )
 
 data class ChannelVideo(
@@ -25,7 +20,6 @@ data class ChannelVideo(
     val duration: String,
     val artwork: String,
     val live: Boolean = false,
-    /** Which channel tab a video belongs to when both tabs can show it. */
     val homeShelf: Boolean = false,
 )
 
@@ -57,12 +51,14 @@ data class ChannelUiState(
     val content: ChannelContent = ChannelContent.Loading,
     val selectedTab: ChannelTab = ChannelTab.Home,
 ) {
-    /** Only these tabs switch locally; the rest stay typed requests. */
     val isLocalTab: Boolean get() = selectedTab == ChannelTab.Home || selectedTab == ChannelTab.Videos
 }
 
-/** Typed boundaries only; the host records them and no page action is simulated. */
+enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), You("You") }
+
 sealed interface ChannelNavigationRequest {
+    data class Destination(val destination: ChannelDestination) : ChannelNavigationRequest
+    data class ItemMenu(val videoId: String) : ChannelNavigationRequest
     data class Watch(val videoId: String) : ChannelNavigationRequest
     data class OtherTab(val tab: ChannelTab) : ChannelNavigationRequest
     data class Subscribe(val channelId: String) : ChannelNavigationRequest
@@ -73,8 +69,10 @@ sealed interface ChannelNavigationRequest {
 }
 
 sealed interface ChannelAction {
+    data class SelectDestination(val destination: ChannelDestination) : ChannelAction
     data object Retry : ChannelAction
     data class SelectTab(val tab: ChannelTab) : ChannelAction
+    data class OpenItemMenu(val videoId: String) : ChannelAction
     data class OpenVideo(val videoId: String) : ChannelAction
     data object Subscribe : ChannelAction
     data object Share : ChannelAction
@@ -93,27 +91,23 @@ object ChannelLayout {
     const val ListRowInset = 12f
     const val DurationBadgeInset = 5f
 
-    /** Banner leaves `PageInset` on both sides and keeps the sampled 6.2:1 box. */
     const val BannerAspect = 6.2f
 
     const val WideViewport = 700f
     const val IdentityLargeViewport = 1148f
 
-    /** Avatar ladder sampled at 390 (72), 600 (120) and 840/1280 (160). */
     fun avatarSize(width: Float): Float = when {
-        width < 528f -> 72f
+        width < 600f -> 72f
         width < WideViewport -> 120f
         else -> 160f
     }
 
-    /** ≥700px the identity block sits beside the widened avatar, as sampled at 840/1280. */
     fun wide(width: Float): Boolean = width >= WideViewport
 
     fun fullWidthSubscribe(width: Float): Boolean = !wide(width)
 
     fun identityStart(width: Float): Float = PageInset + avatarSize(width) + PageInset
 
-    /** Videos grid: one column sampled at 390, two on mid widths, three sampled at 1280. */
     fun gridColumns(width: Float): Int = when {
         width < 600f -> 1
         width < IdentityLargeViewport -> 2
@@ -130,7 +124,7 @@ object ChannelLayout {
     const val VideoRowHeight = 102f
     const val ThumbnailWidth = 160f
     const val ThumbnailHeight = 90f
-    const val ThumbnailRadius = 12f
+    const val ThumbnailRadius = 8f
 
     const val SubscribeHeight = 40f
     const val SubscribeRadius = 20f
@@ -150,33 +144,24 @@ object ChannelLayout {
     const val DescriptionLinksGapNarrow = 10f
     const val DescriptionLinksGapWide = 12f
     const val LinksSubscribeGapNarrow = 12f
-    const val LinksSubscribeGapWide = 10f
+    const val LinksSubscribeGapWide = 12f
     const val SubscribeTabBarGapNarrow = 16f
     const val SubscribeTabBarGapWide = 24f
 
-    fun nameFontSize(width: Float): Float = when {
-        width < 528f -> 24f   // sampled lh 32 at 390
-        width < IdentityLargeViewport -> 28f // 600/840 views; no direct sample (recorded gap)
-        else -> 36f           // sampled lh 50 at 1280
-    }
+    fun nameFontSize(width: Float): Float = if (width < 600f) 24f else 36f
 
-    fun nameLineHeight(width: Float): Float = when {
-        width < 528f -> 32f
-        width < IdentityLargeViewport -> 38f
-        else -> 50f
-    }
+    fun nameLineHeight(width: Float): Float = if (width < 600f) 32f else 50f
 
-    /** The handle and stats merge into one inline row at ≥528, as sampled at 600/1280. */
-    fun mergesIdentityRows(width: Float): Boolean = width >= 528f
+    fun mergesIdentityRows(width: Float): Boolean = width >= 600f
 
     fun identityFontSize(width: Float): Float = if (width >= IdentityLargeViewport) 14f else 12f
 
     fun identityLine(fontSize: Float): Int = if (fontSize >= 14f) 20 else 18
 
-    fun identityNameGap(width: Float): Float = if (wide(width)) NameGapWide else NameGapSmall
+    fun identityNameGap(width: Float): Float = if (width >= 600f) NameGapWide else NameGapSmall
 
     fun descriptionLinksGap(width: Float): Float =
-        if (wide(width)) DescriptionLinksGapWide else DescriptionLinksGapNarrow
+        if (width >= 600f) DescriptionLinksGapWide else DescriptionLinksGapNarrow
 
     fun linksSubscribeGap(width: Float): Float =
         if (wide(width)) LinksSubscribeGapWide else LinksSubscribeGapNarrow
@@ -184,5 +169,5 @@ object ChannelLayout {
     fun subscribeTabBarGap(width: Float): Float =
         if (wide(width)) SubscribeTabBarGapWide else SubscribeTabBarGapNarrow
 
-    fun descriptionLines(width: Float): Int = if (width < 528f) 2 else 1
+    fun descriptionLines(width: Float): Int = if (width < 600f) 2 else 1
 }

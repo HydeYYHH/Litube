@@ -26,6 +26,8 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.hhst.youtubelite.BuildConfig
 import com.hhst.youtubelite.channel.data.ChannelScenario
 import com.hhst.youtubelite.channel.data.FixtureChannelRepository
+import com.hhst.youtubelite.channel.domain.ChannelDestination
+import com.hhst.youtubelite.home.HomeActivity
 import com.hhst.youtubelite.channel.domain.ChannelNavigationRequest
 import com.hhst.youtubelite.channel.presentation.ChannelScreen
 import com.hhst.youtubelite.channel.presentation.ChannelViewModel
@@ -56,8 +58,12 @@ class ChannelActivity : ComponentActivity() {
                 channelViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     // The watch page is the implemented destination; everything else stays a request.
-                    if (request is ChannelNavigationRequest.Watch) {
-                        startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                    when (request) {
+                        is ChannelNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                        ChannelNavigationRequest.Destination(ChannelDestination.Home) ->
+                            startActivity(Intent(this@ChannelActivity, HomeActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        else -> Unit
                     }
                 }
             }

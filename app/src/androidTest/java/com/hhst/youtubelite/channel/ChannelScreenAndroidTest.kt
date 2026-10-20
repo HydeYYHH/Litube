@@ -104,7 +104,7 @@ class ChannelScreenAndroidTest {
         host.onActivity { assertEquals(ChannelNavigationRequest.FullDescription, it.lastNavigationRequest) }
         compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation")
             .performClick()
-        host.onActivity { assertEquals(ChannelNavigationRequest.SectionMenu, it.lastNavigationRequest) }
+        host.onActivity { assertEquals(ChannelNavigationRequest.ItemMenu("bunny"), it.lastNavigationRequest) }
         compose.onNodeWithTag("channel-subscribe").assertIsDisplayed()
     }
 

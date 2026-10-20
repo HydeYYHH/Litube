@@ -33,6 +33,16 @@ class ChannelViewModelTest {
         assertTrue(vm.uiState.value.content is ChannelContent.Ready)
     }
 
+
+    @Test fun restoredIdentityAndLocalTabStayConsistent() = runTest {
+        val saved = SavedStateHandle(mapOf("channelId" to "northlight", "tab" to "Shorts"))
+        val vm = ChannelViewModel(FixtureChannelRepository(), saved, "ignored")
+        advanceUntilIdle()
+        assertEquals("northlight", vm.uiState.value.channelId)
+        assertEquals(ChannelTab.Home, vm.uiState.value.selectedTab)
+        assertEquals("northlight", (vm.uiState.value.content as ChannelContent.Ready).page.profile.channelId)
+    }
+
     @Test fun onlyHomeAndVideosSwitchLocallyAndOtherTabsStayRequests() = runTest {
         val vm = ChannelViewModel(FixtureChannelRepository(), SavedStateHandle(), "blender")
         advanceUntilIdle()

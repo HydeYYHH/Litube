@@ -1,0 +1,171 @@
+package com.hhst.youtubelite.watch.domain
+
+import kotlin.math.floor
+
+/** The ordinary-video watch page model. Every field is served by a local fixture. */
+data class WatchVideo(
+    val id: String,
+    val title: String,
+    val channel: String,
+    val handle: String,
+    val channelId: String,
+    val artwork: String,
+    val likes: String,
+    val views: String,
+    val age: String,
+    val commentCount: String,
+    val topComment: WatchComment,
+    val description: String,
+)
+
+data class WatchComment(val author: String, val text: String, val artwork: String)
+
+data class WatchRelated(
+    val id: String,
+    val title: String,
+    val channel: String,
+    val channelId: String,
+    val views: String,
+    val age: String,
+    val duration: String,
+    val artwork: String,
+    val badge: String? = null,
+    val progress: Float? = null,
+)
+
+data class WatchPage(val video: WatchVideo, val related: List<WatchRelated>)
+
+interface WatchRepository {
+    suspend fun watch(videoId: String): WatchPage
+}
+
+sealed interface WatchContent {
+    data object Loading : WatchContent
+    data class Ready(val page: WatchPage) : WatchContent
+    data object Failed : WatchContent
+}
+
+data class WatchUiState(
+    val videoId: String = "",
+    val content: WatchContent = WatchContent.Loading,
+    val descriptionExpanded: Boolean = false,
+    val searchOpen: Boolean = false,
+    val draftQuery: String = "",
+)
+
+/** Typed boundaries only: every entry is recorded by the host, never simulated as a success. */
+sealed interface WatchNavigationRequest {
+    data class Search(val query: String) : WatchNavigationRequest
+    data object VoiceSearch : WatchNavigationRequest
+    data object PageMenu : WatchNavigationRequest
+    data class Channel(val channelId: String) : WatchNavigationRequest
+    data class Comments(val videoId: String) : WatchNavigationRequest
+    data class Watch(val videoId: String) : WatchNavigationRequest
+    data class ItemMenu(val videoId: String) : WatchNavigationRequest
+    data class Like(val videoId: String) : WatchNavigationRequest
+    data class Dislike(val videoId: String) : WatchNavigationRequest
+    data class Subscribe(val channelId: String) : WatchNavigationRequest
+    data class Download(val videoId: String) : WatchNavigationRequest
+    data class Queue(val videoId: String) : WatchNavigationRequest
+    data class OpenWith(val videoId: String) : WatchNavigationRequest
+    data class Share(val videoId: String) : WatchNavigationRequest
+    data class Save(val videoId: String) : WatchNavigationRequest
+    data class Report(val videoId: String) : WatchNavigationRequest
+}
+
+sealed interface WatchAction {
+    data object VoiceSearch : WatchAction
+    data object CloseSearch : WatchAction
+    data class QueryChanged(val query: String) : WatchAction
+    data class SubmitSearch(val query: String) : WatchAction
+    data object Retry : WatchAction
+    data object ToggleDescription : WatchAction
+    data object OpenSearch : WatchAction
+    data object OpenPageMenu : WatchAction
+    data object Like : WatchAction
+    data object Dislike : WatchAction
+    data object Subscribe : WatchAction
+    data object Download : WatchAction
+    data object Queue : WatchAction
+    data object OpenWith : WatchAction
+    data object Share : WatchAction
+    data object Save : WatchAction
+    data object Report : WatchAction
+    data class OpenChannel(val channelId: String) : WatchAction
+    data class OpenComments(val videoId: String) : WatchAction
+    data class OpenRelated(val videoId: String) : WatchAction
+    data class OpenItemMenu(val videoId: String) : WatchAction
+}
+
+/** Which related-feed geometry the sampled breakpoints call for. */
+enum class WatchRelatedVariant { Phone, Grid, List, Stacked, SidebarCompact, SidebarWide }
+
+/**
+ * Geometry sampled from the mobile watch page (CSS px used as dp).
+ * Every formula here is pinned in `docs/visual/home-measurements.md`.
+ */
+object WatchLayout {
+    const val TopBarHeight = 48f
+    const val ActionBarHeight = 48f
+    /** info content (pad 12 + title 26 + gap 6 + meta 18 + pad 5) + header margin-bottom 3. */
+    const val InfoBlockHeight = 70f
+    const val MetadataSectionHeight = 118f
+    const val CommentsSectionHeight = 113f
+    const val CommentsCardHeight = 92f
+
+    const val ActionRowNaturalWidth = 362f
+    const val ActionRowNaturalEnd = 358f
+    const val ActionRowPadStart = 8f
+    const val ActionGrowEndGap = 4f
+
+    const val GridBreakpoint = 550f
+    const val WideShortMinWidth = 416f
+    const val SidebarBreakpoint = 931f
+    const val SidebarWideBreakpoint = 1280f
+    const val SidebarCompactWidth = 256f
+    const val SidebarWideWidth = 500f
+
+    const val ListCoverWidth = 200f
+    const val ListCoverHeight = 112f
+
+    /** Wide-short landscape: the one zone where the player scrolls with the content. */
+    fun wideShort(width: Float, height: Float): Boolean =
+        width >= WideShortMinWidth && width * 9f >= height * 13f && width < SidebarBreakpoint
+
+    fun pinnedPlayer(width: Float, height: Float): Boolean =
+        !wideShort(width, height) && height >= TopBarHeight + playerHeight(width, height) + 96f
+
+    /** Sidebar: `@media (min-width:931) and (orientation:landscape)`. */
+    fun sidebar(width: Float, height: Float): Boolean = width >= SidebarBreakpoint && width > height
+
+    fun sidebarWidth(width: Float): Float =
+        if (width >= SidebarWideBreakpoint) SidebarWideWidth else SidebarCompactWidth
+
+    /** Main column = viewport minus the sidebar; the player is fixed over this width only. */
+    fun columnWidth(width: Float, height: Float): Float =
+        if (sidebar(width, height)) width - sidebarWidth(width) else width
+
+    fun playerHeight(width: Float, height: Float): Float = columnWidth(width, height) * 9f / 16f
+
+    fun actionGrowth(width: Float, height: Float): Float =
+        (columnWidth(width, height) - ActionGrowEndGap - ActionRowNaturalEnd).coerceAtLeast(0f)
+
+    /** `cols = floor((width − 16) / 250)` → 2 for 550–750, 3 for ≥780. */
+    fun gridColumns(width: Float): Int = floor((width - 16f) / 250f).toInt().coerceAtLeast(1)
+
+    /** Cells are flush: cell = width/cols − 8, so the right inset is 8 × (cols − 1). */
+    fun gridCell(width: Float): Float = width / gridColumns(width) - 8f
+
+    fun relatedVariant(width: Float, height: Float): WatchRelatedVariant = when {
+        sidebar(width, height) ->
+            if (sidebarWidth(width) >= SidebarWideWidth) WatchRelatedVariant.SidebarWide
+            else WatchRelatedVariant.SidebarCompact
+        wideShort(width, height) -> WatchRelatedVariant.List
+        width < GridBreakpoint -> WatchRelatedVariant.Phone
+        width <= height -> WatchRelatedVariant.Grid
+        else -> WatchRelatedVariant.Stacked
+    }
+
+    /** Full-bleed phone cover keeps the sampled +13 height; every other cover is exact 16:9. */
+    fun phoneCoverHeight(width: Float): Float = width * 9f / 16f + 13f
+}

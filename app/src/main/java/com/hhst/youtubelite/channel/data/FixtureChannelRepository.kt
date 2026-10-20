@@ -12,13 +12,14 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
     override suspend fun channel(channelId: String): ChannelPage {
         delay(160)
         if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
-        if (scenario == ChannelScenario.Empty) return ChannelPage(profile(), emptyList())
-        return ChannelPage(profile(), sampleVideos())
+        if (scenario == ChannelScenario.Empty) return ChannelPage(profile(channelId), emptyList())
+        return ChannelPage(profile(channelId), sampleVideos())
     }
 
     companion object {
         /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
-        fun profile() = ChannelProfile(
+        fun profile(channelId: String = "blender") = ChannelProfile(
+            channelId = channelId,
             name = "Blender",
             handle = "@blender",
             avatar = "bunny",
@@ -46,9 +47,9 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
 enum class ChannelScenario(val argument: String) {
     Content("content"), Empty("empty"), Loading("loading"), Error("error");
 
-    fun initialContent(): ChannelContent = when (this) {
+    fun initialContent(channelId: String = "blender"): ChannelContent = when (this) {
         Content, Loading -> ChannelContent.Loading
-        Empty -> ChannelContent.Ready(ChannelPage(FixtureChannelRepository.profile(), emptyList()))
+        Empty -> ChannelContent.Ready(ChannelPage(FixtureChannelRepository.profile(channelId), emptyList()))
         Error -> ChannelContent.Failed
     }
 

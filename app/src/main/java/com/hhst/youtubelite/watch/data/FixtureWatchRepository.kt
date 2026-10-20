@@ -1,0 +1,116 @@
+package com.hhst.youtubelite.watch.data
+
+import com.hhst.youtubelite.watch.domain.WatchComment
+import com.hhst.youtubelite.watch.domain.WatchContent
+import com.hhst.youtubelite.watch.domain.WatchPage
+import com.hhst.youtubelite.watch.domain.WatchRelated
+import com.hhst.youtubelite.watch.domain.WatchRepository
+import com.hhst.youtubelite.watch.domain.WatchVideo
+import kotlinx.coroutines.delay
+
+/** All artwork and metadata are packaged locally. This class has no network dependency. */
+class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario.Content) : WatchRepository {
+    override suspend fun watch(videoId: String): WatchPage {
+        delay(140)
+        if (scenario == WatchScenario.Error) throw java.io.IOException("Local error scenario")
+        return samplePage(videoId)
+    }
+
+    companion object {
+        private data class Entry(
+            val title: String,
+            val channel: String,
+            val handle: String,
+            val channelId: String,
+            val views: String,
+            val age: String,
+            val artwork: String,
+        )
+
+        /** Known home/search ids keep their list metadata; anything else falls back to the default sample. */
+        private val entries = mapOf(
+            "bunny" to Entry("Big Buck Bunny | A short film by the Blender Foundation",
+                "Blender", "@Blender", "blender", "12M views", "2 years ago", "bunny"),
+            "dream" to Entry("Elephants Dream — the world's first open movie",
+                "Blender Studio", "@BlenderStudio", "studio", "4.8M views", "3 years ago", "dream"),
+            "sintel" to Entry("Sintel | An adventure beyond the mountains",
+                "Blender", "@Blender", "blender", "7.2M views", "4 years ago", "sintel"),
+            "harbour" to Entry("City light trails — a night walk through the old harbour",
+                "Northlight Films", "@northlight", "northlight", "1.4M views", "3 weeks ago", "dream"),
+            "studio" to Entry("Inside the studio: building a scene from scratch",
+                "Northlight Studio", "@northlight", "northlight", "428K views", "2 months ago", "bunny"),
+            "meadow" to Entry("Meadow at dawn — a short nature film",
+                "Open Field", "@openfield", "openfield", "92K views", "1 year ago", "sintel"),
+            "workshop" to Entry("Workshop diaries: shaping wood by hand",
+                "Handmade Channel", "@handmade", "handmade", "2.1M views", "8 months ago", "bunny"),
+            "orbit" to Entry("Orbit — an animated short about leaving home",
+                "Northlight Animation", "@northlight", "northlight", "6.7M views", "2 years ago", "sintel"),
+            "river" to Entry("River sound — one hour of calm water",
+                "Quiet Place", "@quietplace", "quietplace", "315K views", "5 months ago", "dream"),
+        )
+
+        private val defaultEntry = entries.getValue("bunny")
+
+        /** Fixed English sample; reaction counts are synthetic and shared by every entry. */
+        fun sampleVideo(videoId: String): WatchVideo {
+            val entry = entries[videoId] ?: defaultEntry
+            return WatchVideo(
+                id = videoId,
+                title = entry.title,
+                channel = entry.channel,
+                handle = entry.handle,
+                channelId = entry.channelId,
+                artwork = entry.artwork,
+                likes = "110K likes",
+                views = entry.views,
+                age = entry.age,
+                commentCount = "5.2K",
+                topComment = WatchComment(
+                    author = "Maya K.",
+                    text = "The lighting still holds up after all these years — every rewatch turns up something new.",
+                    artwork = "sintel",
+                ),
+                description = "An open movie short rendered end to end with free tools. " +
+                    "This local sample never leaves the device: no link, chapter or external page is opened from it.",
+            )
+        }
+
+        fun sampleRelated(): List<WatchRelated> = listOf(
+            WatchRelated("harbour", "City light trails — a night walk through the old harbour",
+                "Northlight Films", "northlight", "1.4M views", "3 weeks ago", "8:12", "dream", progress = 0.35f),
+            WatchRelated("studio", "Inside the studio: building a scene from scratch",
+                "Northlight Studio", "northlight", "428K views", "2 months ago", "12:04", "bunny"),
+            WatchRelated("meadow", "Meadow at dawn — a short nature film",
+                "Open Field", "openfield", "92K views", "1 year ago", "5:37", "sintel", badge = "4K"),
+            WatchRelated("workshop", "Workshop diaries: shaping wood by hand",
+                "Handmade Channel", "handmade", "2.1M views", "8 months ago", "17:45", "bunny"),
+            WatchRelated("orbit", "Orbit — an animated short about leaving home",
+                "Northlight Animation", "northlight", "6.7M views", "2 years ago", "9:56", "sintel"),
+            WatchRelated("river", "River sound — one hour of calm water",
+                "Quiet Place", "quietplace", "315K views", "5 months ago", "1:02:18", "dream"),
+            WatchRelated("bunny", "Big Buck Bunny | A short film by the Blender Foundation",
+                "Blender", "blender", "12M views", "2 years ago", "9:56", "bunny", progress = 0.28f),
+            WatchRelated("dream", "Elephants Dream — the world's first open movie",
+                "Blender Studio", "studio", "4.8M views", "3 years ago", "10:53", "dream"),
+        )
+
+        fun samplePage(videoId: String): WatchPage = WatchPage(
+            video = sampleVideo(videoId),
+            related = sampleRelated().filterNot { it.id == videoId },
+        )
+    }
+}
+
+/** Debug intent names are stable so previews and instrumentation use the same fixtures. */
+enum class WatchScenario(val argument: String) {
+    Content("content"), Loading("loading"), Error("error");
+
+    fun initialContent(): WatchContent = if (this == Error) WatchContent.Failed else WatchContent.Loading
+
+    /** Only the ordinary content entry loads the local fixture; other states are pinned previews. */
+    fun loadsContent(): Boolean = this == Content
+
+    companion object {
+        fun parse(value: String?) = entries.firstOrNull { it.argument == value } ?: Content
+    }
+}

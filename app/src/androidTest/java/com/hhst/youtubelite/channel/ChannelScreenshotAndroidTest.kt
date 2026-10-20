@@ -80,7 +80,7 @@ class ChannelScreenshotAndroidTest {
         setContent(width, height, state)
         val output = File(compose.activity.getExternalFilesDir(null), "channel-acceptance").apply { mkdirs() }
         for ((w, h) in listOf(320 to 844, 390 to 844, 411 to 844, 600 to 960, 840 to 1000, 1280 to 800, 1600 to 900)) {
-            for (scene in listOf("profile", "videos", "empty")) {
+            for (scene in listOf("profile", "videos", "empty", "loading", "error")) {
                 compose.runOnIdle { width.intValue = w; height.intValue = h; state.value = stateOf(scene, tab = if (scene == "videos") ChannelTab.Videos else ChannelTab.Home) }
                 capture("$scene-$w", output, true, emptySet())
             }
@@ -109,7 +109,7 @@ class ChannelScreenshotAndroidTest {
                 val pageLeft = boundsOf("channel-page").left
                 // Avatar ladder: 72 under 528, 120 on mid widths, 160 from 700.
                 val avatar = boundsOf("channel-avatar")
-                assertEquals("avatar size at $w", ChannelLayout.avatarSize(w.toFloat()), avatar.width, 1f)
+                assertEquals("avatar size at $w", if (w < 600) 72f else if (w < 700) 120f else 160f, avatar.width, 1f)
                 // Subscribe pill: full width before 700, compact afterwards.
                 val subscribe = boundsOf("channel-subscribe")
                 if (w < 700) assertEquals("subscribe width at $w", w - 32f, subscribe.width, 1f)
@@ -133,7 +133,11 @@ class ChannelScreenshotAndroidTest {
     @Test fun largeFontScaleKeepsHeaderAndFirstRowVisible() {
         // No density override: the device font scaling reaches the text directly.
         var state = mutableStateOf(stateOf("videos", tab = ChannelTab.Videos))
-        compose.setContent { Box(Modifier.fillMaxSize()) { ChannelScreen(state.value, {}, {}) } }
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                Box(Modifier.requiredSize(390.dp, 844.dp)) { ChannelScreen(state.value, {}, {}) }
+            }
+        }
         awaitKeyAnchors()
         compose.onNodeWithTag("channel-tab-Videos").performClick() // already selected; underline stays
         awaitKeyAnchors()
@@ -146,11 +150,64 @@ class ChannelScreenshotAndroidTest {
         compose.onNodeWithTag("channel-thumb-bunny").assertIsDisplayed()
     }
 
+
+    @Test fun wideDetailsStayBesideTheAvatar() {
+        val width = mutableIntStateOf(1280)
+        val height = mutableIntStateOf(800)
+        val state = mutableStateOf(stateOf("profile"))
+        setContent(width, height, state)
+        val avatar = boundsOf("channel-avatar")
+        val description = boundsOf("channel-description")
+        val subscribe = boundsOf("channel-subscribe")
+        assertEquals(192f, description.left, 0.5f)
+        assertTrue("Description must stay beside the avatar", description.top < avatar.bottom)
+        assertEquals(429.17f, subscribe.top, 1.5f)
+        val footer = boundsOf("channel-navigation")
+        assertEquals(800f, footer.bottom, 0.5f)
+        assertEquals(57f, footer.height, 0.5f)
+    }
+
+    @Test fun shortErrorWindowKeepsRetryReachable() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                Box(Modifier.requiredSize(320.dp, 240.dp)) {
+                    ChannelScreen(ChannelUiState(content = ChannelContent.Failed), {}, {})
+                }
+            }
+        }
+        compose.onNodeWithText("Retry").performScrollTo().assertIsDisplayed()
+        val retry = compose.onNodeWithText("Retry").fetchSemanticsNode().boundsInRoot
+        assertTrue(retry.top >= 48f)
+        assertTrue(retry.bottom <= boundsOf("channel-navigation").top)
+    }
+
+    @Test fun longDescriptionsKeepTheirMoreAffordanceVisible() {
+        val profile = FixtureChannelRepository.profile().copy(description = "A very long channel description. ".repeat(30), banner = null)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                Box(Modifier.requiredSize(320.dp, 844.dp)) {
+                    ChannelScreen(ChannelUiState(content = ChannelContent.Ready(ChannelPage(profile, emptyList()))), {}, {})
+                }
+            }
+        }
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNode(hasAnyAncestor(hasTestTag("channel-description")) and hasText("...more", substring = true), useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertTrue(layout.layoutInput.text.text.endsWith("...more"))
+        assertFalse("More must not be ellipsized off-screen", layout.hasVisualOverflow)
+        assertTrue(layout.lineCount <= 2)
+    }
+
     private fun boundsOf(tag: String): Rect = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
 
     private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {
         compose.waitForIdle()
+        val root = boundsOf("channel-page")
+        assertEquals("Capture must start at the window origin", 0f, root.left, 0.5f)
         val actual = compose.onNodeWithTag("channel-page").captureToImage().asAndroidBitmap()
+        assertEquals(root.width.toInt(), actual.width)
+        assertEquals(root.height.toInt(), actual.height)
         File(output, "$name.png").outputStream().use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }
         if (record || name !in goldens) return
         val assets = InstrumentationRegistry.getInstrumentation().context.assets

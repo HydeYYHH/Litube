@@ -41,6 +41,8 @@ class HomeViewModel(
             }
             is HomeAction.SubmitSearch -> if (action.query.isNotBlank()) {
                 onAction(HomeAction.QueryChanged(action.query.trim()))
+                // The results page takes over; the overlay must not reappear when it returns.
+                overlay(HomeOverlay.None)
                 navigation.trySend(HomeNavigationRequest.Search(action.query.trim()))
             }
             is HomeAction.SelectChip -> {

@@ -124,7 +124,17 @@ fun ShortsLogo(modifier: Modifier = Modifier) {
 
 @Composable
 fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignTokens.Ink) {
-    val paths = remember(icon) { icon.paths.map { PathParser().parsePathString(it).toPath().asAndroidPath() } }
+    val paths = remember(icon) { icon.paths.map { raw ->
+        val path = PathParser().parsePathString(raw).toPath().asAndroidPath()
+        if (icon.sourceUnit != 24f) {
+            // Map a non-24 source viewport (e.g. viewBox "0 -960 960 960") into 24 units:
+            val matrix = android.graphics.Matrix()
+            matrix.postScale(24f / icon.sourceUnit, 24f / icon.sourceUnit)
+            matrix.postTranslate(0f, -icon.sourceTop * 24f / icon.sourceUnit)
+            path.transform(matrix)
+        }
+        path
+    } }
     Spacer(modifier.size(24.dp).drawWithCache {
         // Cache at the displayed pixel size so vector edges retain anti-aliasing on every renderer.
         val bitmap = android.graphics.Bitmap.createBitmap(ceil(size.width).toInt().coerceAtLeast(1),
