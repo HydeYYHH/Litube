@@ -11,12 +11,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -27,27 +34,41 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.hhst.youtubelite.BuildConfig
+import com.hhst.youtubelite.comments.data.CommentsScenario
+import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
+import com.hhst.youtubelite.comments.presentation.CommentsPanel
+import com.hhst.youtubelite.comments.presentation.CommentsViewModel
 import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.watch.data.FixtureWatchRepository
 import com.hhst.youtubelite.watch.data.WatchScenario
 import com.hhst.youtubelite.watch.domain.WatchAction
+import com.hhst.youtubelite.watch.domain.WatchContent
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
 import com.hhst.youtubelite.channel.ChannelActivity
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.ui.design.SearchPanel
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.comments.domain.CommentsContent
+import com.hhst.youtubelite.watch.domain.WatchLayout
 import com.hhst.youtubelite.watch.presentation.WatchPlayer
 import com.hhst.youtubelite.watch.presentation.WatchScreen
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.koin.compose.koinInject
 
 class WatchActivity : ComponentActivity() {
     lateinit var watchViewModel: WatchViewModel
         private set
+    lateinit var commentsViewModel: CommentsViewModel
+        private set
     var lastNavigationRequest: WatchNavigationRequest? = null
+        private set
+    var lastCommentRequest: CommentNavigationRequest? = null
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,6 +83,28 @@ class WatchActivity : ComponentActivity() {
                 return WatchViewModel(FixtureWatchRepository(scenario), extras.createSavedStateHandle(), videoId, scenario) as T
             }
         })[WatchViewModel::class.java]
+        val commentsScenario = if (BuildConfig.DEBUG) CommentsScenario.parse(intent.getStringExtra(EXTRA_COMMENTS_SCENARIO)) else CommentsScenario.Content
+        commentsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+                require(modelClass == CommentsViewModel::class.java)
+                return CommentsViewModel(FixtureCommentsRepository(commentsScenario), extras.createSavedStateHandle(), videoId) as T
+            }
+        })[CommentsViewModel::class.java]
+        if (savedInstanceState == null && BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
+            watchViewModel.onAction(WatchAction.OpenComments(videoId))
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                commentsViewModel.navigationRequests.collect { request ->
+                    lastCommentRequest = request
+                    when (request) {
+                        is CommentNavigationRequest.OpenAuthor -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
+                        else -> Unit
+                    }
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 watchViewModel.navigationRequests.collect { request ->
@@ -80,22 +123,47 @@ class WatchActivity : ComponentActivity() {
             val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
             val state by watchViewModel.uiState.collectAsStateWithLifecycle()
             val fullscreen = playerState.fullscreen
+            val commentsState by commentsViewModel.uiState.collectAsStateWithLifecycle()
+            val commentsListState = rememberSaveable(commentsState.videoId, commentsState.sort, saver = LazyListState.Saver) { LazyListState() }
+            val commentsPosition = remember(commentsListState) {
+                commentsListState.firstVisibleItemIndex to commentsListState.firstVisibleItemScrollOffset
+            }
+            LaunchedEffect(commentsListState) {
+                if (commentsPosition.first > 0 || commentsPosition.second > 0) {
+                    snapshotFlow { commentsListState.layoutInfo.totalItemsCount }.first { it > 0 }
+                    repeat(2) { withFrameNanos {} }
+                    val itemCount = commentsListState.layoutInfo.totalItemsCount
+                    if (itemCount > 0) commentsListState.scrollToItem(
+                        commentsPosition.first.coerceAtMost(itemCount - 1), commentsPosition.second,
+                    )
+                }
+            }
+            LaunchedEffect(fullscreen, state.commentsOpen) {
+                if (fullscreen && state.commentsOpen) watchViewModel.onAction(WatchAction.CloseComments)
+            }
             val back: () -> Unit = {
-                if (state.searchOpen) watchViewModel.onAction(WatchAction.CloseSearch)
-                else when (PlayerUi.nextBackStep(playerState.locked, fullscreen)) {
-                    PlayerUi.BackStep.Unlock -> playerViewModel.setLocked(false)
-                    PlayerUi.BackStep.ExitFullscreen -> playerViewModel.setFullscreen(false)
-                    PlayerUi.BackStep.BrowserBack -> finish()
+                when {
+                    state.searchOpen -> watchViewModel.onAction(WatchAction.CloseSearch)
+                    state.commentsOpen && !fullscreen -> watchViewModel.onAction(WatchAction.CloseComments)
+                    else -> when (PlayerUi.nextBackStep(playerState.locked, fullscreen)) {
+                        PlayerUi.BackStep.Unlock -> playerViewModel.setLocked(false)
+                        PlayerUi.BackStep.ExitFullscreen -> playerViewModel.setFullscreen(false)
+                        PlayerUi.BackStep.BrowserBack -> finish()
+                    }
                 }
             }
             BackHandler(onBack = back)
             Box(Modifier.fillMaxSize().background(ComposeColor.White)) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    val hideWatchControls = state.searchOpen ||
+                        (state.commentsOpen && !fullscreen && !WatchLayout.sidebar(maxWidth.value, maxHeight.value))
                     WatchScreen(
                         state = state,
                         onAction = watchViewModel::onAction,
                         onBack = back,
-                        modifier = Modifier.fillMaxSize().then(if (state.searchOpen) Modifier.clearAndSetSemantics {} else Modifier),
+                        modifier = Modifier.fillMaxSize().then(
+                            if (hideWatchControls) Modifier.clearAndSetSemantics {} else Modifier,
+                        ),
                         fullscreen = fullscreen,
                     )
                 }
@@ -115,6 +183,22 @@ class WatchActivity : ComponentActivity() {
                         onVoiceSearch = { watchViewModel.onAction(WatchAction.VoiceSearch) },
                     )
                 }
+                if (state.commentsOpen && !fullscreen && !state.searchOpen) {
+                    val commentCount = when (commentsState.content) {
+                        CommentsContent.Empty -> "0"
+                        CommentsContent.Disabled -> ""
+                        else -> commentsState.total.ifBlank { (state.content as? WatchContent.Ready)?.page?.video?.commentCount.orEmpty() }
+                    }
+                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("comments-panel-host")) {
+                        CommentsPanel(
+                            state = commentsState,
+                            commentCount = commentCount,
+                            onAction = commentsViewModel::onAction,
+                            onClose = { watchViewModel.onAction(WatchAction.CloseComments) },
+                            listState = commentsListState,
+                        )
+                    }
+                }
             }
         }
     }
@@ -122,10 +206,18 @@ class WatchActivity : ComponentActivity() {
     companion object {
         const val EXTRA_VIDEO_ID = "watch_video_id"
         const val EXTRA_SCENARIO = "watch_scenario"
+        const val EXTRA_COMMENTS_SCENARIO = "watch_comments_scenario"
+        const val EXTRA_OPEN_COMMENTS = "watch_open_comments"
 
         fun intent(context: Context, videoId: String, scenario: WatchScenario? = null) =
             Intent(context, WatchActivity::class.java)
                 .putExtra(EXTRA_VIDEO_ID, videoId)
                 .apply { if (scenario != null) putExtra(EXTRA_SCENARIO, scenario.argument) }
+
+        /** Debug-only entry used by instrumentation tests to pin panel states. */
+        fun commentsIntent(context: Context, videoId: String, comments: CommentsScenario, open: Boolean = true) =
+            intent(context, videoId)
+                .putExtra(EXTRA_COMMENTS_SCENARIO, comments.argument)
+                .putExtra(EXTRA_OPEN_COMMENTS, open)
     }
 }

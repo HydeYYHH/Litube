@@ -148,7 +148,9 @@ class WatchScreenAndroidTest {
         fun clickScrolled(node: SemanticsNodeInteraction, expected: WatchNavigationRequest) {
             node.performScrollTo().performClick()
             assertWatchRequest(expected)
-            compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
+            if (expected is WatchNavigationRequest.Comments) {
+                compose.onNodeWithTag("comments-panel").assertIsDisplayed()
+            } else compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
         }
 
         fun clickFixed(node: SemanticsNodeInteraction, expected: WatchNavigationRequest) {
@@ -169,6 +171,11 @@ class WatchScreenAndroidTest {
             compose.onNodeWithText("Comments"),
             WatchNavigationRequest.Comments("bunny"),
         )
+        // Opening the panel is a host effect; dismiss it before touching the page again.
+        compose.onNodeWithTag("comments-close").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("comments-panel").fetchSemanticsNodes().isEmpty()
+        }
         // The page itself has no kebab; item menus come from the related cards.
         clickScrolled(
             compose.onNodeWithContentDescription("More actions for City light trails — a night walk through the old harbour"),

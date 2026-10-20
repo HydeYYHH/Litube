@@ -51,6 +51,7 @@ data class WatchUiState(
     val descriptionExpanded: Boolean = false,
     val searchOpen: Boolean = false,
     val draftQuery: String = "",
+    val commentsOpen: Boolean = false,
 )
 
 /** Typed boundaries only: every entry is recorded by the host, never simulated as a success. */
@@ -93,6 +94,7 @@ sealed interface WatchAction {
     data object Report : WatchAction
     data class OpenChannel(val channelId: String) : WatchAction
     data class OpenComments(val videoId: String) : WatchAction
+    data object CloseComments : WatchAction
     data class OpenRelated(val videoId: String) : WatchAction
     data class OpenItemMenu(val videoId: String) : WatchAction
 }

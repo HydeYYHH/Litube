@@ -28,6 +28,7 @@ class WatchViewModel(
             descriptionExpanded = savedState["descriptionExpanded"] ?: false,
             searchOpen = savedState["searchOpen"] ?: false,
             draftQuery = savedState["draftQuery"] ?: "",
+            commentsOpen = savedState["commentsOpen"] ?: false,
         )
     )
     val uiState = _state.asStateFlow()
@@ -71,7 +72,11 @@ class WatchViewModel(
                 navigation.trySend(WatchNavigationRequest.Subscribe(channel))
             }
             is WatchAction.OpenChannel -> navigation.trySend(WatchNavigationRequest.Channel(action.channelId))
-            is WatchAction.OpenComments -> navigation.trySend(WatchNavigationRequest.Comments(action.videoId))
+            is WatchAction.OpenComments -> {
+                editComments(true)
+                navigation.trySend(WatchNavigationRequest.Comments(action.videoId))
+            }
+            WatchAction.CloseComments -> editComments(false)
             is WatchAction.OpenRelated -> navigation.trySend(WatchNavigationRequest.Watch(action.videoId))
             is WatchAction.OpenItemMenu -> navigation.trySend(WatchNavigationRequest.ItemMenu(action.videoId))
         }
@@ -81,6 +86,11 @@ class WatchViewModel(
         savedState["searchOpen"] = open
         savedState["draftQuery"] = query
         _state.update { it.copy(searchOpen = open, draftQuery = query) }
+    }
+
+    private fun editComments(open: Boolean) {
+        savedState["commentsOpen"] = open
+        _state.update { it.copy(commentsOpen = open) }
     }
 
     private fun toggleDescription() {
