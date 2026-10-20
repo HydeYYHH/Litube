@@ -20,14 +20,17 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
         /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
         fun profile(channelId: String = "blender") = ChannelProfile(
             channelId = channelId,
-            name = "Blender",
-            handle = "@blender",
+            name = when (channelId) { "studio" -> "Blender Studio"; "northlight" -> "Northlight Films"; else -> "Blender" },
+            handle = when (channelId) { "studio" -> "@BlenderStudio"; "northlight" -> "@northlight"; else -> "@blender" },
             avatar = "bunny",
             banner = "sintel",
             subscribers = "30M subscribers",
             // Short enough that the inline "...more" tail renders at every sampled line budget.
             description = "Blender is the free and open source 3D creation suite for films.",
             links = listOf("blender.org", "studio.blender.org"),
+            fullDescription = "Blender is the free and open source 3D creation suite. Explore the open movies, animation projects and stories from the artists behind them.",
+            country = "Netherlands", joined = "Joined Jan 1, 2010", videoCount = "7 videos", views = "24,000,000 views",
+            canonicalUrl = when (channelId) { "blender" -> "https://www.youtube.com/@BlenderOfficial"; "studio" -> "https://www.youtube.com/@BlenderStudio"; else -> "" },
         )
 
         /** The Home tab lists exactly these (homeShelf) videos; the Videos tab shows every row. */

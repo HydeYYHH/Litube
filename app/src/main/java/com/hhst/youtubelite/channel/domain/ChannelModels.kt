@@ -10,6 +10,12 @@ data class ChannelProfile(
     val description: String,
     val memberBadge: String? = null,
     val links: List<String> = emptyList(),
+    val fullDescription: String = description,
+    val country: String = "",
+    val joined: String = "",
+    val videoCount: String = "",
+    val views: String = "",
+    val canonicalUrl: String = "",
 )
 
 data class ChannelVideo(
@@ -40,10 +46,11 @@ sealed interface ChannelContent {
 }
 
 enum class ChannelTab(val label: String) {
-    Home("Home"), Videos("Videos"), Shorts("Shorts"), Live("Live"), Playlists("Playlists"), Community("Community"),
+    Home("Home"), Videos("Videos"), Shorts("Shorts"), Live("Live"), Playlists("Playlists"), Posts("Posts"), Search("Search"),
 }
 
 sealed interface ChannelOverlay {
+    data object About : ChannelOverlay
     data object None : ChannelOverlay
     data class PlaylistMenu(val playlistId: String) : ChannelOverlay
 }
@@ -55,9 +62,11 @@ data class ChannelUiState(
     val content: ChannelContent = ChannelContent.Loading,
     val selectedTab: ChannelTab = ChannelTab.Home,
     val overlay: ChannelOverlay = ChannelOverlay.None,
+    val searchQuery: String = "",
+    val submittedQuery: String = "",
     val playlistSort: ChannelPlaylistSort = ChannelPlaylistSort.DateAdded,
 ) {
-    val isLocalTab: Boolean get() = selectedTab in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists)
+    val isLocalTab: Boolean get() = selectedTab in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search)
 }
 
 enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), You("You") }
@@ -70,6 +79,7 @@ sealed interface ChannelNavigationRequest {
     data class SharePlaylist(val playlistId: String) : ChannelNavigationRequest
     data class OtherTab(val tab: ChannelTab) : ChannelNavigationRequest
     data class Subscribe(val channelId: String) : ChannelNavigationRequest
+    data class OpenLink(val url: String) : ChannelNavigationRequest
     data object Share : ChannelNavigationRequest
     data object ChannelSearch : ChannelNavigationRequest
     data object FullDescription : ChannelNavigationRequest
@@ -89,6 +99,9 @@ sealed interface ChannelAction {
     data class SortPlaylists(val sort: ChannelPlaylistSort) : ChannelAction
     data object Subscribe : ChannelAction
     data object Share : ChannelAction
+    data class QueryChanged(val query: String) : ChannelAction
+    data object SubmitSearch : ChannelAction
+    data class OpenLink(val url: String) : ChannelAction
     data object ChannelSearch : ChannelAction
     data object OpenFullDescription : ChannelAction
     data object OpenSectionMenu : ChannelAction

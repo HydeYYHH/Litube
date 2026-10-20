@@ -1,7 +1,10 @@
 package com.hhst.youtubelite.search.domain
 
 data class SearchPage(val query: String, val results: List<SearchResult>,
-    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList())
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
+    val channels: List<SearchChannel> = emptyList())
+
+data class SearchChannel(val id: String, val name: String, val handle: String, val subscribers: String, val artwork: String)
 
 data class SearchResult(
     val id: String,
@@ -79,6 +82,7 @@ enum class SearchDestination(val label: String) {
 
 sealed interface SearchNavigationRequest {
     data class Watch(val videoId: String) : SearchNavigationRequest
+    data class Subscribe(val channelId: String) : SearchNavigationRequest
     data class Channel(val channelId: String) : SearchNavigationRequest
     data class Destination(val destination: SearchDestination) : SearchNavigationRequest
     data class ItemMenu(val videoId: String) : SearchNavigationRequest
@@ -86,8 +90,6 @@ sealed interface SearchNavigationRequest {
     data class Share(val videoId: String) : SearchNavigationRequest
     data class Playlist(val playlistId: String) : SearchNavigationRequest
     data class SharePlaylist(val playlistId: String) : SearchNavigationRequest
-    /** A result type this build does not render; the host records the request instead of faking a screen. */
-    data class UnsupportedType(val type: SearchResultType) : SearchNavigationRequest
     data object Filters : SearchNavigationRequest
     data object VoiceSearch : SearchNavigationRequest
     data object PageMenu : SearchNavigationRequest
@@ -102,6 +104,7 @@ sealed interface SearchAction {
     data class OpenPlaylist(val playlistId: String) : SearchAction
     data class OpenPlaylistMenu(val playlistId: String) : SearchAction
     data object SharePlaylist : SearchAction
+    data class Subscribe(val channelId: String) : SearchAction
     data class OpenChannel(val channelId: String) : SearchAction
     data class SelectDestination(val destination: SearchDestination) : SearchAction
     data class OpenItemMenu(val videoId: String) : SearchAction

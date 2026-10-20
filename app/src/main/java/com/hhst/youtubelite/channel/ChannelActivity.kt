@@ -15,6 +15,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
@@ -80,7 +81,7 @@ class ChannelActivity : ComponentActivity() {
             BackHandler(onBack = back)
             ChannelScreen(state, channelViewModel::onAction, onBack = back,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
-                    .windowInsetsPadding(WindowInsets.safeDrawing))
+                    .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
         }
     }
 

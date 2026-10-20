@@ -40,7 +40,7 @@ class SearchResultsViewModel(
             overlay = restoredOverlay,
             draftQuery = savedState["draftQuery"] ?: restoredQuery,
             filters = restoredFilters,
-            signedInPreview = restoredFilters.type != SearchResultType.Playlists,
+            signedInPreview = restoredFilters.type == SearchResultType.All,
             filtersOpen = savedState[KEY_FILTERS_OPEN] ?: (savedState.get<String>(KEY_OVERLAY) == "filters"),
         )
     )
@@ -75,6 +75,7 @@ class SearchResultsViewModel(
                 overlay(SearchOverlay.None)
                 navigation.trySend(SearchNavigationRequest.SharePlaylist(menu.playlistId))
             }
+            is SearchAction.Subscribe -> navigation.trySend(SearchNavigationRequest.Subscribe(action.channelId))
             is SearchAction.OpenChannel -> navigation.trySend(SearchNavigationRequest.Channel(action.channelId))
             is SearchAction.SelectDestination -> navigation.trySend(SearchNavigationRequest.Destination(action.destination))
             is SearchAction.OpenItemMenu -> overlay(SearchOverlay.ItemMenu(action.videoId))
@@ -111,14 +112,10 @@ class SearchResultsViewModel(
     }
 
     private fun selectType(type: SearchResultType) {
-        if (type == SearchResultType.Channels) {
-            navigation.trySend(SearchNavigationRequest.UnsupportedType(type))
-            return
-        }
         if (uiState.value.filters.type == type) return
         val filters = uiState.value.filters.copy(type = type)
         persistFilters(filters)
-        _state.update { it.copy(filters = filters, signedInPreview = type != SearchResultType.Playlists) }
+        _state.update { it.copy(filters = filters, signedInPreview = type == SearchResultType.All) }
         load()
     }
 
@@ -179,7 +176,7 @@ class SearchResultsViewModel(
             try {
                 val page = repository.search(query, filters)
                 if (requestGeneration != generation) return@launch
-                _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty()) SearchContent.Empty(query) else SearchContent.Results(page)) }
+                _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty() && page.channels.isEmpty()) SearchContent.Empty(query) else SearchContent.Results(page)) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

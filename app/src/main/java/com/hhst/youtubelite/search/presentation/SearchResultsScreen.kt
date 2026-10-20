@@ -80,6 +80,8 @@ fun SearchResultsScreen(
                             com.hhst.youtubelite.playlist.presentation.PlaylistSearchList(content.page.playlists, width, height, listState,
                                 { onAction(SearchAction.OpenPlaylist(it)) }, { onAction(SearchAction.OpenChannel(it)) },
                                 { onAction(SearchAction.OpenPlaylistMenu(it)) })
+                            else if (state.filters.type == SearchResultType.Channels)
+                                ChannelResultsList(content.page.channels, listState, onAction)
                             else SearchList(content.page.results, width, height, listState, onAction)
                     }
                 }

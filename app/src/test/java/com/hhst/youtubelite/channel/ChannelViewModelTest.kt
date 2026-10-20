@@ -48,7 +48,7 @@ class ChannelViewModelTest {
         advanceUntilIdle()
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         assertEquals(ChannelTab.Videos, vm.uiState.value.selectedTab)
-        for (tab in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Community)) {
+        for (tab in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts)) {
             vm.onAction(ChannelAction.SelectTab(tab))
             assertEquals(ChannelNavigationRequest.OtherTab(tab), vm.navigationRequests.first())
             assertEquals("Selecting ${tab.name} must not switch the local view", ChannelTab.Videos, vm.uiState.value.selectedTab)
@@ -66,6 +66,39 @@ class ChannelViewModelTest {
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         val restored = ChannelViewModel(FixtureChannelRepository(), saved, "blender")
         assertEquals(ChannelTab.Videos, restored.uiState.value.selectedTab)
+    }
+
+    @Test fun channelSearchAndAboutRestoreWithChannelIdentityAndSeparateDraft() = runTest {
+        val saved = SavedStateHandle()
+        val vm = ChannelViewModel(FixtureChannelRepository(), saved, "northlight")
+        advanceUntilIdle()
+
+        vm.onAction(ChannelAction.ChannelSearch)
+        assertEquals(ChannelTab.Search, vm.uiState.value.selectedTab)
+        assertEquals(ChannelNavigationRequest.ChannelSearch, vm.navigationRequests.first())
+        assertEquals("northlight", vm.uiState.value.channelId)
+
+        vm.onAction(ChannelAction.QueryChanged("  night walk  "))
+        vm.onAction(ChannelAction.SubmitSearch)
+        assertEquals("night walk", vm.uiState.value.submittedQuery)
+        vm.onAction(ChannelAction.QueryChanged("  draft only  "))
+        vm.onAction(ChannelAction.OpenFullDescription)
+        assertEquals(ChannelOverlay.About, vm.uiState.value.overlay)
+        assertEquals(ChannelNavigationRequest.FullDescription, vm.navigationRequests.first())
+
+        val restoredSaved = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
+        val restored = ChannelViewModel(FixtureChannelRepository(), restoredSaved, "ignored")
+        advanceUntilIdle()
+        assertEquals("northlight", restored.uiState.value.channelId)
+        assertEquals(ChannelTab.Search, restored.uiState.value.selectedTab)
+        assertEquals("  draft only  ", restored.uiState.value.searchQuery)
+        assertEquals("night walk", restored.uiState.value.submittedQuery)
+        assertEquals(ChannelOverlay.About, restored.uiState.value.overlay)
+
+        restored.onAction(ChannelAction.CloseOverlay)
+        val closed = ChannelViewModel(FixtureChannelRepository(), restoredSaved, "ignored")
+        assertEquals(ChannelOverlay.None, closed.uiState.value.overlay)
+        assertEquals(ChannelTab.Search, closed.uiState.value.selectedTab)
     }
 
     @Test fun playlistSortAndMenuRestoreWithoutLosingTheShareIdentity() = runTest {
@@ -98,7 +131,7 @@ class ChannelViewModelTest {
         assertEquals(ChannelNavigationRequest.Share, vm.navigationRequests.first())
         vm.onAction(ChannelAction.OpenFullDescription)
         assertEquals(ChannelNavigationRequest.FullDescription, vm.navigationRequests.first())
-        // No page action turns an external request into a local state change.
+        assertEquals(ChannelOverlay.About, vm.uiState.value.overlay)
         assertTrue(vm.uiState.value.content is ChannelContent.Ready)
     }
 

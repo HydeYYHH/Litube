@@ -13,6 +13,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -78,6 +81,8 @@ fun ChannelScreen(
             // Each tab owns a list state that survives tab switches and activity recreation.
             val homeState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val videosState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val searchState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val aboutScroll = rememberScrollState()
             val playlistsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             Column(Modifier.fillMaxSize().then(if (state.overlay != ChannelOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
                 ChannelTopBar(state, onBack, onAction)
@@ -86,6 +91,7 @@ fun ChannelScreen(
                         ChannelContent.Loading -> ChannelSkeleton(width)
                         ChannelContent.Failed -> ChannelFailed(onAction)
                         is ChannelContent.Ready -> when (state.selectedTab) {
+                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction)
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
                             ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
                             else -> ChannelVideosTab(content.page, width, videosState, onAction)
@@ -94,6 +100,8 @@ fun ChannelScreen(
                 }
                 ChannelNavigationBar(onAction)
             }
+            if (state.overlay == ChannelOverlay.About && state.content is ChannelContent.Ready)
+                ChannelAboutPanel(state.content.page.profile, width, height, onAction, aboutScroll)
             if (state.overlay is ChannelOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
                 { onAction(ChannelAction.CloseOverlay) }, { onAction(ChannelAction.SharePlaylist) })
         }
@@ -172,19 +180,21 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
 }
 
 @Composable
-private fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
+internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
     Column(Modifier.fillMaxWidth().background(Color.White).testTag("channel-tabbar")) {
         Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
             .horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
             ChannelTab.entries.forEach { tab ->
                 val isSelected = tab == selected
+                val bringIntoView = remember { BringIntoViewRequester() }
+                LaunchedEffect(isSelected) { if (isSelected) bringIntoView.bringIntoView() }
                 Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
                     .widthIn(min = ChannelLayout.TabMinWidth.dp)
-                    .testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
+                    .bringIntoViewRequester(bringIntoView).testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
                     .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
                     contentAlignment = Alignment.Center) {
-                    AppText(tab.label, size = 14, line = 20, maxLines = 1,
+                    AppText(tab.label, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,
                         color = if (isSelected) DesignTokens.Ink else DesignTokens.Secondary)
                     if (isSelected) {
                         Box(Modifier.align(Alignment.BottomStart).fillMaxWidth()
@@ -369,7 +379,7 @@ private fun BylineIdentity(text: String, fontSize: Int) {
 }
 
 @Composable
-private fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAction) -> Unit) {
+internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAction) -> Unit) {
     val profile = page.profile
     val wide = ChannelLayout.wide(width)
     val compact = width < 600f

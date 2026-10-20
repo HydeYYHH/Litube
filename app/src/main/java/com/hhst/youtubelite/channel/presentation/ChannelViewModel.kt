@@ -25,8 +25,11 @@ class ChannelViewModel(
         ChannelUiState(
             channelId = restoredId,
             content = scenario.initialContent(restoredId),
-            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists).firstOrNull { it.name == name } } ?: ChannelTab.Home,
-            overlay = savedState.get<String>("playlistMenu")?.let(ChannelOverlay::PlaylistMenu) ?: ChannelOverlay.None,
+            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search).firstOrNull { it.name == name } } ?: ChannelTab.Home,
+            overlay = if (savedState.get<Boolean>("about") == true) ChannelOverlay.About
+                else savedState.get<String>("playlistMenu")?.let(ChannelOverlay::PlaylistMenu) ?: ChannelOverlay.None,
+            searchQuery = savedState["channelQuery"] ?: "",
+            submittedQuery = savedState["submittedQuery"] ?: "",
             playlistSort = ChannelPlaylistSort.entries.firstOrNull { it.name == savedState.get<String>("playlistSort") } ?: ChannelPlaylistSort.DateAdded,
         )
     )
@@ -55,6 +58,7 @@ class ChannelViewModel(
             }
             ChannelAction.CloseOverlay -> {
                 savedState.remove<String>("playlistMenu")
+                savedState["about"] = false
                 _state.update { it.copy(overlay = ChannelOverlay.None) }
             }
             ChannelAction.SharePlaylist -> {
@@ -68,15 +72,32 @@ class ChannelViewModel(
             }
             ChannelAction.Subscribe -> navigation.trySend(ChannelNavigationRequest.Subscribe(uiState.value.channelId))
             ChannelAction.Share -> navigation.trySend(ChannelNavigationRequest.Share)
-            ChannelAction.ChannelSearch -> navigation.trySend(ChannelNavigationRequest.ChannelSearch)
-            ChannelAction.OpenFullDescription -> navigation.trySend(ChannelNavigationRequest.FullDescription)
+            ChannelAction.ChannelSearch -> {
+                selectTab(ChannelTab.Search)
+                navigation.trySend(ChannelNavigationRequest.ChannelSearch)
+            }
+            is ChannelAction.QueryChanged -> {
+                savedState["channelQuery"] = action.query
+                _state.update { it.copy(searchQuery = action.query) }
+            }
+            ChannelAction.SubmitSearch -> {
+                val query = uiState.value.searchQuery.trim()
+                savedState["submittedQuery"] = query
+                _state.update { it.copy(submittedQuery = query) }
+            }
+            is ChannelAction.OpenLink -> navigation.trySend(ChannelNavigationRequest.OpenLink(action.url))
+            ChannelAction.OpenFullDescription -> {
+                savedState["about"] = true
+                _state.update { it.copy(overlay = ChannelOverlay.About) }
+                navigation.trySend(ChannelNavigationRequest.FullDescription)
+            }
             ChannelAction.OpenSectionMenu -> navigation.trySend(ChannelNavigationRequest.SectionMenu)
         }
     }
 
     private fun selectTab(tab: ChannelTab) {
         if (tab == _state.value.selectedTab) return
-        if (tab !in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists)) {
+        if (tab !in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search)) {
             navigation.trySend(ChannelNavigationRequest.OtherTab(tab))
             return
         }

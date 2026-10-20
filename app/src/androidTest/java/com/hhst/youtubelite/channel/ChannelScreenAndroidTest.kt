@@ -96,15 +96,24 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-home-list").assertIsDisplayed()
         compose.onNodeWithContentDescription("Search within this channel").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.ChannelSearch, it.lastNavigationRequest) }
+        awaitNode("channel-search-list")
+        compose.onNodeWithTag("channel-tab-Home").performScrollTo().performClick()
+        awaitNode("channel-home-list")
         compose.onNodeWithContentDescription("More channel options").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.SectionMenu, it.lastNavigationRequest) }
         compose.onNodeWithTag("channel-subscribe").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.Subscribe("blender"), it.lastNavigationRequest) }
         compose.onNodeWithTag("channel-description").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.FullDescription, it.lastNavigationRequest) }
+        compose.onNodeWithTag("channel-about-panel").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close channel details").performClick()
+        compose.onNodeWithTag("channel-home-list").performScrollToNode(
+            hasContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation")
+        )
         compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation")
             .performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.ItemMenu("bunny"), it.lastNavigationRequest) }
+        compose.onNodeWithTag("channel-home-list").performScrollToIndex(0)
         compose.onNodeWithTag("channel-subscribe").assertIsDisplayed()
     }
 
@@ -136,6 +145,66 @@ class ChannelScreenAndroidTest {
         results.onActivity { assertFalse(it.isFinishing) }
         results.close()
         search = null
+    }
+
+    @Test fun channelSearchRestoresDraftAndSubmittedQueryWithItsIdentity() {
+        val host = ActivityScenario.launch<ChannelActivity>(ChannelActivity.intent(ApplicationProvider.getApplicationContext(), "studio"))
+        channel = host
+        awaitNode("channel-header")
+        compose.onNodeWithContentDescription("Search within this channel").performClick()
+        awaitNode("channel-search-input")
+        compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-form"))
+        compose.onNodeWithTag("channel-search-input").performTextInput("bunny")
+        compose.onNodeWithContentDescription("Submit channel search").performClick()
+        compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-video-bunny"))
+        compose.onNodeWithTag("channel-search-video-dream").assertDoesNotExist()
+        host.onActivity {
+            assertEquals("studio", it.channelViewModel.uiState.value.channelId)
+            it.channelViewModel.onAction(com.hhst.youtubelite.channel.domain.ChannelAction.QueryChanged("draft"))
+            it.channelViewModel.onAction(com.hhst.youtubelite.channel.domain.ChannelAction.OpenFullDescription)
+        }
+        awaitNode("channel-about-panel")
+        host.recreate()
+        awaitNode("channel-about-panel")
+        host.onActivity {
+            assertEquals("studio", it.channelViewModel.uiState.value.channelId)
+            assertEquals("draft", it.channelViewModel.uiState.value.searchQuery)
+            assertEquals("bunny", it.channelViewModel.uiState.value.submittedQuery)
+        }
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        awaitNode("channel-search-list")
+        compose.onNodeWithTag("channel-about-panel").assertDoesNotExist()
+        compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-thumb-bunny"))
+        compose.onNodeWithTag("channel-search-thumb-bunny").performClick()
+        awaitNode("watch-screen")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        awaitNode("channel-search-list")
+        host.onActivity { assertEquals("bunny", it.channelViewModel.uiState.value.submittedQuery) }
+        DeviceEvidence.captureScene("discovery-channel-search-host")
+    }
+
+    @Test fun channelResultNavigatesWithTheSelectedIdentityAndRestoresItsFilter() {
+        val host = ActivityScenario.launch<SearchResultsActivity>(SearchResultsActivity.intent(ApplicationProvider.getApplicationContext(), "blender"))
+        search = host
+        awaitNode("search-results-list")
+        host.onActivity { it.searchViewModel.onAction(com.hhst.youtubelite.search.domain.SearchAction.SelectResultType(com.hhst.youtubelite.search.domain.SearchResultType.Channels)) }
+        awaitNode("search-channels-list")
+        compose.onNodeWithTag("search-channel-name-studio", true).performClick()
+        awaitNode("channel-header")
+        compose.onNodeWithTag("channel-name", true).assertTextEquals("Blender Studio")
+        compose.onNodeWithTag("channel-description").performClick()
+        awaitNode("channel-about-panel")
+        DeviceEvidence.captureScene("discovery-about-host")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        awaitNode("channel-header")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        awaitNode("search-channels-list")
+        host.recreate()
+        awaitNode("search-channels-list")
+        host.onActivity {
+            assertEquals("blender", it.searchViewModel.uiState.value.query)
+            assertEquals(com.hhst.youtubelite.search.domain.SearchResultType.Channels, it.searchViewModel.uiState.value.filters.type)
+        }
     }
 
     @Test fun debugScenariosRenderTheirOwnState() {

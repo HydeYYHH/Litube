@@ -18,10 +18,16 @@ class FixtureSearchRepository(private val scenario: SearchScenario = SearchScena
             com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries().filter {
                 filters.uploaded.maxAgeDays?.let { limit -> it.updatedDays <= limit } ?: true
             } else emptyList()
-        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList(), playlists)
+        val channels = if (filters.type == SearchResultType.Channels) sampleChannels() else emptyList()
+        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList(), playlists, channels)
     }
 
     companion object {
+        fun sampleChannels() = listOf(
+            SearchChannel("blender", "Blender", "@blender", "30M subscribers", "bunny"),
+            SearchChannel("studio", "Blender Studio", "@BlenderStudio", "577K subscribers", "sintel"),
+            SearchChannel("northlight", "Northlight Films", "@northlight", "428K subscribers", "dream"),
+        )
         /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
         fun sampleResults() = listOf(
             SearchResult("harbour", "City light trails — a night walk through the old harbour",

@@ -126,7 +126,7 @@ class SearchResultsViewModelTest {
         assertEquals(SearchContent.Empty("open movie"), vm.uiState.value.content)
     }
 
-    @Test fun playlistTypeLoadsIndependentCardsAndChannelsRemainAnExit() = runTest {
+    @Test fun channelsTypeLoadsChannelCardsAndSubscriptionKeepsTypedIdentity() = runTest {
         val seen = mutableListOf<SearchFilters>()
         val vm = SearchResultsViewModel(object : SearchRepository {
             override suspend fun search(query: String, filters: SearchFilters): SearchPage {
@@ -139,8 +139,15 @@ class SearchResultsViewModelTest {
         advanceUntilIdle()
         assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
         vm.onAction(SearchAction.SelectResultType(SearchResultType.Channels))
-        assertEquals(SearchNavigationRequest.UnsupportedType(SearchResultType.Channels), vm.navigationRequests.first())
-        assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
+        advanceUntilIdle()
+        assertEquals(SearchResultType.Channels, vm.uiState.value.filters.type)
+        assertEquals(SearchFilters(type = SearchResultType.Channels), seen.last())
+        val channelPage = (vm.uiState.value.content as SearchContent.Results).page
+        assertTrue(channelPage.results.isEmpty())
+        assertEquals(FixtureSearchRepository.sampleChannels(), channelPage.channels)
+        assertFalse(vm.uiState.value.signedInPreview)
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        assertEquals(SearchNavigationRequest.Subscribe("northlight"), vm.navigationRequests.first())
         vm.onAction(SearchAction.SelectResultType(SearchResultType.Playlists))
         advanceUntilIdle()
         assertEquals(SearchResultType.Playlists, vm.uiState.value.filters.type)
