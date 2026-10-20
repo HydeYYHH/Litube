@@ -13,7 +13,7 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
         delay(160)
         if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
         if (scenario == ChannelScenario.Empty) return ChannelPage(profile(channelId), emptyList())
-        return ChannelPage(profile(channelId), sampleVideos())
+        return ChannelPage(profile(channelId), sampleVideos(), com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries())
     }
 
     companion object {

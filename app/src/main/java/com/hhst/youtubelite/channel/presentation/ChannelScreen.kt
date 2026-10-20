@@ -55,6 +55,9 @@ import com.hhst.youtubelite.channel.domain.ChannelProfile
 import com.hhst.youtubelite.channel.domain.ChannelTab
 import com.hhst.youtubelite.channel.domain.ChannelUiState
 import com.hhst.youtubelite.channel.domain.ChannelVideo
+import com.hhst.youtubelite.channel.domain.ChannelOverlay
+import com.hhst.youtubelite.channel.domain.ChannelPlaylistSort
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.hhst.youtubelite.ui.design.*
 
 private val SubscribeForeground = Color(0xFFF1F1F1)
@@ -71,10 +74,12 @@ fun ChannelScreen(
     AppTheme {
         BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("channel-page")) {
             val width = maxWidth.value
+            val height = maxHeight.value
             // Each tab owns a list state that survives tab switches and activity recreation.
             val homeState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val videosState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-            Column(Modifier.fillMaxSize()) {
+            val playlistsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            Column(Modifier.fillMaxSize().then(if (state.overlay != ChannelOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
                 ChannelTopBar(state, onBack, onAction)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (val content = state.content) {
@@ -82,12 +87,44 @@ fun ChannelScreen(
                         ChannelContent.Failed -> ChannelFailed(onAction)
                         is ChannelContent.Ready -> when (state.selectedTab) {
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
+                            ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
                             else -> ChannelVideosTab(content.page, width, videosState, onAction)
                         }
                     }
                 }
                 ChannelNavigationBar(onAction)
             }
+            if (state.overlay is ChannelOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
+                { onAction(ChannelAction.CloseOverlay) }, { onAction(ChannelAction.SharePlaylist) })
+        }
+    }
+}
+
+@Composable
+private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, state: LazyListState,
+    sort: ChannelPlaylistSort, onAction: (ChannelAction) -> Unit) {
+    val viewport = rememberUpdatedState(width)
+    LazyColumn(Modifier.fillMaxSize().testTag("channel-playlists-list"), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { ChannelHeader(page, viewport.value, onAction) }
+        stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Playlists, onAction) }
+        item {
+            val fieldHeight = maxOf(50.dp, with(androidx.compose.ui.platform.LocalDensity.current) { 14.sp.toDp() } + 28.dp)
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp).horizontalScroll(rememberScrollState())) {
+                SelectField("channel-playlist-sort", sort, ChannelPlaylistSort.entries, { it.label }, 176f, fieldHeight) {
+                    onAction(ChannelAction.SortPlaylists(it))
+                }
+                Spacer(Modifier.height(1.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        if (page.playlists.isEmpty()) item {
+            AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+        }
+        val playlists = if (sort == ChannelPlaylistSort.LastVideo) page.playlists.sortedBy { it.updatedDays } else page.playlists
+        items(playlists, key = { it.id }) { playlist ->
+            com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
+                { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
+                if (width >= 931f || width >= 550f && width <= height) 40f else 48f)
         }
     }
 }
@@ -136,7 +173,7 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
 
 @Composable
 private fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag("channel-tabbar")) {
+    Column(Modifier.fillMaxWidth().background(Color.White).testTag("channel-tabbar")) {
         Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
             .horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))

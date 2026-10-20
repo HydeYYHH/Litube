@@ -43,16 +43,18 @@ class ChannelViewModelTest {
         assertEquals("northlight", (vm.uiState.value.content as ChannelContent.Ready).page.profile.channelId)
     }
 
-    @Test fun onlyHomeAndVideosSwitchLocallyAndOtherTabsStayRequests() = runTest {
+    @Test fun implementedTabsSwitchLocallyAndOtherTabsStayRequests() = runTest {
         val vm = ChannelViewModel(FixtureChannelRepository(), SavedStateHandle(), "blender")
         advanceUntilIdle()
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         assertEquals(ChannelTab.Videos, vm.uiState.value.selectedTab)
-        for (tab in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Playlists, ChannelTab.Community)) {
+        for (tab in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Community)) {
             vm.onAction(ChannelAction.SelectTab(tab))
             assertEquals(ChannelNavigationRequest.OtherTab(tab), vm.navigationRequests.first())
             assertEquals("Selecting ${tab.name} must not switch the local view", ChannelTab.Videos, vm.uiState.value.selectedTab)
         }
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
+        assertEquals(ChannelTab.Playlists, vm.uiState.value.selectedTab)
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Home))
         assertEquals(ChannelTab.Home, vm.uiState.value.selectedTab)
     }
@@ -64,6 +66,25 @@ class ChannelViewModelTest {
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         val restored = ChannelViewModel(FixtureChannelRepository(), saved, "blender")
         assertEquals(ChannelTab.Videos, restored.uiState.value.selectedTab)
+    }
+
+    @Test fun playlistSortAndMenuRestoreWithoutLosingTheShareIdentity() = runTest {
+        val saved = SavedStateHandle()
+        val vm = ChannelViewModel(FixtureChannelRepository(), saved, "blender")
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
+        vm.onAction(ChannelAction.SortPlaylists(ChannelPlaylistSort.LastVideo))
+        val id = (vm.uiState.value.content as ChannelContent.Ready).page.playlists.last().id
+        vm.onAction(ChannelAction.OpenPlaylistMenu(id))
+        val restored = ChannelViewModel(FixtureChannelRepository(), saved, "ignored")
+        advanceUntilIdle()
+        assertEquals(ChannelTab.Playlists, restored.uiState.value.selectedTab)
+        assertEquals(ChannelPlaylistSort.LastVideo, restored.uiState.value.playlistSort)
+        assertEquals(ChannelOverlay.PlaylistMenu(id), restored.uiState.value.overlay)
+        restored.onAction(ChannelAction.SharePlaylist)
+        assertEquals(ChannelNavigationRequest.SharePlaylist(id), restored.navigationRequests.first())
+        assertEquals(ChannelOverlay.None, restored.uiState.value.overlay)
+        assertEquals(ChannelPlaylistSort.LastVideo, restored.uiState.value.playlistSort)
     }
 
     @Test fun videoWatchAndHeaderRequestsAreTypedOnly() = runTest {

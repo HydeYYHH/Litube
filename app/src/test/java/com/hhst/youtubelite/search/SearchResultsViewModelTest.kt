@@ -126,7 +126,7 @@ class SearchResultsViewModelTest {
         assertEquals(SearchContent.Empty("open movie"), vm.uiState.value.content)
     }
 
-    @Test fun typeAllAppliesButChannelsAndPlaylistsStayTypedExits() = runTest {
+    @Test fun playlistTypeLoadsIndependentCardsAndChannelsRemainAnExit() = runTest {
         val seen = mutableListOf<SearchFilters>()
         val vm = SearchResultsViewModel(object : SearchRepository {
             override suspend fun search(query: String, filters: SearchFilters): SearchPage {
@@ -142,10 +142,13 @@ class SearchResultsViewModelTest {
         assertEquals(SearchNavigationRequest.UnsupportedType(SearchResultType.Channels), vm.navigationRequests.first())
         assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
         vm.onAction(SearchAction.SelectResultType(SearchResultType.Playlists))
-        assertEquals(SearchNavigationRequest.UnsupportedType(SearchResultType.Playlists), vm.navigationRequests.first())
-        assertEquals(SearchResultType.All, vm.uiState.value.filters.type)
+        advanceUntilIdle()
+        assertEquals(SearchResultType.Playlists, vm.uiState.value.filters.type)
         assertTrue(vm.uiState.value.content is SearchContent.Results)
-        assertEquals(SearchFilters(), seen.last())
+        assertTrue((vm.uiState.value.content as SearchContent.Results).page.results.isEmpty())
+        assertEquals(2, (vm.uiState.value.content as SearchContent.Results).page.playlists.size)
+        assertFalse(vm.uiState.value.signedInPreview)
+        assertEquals(SearchFilters(type = SearchResultType.Playlists), seen.last())
     }
 
     @Test fun itemMenuShareExitsAndOtherRowsStayTypedRequests() = runTest {

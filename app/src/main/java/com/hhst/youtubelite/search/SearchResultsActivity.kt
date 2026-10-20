@@ -71,6 +71,8 @@ class SearchResultsActivity : ComponentActivity() {
                         startActivity(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))
                     }
                     if (request is SearchNavigationRequest.Share) shareGateway.share(request.videoId)
+                    if (request is SearchNavigationRequest.Playlist) startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@SearchResultsActivity, request.playlistId))
+                    if (request is SearchNavigationRequest.SharePlaylist) shareGateway.sharePlaylist(request.playlistId)
                 }
             }
         }
@@ -78,7 +80,7 @@ class SearchResultsActivity : ComponentActivity() {
             val state by searchViewModel.uiState.collectAsStateWithLifecycle()
             val back = {
                 when {
-                    state.overlay is SearchOverlay.ItemMenu -> searchViewModel.onAction(SearchAction.CloseItemMenu)
+                    state.overlay is SearchOverlay.ItemMenu || state.overlay is SearchOverlay.PlaylistMenu -> searchViewModel.onAction(SearchAction.CloseItemMenu)
                     state.searchOpen -> searchViewModel.onAction(SearchAction.CloseSearch)
                     state.filtersOpen -> searchViewModel.onAction(SearchAction.CloseFilters)
                     else -> finish()

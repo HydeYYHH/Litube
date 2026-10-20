@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.search.domain
 
-data class SearchPage(val query: String, val results: List<SearchResult>)
+data class SearchPage(val query: String, val results: List<SearchResult>,
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList())
 
 data class SearchResult(
     val id: String,
@@ -46,6 +47,7 @@ sealed interface SearchOverlay {
     data object None : SearchOverlay
     data object Search : SearchOverlay
     data class ItemMenu(val videoId: String) : SearchOverlay
+    data class PlaylistMenu(val playlistId: String) : SearchOverlay
 }
 
 interface SearchRepository {
@@ -82,6 +84,8 @@ sealed interface SearchNavigationRequest {
     data class ItemMenu(val videoId: String) : SearchNavigationRequest
     data class MenuAction(val videoId: String, val action: SearchVideoMenuAction) : SearchNavigationRequest
     data class Share(val videoId: String) : SearchNavigationRequest
+    data class Playlist(val playlistId: String) : SearchNavigationRequest
+    data class SharePlaylist(val playlistId: String) : SearchNavigationRequest
     /** A result type this build does not render; the host records the request instead of faking a screen. */
     data class UnsupportedType(val type: SearchResultType) : SearchNavigationRequest
     data object Filters : SearchNavigationRequest
@@ -95,6 +99,9 @@ sealed interface SearchAction {
     data class QueryChanged(val query: String) : SearchAction
     data class SubmitSearch(val query: String) : SearchAction
     data class OpenResult(val videoId: String) : SearchAction
+    data class OpenPlaylist(val playlistId: String) : SearchAction
+    data class OpenPlaylistMenu(val playlistId: String) : SearchAction
+    data object SharePlaylist : SearchAction
     data class OpenChannel(val channelId: String) : SearchAction
     data class SelectDestination(val destination: SearchDestination) : SearchAction
     data class OpenItemMenu(val videoId: String) : SearchAction

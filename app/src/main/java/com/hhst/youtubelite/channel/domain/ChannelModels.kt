@@ -26,6 +26,7 @@ data class ChannelVideo(
 data class ChannelPage(
     val profile: ChannelProfile,
     val videos: List<ChannelVideo>,
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
 )
 
 interface ChannelRepository {
@@ -44,14 +45,19 @@ enum class ChannelTab(val label: String) {
 
 sealed interface ChannelOverlay {
     data object None : ChannelOverlay
+    data class PlaylistMenu(val playlistId: String) : ChannelOverlay
 }
+
+enum class ChannelPlaylistSort(val label: String) { DateAdded("Date added (newest)"), LastVideo("Last video added") }
 
 data class ChannelUiState(
     val channelId: String = "blender",
     val content: ChannelContent = ChannelContent.Loading,
     val selectedTab: ChannelTab = ChannelTab.Home,
+    val overlay: ChannelOverlay = ChannelOverlay.None,
+    val playlistSort: ChannelPlaylistSort = ChannelPlaylistSort.DateAdded,
 ) {
-    val isLocalTab: Boolean get() = selectedTab == ChannelTab.Home || selectedTab == ChannelTab.Videos
+    val isLocalTab: Boolean get() = selectedTab in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists)
 }
 
 enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), You("You") }
@@ -60,6 +66,8 @@ sealed interface ChannelNavigationRequest {
     data class Destination(val destination: ChannelDestination) : ChannelNavigationRequest
     data class ItemMenu(val videoId: String) : ChannelNavigationRequest
     data class Watch(val videoId: String) : ChannelNavigationRequest
+    data class Playlist(val playlistId: String) : ChannelNavigationRequest
+    data class SharePlaylist(val playlistId: String) : ChannelNavigationRequest
     data class OtherTab(val tab: ChannelTab) : ChannelNavigationRequest
     data class Subscribe(val channelId: String) : ChannelNavigationRequest
     data object Share : ChannelNavigationRequest
@@ -74,6 +82,11 @@ sealed interface ChannelAction {
     data class SelectTab(val tab: ChannelTab) : ChannelAction
     data class OpenItemMenu(val videoId: String) : ChannelAction
     data class OpenVideo(val videoId: String) : ChannelAction
+    data class OpenPlaylist(val playlistId: String) : ChannelAction
+    data class OpenPlaylistMenu(val playlistId: String) : ChannelAction
+    data object SharePlaylist : ChannelAction
+    data object CloseOverlay : ChannelAction
+    data class SortPlaylists(val sort: ChannelPlaylistSort) : ChannelAction
     data object Subscribe : ChannelAction
     data object Share : ChannelAction
     data object ChannelSearch : ChannelAction

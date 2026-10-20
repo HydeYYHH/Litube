@@ -3,16 +3,7 @@ package com.hhst.youtubelite.search.presentation
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
-import android.app.AlertDialog
-import android.graphics.drawable.ColorDrawable
-import android.view.ContextThemeWrapper
-import android.view.View
-import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.CheckedTextView
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.Image
@@ -44,7 +35,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -77,7 +67,7 @@ fun SearchResultsScreen(
                     }
                 }
             }
-            val backgroundHidden = state.searchOpen || state.overlay is SearchOverlay.ItemMenu
+            val backgroundHidden = state.searchOpen || state.overlay is SearchOverlay.ItemMenu || state.overlay is SearchOverlay.PlaylistMenu
             Column(Modifier.fillMaxSize().then(if (backgroundHidden) Modifier.clearAndSetSemantics {} else Modifier)) {
                 SearchTopBar(state.query, onAction, onBack)
                 if (state.filtersOpen) SearchFilterBar(state.filters, onAction)
@@ -85,8 +75,12 @@ fun SearchResultsScreen(
                     when (val content = state.content) {
                         SearchContent.Loading -> SearchSkeleton(width, height)
                         SearchContent.Failed -> SearchFailed(onAction)
-                        is SearchContent.Empty -> SearchNoResults(content.query)
-                        is SearchContent.Results -> SearchList(content.page.results, width, height, listState, onAction)
+                        is SearchContent.Empty -> SearchNoResults(content.query, state.filters.type)
+                        is SearchContent.Results -> if (state.filters.type == SearchResultType.Playlists)
+                            com.hhst.youtubelite.playlist.presentation.PlaylistSearchList(content.page.playlists, width, height, listState,
+                                { onAction(SearchAction.OpenPlaylist(it)) }, { onAction(SearchAction.OpenChannel(it)) },
+                                { onAction(SearchAction.OpenPlaylistMenu(it)) })
+                            else SearchList(content.page.results, width, height, listState, onAction)
                     }
                 }
                 SearchNavigationBar(state.signedInPreview, onAction)
@@ -113,6 +107,8 @@ fun SearchResultsScreen(
                 tag = "search-video-menu",
                 paneTitle = "Video actions",
             )
+            if (state.overlay is SearchOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
+                { onAction(SearchAction.CloseItemMenu) }, { onAction(SearchAction.SharePlaylist) })
         }
     }
 }
@@ -144,7 +140,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                         .horizontalScroll(rememberScrollState()).testTag("search-filter-groups"),
                     horizontalArrangement = Arrangement.spacedBy(SearchResultsLayout.FilterGroupGap.dp),
                 ) {
-                    FilterGroup(
+                    SelectField(
                         tag = "search-filter-type",
                         selected = filters.type,
                         options = SearchResultType.entries,
@@ -153,7 +149,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                         chipHeight = chipHeight,
                         onSelect = { onAction(SearchAction.SelectResultType(it)) },
                     )
-                    FilterGroup(
+                    SelectField(
                         tag = "search-filter-date",
                         selected = filters.uploaded,
                         options = SearchUploadDate.entries,
@@ -168,78 +164,6 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                         .background(Color.Black.copy(alpha = SearchResultsLayout.FilterDividerAlpha))
                         .testTag("search-filter-divider"),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> FilterGroup(
-    tag: String,
-    selected: T,
-    options: List<T>,
-    labelOf: (T) -> String,
-    minWidth: Float,
-    chipHeight: Dp,
-    onSelect: (T) -> Unit,
-) {
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val style = DesignTokens.text(SearchResultsLayout.FilterTextSize.toInt(), 20)
-    val width = remember(options, style, density) {
-        val labelWidth = options.maxOf { measurer.measure(labelOf(it), style).size.width / density.density }
-        maxOf(minWidth, labelWidth + 46f)
-    }
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
-    val select by rememberUpdatedState(onSelect)
-    Box {
-        Row(
-            Modifier.width(width.dp).height(chipHeight).testTag(tag)
-                .clip(RoundedCornerShape(SearchResultsLayout.FilterGroupRadius.dp))
-                .background(Color(0xFFF1F1F1))
-                .border(
-                    1.dp, Color.Black.copy(alpha = SearchResultsLayout.FilterDividerAlpha),
-                    RoundedCornerShape(SearchResultsLayout.FilterGroupRadius.dp),
-                )
-                .clickable(role = Role.Button) { expanded = true }
-                .semantics { contentDescription = labelOf(selected) }
-                .padding(start = 11.dp, end = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppText(
-                labelOf(selected), Modifier.weight(1f).testTag("$tag-label"), size = SearchResultsLayout.FilterTextSize.toInt(),
-                line = 20, maxLines = 1,
-            )
-            AppIcon(AppIcon.ChevronDown, Modifier.size(SearchResultsLayout.FilterIconSize.dp).testTag("$tag-icon"))
-        }
-        if (expanded) DisposableEffect(context, options, selected) {
-            val pickerContext = ContextThemeWrapper(context, android.R.style.Theme_Material_Light_Dialog_Alert)
-            val scale = pickerContext.resources.displayMetrics.density
-            val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, options.map(labelOf)) {
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
-                    (super.getView(position, convertView, parent) as CheckedTextView).apply {
-                        textSize = 20f
-                        minimumHeight = (64 * scale).toInt()
-                        val inset = (12 * scale).toInt()
-                        setPadding(inset, inset, inset, inset)
-                    }
-            }
-            val dialog = AlertDialog.Builder(pickerContext)
-                .setSingleChoiceItems(adapter, options.indexOf(selected)) { picker, index ->
-                    expanded = false
-                    select(options[index])
-                    picker.dismiss()
-                }
-                .setOnDismissListener { expanded = false }
-                .create()
-            dialog.show()
-            dialog.listView.setPadding(0, 0, 0, 0)
-            dialog.listView.divider = ColorDrawable(android.graphics.Color.rgb(221, 221, 221))
-            dialog.listView.dividerHeight = scale.toInt().coerceAtLeast(1)
-            onDispose {
-                dialog.setOnDismissListener(null)
-                dialog.dismiss()
             }
         }
     }
@@ -514,10 +438,11 @@ private fun SearchMessage(tag: String, content: @Composable ColumnScope.() -> Un
 }
 
 @Composable
-private fun SearchNoResults(query: String) {
+private fun SearchNoResults(query: String, type: SearchResultType) {
     SearchMessage("search-empty") {
         AppText("No results found", size = 20, line = 28, weight = FontWeight.Bold)
-        AppText("Your search for \"$query\" did not match any videos.", Modifier.padding(top = 8.dp),
+        val noun = if (type == SearchResultType.Playlists) "playlists" else "videos"
+        AppText("Your search for \"$query\" did not match any $noun.", Modifier.padding(top = 8.dp),
             size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
     }
 }

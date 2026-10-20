@@ -7,6 +7,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import com.hhst.youtubelite.channel.domain.ChannelAction
+import com.hhst.youtubelite.channel.domain.ChannelOverlay
+import com.hhst.youtubelite.share.ShareGateway
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
@@ -40,6 +44,7 @@ class ChannelActivity : ComponentActivity() {
         private set
     var lastNavigationRequest: ChannelNavigationRequest? = null
         private set
+    val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,9 +62,10 @@ class ChannelActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 channelViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
-                    // The watch page is the implemented destination; everything else stays a request.
                     when (request) {
                         is ChannelNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                        is ChannelNavigationRequest.Playlist -> startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ChannelActivity, request.playlistId))
+                        is ChannelNavigationRequest.SharePlaylist -> shareGateway.sharePlaylist(request.playlistId)
                         ChannelNavigationRequest.Destination(ChannelDestination.Home) ->
                             startActivity(Intent(this@ChannelActivity, HomeActivity::class.java)
                                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -70,7 +76,9 @@ class ChannelActivity : ComponentActivity() {
         }
         setContent {
             val state by channelViewModel.uiState.collectAsStateWithLifecycle()
-            ChannelScreen(state, channelViewModel::onAction, onBack = { finish() },
+            val back = { if (state.overlay != ChannelOverlay.None) channelViewModel.onAction(ChannelAction.CloseOverlay) else finish() }
+            BackHandler(onBack = back)
+            ChannelScreen(state, channelViewModel::onAction, onBack = back,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                     .windowInsetsPadding(WindowInsets.safeDrawing))
         }

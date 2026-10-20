@@ -30,6 +30,7 @@ class SearchResultsViewModel(
     private val restoredOverlay = when (savedState.get<String>(KEY_OVERLAY)) {
         "search" -> SearchOverlay.Search
         "menu" -> savedState.get<String>(KEY_MENU_VIDEO)?.let { SearchOverlay.ItemMenu(it) }
+        "playlist" -> savedState.get<String>(KEY_MENU_VIDEO)?.let { SearchOverlay.PlaylistMenu(it) }
         else -> SearchOverlay.None
     } ?: SearchOverlay.None
     private val _state = MutableStateFlow(
@@ -39,6 +40,7 @@ class SearchResultsViewModel(
             overlay = restoredOverlay,
             draftQuery = savedState["draftQuery"] ?: restoredQuery,
             filters = restoredFilters,
+            signedInPreview = restoredFilters.type != SearchResultType.Playlists,
             filtersOpen = savedState[KEY_FILTERS_OPEN] ?: (savedState.get<String>(KEY_OVERLAY) == "filters"),
         )
     )
@@ -66,6 +68,13 @@ class SearchResultsViewModel(
                 if (query.isNotEmpty()) updateQuery(query)
             }
             is SearchAction.OpenResult -> navigation.trySend(SearchNavigationRequest.Watch(action.videoId))
+            is SearchAction.OpenPlaylist -> navigation.trySend(SearchNavigationRequest.Playlist(action.playlistId))
+            is SearchAction.OpenPlaylistMenu -> overlay(SearchOverlay.PlaylistMenu(action.playlistId))
+            SearchAction.SharePlaylist -> {
+                val menu = uiState.value.overlay as? SearchOverlay.PlaylistMenu ?: return
+                overlay(SearchOverlay.None)
+                navigation.trySend(SearchNavigationRequest.SharePlaylist(menu.playlistId))
+            }
             is SearchAction.OpenChannel -> navigation.trySend(SearchNavigationRequest.Channel(action.channelId))
             is SearchAction.SelectDestination -> navigation.trySend(SearchNavigationRequest.Destination(action.destination))
             is SearchAction.OpenItemMenu -> overlay(SearchOverlay.ItemMenu(action.videoId))
@@ -102,14 +111,14 @@ class SearchResultsViewModel(
     }
 
     private fun selectType(type: SearchResultType) {
-        if (type != SearchResultType.All) {
+        if (type == SearchResultType.Channels) {
             navigation.trySend(SearchNavigationRequest.UnsupportedType(type))
             return
         }
         if (uiState.value.filters.type == type) return
         val filters = uiState.value.filters.copy(type = type)
         persistFilters(filters)
-        _state.update { it.copy(filters = filters) }
+        _state.update { it.copy(filters = filters, signedInPreview = type != SearchResultType.Playlists) }
         load()
     }
 
@@ -139,6 +148,10 @@ class SearchResultsViewModel(
                 savedState[KEY_MENU_VIDEO] = overlay.videoId
                 "menu"
             }
+            is SearchOverlay.PlaylistMenu -> {
+                savedState[KEY_MENU_VIDEO] = overlay.playlistId
+                "playlist"
+            }
             SearchOverlay.None -> {
                 savedState.remove<String>(KEY_MENU_VIDEO)
                 "none"
@@ -166,7 +179,7 @@ class SearchResultsViewModel(
             try {
                 val page = repository.search(query, filters)
                 if (requestGeneration != generation) return@launch
-                _state.update { it.copy(content = if (page.results.isEmpty()) SearchContent.Empty(query) else SearchContent.Results(page)) }
+                _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty()) SearchContent.Empty(query) else SearchContent.Results(page)) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

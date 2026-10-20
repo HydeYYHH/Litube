@@ -20,6 +20,15 @@ class ShareGateway(
 
     fun share(videoId: String): Boolean {
         val url = VideoShare.urlFor(videoId) ?: return false
+        return shareUrl(url)
+    }
+
+    fun sharePlaylist(playlistId: String): Boolean {
+        val url = PlaylistShare.urlFor(playlistId) ?: return false
+        return shareUrl(url)
+    }
+
+    private fun shareUrl(url: String): Boolean {
         val intent = VideoShare.sendIntent(url)
         lastShareIntent = intent
         if (!launchChooser) return true

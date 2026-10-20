@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** One action in a bottom sheet. */
-data class MenuSheetItem(val icon: AppIcon, val label: String, val tag: String? = null)
+data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null)
 
 /** Layout metrics for action sheets. */
 object MenuSheetLayout {
@@ -74,6 +74,8 @@ fun MenuBottomSheet(
     paneTitle: String = "Video actions",
     sheetWidth: Dp? = null,
     bottomPadding: Dp = MenuSheetLayout.BottomInset.dp,
+    rowStart: Dp = MenuSheetLayout.RowStart.dp,
+    iconGap: Dp = MenuSheetLayout.IconGap.dp,
 ) {
     var drag by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
@@ -116,11 +118,13 @@ fun MenuBottomSheet(
                         Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
                             .then(if (item.tag != null) Modifier.testTag(item.tag) else Modifier)
                             .clickable(role = Role.Button) { onSelect(index) }
-                            .padding(horizontal = MenuSheetLayout.RowStart.dp, vertical = MenuSheetLayout.RowVertical.dp),
+                            .padding(horizontal = item.contentStart ?: rowStart, vertical = MenuSheetLayout.RowVertical.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AppIcon(item.icon)
-                        Spacer(Modifier.width(MenuSheetLayout.IconGap.dp))
+                        if (item.icon != null) {
+                            AppIcon(item.icon)
+                            Spacer(Modifier.width(iconGap))
+                        }
                         AppText(item.label, size = 16, line = 22)
                     }
                 }

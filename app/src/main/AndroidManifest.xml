@@ -79,6 +79,7 @@
         </activity>
 
         <!-- Local search results page; it opens a typed request for every later destination. -->
+        <activity android:name=".playlist.PlaylistActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity
             android:name=".search.SearchResultsActivity"
             android:exported="false"

@@ -14,7 +14,11 @@ class FixtureSearchRepository(private val scenario: SearchScenario = SearchScena
             val limit = filters.uploaded.maxAgeDays ?: return@filter true
             days <= limit
         }
-        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList())
+        val playlists = if (filters.type == SearchResultType.Playlists)
+            com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries().filter {
+                filters.uploaded.maxAgeDays?.let { limit -> it.updatedDays <= limit } ?: true
+            } else emptyList()
+        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList(), playlists)
     }
 
     companion object {

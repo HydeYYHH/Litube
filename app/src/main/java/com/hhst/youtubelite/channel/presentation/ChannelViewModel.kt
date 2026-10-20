@@ -25,7 +25,9 @@ class ChannelViewModel(
         ChannelUiState(
             channelId = restoredId,
             content = scenario.initialContent(restoredId),
-            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos).firstOrNull { it.name == name } } ?: ChannelTab.Home,
+            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists).firstOrNull { it.name == name } } ?: ChannelTab.Home,
+            overlay = savedState.get<String>("playlistMenu")?.let(ChannelOverlay::PlaylistMenu) ?: ChannelOverlay.None,
+            playlistSort = ChannelPlaylistSort.entries.firstOrNull { it.name == savedState.get<String>("playlistSort") } ?: ChannelPlaylistSort.DateAdded,
         )
     )
     val uiState = _state.asStateFlow()
@@ -46,6 +48,24 @@ class ChannelViewModel(
             is ChannelAction.SelectTab -> selectTab(action.tab)
             is ChannelAction.OpenItemMenu -> navigation.trySend(ChannelNavigationRequest.ItemMenu(action.videoId))
             is ChannelAction.OpenVideo -> navigation.trySend(ChannelNavigationRequest.Watch(action.videoId))
+            is ChannelAction.OpenPlaylist -> navigation.trySend(ChannelNavigationRequest.Playlist(action.playlistId))
+            is ChannelAction.OpenPlaylistMenu -> {
+                savedState["playlistMenu"] = action.playlistId
+                _state.update { it.copy(overlay = ChannelOverlay.PlaylistMenu(action.playlistId)) }
+            }
+            ChannelAction.CloseOverlay -> {
+                savedState.remove<String>("playlistMenu")
+                _state.update { it.copy(overlay = ChannelOverlay.None) }
+            }
+            ChannelAction.SharePlaylist -> {
+                val menu = uiState.value.overlay as? ChannelOverlay.PlaylistMenu ?: return
+                onAction(ChannelAction.CloseOverlay)
+                navigation.trySend(ChannelNavigationRequest.SharePlaylist(menu.playlistId))
+            }
+            is ChannelAction.SortPlaylists -> {
+                savedState["playlistSort"] = action.sort.name
+                _state.update { it.copy(playlistSort = action.sort) }
+            }
             ChannelAction.Subscribe -> navigation.trySend(ChannelNavigationRequest.Subscribe(uiState.value.channelId))
             ChannelAction.Share -> navigation.trySend(ChannelNavigationRequest.Share)
             ChannelAction.ChannelSearch -> navigation.trySend(ChannelNavigationRequest.ChannelSearch)
@@ -56,8 +76,7 @@ class ChannelViewModel(
 
     private fun selectTab(tab: ChannelTab) {
         if (tab == _state.value.selectedTab) return
-        // Only Home and Videos switch locally; every other tab stays a typed request.
-        if (tab !in listOf(ChannelTab.Home, ChannelTab.Videos)) {
+        if (tab !in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists)) {
             navigation.trySend(ChannelNavigationRequest.OtherTab(tab))
             return
         }

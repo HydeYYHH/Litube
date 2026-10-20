@@ -203,7 +203,7 @@ class SearchResultsScreenAndroidTest {
         compose.onNodeWithText("No results found").assertIsDisplayed()
     }
 
-    @Test fun channelAndPlaylistTypesStayTypedExitsAndKeepTheAppliedValue() {
+    @Test fun channelsStayTypedAndPlaylistTypeLoadsItsCards() {
         val host = launchResults()
         awaitResultsList()
         compose.onNodeWithContentDescription("Search filters").performClick()
@@ -222,14 +222,10 @@ class SearchResultsScreenAndroidTest {
         compose.onNodeWithTag("search-filter-type").performClick()
         compose.waitForIdle()
         NativeChoicePicker.choose("Playlists")
-        compose.waitUntil(5_000) {
-            var request: SearchNavigationRequest? = null
-            host.onActivity { request = it.lastNavigationRequest }
-            request == SearchNavigationRequest.UnsupportedType(SearchResultType.Playlists)
-        }
-        compose.onNodeWithTag("search-filter-type").assertTextEquals("All")
+        awaitNode("playlist-search-list")
+        compose.onNodeWithTag("search-filter-type").assertTextEquals("Playlists")
         host.onActivity {
-            assertEquals(SearchResultType.All, it.searchViewModel.uiState.value.filters.type)
+            assertEquals(SearchResultType.Playlists, it.searchViewModel.uiState.value.filters.type)
         }
     }
 

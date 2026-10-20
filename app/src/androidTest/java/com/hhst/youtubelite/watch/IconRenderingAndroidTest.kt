@@ -3,6 +3,11 @@ package com.hhst.youtubelite.watch
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
@@ -17,6 +22,25 @@ import org.junit.Test
 
 class IconRenderingAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun playlistBadgeRetainsAllThreeLinesAtItsSourceSize() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                Row(Modifier.background(Color.White)) {
+                    AppIcon(AppIcon.Playlist, Modifier.size(12.dp).testTag("playlist-badge"))
+                    AppIcon(AppIcon.Playlist, Modifier.size(24.dp).testTag("playlist-large"))
+                }
+            }
+        }
+        val small = compose.onNodeWithTag("playlist-badge").captureToImage().toPixelMap()
+        val large = compose.onNodeWithTag("playlist-large").captureToImage().toPixelMap()
+        listOf(3, 6, 9).forEach { y ->
+            assertTrue("12-unit line at $y must remain visible", small[5, y].red < 0.8f)
+        }
+        listOf(6, 12, 18).forEach { y ->
+            assertTrue("Scaled line at $y must remain visible", large[10, y].red < 0.5f)
+        }
+    }
 
     @Test fun negativeViewBoxOriginsRemainInsideTheIcon() {
         val icons = listOf(AppIcon.Download, AppIcon.QueueAdd, AppIcon.OpenWith)
