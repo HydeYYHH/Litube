@@ -158,7 +158,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (Ho
 private fun PostCard(item: FeedItem.Post, onAction: (HomeAction) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("community-post")) {
         Row(Modifier.padding(start = 12.dp, top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            Box(Modifier.size(48.dp)) { Avatar(item.artwork, item.author, "studio", onAction, size = 40.dp) }
+            Box(Modifier.size(48.dp)) { Avatar(item.artwork, item.author, item.channelId, onAction, size = 40.dp) }
             Column(Modifier.weight(1f).heightIn(min = 48.dp)) {
                 AppText(item.author, size = 14, line = 20, weight = FontWeight.Medium)
                 AppText(item.age, size = 14, line = 20, color = DesignTokens.Secondary)
@@ -167,12 +167,17 @@ private fun PostCard(item: FeedItem.Post, onAction: (HomeAction) -> Unit) {
                 AppIconButton(AppIcon.More, "Post actions", modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Post)) }
             }
         }
-        AppText(item.text, Modifier.padding(12.dp), size = 16, line = 22, maxLines = 3)
+        AppText(item.text, Modifier.padding(12.dp).clickable(role = Role.Button) {
+            onAction(HomeAction.Navigate(HomeNavigationRequest.OpenPost(item.channelId, item.postId)))
+        }.testTag("post-body-${item.id}"), size = 16, line = 22, maxLines = 3)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val imageWidth = maxWidth - 48.dp
             LazyRow(Modifier.testTag("post-images-${item.id}"), contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(item.images.size) { index ->
-                    Box(Modifier.size(imageWidth).clip(RoundedCornerShape(12.dp)).testTag("post-image-${item.id}-$index")) {
+                    Box(Modifier.size(imageWidth).clip(RoundedCornerShape(12.dp))
+                        .clickable(role = Role.Button) {
+                            onAction(HomeAction.Navigate(HomeNavigationRequest.OpenPost(item.channelId, item.postId)))
+                        }.testTag("post-image-${item.id}-$index")) {
                         Artwork(item.images[index], Modifier.fillMaxSize())
                         if (item.images.size > 1) Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(36.dp, 24.dp)
                             .background(DesignTokens.Ink, CircleShape), contentAlignment = Alignment.Center) {
@@ -183,11 +188,11 @@ private fun PostCard(item: FeedItem.Post, onAction: (HomeAction) -> Unit) {
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Like, "Like post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.id, true))) }
+            AppIconButton(AppIcon.Like, "Like post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, true, item.channelId))) }
             AppText(item.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
-            AppIconButton(AppIcon.Dislike, "Dislike post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.id, false))) }
+            AppIconButton(AppIcon.Dislike, "Dislike post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, false, item.channelId))) }
             Spacer(Modifier.weight(1f))
-            Row(Modifier.clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostComments(item.id))) }
+            Row(Modifier.clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostComments(item.postId, item.channelId))) }
                 .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(AppIcon.Comment)
                 AppText(item.comments, Modifier.padding(start = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)

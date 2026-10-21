@@ -40,6 +40,16 @@ class WatchViewModelTest {
         assertTrue(page.related.none { it.id == "bunny" })
     }
 
+    @Test fun pastBroadcastFixturesKeepTheirListMetadata() {
+        com.hhst.youtubelite.channel.data.FixtureChannelRepository.sampleLive().past.forEach { broadcast ->
+            val video = FixtureWatchRepository.sampleVideo(broadcast.id)
+            assertEquals(broadcast.id, video.id)
+            assertEquals(broadcast.title, video.title)
+            assertEquals(broadcast.views, video.views)
+            assertEquals(broadcast.artwork, video.artwork)
+        }
+    }
+
     @Test fun failedRequestKeepsLoadingOutAndRetryRecovers() = runTest {
         var fail = true
         val vm = WatchViewModel(repository { id ->

@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.channel.data.*
 import com.hhst.youtubelite.channel.domain.*
 import com.hhst.youtubelite.channel.presentation.ChannelViewModel
+import com.hhst.youtubelite.post.domain.PostSummary
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.*
@@ -19,6 +20,9 @@ class ChannelViewModelTest {
 
     private fun repository(block: suspend (String) -> ChannelPage) = object : ChannelRepository {
         override suspend fun channel(channelId: String) = block(channelId)
+        override suspend fun shorts(channelId: String) = emptyList<ChannelShort>()
+        override suspend fun live(channelId: String) = ChannelLivePage()
+        override suspend fun posts(channelId: String) = emptyList<PostSummary>()
     }
 
     @Test fun loadsPageForTheRequestedChannelAndKeepsItsIdentity() = runTest {
@@ -39,19 +43,26 @@ class ChannelViewModelTest {
         val vm = ChannelViewModel(FixtureChannelRepository(), saved, "ignored")
         advanceUntilIdle()
         assertEquals("northlight", vm.uiState.value.channelId)
-        assertEquals(ChannelTab.Home, vm.uiState.value.selectedTab)
+        assertEquals(ChannelTab.Shorts, vm.uiState.value.selectedTab)
         assertEquals("northlight", (vm.uiState.value.content as ChannelContent.Ready).page.profile.channelId)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.shorts is ChannelSection.Ready)
     }
 
-    @Test fun implementedTabsSwitchLocallyAndOtherTabsStayRequests() = runTest {
+    @Test fun allChannelTabsSwitchLocallyAndLoadTheirOwnSection() = runTest {
         val vm = ChannelViewModel(FixtureChannelRepository(), SavedStateHandle(), "blender")
         advanceUntilIdle()
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         assertEquals(ChannelTab.Videos, vm.uiState.value.selectedTab)
         for (tab in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts)) {
             vm.onAction(ChannelAction.SelectTab(tab))
-            assertEquals(ChannelNavigationRequest.OtherTab(tab), vm.navigationRequests.first())
-            assertEquals("Selecting ${tab.name} must not switch the local view", ChannelTab.Videos, vm.uiState.value.selectedTab)
+            assertEquals(tab, vm.uiState.value.selectedTab)
+            advanceUntilIdle()
+            when (tab) {
+                ChannelTab.Shorts -> assertTrue(vm.uiState.value.shorts is ChannelSection.Ready)
+                ChannelTab.Live -> assertTrue(vm.uiState.value.live is ChannelSection.Ready)
+                else -> assertTrue(vm.uiState.value.posts is ChannelSection.Ready)
+            }
         }
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
         assertEquals(ChannelTab.Playlists, vm.uiState.value.selectedTab)

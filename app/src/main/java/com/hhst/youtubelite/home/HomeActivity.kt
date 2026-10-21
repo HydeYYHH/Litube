@@ -28,6 +28,7 @@ import com.hhst.youtubelite.home.domain.*
 import com.hhst.youtubelite.home.presentation.HomeScreen
 import com.hhst.youtubelite.home.presentation.HomeViewModel
 import com.hhst.youtubelite.channel.ChannelActivity
+import com.hhst.youtubelite.post.PostDetailActivity
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.watch.WatchActivity
@@ -60,6 +61,9 @@ class HomeActivity : ComponentActivity() {
                     if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
                     if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
                     if (request is HomeNavigationRequest.Channel) startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
+                    if (request is HomeNavigationRequest.OpenPost) startActivity(
+                        PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
+                    )
                     if (request is HomeNavigationRequest.MenuAction && request.action == FeedMenuAction.Share) {
                         shareGateway.share(request.itemId)
                     }

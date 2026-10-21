@@ -33,6 +33,7 @@ import com.hhst.youtubelite.channel.data.ChannelScenario
 import com.hhst.youtubelite.channel.data.FixtureChannelRepository
 import com.hhst.youtubelite.channel.domain.ChannelDestination
 import com.hhst.youtubelite.home.HomeActivity
+import com.hhst.youtubelite.post.PostDetailActivity
 import com.hhst.youtubelite.channel.domain.ChannelNavigationRequest
 import com.hhst.youtubelite.channel.presentation.ChannelScreen
 import com.hhst.youtubelite.channel.presentation.ChannelViewModel
@@ -67,6 +68,9 @@ class ChannelActivity : ComponentActivity() {
                         is ChannelNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
                         is ChannelNavigationRequest.Playlist -> startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ChannelActivity, request.playlistId))
                         is ChannelNavigationRequest.SharePlaylist -> shareGateway.sharePlaylist(request.playlistId)
+                        is ChannelNavigationRequest.Post -> startActivity(
+                            PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
+                        )
                         ChannelNavigationRequest.Destination(ChannelDestination.Home) ->
                             startActivity(Intent(this@ChannelActivity, HomeActivity::class.java)
                                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))

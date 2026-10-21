@@ -1,5 +1,9 @@
 package com.hhst.youtubelite.channel.domain
 
+import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.post.domain.PostMenuAction
+import com.hhst.youtubelite.post.domain.PostSummary
+
 data class ChannelProfile(
     val channelId: String = "blender",
     val name: String,
@@ -35,8 +39,62 @@ data class ChannelPage(
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
 )
 
+/** The channel grid uses the measured 2:3 poster with a 1px outer and 2px inner gutter. */
+data class ChannelShort(
+    val id: String,
+    val title: String,
+    val views: String,
+    val artwork: String,
+    val order: Int = 0,
+    val popularity: Long = 0,
+)
+
+/** A live row can be a current stream or a past broadcast; the two are never conflated. */
+data class ChannelLiveVideo(
+    val id: String,
+    val title: String,
+    val views: String,
+    val time: String,
+    val duration: String,
+    val artwork: String,
+    val liveNow: Boolean = false,
+    val order: Int = 0,
+    val popularity: Long = 0,
+)
+
+data class ChannelLivePage(
+    val current: List<ChannelLiveVideo> = emptyList(),
+    val past: List<ChannelLiveVideo> = emptyList(),
+) {
+    val all: List<ChannelLiveVideo> get() = current + past
+}
+
 interface ChannelRepository {
     suspend fun channel(channelId: String): ChannelPage
+
+    suspend fun shorts(channelId: String): List<ChannelShort>
+
+    suspend fun live(channelId: String): ChannelLivePage
+
+    suspend fun posts(channelId: String): List<PostSummary>
+}
+
+sealed interface ChannelSection<out T> {
+    data object Loading : ChannelSection<Nothing>
+    data object Empty : ChannelSection<Nothing>
+    data object Failed : ChannelSection<Nothing>
+    data class Ready<T>(val value: T) : ChannelSection<T>
+}
+
+enum class ChannelSortOption(val label: String) {
+    Latest("Latest"),
+    Popular("Popular"),
+    Oldest("Oldest"),
+}
+
+enum class ChannelShortMenuAction(val label: String) {
+    NotInterested("Not interested"),
+    SendFeedback("Send feedback"),
 }
 
 sealed interface ChannelContent {
@@ -53,6 +111,8 @@ sealed interface ChannelOverlay {
     data object About : ChannelOverlay
     data object None : ChannelOverlay
     data class PlaylistMenu(val playlistId: String) : ChannelOverlay
+    data class ShortMenu(val shortId: String) : ChannelOverlay
+    data class PostMenu(val identity: PostIdentity) : ChannelOverlay
 }
 
 enum class ChannelPlaylistSort(val label: String) { DateAdded("Date added (newest)"), LastVideo("Last video added") }
@@ -65,8 +125,23 @@ data class ChannelUiState(
     val searchQuery: String = "",
     val submittedQuery: String = "",
     val playlistSort: ChannelPlaylistSort = ChannelPlaylistSort.DateAdded,
+    val shorts: ChannelSection<List<ChannelShort>> = ChannelSection.Loading,
+    val live: ChannelSection<ChannelLivePage> = ChannelSection.Loading,
+    val posts: ChannelSection<List<PostSummary>> = ChannelSection.Loading,
+    val shortsSort: ChannelSortOption = ChannelSortOption.Latest,
+    val liveSort: ChannelSortOption = ChannelSortOption.Latest,
+    val expandedPosts: Set<String> = emptySet(),
 ) {
-    val isLocalTab: Boolean get() = selectedTab in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search)
+    val isLocalTab: Boolean
+        get() = selectedTab in listOf(
+            ChannelTab.Home,
+            ChannelTab.Videos,
+            ChannelTab.Shorts,
+            ChannelTab.Live,
+            ChannelTab.Playlists,
+            ChannelTab.Posts,
+            ChannelTab.Search,
+        )
 }
 
 enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), You("You") }
@@ -84,6 +159,25 @@ sealed interface ChannelNavigationRequest {
     data object ChannelSearch : ChannelNavigationRequest
     data object FullDescription : ChannelNavigationRequest
     data object SectionMenu : ChannelNavigationRequest
+
+    /** A Short has its own typed exit; it is never passed to the ordinary video player. */
+    data class Short(val channelId: String, val shortId: String) : ChannelNavigationRequest
+    data class ShortMenu(
+        val channelId: String,
+        val shortId: String,
+        val action: ChannelShortMenuAction,
+    ) : ChannelNavigationRequest
+
+    /** A currently live stream is not claimed to be playable by the on-demand player. */
+    data class LiveStream(val channelId: String, val videoId: String) : ChannelNavigationRequest
+
+    data class Post(val identity: PostIdentity) : ChannelNavigationRequest
+    data class PostFeedback(val identity: PostIdentity, val liked: Boolean) : ChannelNavigationRequest
+    data class PostComments(val identity: PostIdentity) : ChannelNavigationRequest
+    data class PostMenu(
+        val identity: PostIdentity,
+        val action: PostMenuAction,
+    ) : ChannelNavigationRequest
 }
 
 sealed interface ChannelAction {
@@ -105,6 +199,20 @@ sealed interface ChannelAction {
     data object ChannelSearch : ChannelAction
     data object OpenFullDescription : ChannelAction
     data object OpenSectionMenu : ChannelAction
+
+    data class SortShorts(val option: ChannelSortOption) : ChannelAction
+    data class SortLive(val option: ChannelSortOption) : ChannelAction
+    data class RetrySection(val tab: ChannelTab) : ChannelAction
+    data class OpenShort(val shortId: String) : ChannelAction
+    data class OpenShortMenu(val shortId: String) : ChannelAction
+    data class SelectShortMenu(val action: ChannelShortMenuAction) : ChannelAction
+    data class OpenLive(val videoId: String) : ChannelAction
+    data class OpenPost(val identity: PostIdentity) : ChannelAction
+    data class TogglePostExpanded(val identity: PostIdentity) : ChannelAction
+    data class OpenPostMenu(val identity: PostIdentity) : ChannelAction
+    data class SelectPostMenu(val action: PostMenuAction) : ChannelAction
+    data class PostFeedback(val identity: PostIdentity, val liked: Boolean) : ChannelAction
+    data class PostComments(val identity: PostIdentity) : ChannelAction
 }
 
 
@@ -196,4 +304,37 @@ object ChannelLayout {
         if (wide(width)) SubscribeTabBarGapWide else SubscribeTabBarGapNarrow
 
     fun descriptionLines(width: Float): Int = if (width < 600f) 2 else 1
+
+    // Channel community tabs, measured at 390/600/840/1280 CSS px.
+    const val ShortsOuterInset = 1f
+    const val ShortsGap = 2f
+    const val ShortsRowGap = 3f
+    const val ShortsMinWidth = 166f
+    const val ShortsMaxColumns = 6
+    const val ShortsCardRadius = 8f
+    const val FilterChipHeight = 32f
+    const val FilterChipRadius = 8f
+
+    fun shortsColumns(width: Float): Int = (width / ShortsMinWidth).toInt().coerceIn(2, ShortsMaxColumns)
+
+    fun shortsCardWidth(width: Float): Float {
+        val columns = shortsColumns(width)
+        return (width - ShortsOuterInset * 2f - ShortsGap * (columns - 1f)) / columns
+    }
+
+    const val LiveInset = 16f
+    const val LiveGap = 16f
+    const val LiveRowHeight = 102f
+    const val LiveThumbnailWidth = 160f
+    const val LiveThumbnailHeight = 90f
+
+    fun liveColumns(width: Float): Int = gridColumns(width)
+
+    fun liveCellWidth(width: Float): Float {
+        val columns = liveColumns(width)
+        return (width - LiveInset * 2f - LiveGap * (columns - 1f)) / columns
+    }
+
+    /** Wide three-column rows use the compact 160x90 row; narrow two-column grids use a tile. */
+    fun liveTile(width: Float): Boolean = width >= 600f && gridColumns(width) < 3
 }

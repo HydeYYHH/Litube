@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.channel.data.ChannelScenario
 import com.hhst.youtubelite.channel.domain.*
+import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.post.domain.PostMenuAction
+import com.hhst.youtubelite.post.domain.PostSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -25,12 +28,25 @@ class ChannelViewModel(
         ChannelUiState(
             channelId = restoredId,
             content = scenario.initialContent(restoredId),
-            selectedTab = savedState.get<String>("tab")?.let { name -> listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search).firstOrNull { it.name == name } } ?: ChannelTab.Home,
-            overlay = if (savedState.get<Boolean>("about") == true) ChannelOverlay.About
-                else savedState.get<String>("playlistMenu")?.let(ChannelOverlay::PlaylistMenu) ?: ChannelOverlay.None,
+            selectedTab = savedState.get<String>("tab")?.let { name ->
+                ChannelTab.entries.firstOrNull { it.name == name }
+            } ?: ChannelTab.Home,
+            overlay = restoredOverlay(),
             searchQuery = savedState["channelQuery"] ?: "",
             submittedQuery = savedState["submittedQuery"] ?: "",
-            playlistSort = ChannelPlaylistSort.entries.firstOrNull { it.name == savedState.get<String>("playlistSort") } ?: ChannelPlaylistSort.DateAdded,
+            playlistSort = ChannelPlaylistSort.entries.firstOrNull {
+                it.name == savedState.get<String>("playlistSort")
+            } ?: ChannelPlaylistSort.DateAdded,
+            shorts = scenario.initialSection(),
+            live = scenario.initialSection(),
+            posts = scenario.initialSection(),
+            shortsSort = ChannelSortOption.entries.firstOrNull {
+                it.name == savedState.get<String>("shortsSort")
+            } ?: ChannelSortOption.Latest,
+            liveSort = ChannelSortOption.entries.firstOrNull {
+                it.name == savedState.get<String>("liveSort")
+            } ?: ChannelSortOption.Latest,
+            expandedPosts = savedState.get<ArrayList<String>>("expandedPosts")?.toSet() ?: emptySet(),
         )
     )
     val uiState = _state.asStateFlow()
@@ -38,6 +54,8 @@ class ChannelViewModel(
     val navigationRequests = navigation.receiveAsFlow()
     private var loadJob: Job? = null
     private var generation = 0
+    private val sectionJobs = mutableMapOf<ChannelTab, Job>()
+    private val sectionGenerations = mutableMapOf<ChannelTab, Int>()
 
     init {
         savedState["channelId"] = restoredId
@@ -52,18 +70,11 @@ class ChannelViewModel(
             is ChannelAction.OpenItemMenu -> navigation.trySend(ChannelNavigationRequest.ItemMenu(action.videoId))
             is ChannelAction.OpenVideo -> navigation.trySend(ChannelNavigationRequest.Watch(action.videoId))
             is ChannelAction.OpenPlaylist -> navigation.trySend(ChannelNavigationRequest.Playlist(action.playlistId))
-            is ChannelAction.OpenPlaylistMenu -> {
-                savedState["playlistMenu"] = action.playlistId
-                _state.update { it.copy(overlay = ChannelOverlay.PlaylistMenu(action.playlistId)) }
-            }
-            ChannelAction.CloseOverlay -> {
-                savedState.remove<String>("playlistMenu")
-                savedState["about"] = false
-                _state.update { it.copy(overlay = ChannelOverlay.None) }
-            }
+            is ChannelAction.OpenPlaylistMenu -> setOverlay(ChannelOverlay.PlaylistMenu(action.playlistId))
+            ChannelAction.CloseOverlay -> setOverlay(ChannelOverlay.None)
             ChannelAction.SharePlaylist -> {
                 val menu = uiState.value.overlay as? ChannelOverlay.PlaylistMenu ?: return
-                onAction(ChannelAction.CloseOverlay)
+                setOverlay(ChannelOverlay.None)
                 navigation.trySend(ChannelNavigationRequest.SharePlaylist(menu.playlistId))
             }
             is ChannelAction.SortPlaylists -> {
@@ -87,22 +98,164 @@ class ChannelViewModel(
             }
             is ChannelAction.OpenLink -> navigation.trySend(ChannelNavigationRequest.OpenLink(action.url))
             ChannelAction.OpenFullDescription -> {
-                savedState["about"] = true
-                _state.update { it.copy(overlay = ChannelOverlay.About) }
+                setOverlay(ChannelOverlay.About)
                 navigation.trySend(ChannelNavigationRequest.FullDescription)
             }
             ChannelAction.OpenSectionMenu -> navigation.trySend(ChannelNavigationRequest.SectionMenu)
+
+            is ChannelAction.SortShorts -> {
+                savedState["shortsSort"] = action.option.name
+                _state.update { it.copy(shortsSort = action.option) }
+            }
+            is ChannelAction.SortLive -> {
+                savedState["liveSort"] = action.option.name
+                _state.update { it.copy(liveSort = action.option) }
+            }
+            is ChannelAction.RetrySection -> loadSection(action.tab)
+            is ChannelAction.OpenShort -> navigation.trySend(
+                ChannelNavigationRequest.Short(uiState.value.channelId, action.shortId)
+            )
+            is ChannelAction.OpenShortMenu -> setOverlay(ChannelOverlay.ShortMenu(action.shortId))
+            is ChannelAction.SelectShortMenu -> {
+                val menu = uiState.value.overlay as? ChannelOverlay.ShortMenu ?: return
+                setOverlay(ChannelOverlay.None)
+                navigation.trySend(
+                    ChannelNavigationRequest.ShortMenu(uiState.value.channelId, menu.shortId, action.action)
+                )
+            }
+            is ChannelAction.OpenLive -> {
+                val page = (uiState.value.live as? ChannelSection.Ready)?.value ?: return
+                val video = page.all.firstOrNull { it.id == action.videoId } ?: return
+                if (video.liveNow) {
+                    navigation.trySend(ChannelNavigationRequest.LiveStream(uiState.value.channelId, video.id))
+                } else {
+                    navigation.trySend(ChannelNavigationRequest.Watch(video.id))
+                }
+            }
+            is ChannelAction.OpenPost -> navigation.trySend(ChannelNavigationRequest.Post(action.identity))
+            is ChannelAction.TogglePostExpanded -> {
+                val next = _state.value.expandedPosts.toMutableSet()
+                if (!next.add(action.identity.postId)) next.remove(action.identity.postId)
+                savedState["expandedPosts"] = ArrayList(next)
+                _state.update { it.copy(expandedPosts = next) }
+            }
+            is ChannelAction.OpenPostMenu -> setOverlay(ChannelOverlay.PostMenu(action.identity))
+            is ChannelAction.SelectPostMenu -> {
+                val menu = uiState.value.overlay as? ChannelOverlay.PostMenu ?: return
+                setOverlay(ChannelOverlay.None)
+                navigation.trySend(ChannelNavigationRequest.PostMenu(menu.identity, action.action))
+            }
+            is ChannelAction.PostFeedback -> navigation.trySend(
+                ChannelNavigationRequest.PostFeedback(action.identity, action.liked)
+            )
+            is ChannelAction.PostComments -> navigation.trySend(
+                ChannelNavigationRequest.PostComments(action.identity)
+            )
         }
     }
 
     private fun selectTab(tab: ChannelTab) {
-        if (tab == _state.value.selectedTab) return
-        if (tab !in listOf(ChannelTab.Home, ChannelTab.Videos, ChannelTab.Playlists, ChannelTab.Search)) {
-            navigation.trySend(ChannelNavigationRequest.OtherTab(tab))
-            return
+        if (tab != _state.value.selectedTab) {
+            savedState["tab"] = tab.name
+            _state.update { it.copy(selectedTab = tab) }
         }
-        savedState["tab"] = tab.name
-        _state.update { it.copy(selectedTab = tab) }
+        when (tab) {
+            ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts -> ensureSectionLoaded(tab)
+            else -> Unit
+        }
+    }
+
+    private fun ensureSectionLoaded(tab: ChannelTab) {
+        val section = when (tab) {
+            ChannelTab.Shorts -> _state.value.shorts
+            ChannelTab.Live -> _state.value.live
+            ChannelTab.Posts -> _state.value.posts
+            else -> return
+        }
+        if (section is ChannelSection.Loading && sectionJobs[tab]?.isActive != true) loadSection(tab)
+    }
+
+    private fun loadSection(tab: ChannelTab) {
+        if (tab !in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts)) return
+        sectionJobs[tab]?.cancel()
+        val current = (sectionGenerations[tab] ?: 0) + 1
+        sectionGenerations[tab] = current
+        setSectionLoading(tab)
+        sectionJobs[tab] = viewModelScope.launch {
+            try {
+                when (tab) {
+                    ChannelTab.Shorts -> {
+                        val shorts = repository.shorts(uiState.value.channelId)
+                        if (current != sectionGenerations[tab]) return@launch
+                        _state.update {
+                            it.copy(shorts = if (shorts.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(shorts))
+                        }
+                    }
+                    ChannelTab.Live -> {
+                        val live = repository.live(uiState.value.channelId)
+                        if (current != sectionGenerations[tab]) return@launch
+                        _state.update {
+                            it.copy(live = if (live.all.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(live))
+                        }
+                    }
+                    ChannelTab.Posts -> {
+                        val posts = repository.posts(uiState.value.channelId)
+                        if (current != sectionGenerations[tab]) return@launch
+                        _state.update {
+                            it.copy(posts = if (posts.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(posts))
+                        }
+                    }
+                    else -> Unit
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (current == sectionGenerations[tab]) {
+                    _state.update {
+                        when (tab) {
+                            ChannelTab.Shorts -> it.copy(shorts = ChannelSection.Failed)
+                            ChannelTab.Live -> it.copy(live = ChannelSection.Failed)
+                            else -> it.copy(posts = ChannelSection.Failed)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setSectionLoading(tab: ChannelTab) {
+        _state.update {
+            when (tab) {
+                ChannelTab.Shorts -> it.copy(shorts = ChannelSection.Loading)
+                ChannelTab.Live -> it.copy(live = ChannelSection.Loading)
+                else -> it.copy(posts = ChannelSection.Loading)
+            }
+        }
+    }
+
+    private fun setOverlay(overlay: ChannelOverlay) {
+        savedState.remove<String>("shortMenu")
+        savedState.remove<String>("postMenu")
+        savedState.remove<String>("playlistMenu")
+        savedState["about"] = overlay == ChannelOverlay.About
+        when (overlay) {
+            is ChannelOverlay.ShortMenu -> savedState["shortMenu"] = overlay.shortId
+            is ChannelOverlay.PostMenu -> savedState["postMenu"] = overlay.identity.postId
+            is ChannelOverlay.PlaylistMenu -> savedState["playlistMenu"] = overlay.playlistId
+            else -> Unit
+        }
+        _state.update { it.copy(overlay = overlay) }
+    }
+
+    private fun restoredOverlay(): ChannelOverlay = when {
+        savedState.get<Boolean>("about") == true -> ChannelOverlay.About
+        savedState.get<String>("playlistMenu") != null ->
+            ChannelOverlay.PlaylistMenu(savedState.get<String>("playlistMenu")!!)
+        savedState.get<String>("shortMenu") != null ->
+            ChannelOverlay.ShortMenu(savedState.get<String>("shortMenu")!!)
+        savedState.get<String>("postMenu") != null ->
+            ChannelOverlay.PostMenu(PostIdentity(restoredId, savedState.get<String>("postMenu")!!))
+        else -> ChannelOverlay.None
     }
 
     private fun load() {
@@ -114,6 +267,7 @@ class ChannelViewModel(
                 val page = repository.channel(uiState.value.channelId)
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = ChannelContent.Ready(page)) }
+                ensureSectionLoaded(_state.value.selectedTab)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -123,5 +277,13 @@ class ChannelViewModel(
         }
     }
 
-    override fun onCleared() { navigation.close() }
+    override fun onCleared() {
+        navigation.close()
+    }
+}
+
+private fun ChannelScenario.initialSection(): ChannelSection<Nothing> = when (this) {
+    ChannelScenario.Content, ChannelScenario.Loading -> ChannelSection.Loading
+    ChannelScenario.Empty -> ChannelSection.Empty
+    ChannelScenario.Error -> ChannelSection.Failed
 }

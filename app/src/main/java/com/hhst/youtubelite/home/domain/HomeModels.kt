@@ -27,6 +27,7 @@ sealed interface FeedItem {
     data class Post(
         override val id: String, val author: String, val age: String, val text: String,
         val artwork: String, val images: List<String>, val likes: String, val comments: String,
+        val channelId: String = "studio", val postId: String = id,
     ) : FeedItem
 }
 
@@ -84,8 +85,9 @@ sealed interface HomeNavigationRequest {
     data class Channel(val channelId: String) : HomeNavigationRequest
     data class Destination(val destination: HomeDestination) : HomeNavigationRequest
     data class MenuAction(val itemId: String, val action: FeedMenuAction) : HomeNavigationRequest
-    data class PostFeedback(val postId: String, val like: Boolean) : HomeNavigationRequest
-    data class PostComments(val postId: String) : HomeNavigationRequest
+    data class PostFeedback(val postId: String, val like: Boolean, val channelId: String = "studio") : HomeNavigationRequest
+    data class PostComments(val postId: String, val channelId: String = "studio") : HomeNavigationRequest
+    data class OpenPost(val channelId: String, val postId: String) : HomeNavigationRequest
     data class OpenLink(val url: String) : HomeNavigationRequest
     data object VoiceSearch : HomeNavigationRequest
     data object Explore : HomeNavigationRequest

@@ -106,7 +106,11 @@ class HomeScreenAndroidTest {
         compose.onNodeWithTag("home-empty").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
         compose.onNodeWithTag("search-input").assertTextEquals("nature documentary")
-        compose.onNodeWithTag("home-screen").performTouchInput { click(center.copy(y = height - 20f)) }
+        val home = compose.onNodeWithTag("home-screen").fetchSemanticsNode().boundsInRoot
+        val overlay = compose.onNodeWithTag("search-overlay").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("home-screen").performTouchInput {
+            click(center.copy(y = overlay.bottom - home.top + 24f))
+        }
         compose.onNodeWithTag("search-overlay").assertDoesNotExist()
         compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
         compose.onNodeWithTag("search-input").assertTextEquals("nature documentary")
@@ -181,6 +185,29 @@ class HomeScreenAndroidTest {
         compose.onNodeWithTag("video-menu").assertDoesNotExist()
         compose.onNodeWithTag("home-screen").assertIsDisplayed()
         host.onActivity { assertFalse(it.isFinishing) }
+    }
+
+    @Test fun homePostOpensTheSharedPostDetailAndBackKeepsTheFeedPosition() {
+        val host = launch(HomeScenario.Feed)
+        val feed = compose.onNodeWithTag("home-feed")
+        feed.performScrollToNode(hasTestTag("post-body-post"))
+        compose.onNodeWithTag("post-body-post").performTouchInput { click() }
+        compose.waitUntil(15_000) {
+            runCatching { compose.onAllNodesWithTag("post-detail-page").fetchSemanticsNodes() }
+                .getOrDefault(emptyList()).isNotEmpty()
+        }
+        host.onActivity {
+            assertEquals(HomeNavigationRequest.OpenPost("studio", "post"), it.lastNavigationRequest)
+        }
+        compose.onNodeWithTag("post-detail-body")
+            .assertTextContains("A new story starts with a little curiosity", substring = true)
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        compose.waitUntil(15_000) {
+            runCatching { compose.onAllNodesWithTag("home-feed").fetchSemanticsNodes() }
+                .getOrDefault(emptyList()).isNotEmpty()
+        }
+        compose.onNodeWithTag("post-body-post").assertIsDisplayed()
     }
 
     @Test fun feedScrollPositionSurvivesSearchAndRecreation() {

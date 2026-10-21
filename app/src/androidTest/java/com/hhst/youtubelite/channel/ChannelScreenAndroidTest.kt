@@ -88,12 +88,12 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-video-behind").assertIsDisplayed()
     }
 
-    @Test fun everyNonLocalSurfaceStaysATypedRequest() {
+    @Test fun unimplementedHeaderSurfacesStayTypedRequests() {
         val host = launchChannel()
         awaitNode("channel-header")
         compose.onNodeWithTag("channel-tab-Shorts").performClick()
-        host.onActivity { assertEquals(ChannelNavigationRequest.OtherTab(com.hhst.youtubelite.channel.domain.ChannelTab.Shorts), it.lastNavigationRequest) }
-        compose.onNodeWithTag("channel-home-list").assertIsDisplayed()
+        awaitNode("channel-shorts-list")
+        compose.onNodeWithTag("channel-shorts-list").assertIsDisplayed()
         compose.onNodeWithContentDescription("Search within this channel").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.ChannelSearch, it.lastNavigationRequest) }
         awaitNode("channel-search-list")
@@ -172,6 +172,12 @@ class ChannelScreenAndroidTest {
             assertEquals("bunny", it.channelViewModel.uiState.value.submittedQuery)
         }
         InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        compose.waitForIdle()
+        host.onActivity {
+            if (it.channelViewModel.uiState.value.overlay == com.hhst.youtubelite.channel.domain.ChannelOverlay.About) {
+                it.onBackPressedDispatcher.onBackPressed()
+            }
+        }
         awaitNode("channel-search-list")
         compose.onNodeWithTag("channel-about-panel").assertDoesNotExist()
         compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-thumb-bunny"))

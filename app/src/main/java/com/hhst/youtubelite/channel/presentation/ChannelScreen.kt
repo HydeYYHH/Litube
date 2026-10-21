@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.semantics.selected
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +85,10 @@ fun ChannelScreen(
             val searchState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val aboutScroll = rememberScrollState()
             val playlistsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val shortsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val liveState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val postsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+            val postState = rememberSaveableStateHolder()
             Column(Modifier.fillMaxSize().then(if (state.overlay != ChannelOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
                 ChannelTopBar(state, onBack, onAction)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -94,6 +99,11 @@ fun ChannelScreen(
                             ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction)
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
                             ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
+                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction)
+                            ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction)
+                            ChannelTab.Posts -> postState.SaveableStateProvider(state.channelId) {
+                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction)
+                            }
                             else -> ChannelVideosTab(content.page, width, videosState, onAction)
                         }
                     }
@@ -104,6 +114,7 @@ fun ChannelScreen(
                 ChannelAboutPanel(state.content.page.profile, width, height, onAction, aboutScroll)
             if (state.overlay is ChannelOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
                 { onAction(ChannelAction.CloseOverlay) }, { onAction(ChannelAction.SharePlaylist) })
+            ChannelCommunityMenuSheets(state.overlay, onAction)
         }
     }
 }
@@ -139,24 +150,8 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
 
 @Composable
 private fun ChannelNavigationBar(onAction: (ChannelAction) -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag("channel-navigation")) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
-        Row(Modifier.fillMaxWidth().height(56.dp)) {
-            ChannelDestination.entries.forEach { destination ->
-                Column(Modifier.weight(1f).fillMaxHeight()
-                    .clickable(role = Role.Tab) { onAction(ChannelAction.SelectDestination(destination)) }
-                    .testTag("channel-nav-" + destination.name),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center) {
-                    AppIcon(when (destination) {
-                        ChannelDestination.Home -> AppIcon.HomeOutline
-                        ChannelDestination.Shorts -> AppIcon.Shorts
-                        ChannelDestination.You -> AppIcon.You
-                    })
-                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
-                }
-            }
-        }
+    BrowseNavigationBar("channel") { destination ->
+        onAction(ChannelAction.SelectDestination(ChannelDestination.valueOf(destination.name)))
     }
 }
 
@@ -183,7 +178,7 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
 internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
     Column(Modifier.fillMaxWidth().background(Color.White).testTag("channel-tabbar")) {
         Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
-            .horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            .horizontalScroll(rememberScrollState()).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
             ChannelTab.entries.forEach { tab ->
                 val isSelected = tab == selected

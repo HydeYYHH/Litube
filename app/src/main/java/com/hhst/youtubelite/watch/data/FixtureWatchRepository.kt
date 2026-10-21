@@ -47,6 +47,14 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
                 "Northlight Animation", "@northlight", "northlight", "6.7M views", "2 years ago", "sintel"),
             "river" to Entry("River sound — one hour of calm water",
                 "Quiet Place", "@quietplace", "quietplace", "315K views", "5 months ago", "dream"),
+            "live-1" to Entry("SINGULARITY Premiere Party", "Blender Studio", "@BlenderStudio", "studio", "8.7K views", "Streamed 5 months ago", "dream"),
+            "live-2" to Entry("DOGWALK Release Party", "Blender Studio", "@BlenderStudio", "studio", "13K views", "Streamed 1 year ago", "sintel"),
+            "live-3" to Entry("Rigging \"Critter\" with Demeter Dzadik", "Blender Studio", "@BlenderStudio", "studio", "14K views", "Streamed 1 year ago", "bunny"),
+            "live-4" to Entry("Project Gold Premiere Party", "Blender Studio", "@BlenderStudio", "studio", "12K views", "Streamed 1 year ago", "dream"),
+            "live-5" to Entry("Making a scene with Grease Pencil 3", "Blender Studio", "@BlenderStudio", "studio", "33K views", "Streamed 2 years ago", "sintel"),
+            "live-6" to Entry("Character Rigging with Demeter #3", "Blender Studio", "@BlenderStudio", "studio", "6.9K views", "Streamed 2 years ago", "bunny"),
+            "live-7" to Entry("Character Rigging with Demeter #2", "Blender Studio", "@BlenderStudio", "studio", "6.9K views", "Streamed 2 years ago", "dream"),
+            "live-8" to Entry("CloudRig coding stream with Demeter", "Blender Studio", "@BlenderStudio", "studio", "6.1K views", "Streamed 2 years ago", "sintel"),
         )
 
         private val defaultEntry = entries.getValue("bunny")

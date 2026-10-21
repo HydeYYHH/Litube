@@ -99,6 +99,12 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.App.Home" />
 
+        <!-- Shared post detail host used by both the Home post card and channel Posts. -->
+        <activity
+            android:name=".post.PostDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.App.Home" />
+
         <!-- Internal browser, playback and download host. -->
         <activity android:name=".MainActivity" android:exported="false"
             android:launchMode="singleTask" android:supportsPictureInPicture="true"
