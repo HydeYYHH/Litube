@@ -194,13 +194,13 @@ fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubel
                                         .padding(horizontal = 4.dp, vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
                                         AppIcon(AppIcon.Playlist, Modifier.size(12.dp), color = Color.White)
                                         Spacer(Modifier.width(4.dp))
-                                        AppText("${playlist.videoCount}", size = 12, line = 18, color = Color.White, maxLines = 1)
+                                        AppText(playlist.videoCount?.toString() ?: playlist.countLabel.orEmpty(), size = 12, line = 18, color = Color.White, maxLines = 1)
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     AppText(playlist.title, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
-                                    AppText("${playlist.owner} · ${playlist.videoCount} videos", Modifier.padding(top = 2.dp),
+                                    AppText(listOfNotNull(playlist.owner.takeIf(String::isNotBlank), playlist.countLabel).joinToString(" · "), Modifier.padding(top = 2.dp),
                                         size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                                 }
                             }

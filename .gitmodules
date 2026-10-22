@@ -1,0 +1,3 @@
+[submodule "external/mediaservicecore"]
+	path = external/mediaservicecore
+	url = https://github.com/HydeYYHH/MediaServiceCore.git

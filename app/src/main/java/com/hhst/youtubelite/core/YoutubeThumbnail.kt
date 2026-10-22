@@ -5,25 +5,20 @@ import android.graphics.BitmapFactory
 import android.util.LruCache
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import androidx.core.net.toUri
 import com.hhst.youtubelite.diagnostics.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-/**
- * Fetches video thumbnails. Page JS and notifications must not be
- * allowed to point this at arbitrary HTTPS hosts.
- */
+/** Fetches bounded artwork from the service's image hosts. */
 object YoutubeThumbnail {
     private val http by lazy { DiagnosticNetwork.install(OkHttpClient.Builder()).followRedirects(false).followSslRedirects(false)
         .connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS).build() }
     const val HOST = "i.ytimg.com"
-    private const val CACHE_BYTES = 3 * 1024 * 1024
+    private const val CACHE_BYTES = 24 * 1024 * 1024
     /** Rejects a thumbnail body larger than this before decode. */
-    private const val MAX_DOWNLOAD_BYTES = 512 * 1024
+    private const val MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
 
     private val cache = object : LruCache<String, Bitmap>(CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
@@ -34,8 +29,8 @@ object YoutubeThumbnail {
     fun isAllowed(url: String): Boolean {
         val uri = url.toUri()
         return uri.scheme?.equals("https", ignoreCase = true) == true &&
-            uri.host == HOST &&
-            uri.userInfo.isNullOrEmpty()
+            uri.host in setOf(HOST, "i9.ytimg.com", "yt3.ggpht.com", "yt3.googleusercontent.com", "lh3.googleusercontent.com") &&
+            uri.userInfo.isNullOrEmpty() && uri.port in setOf(-1, 443)
     }
 
     fun fetch(url: String?): Bitmap? {
@@ -55,7 +50,13 @@ object YoutubeThumbnail {
                 if (declared > MAX_DOWNLOAD_BYTES) return null
                 val bytes = conn.body?.byteStream()?.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return null
                 reason = "decode_failed"
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.also { cache.put(url, it); success = true }
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1600) sample *= 2
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                    ?.also { cache.put(url, it); success = true }
             }
         } catch (failure: Exception) {
             reason = "transport_failed"

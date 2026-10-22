@@ -117,13 +117,7 @@ object PlayerUi {
         else -> BackStep.BrowserBack
     }
 
-    /**
-     * Embedded offset from the window top. The overlay lives one level above
-     * the inset-padded WebView container, so the page player's slot is the
-     * system-bar inset plus its viewport-relative top — reported live by
-     * player-hook.js (masthead ≈ 48 dp before the first report lands).
-     * Fullscreen is flush.
-     */
+    /** Embedded surface offset including the system bar inset. */
     fun playerTopOffsetDp(
         fullscreen: Boolean,
         reportedTopDp: Int? = null,

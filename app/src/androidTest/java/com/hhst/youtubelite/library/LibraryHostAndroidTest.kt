@@ -9,7 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.account.SignInActivity
 import com.hhst.youtubelite.home.HomeActivity
 import com.hhst.youtubelite.home.data.HomeScenario
 import com.hhst.youtubelite.library.data.LibraryScenario
@@ -37,7 +37,7 @@ class LibraryHostAndroidTest {
         scenario?.close()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<MainActivity>().forEach { it.finish() }
+                .filterIsInstance<SignInActivity>().forEach { it.finish() }
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
@@ -140,7 +140,7 @@ class HistoryHostAndroidTest {
         scenario?.close()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<MainActivity>().forEach { it.finish() }
+                .filterIsInstance<SignInActivity>().forEach { it.finish() }
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }

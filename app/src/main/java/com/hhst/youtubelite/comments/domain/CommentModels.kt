@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.comments.domain
 
-/** A fixed local comment thread. All content is packaged with the app. */
 data class CommentThread(
     val id: String,
     val author: CommentAuthor,
@@ -11,6 +10,9 @@ data class CommentThread(
     val replies: List<CommentReply> = emptyList(),
     val authorChannelId: String = "",
     val ownedByViewer: Boolean = false,
+    val replyKey: String? = null,
+    val repliesLoading: Boolean = false,
+    val repliesFailed: Boolean = false,
 )
 
 data class CommentAuthor(val displayName: String, val handle: String, val artwork: String)
@@ -38,6 +40,7 @@ sealed interface CommentTarget {
 }
 
 interface CommentsRepository {
+    suspend fun replies(target: CommentTarget, thread: CommentThread): List<CommentReply> = thread.replies
     suspend fun comments(target: CommentTarget, sort: CommentSort, cursor: String?): CommentsPage
     suspend fun comments(videoId: String, sort: CommentSort, cursor: String?): CommentsPage =
         comments(CommentTarget.Video(videoId), sort, cursor)
@@ -67,6 +70,7 @@ data class CommentsUiState(
     val total: String = "",
     val overlay: CommentsOverlay = CommentsOverlay.None,
     val draft: String = "",
+    val actionPending: Boolean = false,
     val target: CommentTarget = CommentTarget.Video(videoId),
 )
 

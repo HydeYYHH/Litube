@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.channel.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -205,11 +207,7 @@ internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Un
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier = Modifier) {
-    Image(painterResource(when (asset) {
-        "dream" -> R.drawable.sample_dream
-        "sintel" -> R.drawable.sample_sintel
-        else -> R.drawable.sample_bunny
-    }), contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
 @Composable
@@ -308,7 +306,7 @@ private fun ChannelVideoRow(
         .testTag("channel-video-${video.id}")) {
         Box(Modifier.padding(top = 12.dp).size(ChannelLayout.ThumbnailWidth.dp, ChannelLayout.ThumbnailHeight.dp)
             .clip(RoundedCornerShape(ChannelLayout.ThumbnailRadius.dp))
-            .clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }
+            .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }
             .semantics { contentDescription = "${video.title}, ${video.duration}" }
             .testTag("channel-thumb-${video.id}")) {
             Artwork(video.artwork, Modifier.fillMaxSize())
@@ -320,7 +318,7 @@ private fun ChannelVideoRow(
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).padding(top = 14.dp)
-            .clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }) {
+            .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }) {
             AppText(video.title, Modifier.fillMaxWidth(), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.sp)
             Spacer(Modifier.height(2.dp))
             if (video.age.isNotBlank()) {

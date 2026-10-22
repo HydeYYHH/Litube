@@ -28,7 +28,7 @@ class SubscriptionsViewModel(
     private val repository: SubscriptionsRepository,
     private val savedState: SavedStateHandle,
     private val scenario: SubscriptionsScenario,
-    private val signedIn: Boolean,
+    private var signedIn: Boolean,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         SubscriptionsUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "",
@@ -56,6 +56,20 @@ class SubscriptionsViewModel(
             scenario == SubscriptionsScenario.Content -> refresh(SubscriptionsFilter.from(_uiState.value.selectedChip))
             else -> Unit
         }
+    }
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (signedIn == value && !changed) return
+        signedIn = value
+        ++generation
+        loadJob?.cancel()
+        pageJob?.cancel()
+        _uiState.update { it.copy(signedIn = value, content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
+        if (value) refresh(SubscriptionsFilter.from(uiState.value.selectedChip))
     }
 
     fun onAction(action: SubscriptionsAction) {

@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.watch
 
+import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -43,6 +44,7 @@ import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.watch.data.FixtureWatchRepository
 import com.hhst.youtubelite.watch.data.WatchScenario
+import com.hhst.youtubelite.watch.domain.WatchNotice
 import com.hhst.youtubelite.watch.domain.WatchAction
 import com.hhst.youtubelite.watch.domain.WatchContent
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
@@ -72,12 +74,11 @@ import kotlinx.coroutines.flow.first
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 
-class WatchActivity : ComponentActivity() {
+class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
     lateinit var watchViewModel: WatchViewModel
         private set
     lateinit var commentsViewModel: CommentsViewModel
         private set
-    private val playerViewModel: PlayerViewModel by inject()
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     var lastNavigationRequest: WatchNavigationRequest? = null
         private set
@@ -90,27 +91,41 @@ class WatchActivity : ComponentActivity() {
     var lastQueuedItem: QueueItem? = null
         private set
     var launchDownload: Boolean = true
+    private var fixtures = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val videoId = intent.getStringExtra(EXTRA_VIDEO_ID).orEmpty()
+        val videoId = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId.orEmpty()
         val scenario = if (BuildConfig.DEBUG) WatchScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else WatchScenario.Content
         watchViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == WatchViewModel::class.java)
-                return WatchViewModel(FixtureWatchRepository(scenario), extras.createSavedStateHandle(), videoId, scenario) as T
+                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions) as T
             }
         })[WatchViewModel::class.java]
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                watchViewModel.actionNotices.collect { notice ->
+                    when (notice) {
+                        WatchNotice.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@WatchActivity)
+                        is WatchNotice.Message -> android.widget.Toast.makeText(this@WatchActivity, notice.text, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
         val commentsScenario = if (BuildConfig.DEBUG) CommentsScenario.parse(intent.getStringExtra(EXTRA_COMMENTS_SCENARIO)) else CommentsScenario.Content
         commentsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == CommentsViewModel::class.java)
-                return CommentsViewModel(FixtureCommentsRepository(commentsScenario), extras.createSavedStateHandle(), videoId) as T
+                return CommentsViewModel(if (fixtures) FixtureCommentsRepository(commentsScenario) else sources.comments(), extras.createSavedStateHandle(), videoId) as T
             }
         })[CommentsViewModel::class.java]
+        bindCommentNotices(commentsViewModel)
         if (savedInstanceState == null && BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
             watchViewModel.onAction(WatchAction.OpenComments(videoId))
         }
@@ -133,6 +148,7 @@ class WatchActivity : ComponentActivity() {
                         is WatchNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
                         is WatchNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@WatchActivity, request.query))
                         is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId))
+                        WatchNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is WatchNavigationRequest.Share -> shareGateway.share(request.videoId)
                         is WatchNavigationRequest.Download -> {
                             val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
@@ -167,11 +183,28 @@ class WatchActivity : ComponentActivity() {
                 }
             }
         }
+        if (!fixtures) {
+            (application as com.hhst.youtubelite.App).startMediaRuntime()
+            playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
+                intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { savedInstanceState == null && it > 0 })
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    playerViewModel.uiState.collect { playback ->
+                        val id = playback.videoId
+                        if (id != null && id != watchViewModel.uiState.value.videoId) {
+                            watchViewModel.selectVideo(id)
+                            commentsViewModel.selectVideo(id)
+                        }
+                    }
+                }
+            }
+        }
         setContent {
+            val pip by inPip.collectAsStateWithLifecycle()
             val playerViewModel: PlayerViewModel = koinInject()
             val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
             val state by watchViewModel.uiState.collectAsStateWithLifecycle()
-            val fullscreen = playerState.fullscreen
+            val fullscreen = playerState.fullscreen || pip
             val commentsState by commentsViewModel.uiState.collectAsStateWithLifecycle()
             val commentsListState = rememberSaveable(commentsState.videoId, commentsState.sort, saver = LazyListState.Saver) { LazyListState() }
             val commentsPosition = remember(commentsListState) {
@@ -239,7 +272,7 @@ class WatchActivity : ComponentActivity() {
                 }
                 if (fullscreen) {
                     Box(Modifier.fillMaxSize().background(ComposeColor.Black)) {
-                        WatchPlayer(Modifier.fillMaxSize(), back)
+                        WatchPlayer(Modifier.fillMaxSize(), back, pip)
                     }
                 }
                 if (state.searchOpen) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
@@ -278,12 +311,26 @@ class WatchActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val id = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId ?: return
+        watchViewModel.selectVideo(id)
+        commentsViewModel.selectVideo(id)
+        if (!fixtures) playerViewModel.openVideo(id, intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { it > 0 })
+    }
+
     override fun onResume() {
         super.onResume()
+        if (!fixtures) playerViewModel.openVideo(watchViewModel.uiState.value.videoId)
         playerViewModel.refreshPipAvailability()
+        val prefs = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
+        watchViewModel.refreshVoteCounts(prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_SHOW_LIKES),
+            prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_DISPLAY_DISLIKES))
     }
 
     companion object {
+        const val EXTRA_START_SECONDS = "watch_start_seconds"
         const val EXTRA_VIDEO_ID = "watch_video_id"
         const val EXTRA_SCENARIO = "watch_scenario"
         const val EXTRA_COMMENTS_SCENARIO = "watch_comments_scenario"

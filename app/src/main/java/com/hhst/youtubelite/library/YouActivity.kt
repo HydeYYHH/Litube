@@ -55,7 +55,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the library page. The Shorts tab is wired with its own screen. */
-class YouActivity : ComponentActivity() {
+class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var youViewModel: YouViewModel
         private set
     var lastNavigationRequest: LibraryNavigationRequest? = null
@@ -68,14 +68,16 @@ class YouActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val signedIn = intent.getBooleanExtra(EXTRA_SIGNED_IN, false)
+        val signedIn = if (fixtures) intent.getBooleanExtra(EXTRA_SIGNED_IN, false) else com.hhst.youtubelite.data.media.MediaSession.signedIn()
         val scenario = if (BuildConfig.DEBUG) LibraryScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else LibraryScenario.Content
         youViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == YouViewModel::class.java)
-                return YouViewModel(FixtureLibraryRepository(scenario), extras.createSavedStateHandle(), scenario, signedIn) as T
+                return YouViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, signedIn) as T
             }
         })[YouViewModel::class.java]
         lifecycleScope.launch {
@@ -182,6 +184,13 @@ class YouActivity : ComponentActivity() {
     private fun openTab(tab: MainTab) {
         val intent = MainTabs.intent(this, tab, intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         if (intent != null) startActivity(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            com.hhst.youtubelite.data.media.MediaSession.snapshot().let { youViewModel.updateSession(it.signedIn, it.generation) }
+        }
     }
 
     companion object {

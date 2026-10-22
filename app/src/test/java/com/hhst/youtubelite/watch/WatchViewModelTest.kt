@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeoutOrNull
@@ -26,6 +27,57 @@ class WatchViewModelTest {
 
     private fun repository(block: suspend (String) -> WatchPage) = object : WatchRepository {
         override suspend fun watch(videoId: String) = block(videoId)
+    }
+
+    @Test fun ratingChangesOnlyAfterConfirmationAndBlocksDuplicateTaps() = runTest {
+        val result = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val actions = object : VideoActions {
+            override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) { calls++; result.await() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) = Unit
+        }
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Like)
+        vm.onAction(WatchAction.Like)
+        runCurrent()
+        assertEquals(1, calls)
+        assertTrue(vm.uiState.value.actionPending)
+        assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
+        result.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(VideoRating.Like, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
+        assertFalse(vm.uiState.value.actionPending)
+    }
+
+    @Test fun failedRatingKeepsTheServerStateAndRequestsSignIn() = runTest {
+        val actions = object : VideoActions {
+            override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) { throw SignInRequiredException() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) = Unit
+        }
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Dislike)
+        advanceUntilIdle()
+        assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
+        assertEquals(WatchNotice.SignIn, vm.actionNotices.first())
+    }
+
+    @Test fun switchingVideosCancelsAnUnfinishedRating() = runTest {
+        val result = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val actions = object : VideoActions {
+            override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) { result.await() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) = Unit
+        }
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Like)
+        runCurrent()
+        vm.selectVideo("sintel")
+        result.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("sintel", vm.uiState.value.videoId)
+        assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
     }
 
     @Test fun ordinaryEntryLoadsTheLocalPageForTheRequestedVideo() = runTest {

@@ -26,7 +26,7 @@ import com.hhst.youtubelite.search.domain.*
 import com.hhst.youtubelite.ui.design.*
 
 @Composable
-fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAction: (SearchAction) -> Unit) {
+fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAction: (SearchAction) -> Unit, footer: (@Composable () -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize().testTag("search-channels-list"), state = state,
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp)) {
@@ -39,8 +39,7 @@ fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAc
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.Top) {
                                 Box(Modifier.width(imageSlot).heightIn(min = 90.dp)
                                     .clickable(role = Role.Button) { onAction(SearchAction.OpenChannel(channel.id)) }, contentAlignment = Alignment.Center) {
-                                    Image(painterResource(when (channel.artwork) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
-                                        contentDescription = "Open ${channel.name}", contentScale = ContentScale.Crop,
+                                    com.hhst.youtubelite.ui.design.Artwork(channel.artwork,
                                         modifier = Modifier.size(67.dp).clip(CircleShape).testTag("search-channel-avatar-${channel.id}"))
                                 }
                                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -62,6 +61,7 @@ fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAc
                     Spacer(Modifier.height(12.dp))
                 }
             }
+            if (footer != null) item(key = "pagination") { footer() }
         }
     }
 }

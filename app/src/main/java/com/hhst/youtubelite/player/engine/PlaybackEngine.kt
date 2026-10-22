@@ -37,7 +37,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.browser.PageKind
+import com.hhst.youtubelite.core.PageKind
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.extension.ExtensionManager

@@ -81,19 +81,19 @@ import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.ServiceNotificationController
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.MiniPlayerStore
-import com.hhst.youtubelite.ui.browser.BrowserViewModel
 import com.hhst.youtubelite.ui.extension.ExtensionViewModel
 import com.tencent.mmkv.MMKV
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
-import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /** Application-scoped Koin module. */
 val appModule = module {
+    single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::snapshot) }
+    single { com.hhst.youtubelite.data.media.ContentRepositories(get()) }
     single {
         DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -244,9 +244,11 @@ val appModule = module {
             cast = get(),
             appContext = androidContext(),
             haptics = get(),
+            nextVideo = { id -> if (com.hhst.youtubelite.data.media.ContentSource.fixtures) null
+                else get<com.hhst.youtubelite.data.media.ContentRepositories>().watch.watch(id).related
+                .firstOrNull { it.id != id }?.id },
         )
     }
-    viewModelOf(::BrowserViewModel)
     viewModel { ExtensionViewModel(manager = get(), pipSupported = PipSupport.isSupported(androidContext())) }
 
     single {

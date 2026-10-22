@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -28,14 +30,9 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-      - name: Page script tests
-        run: node --test app/src/test/script/*.test.cjs
       - name: Unit tests, Lint and debug build
         run: >-
-          bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+          bash gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
           --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
           "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
       - name: Build debug-signed R8 verification APKs
@@ -136,7 +133,7 @@ jobs:
               adb install -r -t -g "artifacts/apk/androidTest/$variant/app-$variant-androidTest.apk"
             }
             run_suite() {
-              local package="$1" classes="$2" label="$3" runner="${4:-androidx.test.runner.AndroidJUnitRunner}"
+              local package="$1" classes="$2" label="$3" runner="${4:-com.hhst.youtubelite.ContentTestRunner}"
               adb shell am force-stop "$package" || return
               adb shell am instrument -w -r -e class "$classes" "$package.test/$runner" | tee "device-results/$label.txt" || return
               grep -Eq '^OK \([1-9][0-9]* tests?\)' "device-results/$label.txt"

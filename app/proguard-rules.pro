@@ -26,8 +26,6 @@
 -keep class com.hhst.youtubelite.extractor.Chapter { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Stream { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.ChapterList { <init>(...); <fields>; }
--keep class com.hhst.youtubelite.extension.InjectReport { <init>(...); <fields>; }
--keep class com.hhst.youtubelite.extension.InjectFailure { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.SettingsBackupData { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extension.DownloadBackupData { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.diagnostics.DiagnosticEvent { <init>(...); <fields>; }
@@ -38,7 +36,6 @@
 -keep class com.hhst.youtubelite.downloader.core.DownloadConfig { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.EnqueueResult { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.TaskRef { <init>(...); <fields>; }
--keep class com.hhst.youtubelite.browser.Bridge$QueueItemJson { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.core.MmkvJsonCache$Entry { <init>(...); <fields>; }
 
 -keep class com.hhst.youtubelite.downloader.engine.DownloadTransferWorker { *; }

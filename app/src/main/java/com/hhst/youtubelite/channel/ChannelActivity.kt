@@ -41,7 +41,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the local channel page and observes its navigation requests. */
-class ChannelActivity : ComponentActivity() {
+class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var channelViewModel: ChannelViewModel
         private set
     var lastNavigationRequest: ChannelNavigationRequest? = null
@@ -50,6 +50,8 @@ class ChannelActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: FixtureChannelRepository.profile().channelId
         val scenario = if (BuildConfig.DEBUG) ChannelScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else ChannelScenario.Content
@@ -57,7 +59,7 @@ class ChannelActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == ChannelViewModel::class.java)
-                return ChannelViewModel(FixtureChannelRepository(scenario), extras.createSavedStateHandle(), channelId, scenario) as T
+                return ChannelViewModel(if (fixtures) FixtureChannelRepository(scenario) else sources.channel, extras.createSavedStateHandle(), channelId, scenario) as T
             }
         })[ChannelViewModel::class.java]
         lifecycleScope.launch {

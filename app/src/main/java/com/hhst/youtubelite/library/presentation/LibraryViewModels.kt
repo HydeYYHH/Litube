@@ -24,12 +24,15 @@ class YouViewModel(
     private val repository: LibraryRepository,
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
-    private val signedIn: Boolean,
+    private var signedIn: Boolean,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
+
+    private var loadJob: Job? = null
+    private var generation = 0
 
     init {
         when {
@@ -39,8 +42,19 @@ class YouViewModel(
         }
     }
 
-    private var loadJob: Job? = null
-    private var generation = 0
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (signedIn == value && !changed) return
+        signedIn = value
+        ++generation
+        loadJob?.cancel()
+        _uiState.update { it.copy(signedIn = value, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
+        if (value) refresh()
+    }
 
     fun onAction(action: LibraryAction) {
         when (action) {
@@ -130,20 +144,36 @@ class HistoryViewModel(
     private val repository: LibraryRepository,
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
+    private var signedIn: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HistoryUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
 
+    private var loadJob: Job? = null
+    private var generation = 0
+
     init {
-        if (scenario == LibraryScenario.Loading) {
+        if (!signedIn) _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
+        else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = HistoryContent.Loading) }
         } else refresh()
     }
 
-    private var loadJob: Job? = null
-    private var generation = 0
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (signedIn == value && !changed) return
+        signedIn = value
+        ++generation
+        loadJob?.cancel()
+        _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
+        if (value) refresh()
+    }
 
     fun onAction(action: LibraryAction) {
         when (action) {
@@ -185,6 +215,7 @@ class HistoryViewModel(
     }
 
     private fun refresh() {
+        if (!signedIn) return
         loadJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
@@ -214,20 +245,36 @@ class CollectionViewModel(
     private val repository: LibraryRepository,
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
+    private var signedIn: Boolean = true,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CollectionUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
 
+    private var loadJob: Job? = null
+    private var generation = 0
+
     init {
-        if (scenario == LibraryScenario.Loading) {
+        if (!signedIn) _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
+        else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = CollectionContent.Loading) }
         } else refresh()
     }
 
-    private var loadJob: Job? = null
-    private var generation = 0
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (signedIn == value && !changed) return
+        signedIn = value
+        ++generation
+        loadJob?.cancel()
+        _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
+        if (value) refresh()
+    }
 
     fun onAction(action: LibraryAction) {
         when (action) {
@@ -262,6 +309,7 @@ class CollectionViewModel(
     }
 
     private fun refresh() {
+        if (!signedIn) return
         loadJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {

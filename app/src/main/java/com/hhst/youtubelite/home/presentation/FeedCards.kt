@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.home.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -40,8 +42,7 @@ internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, onAc
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier = Modifier) {
-    Image(painterResource(when (asset) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
-        contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
 @Composable
@@ -59,7 +60,7 @@ private fun Modifier.semanticsLabel(label: String) = this.then(Modifier.semantic
 private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAction) -> Unit) {
     Column(Modifier.testTag("feed-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
+            .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
             .semanticsLabel("${item.title}, ${item.duration}")) {
             Artwork(item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -72,12 +73,12 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
             }
         }
         Row(Modifier.padding(start = if (compact) 12.dp else 0.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-            Avatar(item.artwork, item.author, item.channelId, onAction, size = 36.dp)
+            Avatar(item.avatar ?: item.artwork, item.author, item.channelId, onAction, size = 36.dp)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
-                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
+                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
                     AppText(item.title, Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
-                    AppText("${item.author} · ${item.metadata}", Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
+                    AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
                 // Sampled menu anchors: phone right inset 2px, grid +10px overhang, top -6px.
                 AppIconButton(AppIcon.More, "More actions for ${item.title}",
@@ -95,7 +96,7 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, onAction: (HomeAction)
             if (compact) Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-8).dp).background(Color(item.palette.stackColor).copy(alpha = 0.5f), RoundedCornerShape(12.dp)))
             Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-5).dp).background(Color(item.palette.stackColor), RoundedCornerShape(12.dp)))
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp))
-                .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
+                .mediaActions(MediaActionItem(item.id, item.title, item.authors, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
                 Artwork(item.artwork, Modifier.fillMaxSize())
                 Row(Modifier.align(Alignment.BottomEnd).padding(8.dp).height(24.dp).background(Color(item.palette.badgeColor), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

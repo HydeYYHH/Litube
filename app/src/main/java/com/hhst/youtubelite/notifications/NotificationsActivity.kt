@@ -46,7 +46,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Hosts the notifications page. */
-class NotificationsActivity : ComponentActivity() {
+class NotificationsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var notificationsViewModel: NotificationsViewModel
         private set
     var lastNavigationRequest: NotificationsNavigationRequest? = null
@@ -54,14 +54,16 @@ class NotificationsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val signedIn = intent.getBooleanExtra(EXTRA_SIGNED_IN, false)
+        val signedIn = if (fixtures) intent.getBooleanExtra(EXTRA_SIGNED_IN, false) else com.hhst.youtubelite.data.media.MediaSession.signedIn()
         val scenario = if (BuildConfig.DEBUG) NotificationsScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else NotificationsScenario.Content
         notificationsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == NotificationsViewModel::class.java)
-                return NotificationsViewModel(FixtureNotificationsRepository(scenario), scenario, signedIn) as T
+                return NotificationsViewModel(if (fixtures) FixtureNotificationsRepository(scenario) else sources.notifications, scenario, signedIn) as T
             }
         })[NotificationsViewModel::class.java]
         lifecycleScope.launch {
@@ -86,6 +88,13 @@ class NotificationsActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            com.hhst.youtubelite.data.media.MediaSession.snapshot().let { notificationsViewModel.updateSession(it.signedIn, it.generation) }
+        }
+    }
+
     companion object {
         const val EXTRA_SIGNED_IN = "notifications_signed_in"
         const val EXTRA_SCENARIO = "notifications_scenario"
@@ -101,12 +110,15 @@ class NotificationsActivity : ComponentActivity() {
 class NotificationsViewModel(
     private val repository: com.hhst.youtubelite.notifications.data.NotificationsRepository,
     private val scenario: NotificationsScenario,
-    private val signedIn: Boolean,
+    private var signedIn: Boolean,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationsUiState(signedIn = signedIn))
     val uiState: StateFlow<NotificationsUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<NotificationsNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<NotificationsNavigationRequest> = navigation.receiveAsFlow()
+
+    private var loadJob: kotlinx.coroutines.Job? = null
+    private var generation = 0
 
     init {
         when {
@@ -114,6 +126,19 @@ class NotificationsViewModel(
             scenario == NotificationsScenario.Loading -> _uiState.update { it.copy(content = NotificationsContent.Loading) }
             else -> refresh()
         }
+    }
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (signedIn == value && !changed) return
+        signedIn = value
+        ++generation
+        loadJob?.cancel()
+        _uiState.update { it.copy(signedIn = value, content = NotificationsContent.SignedOut(notificationsSignedOutPrompt())) }
+        if (value) refresh()
     }
 
     fun onAction(action: NotificationsAction) {
@@ -125,8 +150,6 @@ class NotificationsViewModel(
         }
     }
 
-    private var loadJob: kotlinx.coroutines.Job? = null
-    private var generation = 0
 
     private fun refresh() {
         if (!signedIn) return

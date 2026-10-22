@@ -24,6 +24,18 @@ class LibraryViewModelTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
 
+    @Test fun loginRefreshesAndLogoutDiscardsPendingAccountContent() = runTest {
+        val loads = mutableListOf<String>()
+        val vm = YouViewModel(recordingRepository(loads), SavedStateHandle(), LibraryScenario.Content, false)
+        vm.updateSession(true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is LibraryContent.Ready)
+        assertTrue(vm.uiState.value.signedIn)
+        vm.updateSession(false)
+        assertTrue(vm.uiState.value.content is LibraryContent.SignedOut)
+        assertFalse(vm.uiState.value.signedIn)
+    }
+
     @Test fun signedOutYouPageShowsTheSampledPromptWithoutLoading() = runTest {
         val loads = mutableListOf<String>()
         val vm = YouViewModel(recordingRepository(loads), SavedStateHandle(), LibraryScenario.Content, signedIn = false)

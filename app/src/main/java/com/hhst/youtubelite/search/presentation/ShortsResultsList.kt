@@ -36,10 +36,11 @@ import com.hhst.youtubelite.ui.design.DesignTokens
  * badge hidden — shorts show their length in the title metadata only).
  */
 @Composable
-fun ShortsResultsList(shorts: List<SearchResult>, state: LazyListState, onAction: (SearchAction) -> Unit) {
+fun ShortsResultsList(shorts: List<SearchResult>, state: androidx.compose.foundation.lazy.grid.LazyGridState, onAction: (SearchAction) -> Unit, footer: (@Composable () -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
+            state = state,
             modifier = Modifier.widthIn(max = 840.dp).fillMaxSize().testTag("search-shorts-list"),
             contentPadding = PaddingValues(top = 12.dp, start = 12.dp, end = 12.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -50,11 +51,7 @@ fun ShortsResultsList(shorts: List<SearchResult>, state: LazyListState, onAction
                     .clickable(role = Role.Button) { onAction(SearchAction.OpenResult(short.id)) }) {
                     Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(8.dp))
                         .semantics { contentDescription = short.title }) {
-                        Image(painterResource(when (short.artwork) {
-                            "dream" -> R.drawable.sample_dream
-                            "sintel" -> R.drawable.sample_sintel
-                            else -> R.drawable.sample_bunny
-                        }), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        com.hhst.youtubelite.ui.design.Artwork(short.artwork, modifier = Modifier.fillMaxSize())
                         Box(Modifier.matchParentSize().background(
                             Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
                         AppText(short.title, Modifier.align(Alignment.BottomStart).padding(8.dp),
@@ -64,6 +61,7 @@ fun ShortsResultsList(shorts: List<SearchResult>, state: LazyListState, onAction
                         size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
             }
+            if (footer != null) item(key = "pagination", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { footer() }
         }
     }
 }

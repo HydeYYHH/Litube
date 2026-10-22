@@ -17,7 +17,7 @@ class DownloadActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        (application as com.hhst.youtubelite.App).startLegacyRuntime()
+        (application as com.hhst.youtubelite.App).startMediaRuntime()
         enableEdgeToEdge()
         val batchId = intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID)
         setContent {

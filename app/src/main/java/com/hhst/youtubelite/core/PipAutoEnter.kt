@@ -74,7 +74,7 @@ object PipAutoEnter {
         private set
 
     fun apply(activity: Activity, autoEnter: Boolean, aspect: Rational? = null, actions: List<RemoteAction>? = null) {
-        // While an overlay holds suppress, MainActivity.syncPipParams still
+        // While an overlay holds suppress, PlaybackActivity.syncPipParams still
         // calls apply(false). Keep lastEligible as the unsuppressed desire.
         if (!isSuppressed()) {
             lastEligible = autoEnter

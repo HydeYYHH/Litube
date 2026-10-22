@@ -220,6 +220,7 @@ private fun CommentsSurface(
             }
             is CommentsOverlay.Composer -> CommentComposerSheet(
                 draft = state.draft,
+                pending = state.actionPending,
                 editing = state.overlay.editing,
                 reply = state.overlay.threadId != null,
                 onDraft = { onAction(CommentAction.DraftChanged(it)) },
@@ -256,6 +257,7 @@ private fun menuActions(state: CommentsUiState): List<CommentMenuAction> {
 @Composable
 private fun CommentComposerSheet(
     draft: String,
+    pending: Boolean,
     editing: Boolean,
     reply: Boolean,
     onDraft: (String) -> Unit,
@@ -311,6 +313,7 @@ private fun CommentComposerSheet(
                         .testTag("comment-composer-input")
                         .semantics { contentDescription = if (editing) "Edit comment text" else "Comment text" },
                     maxLines = 6,
+                    readOnly = pending,
                     textStyle = DesignTokens.text(14, 20),
                     cursorBrush = SolidColor(DesignTokens.Ink),
                     decorationBox = { inner ->
@@ -329,12 +332,12 @@ private fun CommentComposerSheet(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ComposerAction("Cancel", "comment-composer-cancel", onClick = onCancel)
+                ComposerAction("Cancel", "comment-composer-cancel", enabled = !pending, onClick = onCancel)
                 Spacer(Modifier.width(8.dp))
                 ComposerAction(
-                    if (editing) "Save" else "Comment",
+                    if (pending) "Sending…" else if (editing) "Save" else "Comment",
                     "comment-composer-submit",
-                    enabled = draft.isNotBlank(),
+                    enabled = draft.isNotBlank() && !pending,
                     onClick = onSubmit,
                 )
             }
@@ -661,13 +664,15 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
     Column(Modifier.fillMaxWidth().testTag("comment-${thread.id}")) {
         Spacer(Modifier.height(CommentsLayout.ThreadTopPad.dp))
         ThreadContent(thread, onAction)
-        if (thread.replies.isNotEmpty()) {
+        if (thread.replies.isNotEmpty() || thread.replyKey != null) {
             Spacer(Modifier.height(CommentsLayout.ReplyToggleTopGap.dp))
             if (expanded) {
                 Column(
                     Modifier.fillMaxWidth().padding(start = CommentsLayout.ReplyToggleStart.dp, end = 20.dp)
                         .testTag("comment-${thread.id}-replies"),
                 ) {
+                    if (thread.repliesLoading) AppText("Loading replies…", size = 12, line = 18)
+                    if (thread.repliesFailed) AppText("Couldn't load replies. Tap below to retry.", size = 12, line = 18)
                     thread.replies.forEach { reply ->
                         ReplyContent(thread.id, reply, onAction)
                         Spacer(Modifier.height(CommentsLayout.ReplyRowGap.dp))
@@ -676,7 +681,7 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
                 Spacer(Modifier.height(4.dp))
             }
             RepliesToggle(
-                label = if (expanded) "Hide replies" else "Show more replies",
+                label = if (thread.repliesFailed) "Retry" else if (expanded) "Hide replies" else "Show more replies",
                 tag = "comment-${thread.id}-reply-toggle",
                 onClick = { onAction(CommentAction.ToggleReplies(thread.id)) },
             )
@@ -766,7 +771,7 @@ private fun CommentAuthorRow(
         }.testTag("comment-$testTagSuffix-open-author"),
     ) {
         AppText(
-            author.handle,
+            author.handle.ifBlank { author.displayName },
             Modifier.weight(1f).testTag("comment-$testTagSuffix-author"),
             size = CommentsLayout.AuthorSize.toInt(),
             line = CommentsLayout.AuthorLine.toInt(),
@@ -868,18 +873,9 @@ private fun DefaultAvatar(size: Dp) {
 
 @Composable
 private fun CommentAvatar(author: CommentAuthor, size: Dp, channelId: String, onAction: (CommentAction) -> Unit) {
-    Image(
-        painterResource(
-            when (author.artwork) {
-                "dream" -> R.drawable.sample_dream
-                "sintel" -> R.drawable.sample_sintel
-                else -> R.drawable.sample_bunny
-            },
-        ),
-        contentDescription = null,
+    com.hhst.youtubelite.ui.design.Artwork(author.artwork,
         modifier = Modifier.size(size).clip(CircleShape).then(if (channelId.isBlank()) Modifier else
             Modifier.clickable(role = Role.Button) { onAction(CommentAction.OpenAuthor(channelId)) }
                 .semantics { contentDescription = "Open channel ${author.handle}" }),
-        contentScale = ContentScale.Crop,
     )
 }

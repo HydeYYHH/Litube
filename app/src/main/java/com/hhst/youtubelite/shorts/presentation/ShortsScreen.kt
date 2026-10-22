@@ -42,7 +42,7 @@ import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 
 @Composable
-fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier) {
+fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier, videoContent: (@Composable (String) -> Unit)? = null) {
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
             ShortsContent.Loading -> Box(Modifier.fillMaxSize().background(Color.White)) { LibrarySkeleton("shorts-skeleton") }
@@ -50,13 +50,13 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
-            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction)
+            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent)
         }
     }
 }
 
 @Composable
-private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit) {
+private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?) {
     val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
     val currentAction by rememberUpdatedState(onAction)
     LaunchedEffect(pagerState, items) {
@@ -65,14 +65,15 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
         }
     }
     VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
-        ShortPage(items[page], onAction)
+        ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null)
     }
 }
 
 @Composable
-private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit) {
+private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
         Image(item.artwork, Modifier.fillMaxSize(), "Play ${item.title}")
+        videoContent?.invoke(item.id)
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         BoxWithConstraints(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -139,16 +140,10 @@ private fun RailAction(icon: AppIcon, description: String, label: String, onClic
 
 @Composable
 private fun Image(asset: String, modifier: Modifier, description: String) {
-    androidx.compose.foundation.Image(
-        painterResource(when (asset) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
-        contentDescription = description, modifier = modifier, contentScale = ContentScale.Crop,
-    )
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier.semantics { contentDescription = description })
 }
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier) {
-    androidx.compose.foundation.Image(
-        painterResource(when (asset) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
-        contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop,
-    )
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }

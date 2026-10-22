@@ -231,6 +231,11 @@ class HomeScreenshotAndroidTest {
         assertEquals(60f, gridTitle.left, 0.5f)
         assertEquals(361.333f, gridTitle.width, 1f)
         assertEquals(337.333f, textWidth().toFloat(), 1f)
+        compose.runOnIdle { width = 390 }
+        val restoredTitle = compose.onNodeWithText(title).fetchSemanticsNode().boundsInRoot
+        assertEquals(56f, restoredTitle.left, 0.5f)
+        assertEquals(322f, restoredTitle.width, 0.5f)
+        assertEquals(298, textWidth())
     }
 
     @Test fun feedHeaderFollowsScrollDirection() {

@@ -1,4 +1,4 @@
-package com.hhst.youtubelite.browser
+package com.hhst.youtubelite.core
 
 import com.hhst.youtubelite.core.Constants
 import org.junit.Assert.assertEquals

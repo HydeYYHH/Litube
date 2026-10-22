@@ -48,7 +48,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the subscriptions page. The Shorts tab is wired with its own screen. */
-class SubscriptionsActivity : ComponentActivity() {
+class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var subscriptionsViewModel: SubscriptionsViewModel
         private set
     var lastNavigationRequest: SubscriptionsNavigationRequest? = null
@@ -58,14 +58,16 @@ class SubscriptionsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val signedIn = intent.getBooleanExtra(EXTRA_SIGNED_IN, false)
+        val signedIn = if (fixtures) intent.getBooleanExtra(EXTRA_SIGNED_IN, false) else com.hhst.youtubelite.data.media.MediaSession.signedIn()
         val scenario = if (BuildConfig.DEBUG) SubscriptionsScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else SubscriptionsScenario.Content
         subscriptionsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == SubscriptionsViewModel::class.java)
-                return SubscriptionsViewModel(FixtureSubscriptionsRepository(scenario), extras.createSavedStateHandle(), scenario, signedIn) as T
+                return SubscriptionsViewModel(if (fixtures) FixtureSubscriptionsRepository(scenario) else sources.subscriptions, extras.createSavedStateHandle(), scenario, signedIn) as T
             }
         })[SubscriptionsViewModel::class.java]
         lifecycleScope.launch {
@@ -141,6 +143,13 @@ class SubscriptionsActivity : ComponentActivity() {
     private fun openTab(tab: MainTab) {
         val intent = MainTabs.intent(this, tab, intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         if (intent != null) startActivity(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            com.hhst.youtubelite.data.media.MediaSession.snapshot().let { subscriptionsViewModel.updateSession(it.signedIn, it.generation) }
+        }
     }
 
     companion object {

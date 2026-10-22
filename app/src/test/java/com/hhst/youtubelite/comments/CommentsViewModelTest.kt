@@ -383,4 +383,63 @@ class CommentsViewModelTest {
         assertEquals(target, restored.uiState.value.target)
     }
 
+    private fun actionsRepository(block: suspend (CommentNavigationRequest) -> Unit) = object :
+        CommentsRepository by FixtureCommentsRepository(), com.hhst.youtubelite.comments.domain.CommentActions {
+        override suspend fun perform(request: CommentNavigationRequest) = block(request)
+    }
+
+    @Test fun postingKeepsDraftUntilConfirmedAndRejectsDuplicateSubmission() = runTest {
+        val reply = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val vm = CommentsViewModel(actionsRepository { calls++; reply.await() }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Keep this draft"))
+        vm.onAction(CommentAction.SubmitDraft)
+        vm.onAction(CommentAction.SubmitDraft)
+        runCurrent()
+        assertEquals(1, calls)
+        assertTrue(vm.uiState.value.actionPending)
+        assertEquals("Keep this draft", vm.uiState.value.draft)
+        reply.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.actionPending)
+        assertEquals("", vm.uiState.value.draft)
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun failedPostingPreservesEditorAndDraftAcrossRecreation() = runTest {
+        val saved = SavedStateHandle()
+        val repository = actionsRepository { throw IOException("offline") }
+        val vm = CommentsViewModel(repository, saved, "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Do not discard"))
+        vm.onAction(CommentAction.SubmitDraft)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.actionPending)
+        assertEquals("Do not discard", vm.uiState.value.draft)
+        assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
+        assertTrue(vm.actionNotices.first() is com.hhst.youtubelite.comments.domain.CommentNotice.Message)
+        val restored = CommentsViewModel(repository, saved, "bunny")
+        assertEquals("Do not discard", restored.uiState.value.draft)
+        assertTrue(restored.uiState.value.overlay is CommentsOverlay.Composer)
+    }
+
+    @Test fun changingVideoCancelsPendingCommentWithoutChangingTheNewPanel() = runTest {
+        val reply = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val vm = CommentsViewModel(actionsRepository { reply.await() }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Old video"))
+        vm.onAction(CommentAction.SubmitDraft)
+        runCurrent()
+        vm.selectVideo("sintel")
+        reply.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("sintel", vm.uiState.value.videoId)
+        assertEquals("", vm.uiState.value.draft)
+        assertFalse(vm.uiState.value.actionPending)
+    }
+
 }

@@ -17,8 +17,6 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import com.hhst.youtubelite.browser.PageKind
-import com.hhst.youtubelite.ui.browser.BrowserViewModel
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.service.PlaybackService
@@ -78,8 +76,8 @@ class PipDismissAndroidTest {
             fixture.await { fixture.app.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == notificationId } }
             assertNull(fixture.engine.snapshot.value.videoId)
             fixture.instrumentation.runOnMainSync {
-                val browser = ViewModelProvider(fixture.activity)[BrowserViewModel::class.java]
-                assertFalse("Closing PiP must leave a usable page", PageKind.isPlayerSurface(PageKind.of(browser.uiState.value.url)))
+                assertFalse("Closing PiP must hide the native player", fixture.model.uiState.value.visible)
+                assertNotNull(fixture.activity.watchViewModel.uiState.value.content)
             }
         }
     }
@@ -96,6 +94,7 @@ class PipDismissAndroidTest {
                 listOf(node) + (0 until node.childCount).flatMap { index -> node.getChild(index)?.let(::nodes).orEmpty() }
             var control: AccessibilityNodeInfo? = null
             var opened = false
+            var lastTap = 0L
             var controls = ""
             val deadline = SystemClock.elapsedRealtime() + 10_000
             while (control == null && SystemClock.elapsedRealtime() < deadline) {
@@ -106,16 +105,18 @@ class PipDismissAndroidTest {
                     it.isClickable && it.viewIdResourceName?.startsWith("com.android.") == true &&
                         it.viewIdResourceName?.substringAfterLast('/') == controlId
                 }
-                if (control == null && !opened) {
+                if (control == null && SystemClock.elapsedRealtime() - lastTap > 750) {
                     val bounds = Rect()
                     automation.windows.firstOrNull { it.isInPictureInPictureMode }?.getBoundsInScreen(bounds)
                     if (!bounds.isEmpty) {
                         DeviceEvidence.shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
                         opened = true
+                        lastTap = SystemClock.elapsedRealtime()
                     }
                 }
                 if (control == null) Thread.sleep(50)
             }
+            if (control == null) DeviceEvidence.captureScene("native-pip-$controlId-missing")
             assertNotNull("System PiP $controlId control missing (pip=${fixture.activity.isInPictureInPictureMode}, opened=$opened, controls=$controls)", control)
             assertTrue(control!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         } finally {

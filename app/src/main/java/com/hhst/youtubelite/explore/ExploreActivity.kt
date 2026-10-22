@@ -90,7 +90,7 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
 }
 
 /** The explore entry: four fixed category containers sharing one template. */
-class ExploreActivity : ComponentActivity() {
+class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var exploreViewModel: ExploreViewModel
         private set
     var lastNavigationRequest: ExploreNavigationRequest? = null
@@ -98,6 +98,8 @@ class ExploreActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val scenario = if (BuildConfig.DEBUG) ExploreScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else ExploreScenario.Content
         val category = ExploreCategory.parse(intent.getStringExtra(EXTRA_CATEGORY))
@@ -107,7 +109,7 @@ class ExploreActivity : ComponentActivity() {
                 require(modelClass == ExploreViewModel::class.java)
                 val handle = extras.createSavedStateHandle()
                 if (!handle.contains("category")) handle["category"] = category.name
-                return ExploreViewModel(FixtureExploreRepository(scenario), scenario, handle) as T
+                return ExploreViewModel(if (fixtures) FixtureExploreRepository(scenario) else sources.explore, scenario, handle) as T
             }
         })[ExploreViewModel::class.java]
         lifecycleScope.launch {

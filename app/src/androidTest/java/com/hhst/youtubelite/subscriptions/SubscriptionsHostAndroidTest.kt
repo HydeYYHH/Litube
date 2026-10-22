@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.account.SignInActivity
 import com.hhst.youtubelite.home.domain.FeedMenuAction
 import com.hhst.youtubelite.subscriptions.data.SubscriptionsScenario
 import com.hhst.youtubelite.subscriptions.domain.SubscriptionsNavigationRequest
@@ -34,7 +34,7 @@ class SubscriptionsHostAndroidTest {
         scenario?.close()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<MainActivity>().forEach { it.finish() }
+                .filterIsInstance<SignInActivity>().forEach { it.finish() }
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
@@ -113,7 +113,7 @@ class NotificationsHostAndroidTest {
         scenario?.close()
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<MainActivity>().forEach { it.finish() }
+                .filterIsInstance<SignInActivity>().forEach { it.finish() }
         }
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }

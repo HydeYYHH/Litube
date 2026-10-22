@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.explore.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -108,7 +110,7 @@ private fun CategoryContainer(videos: List<FeedItem.Video>, width: Float, onActi
 private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (ExploreAction) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("explore-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .clickable(role = Role.Button) { onAction(ExploreAction.OpenVideo(item.id)) }
+            .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(ExploreAction.OpenVideo(item.id)) }
             .semantics { contentDescription = "${item.title}, ${item.duration}" }) {
             Artwork(item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
@@ -135,9 +137,5 @@ private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier) {
-    Image(painterResource(when (asset) {
-        "dream" -> R.drawable.sample_dream
-        "sintel" -> R.drawable.sample_sintel
-        else -> R.drawable.sample_bunny
-    }), contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }

@@ -29,15 +29,33 @@ import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
-class PlaylistActivity : ComponentActivity() {
+class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var playlistViewModel: PlaylistViewModel
         private set
     var lastNavigationRequest: PlaylistNavigationRequest? = null
         private set
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
+    private var downloadPending = false
+
+    private fun downloadPlaylist() {
+        val page = (playlistViewModel.uiState.value.content as? PlaylistContent.Ready)?.page ?: return
+        val items = page.entries.mapNotNull { entry ->
+            com.hhst.youtubelite.extractor.VideoId.parse(entry.videoId)?.let { id ->
+                com.hhst.youtubelite.downloader.core.DownloadRequest(id, entry.title, entry.channel, entry.artwork)
+            }
+        }.distinctBy { it.videoId }
+        if (items.isEmpty()) return
+        val result = com.hhst.youtubelite.downloader.ui.DownloadUi.showBatchConfirm(this,
+            com.hhst.youtubelite.downloader.core.BatchSnapshot(
+                com.hhst.youtubelite.downloader.core.BatchSource.PLAYLIST, page.summary.title, items))
+        if (result is com.hhst.youtubelite.downloader.ui.DownloadUiStart.Rejected)
+            android.widget.Toast.makeText(this, "This playlist is too large to download at once", android.widget.Toast.LENGTH_LONG).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.dark(0xFF2D4F72.toInt()), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val id = intent.getStringExtra(EXTRA_PLAYLIST_ID) ?: FixturePlaylistRepository.MOVIES
         val scenario = if (BuildConfig.DEBUG) PlaylistScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else PlaylistScenario.Content
@@ -45,7 +63,7 @@ class PlaylistActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == PlaylistViewModel::class.java)
-                return PlaylistViewModel(FixturePlaylistRepository(scenario), extras.createSavedStateHandle(), id, scenario) as T
+                return PlaylistViewModel(if (fixtures) FixturePlaylistRepository(scenario) else sources.playlist, extras.createSavedStateHandle(), id, scenario) as T
             }
         })[PlaylistViewModel::class.java]
         lifecycleScope.launch {
@@ -53,13 +71,42 @@ class PlaylistActivity : ComponentActivity() {
                 playlistViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is PlaylistNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@PlaylistActivity, request.videoId))
+                        is PlaylistNavigationRequest.Watch -> {
+                            if (!fixtures) {
+                                val entries = (playlistViewModel.uiState.value.content as? PlaylistContent.Ready)?.page?.entries.orEmpty()
+                                                                val player = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.player.PlayerViewModel>()
+                                player.startPlaylist(entries.map { com.hhst.youtubelite.player.QueueItem(it.videoId, title = it.title, author = it.channel) }, startId = request.videoId)
+                            }
+                            startActivity(WatchActivity.intent(this@PlaylistActivity, request.videoId))
+                        }
+                        is PlaylistNavigationRequest.Queue -> {
+                            val entries = (playlistViewModel.uiState.value.content as? PlaylistContent.Ready)?.page?.entries.orEmpty()
+                            val selected = if (request.shuffle) entries.shuffled() else entries
+                            selected.firstOrNull()?.let { first ->
+                                if (!fixtures) org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.player.PlayerViewModel>()
+                                    .startPlaylist(selected.map { com.hhst.youtubelite.player.QueueItem(it.videoId, title = it.title, author = it.channel) })
+                                startActivity(WatchActivity.intent(this@PlaylistActivity, first.videoId))
+                            }
+                        }
                         is PlaylistNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@PlaylistActivity, request.channelId))
                         is PlaylistNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@PlaylistActivity, request.query))
+                        PlaylistNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
+                        is PlaylistNavigationRequest.Download -> downloadPlaylist()
                         is PlaylistNavigationRequest.Share -> shareGateway.sharePlaylist(request.playlistId)
                         is PlaylistNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
                             this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
                         else -> Unit
+                    }
+                }
+            }
+        }
+        downloadPending = savedInstanceState?.getBoolean(EXTRA_DOWNLOAD) ?: intent.getBooleanExtra(EXTRA_DOWNLOAD, false)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                playlistViewModel.uiState.collect { state ->
+                    if (downloadPending && state.content is PlaylistContent.Ready) {
+                        downloadPending = false
+                        downloadPlaylist()
                     }
                 }
             }
@@ -82,7 +129,13 @@ class PlaylistActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(EXTRA_DOWNLOAD, downloadPending)
+        super.onSaveInstanceState(outState)
+    }
+
     companion object {
+        const val EXTRA_DOWNLOAD = "playlist_download"
         const val EXTRA_PLAYLIST_ID = "playlist_id"
         const val EXTRA_SCENARIO = "playlist_scenario"
         fun intent(context: Context, playlistId: String, scenario: PlaylistScenario? = null) = Intent(context, PlaylistActivity::class.java)

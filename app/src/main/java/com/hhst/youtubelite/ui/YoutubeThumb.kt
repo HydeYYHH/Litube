@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import com.hhst.youtubelite.core.YoutubeThumbnail
@@ -25,6 +26,8 @@ fun YoutubeThumb(
     url: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    contentScale: ContentScale = ContentScale.Crop,
+    placeholderColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     placeholder: @Composable BoxScope.() -> Unit = {},
 ) {
     var bitmap by remember(url) { mutableStateOf(YoutubeThumbnail.cached(url)) }
@@ -40,7 +43,7 @@ fun YoutubeThumb(
         bitmap = withContext(Dispatchers.IO) { YoutubeThumbnail.fetch(url) }
     }
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier.background(placeholderColor),
         contentAlignment = Alignment.Center,
     ) {
         val bmp = bitmap
@@ -48,7 +51,7 @@ fun YoutubeThumb(
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = contentDescription,
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {

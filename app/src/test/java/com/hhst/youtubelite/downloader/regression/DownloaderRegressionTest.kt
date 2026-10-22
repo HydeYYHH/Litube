@@ -44,7 +44,6 @@ import com.hhst.youtubelite.downloader.resolve.videoFormat
 import com.hhst.youtubelite.downloader.ui.DownloadPresentation
 import com.hhst.youtubelite.downloader.ui.DownloadRowAction
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
-import com.hhst.youtubelite.downloader.webview.DownloadWebGuard
 import com.hhst.youtubelite.downloader.engine.DownloadBatchExecutor
 import com.hhst.youtubelite.downloader.engine.SchedulerHarness
 import kotlinx.coroutines.runBlocking
@@ -197,11 +196,6 @@ class DownloaderRegressionTest {
             "failed deletion must remain available to retry",
             h.repo.transact { getTask(id) }!!.removed,
         )
-    }
-
-    @Test
-    fun malformedBridgeItems_isRejectedWithoutThrowing() {
-        assertNull(DownloadWebGuard.parse("""{"type":"openBatch","items":{}}"""))
     }
 
     @Test

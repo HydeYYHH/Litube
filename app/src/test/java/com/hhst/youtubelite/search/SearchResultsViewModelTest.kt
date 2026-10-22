@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeoutOrNull
@@ -367,4 +368,70 @@ class SearchResultsViewModelTest {
         assertTrue(results.any { it.progress != null })
         assertEquals(results[0].id, results[0].copy().id)
     }
+    @Test fun paginationAppendsUniqueResultsAndRetriesWithoutReplacingTheList() = runTest {
+        val initial = com.hhst.youtubelite.search.data.FixtureSearchRepository().search("movie")
+        var calls = 0
+        val repository = object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters) = initial.copy(nextCursor = "page-2")
+            override suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage {
+                calls++
+                if (calls == 1) throw java.io.IOException("offline")
+                return initial.copy(results = initial.results.take(1) + initial.results.take(1).map { it.copy(id = "new-result") })
+            }
+        }
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "movie")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.LoadMore)
+        advanceUntilIdle()
+        val failed = vm.uiState.value.content as SearchContent.Results
+        assertTrue(failed.loadMoreFailed)
+        assertEquals(initial.results, failed.page.results)
+        vm.onAction(SearchAction.LoadMore)
+        vm.onAction(SearchAction.LoadMore)
+        advanceUntilIdle()
+        val ready = vm.uiState.value.content as SearchContent.Results
+        assertEquals(2, calls)
+        assertEquals(initial.results.size + 1, ready.page.results.size)
+        assertEquals(null, ready.page.nextCursor)
+        assertFalse(ready.loadMoreFailed)
+    }
+
+    @Test fun changingQueryCancelsOldPaginationAndPreservesTheNewResults() = runTest {
+        val initial = com.hhst.youtubelite.search.data.FixtureSearchRepository().search("movie")
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repository = object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters) = initial.copy(query = query, nextCursor = "page-2")
+            override suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage {
+                gate.await()
+                return initial.copy(query = query)
+            }
+        }
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "old")
+        advanceUntilIdle()
+        vm.onAction(SearchAction.LoadMore)
+        runCurrent()
+        vm.onAction(SearchAction.SubmitSearch("new"))
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("new", (vm.uiState.value.content as SearchContent.Results).page.query)
+    }
+
+    @Test fun changedSessionReloadsResultsWithoutLosingQueryOrFilters() = runTest {
+        var calls = 0
+        val vm = SearchResultsViewModel(repository { query ->
+            calls++
+            SearchPage(query, com.hhst.youtubelite.search.data.FixtureSearchRepository.sampleResults())
+        }, SavedStateHandle(), "movie", signedIn = false)
+        advanceUntilIdle()
+        vm.updateSession(false, 1L)
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals("movie", vm.uiState.value.query)
+        assertTrue(vm.uiState.value.signedInPreview)
+    }
+
+
 }

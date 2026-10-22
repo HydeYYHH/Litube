@@ -59,12 +59,7 @@ fun MainNavigationBar(tag: String, signedIn: Boolean, avatarAsset: String?, sele
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center) {
                     if (signedIn && tab == MainTab.You && avatarAsset != null) {
-                        Image(painterResource(when (avatarAsset) {
-                            "dream" -> R.drawable.sample_dream
-                            "sintel" -> R.drawable.sample_sintel
-                            else -> R.drawable.sample_bunny
-                        }), contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop)
+                        com.hhst.youtubelite.ui.design.Artwork(avatarAsset, modifier = Modifier.size(24.dp).clip(CircleShape),)
                     } else AppIcon(when (tab) {
                         MainTab.Home -> AppIcon.HomeOutline
                         MainTab.Shorts -> AppIcon.Shorts

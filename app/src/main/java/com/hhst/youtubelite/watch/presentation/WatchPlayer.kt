@@ -32,7 +32,7 @@ import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import org.koin.compose.koinInject
 
 @Composable
-internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit) {
+internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = false) {
     val playerViewModel: PlayerViewModel = koinInject()
     val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -97,7 +97,7 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit) {
                 if (surface.value === it) surface.value = null
             },
             zoneEnabled = playerViewModel::gestureEnabled,
-            pip = false,
+            pip = pip,
             onRefreshCastState = playerViewModel::refreshCastState,
             positionState = playerViewModel.positionState,
             bufferedPositionState = playerViewModel.bufferedPositionState,

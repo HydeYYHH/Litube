@@ -10,8 +10,9 @@ plugins {
 
 // File-content providers make the fingerprint respond to source changes with configuration caching.
 val diagnosticDigest = MessageDigest.getInstance("SHA-256")
-listOf(fileTree("src/main"),
-    files("build.gradle.kts", "proguard-rules.pro", "proguard-r8-verification.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts").asFileTree)
+listOf(fileTree("src/main"), fileTree("../external/mediaservicecore/common/src/main"),
+    fileTree("../media-core/src/main"),
+    files("build.gradle.kts", "proguard-rules.pro", "proguard-r8-verification.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts", "../media-core/build.gradle.kts").asFileTree)
     .flatMap { it.files }.sortedBy { it.invariantSeparatorsPath }.forEach { source ->
         diagnosticDigest.update(source.relativeTo(rootDir).invariantSeparatorsPath.toByteArray())
         diagnosticDigest.update(providers.fileContents(layout.projectDirectory.file(source.relativeTo(projectDir).path)).asBytes.get())
@@ -30,7 +31,7 @@ android {
         versionName = "4.0.0-preview01"
         buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
         buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};NewPipe=${libs.newpipe.extractor.get().version}\"")
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.hhst.youtubelite.ContentTestRunner"
     }
 
     buildTypes {
@@ -125,6 +126,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":media-core"))
     implementation(libs.guava)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -136,7 +138,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.javascriptengine)
     implementation(libs.kotlinx.coroutines.android)

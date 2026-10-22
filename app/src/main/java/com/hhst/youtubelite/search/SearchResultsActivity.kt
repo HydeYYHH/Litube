@@ -40,7 +40,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the local results page and observes its navigation requests. */
-class SearchResultsActivity : ComponentActivity() {
+class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var searchViewModel: SearchResultsViewModel
         private set
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
@@ -49,6 +49,8 @@ class SearchResultsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val query = intent.getStringExtra(EXTRA_QUERY).orEmpty()
         val scenario = if (BuildConfig.DEBUG) SearchScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else SearchScenario.Results
@@ -56,7 +58,7 @@ class SearchResultsActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == SearchResultsViewModel::class.java)
-                return SearchResultsViewModel(FixtureSearchRepository(scenario), extras.createSavedStateHandle(), query, scenario) as T
+                return SearchResultsViewModel(if (fixtures) FixtureSearchRepository(scenario) else sources.search, extras.createSavedStateHandle(), query, scenario, if (fixtures) null else com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
             }
         })[SearchResultsViewModel::class.java]
         lifecycleScope.launch {
@@ -77,6 +79,7 @@ class SearchResultsActivity : ComponentActivity() {
                     if (request is SearchNavigationRequest.Channel) {
                         startActivity(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))
                     }
+                    if (request is SearchNavigationRequest.VoiceSearch && !fixtures) openVoiceSearch()
                     if (request is SearchNavigationRequest.Share) shareGateway.share(request.videoId)
                     if (request is SearchNavigationRequest.Playlist) startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@SearchResultsActivity, request.playlistId))
                     if (request is SearchNavigationRequest.SharePlaylist) shareGateway.sharePlaylist(request.playlistId)
@@ -106,6 +109,14 @@ class SearchResultsActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intent.getStringExtra(EXTRA_QUERY)?.let(searchViewModel::updateQuery)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+            searchViewModel.updateSession(session.signedIn, session.generation)
+        }
     }
 
     companion object {

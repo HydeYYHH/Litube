@@ -1,4 +1,4 @@
-package com.hhst.youtubelite.browser
+package com.hhst.youtubelite.core
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.post
 
+import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -42,7 +43,7 @@ import com.hhst.youtubelite.post.presentation.PostDetailScreen
 import com.hhst.youtubelite.post.presentation.PostDetailViewModel
 import kotlinx.coroutines.launch
 
-class PostDetailActivity : ComponentActivity() {
+class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var postDetailViewModel: PostDetailViewModel
         private set
     lateinit var postCommentsViewModel: CommentsViewModel
@@ -59,6 +60,8 @@ class PostDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: "studio"
         val postId = intent.getStringExtra(EXTRA_POST_ID) ?: FixturePostRepository.HOME_POST_ID
@@ -69,7 +72,7 @@ class PostDetailActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == PostDetailViewModel::class.java)
                 return PostDetailViewModel(
-                    FixturePostRepository(scenario),
+                    if (fixtures) FixturePostRepository(scenario) else sources.posts,
                     extras.createSavedStateHandle(),
                     identity,
                     scenario,
@@ -81,12 +84,13 @@ class PostDetailActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == CommentsViewModel::class.java)
                 return CommentsViewModel(
-                    FixturePostCommentsRepository(),
+                    if (fixtures) FixturePostCommentsRepository() else sources.comments(),
                     extras.createSavedStateHandle(),
                     CommentTarget.Post(identity),
                 ) as T
             }
         })[CommentsViewModel::class.java]
+        bindCommentNotices(postCommentsViewModel)
         if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
             postDetailViewModel.onAction(PostDetailAction.Comments)
         }
@@ -128,7 +132,13 @@ class PostDetailActivity : ComponentActivity() {
             BackHandler(onBack = back)
             PostDetailScreen(
                 state,
-                postDetailViewModel::onAction,
+                { action ->
+                    if (!fixtures && action is PostDetailAction.OpenImage) {
+                        state.post?.images?.takeIf { it.isNotEmpty() }?.let {
+                            com.hhst.youtubelite.gallery.GalleryActivity.open(this@PostDetailActivity, it, action.index)
+                        }
+                    } else postDetailViewModel.onAction(action)
+                },
                 back,
                 Modifier.statusBarsPadding().navigationBarsPadding(),
                 commentsState = commentsState,

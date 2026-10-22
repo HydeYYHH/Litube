@@ -52,6 +52,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
     AppTheme {
         BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("home-screen")) {
             val width = maxWidth.value
+            val currentWidth by rememberUpdatedState(width)
             val chipExtraHeight = with(LocalDensity.current) { (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) }
             val chromeTravel = 108f + chipExtraHeight.value
             val grid = rememberLazyGridState()
@@ -126,7 +127,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                             ) {
                                 items(content.page.items.filterNot { state.hideShorts && it is FeedItem.Shorts }, key = { it.id }, span = { if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1) }, contentType = { it.javaClass.simpleName }) { item ->
                                     Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
-                                        FeedCard(item, compact = width < 528, windowWidth = width, onAction)
+                                        FeedCard(item, compact = currentWidth < 528, windowWidth = currentWidth, onAction)
                                     }
                                 }
                                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -138,7 +139,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 }
                             }
                             }
-                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(Color.White)) { ChipStrip(state.selectedChip, onAction) }
+                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(Color.White)) { ChipStrip(state.selectedChip, state.chips, onAction) }
                             Box(Modifier.graphicsLayer { translationY = -48f * chromeOffset * density }.background(Color.White)) { HomeTopBar(onAction) }
                         }
                     }
@@ -224,7 +225,7 @@ private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAc
 }
 
 @Composable
-private fun ChipStrip(selected: String, onAction: (HomeAction) -> Unit) {
+private fun ChipStrip(selected: String, chips: List<String>, onAction: (HomeAction) -> Unit) {
     val extraHeight = with(LocalDensity.current) { (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) }
     LazyRow(Modifier.fillMaxWidth().height(48.dp + extraHeight).testTag("home-chips"), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
@@ -236,7 +237,7 @@ private fun ChipStrip(selected: String, onAction: (HomeAction) -> Unit) {
                 AppIcon(AppIcon.Explore)
             }
         }
-        items(HomeLayout.chips) { chip ->
+        items(chips) { chip ->
             Box(Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).background(if (chip == selected) DesignTokens.Ink else DesignTokens.Surface)
                 .selectable(chip == selected, role = Role.Tab) { onAction(HomeAction.SelectChip(chip)) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center) {

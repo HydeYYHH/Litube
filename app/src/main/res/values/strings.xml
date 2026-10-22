@@ -305,4 +305,5 @@
     <string name="about_save_cancelled">Save canceled</string>
     <string name="about_save_failed">Could not save diagnostics. Choose another location and try again.</string>
     <string name="player_live_unavailable">Live stream unavailable. Try again later.</string>
+    <string name="autoplay">Autoplay</string>
 </resources>

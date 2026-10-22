@@ -27,7 +27,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaStyleNotificationHelper
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.YoutubeThumbnail
 import java.util.concurrent.ExecutorService
@@ -184,7 +184,7 @@ class PlaybackService : Service() {
         // not no-op — the notification's contentIntent does not cover it.
         val sessionActivity = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).apply {
+            Intent(this, WatchActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -287,7 +287,7 @@ class PlaybackService : Service() {
         val current = session ?: return null
         val contentIntent = PendingIntent.getActivity(
             this, 101,
-            Intent(this, MainActivity::class.java).apply {
+            Intent(this, WatchActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

@@ -15,9 +15,9 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
+import com.hhst.youtubelite.player.PlaybackActivity
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -78,8 +78,8 @@ class PipAudioOnlyAndroidTest {
         val oldExtractor = extractorField.get(engine)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
-        var scenario: ActivityScenario<MainActivity>? = null
-        lateinit var host: MainActivity
+        var scenario: ActivityScenario<WatchActivity>? = null
+        lateinit var host: WatchActivity
         fun await(condition: () -> Boolean) {
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 15_000
@@ -96,7 +96,7 @@ class PipAudioOnlyAndroidTest {
             }
         }
         fun selectedVideo() = player.currentTracks.groups.any { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
-        fun params() = MainActivity::class.java.getDeclaredMethod("pipParams").apply { isAccessible = true }.invoke(host) as PictureInPictureParams
+        fun params() = PlaybackActivity::class.java.getDeclaredMethod("pipParams").apply { isAccessible = true }.invoke(host) as PictureInPictureParams
         @Suppress("UNCHECKED_CAST")
         fun actions(): List<RemoteAction> = PictureInPictureParams::class.java.getMethod("getActions").invoke(params()) as List<RemoteAction>
         try {
@@ -105,10 +105,9 @@ class PipAudioOnlyAndroidTest {
             queue.setEnabled(true)
             queue.add(QueueItem("audioPip001", VideoId.watchUrl("audioPip001"), "First"))
             extractorField.set(engine, Extractor(GlobalContext.get().get<HttpDownloader>(), fixtureCache, scope))
-            scenario = ActivityScenario.launch(Intent(Intent.ACTION_VIEW,
-                Uri.parse(VideoId.watchUrl("audioPip001")), app, MainActivity::class.java))
+            scenario = ActivityScenario.launch(WatchActivity.intent(app, "audioPip001"))
             scenario!!.onActivity { host = it }
-            instrumentation.runOnMainSync { model.playVideo(VideoId.watchUrl("audioPip001"), PageOrigin.HOST) }
+            instrumentation.runOnMainSync { model.openVideo("audioPip001") }
             await { player.isPlaying && model.uiState.value.isPlaying && selectedVideo() && engine.snapshot.value.audioTracks.size == 2 }
             assertEquals("hls:en:English original", engine.snapshot.value.audioTrackKey)
             await { !model.uiState.value.hasNext }
@@ -180,7 +179,7 @@ class PipAudioOnlyAndroidTest {
             assertTrue("Media notification must survive", notifications.isNotEmpty())
             assertEquals("hls:en:English original", engine.snapshot.value.audioTrackKey)
             DeviceEvidence.captureScene("issue-331-audio-without-pip")
-            scenario = ActivityScenario.launch(Intent(app, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
+            scenario = ActivityScenario.launch(WatchActivity.intent(app, engine.snapshot.value.videoId!!))
             scenario!!.onActivity { host = it }
             await {
                 val surface = engine.javaClass.getDeclaredField("videoSurface").apply { isAccessible = true }.get(engine) as? SurfaceView

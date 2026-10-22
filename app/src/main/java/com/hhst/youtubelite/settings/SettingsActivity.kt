@@ -69,6 +69,7 @@ class SettingsActivity : ComponentActivity() {
                     preferences = extensionManager.allPreferences()
                 },
                 onAbout = { startActivity(Intent(this@SettingsActivity, AboutActivity::class.java)) },
+                onAdvanced = { startActivity(Intent(this@SettingsActivity, PlaybackSettingsActivity::class.java)) },
                 onOpenNotificationSettings = {
                     val settingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

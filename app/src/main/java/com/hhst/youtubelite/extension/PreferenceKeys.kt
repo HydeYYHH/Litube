@@ -11,6 +11,7 @@ object PreferenceKeys {
     const val REMEMBER_RESIZE_MODE = "remember_resize_mode"
     const val USE_ORIGINAL_TITLE = "use_original_title"
 
+    const val ENABLE_AUTOPLAY = "enable_autoplay"
     const val ENABLE_BACKGROUND_PLAY = "enable_background_play"
     const val ENABLE_PIP = "enable_pip"
     const val ENABLE_IN_APP_MINI_PLAYER = "enable_in_app_mini_player"
@@ -80,6 +81,7 @@ object PreferenceKeys {
         REMEMBER_LAST_POSITION to true,
         REMEMBER_QUALITY to true,
         ENABLE_BACKGROUND_PLAY to true,
+        ENABLE_AUTOPLAY to true,
         ENABLE_PIP to true,
         ENABLE_IN_APP_MINI_PLAYER to true,
         REMEMBER_RESIZE_MODE to false,

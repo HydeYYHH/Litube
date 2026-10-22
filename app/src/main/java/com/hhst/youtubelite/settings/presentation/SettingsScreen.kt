@@ -42,6 +42,7 @@ fun SettingsScreen(
     onOpenNotificationSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onAdvanced: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White).testTag("settings-screen")) {
         SettingsTopBar(page.title, onBack)
@@ -49,7 +50,7 @@ fun SettingsScreen(
             Column(Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()
                 .verticalScroll(rememberScrollState()).testTag("settings-page-${page.argument}")) {
                 when (page) {
-                    SettingsPage.Home -> SettingsHome(onNavigate, onAbout)
+                    SettingsPage.Home -> SettingsHome(onNavigate, onAbout, onAdvanced)
                     SettingsPage.General -> GeneralSettings(preferences, onToggle)
                     SettingsPage.Playback -> PlaybackSettings(preferences, onToggle)
                     SettingsPage.Notifications -> NotificationSettings(notificationsEnabled, onOpenNotificationSettings)
@@ -78,7 +79,7 @@ private fun SettingsTopBar(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun SettingsHome(onNavigate: (SettingsPage) -> Unit, onAbout: () -> Unit) {
+private fun SettingsHome(onNavigate: (SettingsPage) -> Unit, onAbout: () -> Unit, onAdvanced: (() -> Unit)?) {
     SettingsGroup("Preferences")
     SettingsRow("General", "Theme, language and Shorts", tag = "settings-row-general") {
         onNavigate(SettingsPage.General)
@@ -89,6 +90,7 @@ private fun SettingsHome(onNavigate: (SettingsPage) -> Unit, onAbout: () -> Unit
     SettingsRow("Notifications", "System notification access", tag = "settings-row-notifications") {
         onNavigate(SettingsPage.Notifications)
     }
+    if (onAdvanced != null) SettingsRow("Advanced", "Player, gestures, SponsorBlock and backup", tag = "settings-row-advanced", onClick = onAdvanced)
     SettingsGroup("About")
     SettingsRow("About Litube", "Version, updates and diagnostics", tag = "settings-row-about", onClick = onAbout)
 }

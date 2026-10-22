@@ -221,4 +221,21 @@ class HomeViewModelTest {
         val restored = HomeViewModel(FixtureHomeRepository(HomeScenario.Feed), saved, HomeScenario.Feed)
         assertEquals(HomeOverlay.Save("bunny", true, "Films", "Weekend"), restored.uiState.value.overlay)
     }
+    @Test fun changedAccountSessionReloadsOnceEvenWhenBothSessionsAreSignedIn() = runTest {
+        var calls = 0
+        val vm = HomeViewModel(repository { _, _ -> calls++; FixtureHomeRepository.samplePage() }, SavedStateHandle(), HomeScenario.Feed)
+        vm.updateSession(true, 1L)
+        advanceUntilIdle()
+        assertEquals(0, calls)
+        vm.onAction(HomeAction.QueryChanged("preserved query"))
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals("preserved query", vm.uiState.value.query)
+        assertTrue(vm.uiState.value.signedInPreview)
+    }
+
+
 }

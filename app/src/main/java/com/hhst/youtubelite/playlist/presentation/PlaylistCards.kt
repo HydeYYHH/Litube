@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.playlist.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,17 +33,13 @@ import com.hhst.youtubelite.ui.design.*
 
 @Composable
 internal fun PlaylistArtwork(asset: String, modifier: Modifier = Modifier) {
-    Image(painterResource(when (asset) {
-        "dream" -> R.drawable.sample_dream
-        "sintel" -> R.drawable.sample_sintel
-        else -> R.drawable.sample_bunny
-    }), contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
 @Composable
 private fun PlaylistCover(playlist: PlaylistSummary, modifier: Modifier, onOpen: () -> Unit, compact: Boolean = false) {
     Box(modifier.testTag("playlist-cover-${playlist.id}").clickable(role = Role.Button, onClick = onOpen)
-        .semantics { contentDescription = "${playlist.title}, ${playlist.videoCount} videos" }) {
+        .semantics { contentDescription = listOfNotNull(playlist.title, playlist.countLabel).joinToString(", ") }) {
         Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().height(12.dp)
             .background(Color(playlist.accent).copy(alpha = 0.3f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)))
         Box(Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp).fillMaxWidth().height(12.dp)
@@ -53,7 +51,7 @@ private fun PlaylistCover(playlist: PlaylistSummary, modifier: Modifier, onOpen:
                 .padding(horizontal = 4.dp, vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(AppIcon.Playlist, Modifier.size(12.dp), color = Color.White)
                 Spacer(Modifier.width(4.dp))
-                AppText(if (compact) "${playlist.videoCount}" else "${playlist.videoCount} videos",
+                AppText(if (compact && playlist.videoCount != null) "${playlist.videoCount}" else playlist.countLabel.orEmpty(),
                     size = 12, line = 18, color = Color.White, maxLines = 1)
             }
         }
@@ -64,6 +62,7 @@ private fun PlaylistCover(playlist: PlaylistSummary, modifier: Modifier, onOpen:
 fun PlaylistSearchList(
     playlists: List<PlaylistSummary>, width: Float, height: Float, listState: LazyListState,
     onOpen: (String) -> Unit, onOwner: (String) -> Unit, onMenu: (String) -> Unit,
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val viewport = rememberUpdatedState(width to height)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -115,6 +114,7 @@ fun PlaylistSearchList(
                     }
                 }
             }
+            if (footer != null) item(key = "pagination") { footer() }
         }
     }
 }

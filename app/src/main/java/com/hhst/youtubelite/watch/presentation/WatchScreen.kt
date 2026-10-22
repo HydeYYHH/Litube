@@ -2,6 +2,8 @@
 
 package com.hhst.youtubelite.watch.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.text.font.FontWeight
@@ -374,7 +377,7 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
             }
             Spacer(Modifier.height(3.dp))
         }
-        WatchActionBar(video, onAction)
+        WatchActionBar(video, state.actionPending, onAction)
     }
 }
 
@@ -425,7 +428,7 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
 }
 
 @Composable
-private fun WatchActionBar(video: WatchVideo, onAction: (WatchAction) -> Unit) {
+private fun WatchActionBar(video: WatchVideo, pending: Boolean, onAction: (WatchAction) -> Unit) {
     BoxWithConstraints(
         Modifier.fillMaxWidth().height(WatchLayout.ActionBarHeight.dp).testTag("watch-actions"),
     ) {
@@ -445,7 +448,7 @@ private fun WatchActionBar(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                         .semantics { contentDescription = "Go to channel ${video.channel}" },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Artwork(video.artwork, Modifier.size(32.dp).clip(CircleShape))
+                    Artwork(video.avatar ?: video.artwork, Modifier.size(32.dp).clip(CircleShape))
                 }
                 Box(
                     Modifier.widthIn(min = 78.dp).heightIn(min = 32.dp)
@@ -456,7 +459,7 @@ private fun WatchActionBar(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) {
                     AppText(
-                        "Subscribe",
+                        if (video.subscribed) "Subscribed" else "Subscribe",
                         size = 12,
                         line = 16,
                         weight = FontWeight.Medium,
@@ -485,6 +488,10 @@ private fun WatchActionBar(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                             sizeWidth = 48f, sizeHeight = 48f, radius = 24f,
                             offsetX = offsetX, offsetY = 0f,
                             compactSurface = index in 2..4,
+                            selected = (index == 0 && video.rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) ||
+                                (index == 1 && video.rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike),
+                            enabled = index > 1 || !pending,
+                            count = when (index) { 0 -> video.likeCount; 1 -> video.dislikeCount; else -> null },
                             testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")[index]}",
                             onClick = { onAction(action) },
                         )
@@ -507,6 +514,9 @@ private fun WatchSlotButton(
     testTag: String,
     onClick: () -> Unit,
     compactSurface: Boolean = false,
+    count: String? = null,
+    selected: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
@@ -514,9 +524,9 @@ private fun WatchSlotButton(
         Modifier.offset(x = offsetX.dp, y = offsetY.dp)
             .size(sizeWidth.dp, sizeHeight.dp)
             .clip(RoundedCornerShape(radius.dp))
-            .background(if (pressed && !compactSurface) DesignTokens.Surface else Color.Transparent)
-            .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description }
+            .background(if ((pressed || selected) && !compactSurface) DesignTokens.Surface else Color.Transparent)
+            .clickable(enabled = enabled, interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description; this.selected = selected }
             .testTag(testTag),
         contentAlignment = Alignment.Center,
     ) {
@@ -524,6 +534,11 @@ private fun WatchSlotButton(
             Box(Modifier.size(40.dp, 36.dp).clip(RoundedCornerShape(18.dp))
                 .background(if (pressed) DesignTokens.Surface else Color.Transparent)
                 .testTag("$testTag-surface"), contentAlignment = Alignment.Center) { AppIcon(icon) }
+        } else if (count != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AppIcon(icon)
+                AppText(count, size = 10, line = 12, maxLines = 1)
+            }
         } else AppIcon(icon)
     }
 }
@@ -816,7 +831,7 @@ private fun RelatedThumb(
 ) {
     Box(
         modifier.clip(RoundedCornerShape(radius))
-            .clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) }
+            .mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) }
             .semantics { contentDescription = "${item.title}, ${item.duration}" }
             .testTag("watch-thumb-${item.id}"),
     ) {
@@ -845,7 +860,7 @@ private fun RelatedText(
     onAction: (WatchAction) -> Unit,
 ) {
     Column(
-        modifier.clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) },
+        modifier.mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) },
     ) {
         AppText(
             item.title,
@@ -893,7 +908,7 @@ private fun RelatedDetailsAvatar(item: WatchRelated, onAction: (WatchAction) -> 
         .clickable(role = Role.Button) { onAction(WatchAction.OpenChannel(item.channelId)) }
             .semantics { contentDescription = "Go to channel ${item.channel}" },
     ) {
-        Artwork(item.artwork, Modifier.fillMaxSize())
+        Artwork(item.avatar ?: item.artwork, Modifier.fillMaxSize())
     }
 }
 
@@ -906,14 +921,5 @@ private fun RelatedKebab(item: WatchRelated, onAction: (WatchAction) -> Unit) {
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier = Modifier) {
-    Image(
-        painterResource(when (asset) {
-            "dream" -> R.drawable.sample_dream
-            "sintel" -> R.drawable.sample_sintel
-            else -> R.drawable.sample_bunny
-        }),
-        contentDescription = null,
-        modifier = modifier,
-        contentScale = ContentScale.Crop,
-    )
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }

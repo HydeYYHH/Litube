@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.home
 
+import com.hhst.youtubelite.navigation.openContentLink
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -35,7 +36,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the home screen and observes its navigation requests. */
-class HomeActivity : ComponentActivity() {
+class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var homeViewModel: HomeViewModel
         private set
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
@@ -44,20 +45,23 @@ class HomeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val scenario = if (BuildConfig.DEBUG) HomeScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else HomeScenario.Empty
+        val scenario = if (fixtures) HomeScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else HomeScenario.Loading
         homeViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HomeViewModel::class.java)
-                return HomeViewModel(FixtureHomeRepository(scenario), extras.createSavedStateHandle(), scenario) as T
+                return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures) as T
             }
         })[HomeViewModel::class.java]
-        if (intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
+        if (fixtures && intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 homeViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
+                    if (request is HomeNavigationRequest.OpenLink) openContentLink(request.url)
                     if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
                     if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
                     if (request is HomeNavigationRequest.Shorts) startActivity(
@@ -93,6 +97,10 @@ class HomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+            homeViewModel.updateSession(session.signedIn, session.generation)
+        }
         val preferences = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         homeViewModel.setHideShorts(preferences.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_HIDE_SHORTS))
     }
@@ -100,7 +108,7 @@ class HomeActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
+        if (com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent) && intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         receiveLink(intent)
     }
 

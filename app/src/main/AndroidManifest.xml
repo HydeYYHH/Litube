@@ -70,7 +70,7 @@
             </intent-filter>
             <!-- Share sheet "Open with". text/plain is intentionally broad:
                  intent filters cannot match URL content, so non-link shares
-                 are rejected in code (MainActivity toasts "no link found"). -->
+                 are rejected in code (HomeActivity reports "no link found"). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -78,12 +78,14 @@
             </intent-filter>
         </activity>
 
-        <!-- Local search results page; it opens a typed request for every later destination. -->
+        <!-- Native content destinations. -->
         <activity android:name=".playlist.PlaylistActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.YouActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.HistoryActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.PlaylistsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".settings.PlaybackSettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".account.SignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".notifications.NotificationsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
 
@@ -98,9 +100,11 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.App.Home" />
 
-        <!-- Standard video watch page; local fixtures only, typed requests for every action. -->
+        <!-- Video playback and native details. -->
         <activity
             android:name=".watch.WatchActivity"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:exported="false"
             android:theme="@style/Theme.App.Home" />
 
@@ -116,12 +120,6 @@
             android:name=".post.PostDetailActivity"
             android:exported="false"
             android:theme="@style/Theme.App.Home" />
-
-        <!-- Internal browser, playback and download host. -->
-        <activity android:name=".MainActivity" android:exported="false"
-            android:launchMode="singleTask" android:supportsPictureInPicture="true"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
-            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".downloader.ui.DownloadShareActivity"

@@ -55,7 +55,7 @@ object VideoId {
 
     /**
      * `t=` forms: `90`, `90s`, `1m30s`, `1h2m3s`.
-     * Matches player-hook.js `parseTime` (seconds unit may omit the `s`).
+     * Accepts seconds or an hours/minutes/seconds timestamp.
      */
     private fun parseYoutubeTimeSeconds(text: String): Long? {
         val trimmed = text.trim()

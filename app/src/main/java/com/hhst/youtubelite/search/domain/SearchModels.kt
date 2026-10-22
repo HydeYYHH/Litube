@@ -3,7 +3,8 @@ package com.hhst.youtubelite.search.domain
 data class SearchPage(val query: String, val results: List<SearchResult>,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
     val channels: List<SearchChannel> = emptyList(),
-    val shorts: List<SearchResult> = emptyList())
+    val shorts: List<SearchResult> = emptyList(),
+    val nextCursor: String? = null)
 
 data class SearchChannel(val id: String, val name: String, val handle: String, val subscribers: String, val artwork: String)
 
@@ -20,6 +21,7 @@ data class SearchResult(
     val progress: Float? = null,
     /** Fixture-only age used by the upload-date filter; production data would carry this separately. */
     val uploadedDays: Int? = null,
+    val avatar: String? = null,
 )
 
 /** The two groups the mobile results page exposes behind its filter button. */
@@ -55,12 +57,13 @@ sealed interface SearchOverlay {
 }
 
 interface SearchRepository {
+    suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage = SearchPage(query, emptyList())
     suspend fun search(query: String, filters: SearchFilters = SearchFilters()): SearchPage
 }
 
 sealed interface SearchContent {
     data object Loading : SearchContent
-    data class Results(val page: SearchPage) : SearchContent
+    data class Results(val page: SearchPage, val loadingMore: Boolean = false, val loadMoreFailed: Boolean = false) : SearchContent
     data class Empty(val query: String) : SearchContent
     data object Failed : SearchContent
 }
@@ -118,6 +121,7 @@ sealed interface SearchAction {
     data class SelectUploadDate(val date: SearchUploadDate) : SearchAction
     data object VoiceSearch : SearchAction
     data object OpenPageMenu : SearchAction
+    data object LoadMore : SearchAction
     data object Retry : SearchAction
 }
 

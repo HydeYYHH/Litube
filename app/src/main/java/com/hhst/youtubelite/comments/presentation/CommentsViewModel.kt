@@ -3,6 +3,8 @@ package com.hhst.youtubelite.comments.presentation
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hhst.youtubelite.comments.domain.CommentActions
+import com.hhst.youtubelite.comments.domain.CommentNotice
 import com.hhst.youtubelite.comments.domain.CommentTarget
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentMenuAction
@@ -24,7 +26,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Panel state for one video. Sorting and expanded threads survive recreation through
- * [SavedStateHandle]; the visible list itself is refetched from the local fixture.
+ * [SavedStateHandle]; the repository supplies the visible list.
  */
 class CommentsViewModel(
     private val repository: CommentsRepository,
@@ -33,7 +35,7 @@ class CommentsViewModel(
 ) : ViewModel() {
     constructor(repository: CommentsRepository, savedState: SavedStateHandle, videoId: String) :
         this(repository, savedState, CommentTarget.Video(videoId))
-    private val target: CommentTarget = when (savedState.get<String>("commentsTargetKind")) {
+    private var target: CommentTarget = when (savedState.get<String>("commentsTargetKind")) {
         "post" -> CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity(
             savedState.get<String>("commentsTargetChannel").orEmpty(), savedState.get<String>("commentsTargetId").orEmpty()))
         "video" -> CommentTarget.Video(savedState.get<String>("commentsTargetId").orEmpty())
@@ -43,7 +45,7 @@ class CommentsViewModel(
         CommentSort.valueOf(savedState.get<String>(KEY_SORT) ?: CommentSort.Top.name)
     }.getOrDefault(CommentSort.Top)
     private val expanded = savedState.get<ArrayList<String>>(KEY_EXPANDED)?.toSet() ?: emptySet()
-    private val videoId = (target as? CommentTarget.Video)?.id.orEmpty()
+    private var videoId = (target as? CommentTarget.Video)?.id.orEmpty()
     private val restoredOverlay: CommentsOverlay = when (savedState.get<String>(KEY_OVERLAY)) {
         "sort" -> CommentsOverlay.SortMenu
         "thread" -> savedState.get<String>(KEY_THREAD)?.let { CommentsOverlay.ThreadMenu(it) }
@@ -76,9 +78,15 @@ class CommentsViewModel(
     private val navigation = Channel<CommentNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
 
+    private val notices = Channel<CommentNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
+    private var actionJob: Job? = null
+    private val actions = repository as? CommentActions
+
     private var loadJob: Job? = null
     private var pageJob: Job? = null
     private var generation = 0
+    private val replyJobs = mutableMapOf<String, Job>()
 
     init {
         when (val content = this.target) {
@@ -99,7 +107,24 @@ class CommentsViewModel(
         load()
     }
 
+    fun selectVideo(id: String) {
+        if (target == CommentTarget.Video(id)) return
+        actionJob?.cancel()
+        target = CommentTarget.Video(id)
+        videoId = id
+        savedState["commentsTargetKind"] = "video"
+        savedState["commentsTargetId"] = id
+        savedState[KEY_VIDEO] = id
+        savedState[KEY_EXPANDED] = arrayListOf<String>()
+        savedState[KEY_SORT] = CommentSort.Top.name
+        savedState[KEY_DRAFT] = ""
+        _state.value = CommentsUiState(videoId = id, target = target)
+        persistOverlay(CommentsOverlay.None)
+        load()
+    }
+
     fun onAction(action: CommentAction) {
+        if (_state.value.actionPending && action != CommentAction.Retry) return
         when (action) {
             CommentAction.Retry -> load()
             CommentAction.LoadMore -> loadMore()
@@ -117,7 +142,7 @@ class CommentsViewModel(
             is CommentAction.ToggleReplies -> toggleReplies(action.commentId)
             CommentAction.Compose -> openComposer(null, null, editing = false)
             is CommentAction.DraftChanged -> {
-                if (_state.value.overlay !is CommentsOverlay.Composer) return
+                if (_state.value.overlay !is CommentsOverlay.Composer || _state.value.actionPending) return
                 savedState[KEY_DRAFT] = action.text
                 _state.update { it.copy(draft = action.text) }
             }
@@ -131,9 +156,9 @@ class CommentsViewModel(
             }
             CommentAction.ConfirmDelete -> confirmDelete()
             CommentAction.CancelDelete -> overlay(CommentsOverlay.None)
-            is CommentAction.LikeThread -> navigation.trySend(CommentNavigationRequest.LikeComment(target, action.commentId))
-            is CommentAction.DislikeThread -> navigation.trySend(CommentNavigationRequest.DislikeComment(target, action.commentId))
-            is CommentAction.ReportThread -> navigation.trySend(
+            is CommentAction.LikeThread -> dispatch(CommentNavigationRequest.LikeComment(target, action.commentId))
+            is CommentAction.DislikeThread -> dispatch(CommentNavigationRequest.DislikeComment(target, action.commentId))
+            is CommentAction.ReportThread -> dispatch(
                 CommentNavigationRequest.ReportComment(target, action.commentId, action.commentId),
             )
             is CommentAction.OpenThreadMenu -> {
@@ -146,9 +171,9 @@ class CommentsViewModel(
                 action.commentId.takeUnless { it == action.threadId },
                 editing = false,
             )
-            is CommentAction.LikeReply -> navigation.trySend(CommentNavigationRequest.LikeComment(target, action.replyId))
-            is CommentAction.DislikeReply -> navigation.trySend(CommentNavigationRequest.DislikeComment(target, action.replyId))
-            is CommentAction.ReportReply -> navigation.trySend(
+            is CommentAction.LikeReply -> dispatch(CommentNavigationRequest.LikeComment(target, action.replyId))
+            is CommentAction.DislikeReply -> dispatch(CommentNavigationRequest.DislikeComment(target, action.replyId))
+            is CommentAction.ReportReply -> dispatch(
                 CommentNavigationRequest.ReportComment(target, action.commentId, action.replyId),
             )
             is CommentAction.OpenReplyMenu -> {
@@ -192,7 +217,7 @@ class CommentsViewModel(
             CommentMenuAction.Reply -> openComposer(threadId, replyId, editing = false)
             CommentMenuAction.Report -> {
                 overlay(CommentsOverlay.None)
-                navigation.trySend(
+                dispatch(
                     CommentNavigationRequest.ReportComment(target, threadId, replyId ?: threadId),
                 )
             }
@@ -225,6 +250,7 @@ class CommentsViewModel(
     }
 
     private fun closeComposer() {
+        if (_state.value.actionPending) return
         savedState[KEY_DRAFT] = ""
         _state.update { it.copy(draft = "") }
         overlay(CommentsOverlay.None)
@@ -237,23 +263,46 @@ class CommentsViewModel(
         val threadId = composer.threadId
         val commentId = composer.replyId ?: threadId
         if (threadId == null || commentId == null) {
-            navigation.trySend(CommentNavigationRequest.SubmitComment(target, body))
+            dispatch(CommentNavigationRequest.SubmitComment(target, body))
         } else if (composer.editing) {
-            navigation.trySend(CommentNavigationRequest.EditComment(target, threadId, commentId, body))
+            dispatch(CommentNavigationRequest.EditComment(target, threadId, commentId, body))
         } else {
-            navigation.trySend(CommentNavigationRequest.SubmitReply(target, threadId, commentId, body))
+            dispatch(CommentNavigationRequest.SubmitReply(target, threadId, commentId, body))
         }
-        closeComposer()
+        if (actions == null) closeComposer()
     }
 
     private fun confirmDelete() {
         val confirm = _state.value.overlay as? CommentsOverlay.DeleteConfirm ?: return
-        navigation.trySend(
+        dispatch(
             CommentNavigationRequest.DeleteComment(
                 target, confirm.threadId, confirm.replyId ?: confirm.threadId,
             ),
         )
-        overlay(CommentsOverlay.None)
+        if (actions == null) overlay(CommentsOverlay.None)
+    }
+
+    private fun dispatch(request: CommentNavigationRequest) {
+        val service = actions ?: run { navigation.trySend(request); return }
+        if (_state.value.actionPending) return
+        val requestedTarget = target
+        val closesEditor = request is CommentNavigationRequest.SubmitComment ||
+            request is CommentNavigationRequest.SubmitReply || request is CommentNavigationRequest.EditComment ||
+            request is CommentNavigationRequest.DeleteComment
+        _state.update { it.copy(actionPending = true) }
+        actionJob = viewModelScope.launch {
+            try {
+                service.perform(request)
+                if (target != requestedTarget) return@launch
+                _state.update { it.copy(actionPending = false) }
+                if (closesEditor) closeComposer()
+                load()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.send(CommentNotice.SignIn) }
+            catch (_: UnsupportedOperationException) { notices.send(CommentNotice.Message("This action is not available.")) }
+            catch (_: Exception) { notices.send(CommentNotice.Message("Could not confirm the change. Please refresh and try again.")) }
+            finally { if (target == requestedTarget) _state.update { it.copy(actionPending = false) } }
+        }
     }
 
     private fun overlay(next: CommentsOverlay) {
@@ -314,12 +363,38 @@ class CommentsViewModel(
 
     private fun toggleReplies(commentId: String) {
         val current = _state.value.expanded
-        val next = if (commentId in current) current - commentId else current + commentId
+        val next = if (commentId in current && findThread(commentId)?.repliesFailed != true) current - commentId else current + commentId
         savedState[KEY_EXPANDED] = ArrayList(next)
         _state.update { it.copy(expanded = next) }
+        requestReplies(commentId, next)
+    }
+
+    private fun requestReplies(commentId: String, next: Set<String> = _state.value.expanded) {
+        val thread = findThread(commentId) ?: return
+        if (commentId !in next || thread.replyKey == null || thread.replies.isNotEmpty() || replyJobs[commentId]?.isActive == true) return
+        val requestGeneration = generation
+        updateThread(commentId) { it.copy(repliesLoading = true, repliesFailed = false) }
+        replyJobs[commentId] = viewModelScope.launch {
+            try {
+                val replies = repository.replies(target, thread)
+                if (requestGeneration == generation) updateThread(commentId) { it.copy(replies = replies, repliesLoading = false) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) updateThread(commentId) { it.copy(repliesLoading = false, repliesFailed = true) }
+            }
+        }
+    }
+
+    private fun updateThread(id: String, transform: (CommentThread) -> CommentThread) {
+        _state.update { state ->
+            val content = state.content as? CommentsContent.Ready ?: return@update state
+            state.copy(content = content.copy(threads = content.threads.map { if (it.id == id) transform(it) else it }))
+        }
     }
 
     private fun load() {
+        replyJobs.values.forEach(Job::cancel)
+        replyJobs.clear()
         loadJob?.cancel()
         pageJob?.cancel()
         val requestGeneration = ++generation
@@ -360,6 +435,7 @@ class CommentsViewModel(
             }
             savedState[KEY_LOADED] = threads.size
             _state.update { it.copy(content = content, total = if (content == CommentsContent.Empty) "0" else total) }
+            _state.value.expanded.forEach { requestReplies(it) }
         }
     }
 
@@ -397,10 +473,11 @@ class CommentsViewModel(
                     ),
                 )
             }
+            _state.value.expanded.forEach { requestReplies(it) }
         }
     }
 
-    override fun onCleared() { navigation.close() }
+    override fun onCleared() { navigation.close(); notices.close() }
 
     private companion object {
         const val KEY_VIDEO = "commentsVideoId"

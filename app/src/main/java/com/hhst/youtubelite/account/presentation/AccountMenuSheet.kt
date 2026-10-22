@@ -45,13 +45,7 @@ fun AccountMenuHeader(account: AccountProfile, onOpenChannel: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape)) {
-            Image(
-                painterResource(when (account.avatar) {
-                    "dream" -> R.drawable.sample_dream
-                    "sintel" -> R.drawable.sample_sintel
-                    else -> R.drawable.sample_bunny
-                }),
-                contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+            com.hhst.youtubelite.ui.design.Artwork(account.avatar, modifier = Modifier.fillMaxSize(),
             )
         }
         Spacer(Modifier.width(12.dp))

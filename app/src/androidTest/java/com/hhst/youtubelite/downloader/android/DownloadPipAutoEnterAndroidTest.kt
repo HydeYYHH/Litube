@@ -10,7 +10,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.downloader.core.DownloadShareOnce
 import com.hhst.youtubelite.downloader.ui.DownloadActionActivity
@@ -33,7 +33,7 @@ import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 /**
- * API 31+ auto-PiP: MainActivity.setPictureInPictureParams(setAutoEnterEnabled)
+ * API 31+ auto-PiP: WatchActivity.setPictureInPictureParams(setAutoEnterEnabled)
  * must stay off while DownloadActivity / sheet / share trampolines hold
  * [PipAutoEnter.suppress], then restore from [PreferenceKeys.ENABLE_PIP].
  *
@@ -68,14 +68,14 @@ class DownloadPipAutoEnterAndroidTest {
 
     @Test
     fun mainAutoEnter_offForManagerSheetShare_restoresWithEnablePipPref() {
-        ActivityScenario.launch(MainActivity::class.java).use { main ->
+        ActivityScenario.launch(WatchActivity::class.java).use { main ->
             instrumentation.waitForIdleSync()
             main.onActivity { host ->
                 host.setPlayerPipEligible(true)
                 assertFalse("suppress must be clear before auto-enter", PipAutoEnter.isSuppressed())
                 assertTrue(PipAutoEnter.shouldAutoEnter(eligible = true, sdk = sdk()))
                 assertTrue(
-                    "eligible MainActivity must setAutoEnterEnabled " +
+                    "eligible WatchActivity must setAutoEnterEnabled " +
                         "pushError=${PipAutoEnter.lastPushError} " +
                         "requested=${PipAutoEnter.lastRequestedAutoEnter} " +
                         "paramsOn=${PipAutoEnter.isAutoEnterEnabled(host)}",
@@ -140,10 +140,10 @@ class DownloadPipAutoEnterAndroidTest {
     }
 
     private fun openAndFinishOverlay(
-        main: ActivityScenario<MainActivity>,
+        main: ActivityScenario<WatchActivity>,
         overlayClass: String,
         playerEligible: Boolean = true,
-        launch: (MainActivity) -> Unit,
+        launch: (WatchActivity) -> Unit,
     ) {
         val monitor = instrumentation.addMonitor(overlayClass, null, false)
         var overlay: Activity? = null
@@ -179,7 +179,7 @@ class DownloadPipAutoEnterAndroidTest {
             !PipAutoEnter.isSuppressed()
     }
 
-    private fun assertRestoredOn(main: ActivityScenario<MainActivity>) {
+    private fun assertRestoredOn(main: ActivityScenario<WatchActivity>) {
         main.onActivity { host ->
             assertFalse(PipAutoEnter.isSuppressed())
             assertTrue(PipAutoEnter.shouldAutoEnter(eligible = true, sdk = sdk()))

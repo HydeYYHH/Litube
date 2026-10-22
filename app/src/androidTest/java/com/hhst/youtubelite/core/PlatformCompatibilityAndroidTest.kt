@@ -16,7 +16,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.extractor.ExtractionTestActivity
 import com.hhst.youtubelite.player.service.PlaybackService
 import com.hhst.youtubelite.player.surface.PlayerWindowHost
@@ -41,7 +41,7 @@ class PlatformCompatibilityAndroidTest {
     @Test fun supportedDevicesEnterManualPip() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(PipSupport.isSupported(context))
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(WatchActivity::class.java).use { scenario ->
             scenario.onActivity { host ->
                 PlayerWindowHost(host, host.getSystemService(AudioManager::class.java), {}, { true }, { null }, { 1280 to 720 })
                     .onPip()
@@ -115,7 +115,7 @@ class PlatformCompatibilityAndroidTest {
     @Test fun unsupportedPipIsHiddenAndAllAutomaticUpdatesAreSafe() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(!PipSupport.isSupported(context))
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(WatchActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val model = GlobalContext.get().get<PlayerViewModel>()
                 model.refreshPipAvailability()
@@ -136,7 +136,7 @@ class PlatformCompatibilityAndroidTest {
     @Test fun supportedDevicePublishesPipAvailability() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assumeTrue(PipSupport.isSupported(context))
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(WatchActivity::class.java).use { scenario ->
             scenario.onActivity {
                 val model = GlobalContext.get().get<PlayerViewModel>()
                 val prefs = GlobalContext.get().get<ExtensionManager>()

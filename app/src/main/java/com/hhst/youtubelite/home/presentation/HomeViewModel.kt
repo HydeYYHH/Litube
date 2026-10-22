@@ -18,12 +18,13 @@ class HomeViewModel(
     private val repository: HomeRepository,
     private val savedState: SavedStateHandle,
     scenario: HomeScenario = HomeScenario.Empty,
+    loadOnStart: Boolean = false,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
-        selectedChip = savedState["chip"] ?: "All",
+        selectedChip = savedState.get<String>("chip")?.takeIf { it in repository.filters } ?: "All",
         signedInPreview = savedState.get<Boolean>("signedInPreview") ?: (scenario != HomeScenario.Empty),
-        overlay = restoreOverlay(),
+        overlay = restoreOverlay(), chips = repository.filters,
     ))
     val uiState = _state.asStateFlow()
     private val navigation = Channel<HomeNavigationRequest>(Channel.BUFFERED)
@@ -31,11 +32,25 @@ class HomeViewModel(
     private var loadJob: Job? = null
     private var generation = 0
 
+    init { if (loadOnStart) load(append = false) }
+
     fun setHideShorts(hidden: Boolean) { _state.update { it.copy(hideShorts = hidden) } }
 
     fun setSignedInPreview(signedIn: Boolean) {
         savedState["signedInPreview"] = signedIn
         _state.update { it.copy(signedInPreview = signedIn) }
+    }
+
+    private var sessionKey: Long? = null
+
+    fun updateSession(signedIn: Boolean, key: Long) {
+        val changed = sessionKey != null && sessionKey != key
+        sessionKey = key
+        setSignedInPreview(signedIn)
+        if (changed) {
+            overlay(HomeOverlay.None)
+            load(append = false)
+        }
     }
 
     fun onAction(action: HomeAction) {
@@ -53,7 +68,7 @@ class HomeViewModel(
                 navigation.trySend(HomeNavigationRequest.Search(action.query.trim()))
             }
             is HomeAction.SelectChip -> {
-                if (action.chip == uiState.value.selectedChip) return
+                if (action.chip == uiState.value.selectedChip || action.chip !in uiState.value.chips) return
                 savedState["chip"] = action.chip
                 _state.update { it.copy(selectedChip = action.chip) }
                 load(append = false)

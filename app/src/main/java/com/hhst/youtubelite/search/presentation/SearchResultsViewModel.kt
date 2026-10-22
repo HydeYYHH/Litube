@@ -19,6 +19,7 @@ class SearchResultsViewModel(
     private val savedState: SavedStateHandle,
     query: String,
     scenario: SearchScenario = SearchScenario.Results,
+    private var signedIn: Boolean? = null,
 ) : ViewModel() {
     private val restoredQuery = savedState.get<String>("query") ?: query
     private val restoredFilters = SearchFilters(
@@ -40,7 +41,7 @@ class SearchResultsViewModel(
             overlay = restoredOverlay,
             draftQuery = savedState["draftQuery"] ?: restoredQuery,
             filters = restoredFilters,
-            signedInPreview = restoredFilters.type == SearchResultType.All,
+            signedInPreview = signedIn ?: (restoredFilters.type == SearchResultType.All),
             filtersOpen = savedState[KEY_FILTERS_OPEN] ?: (savedState.get<String>(KEY_OVERLAY) == "filters"),
         )
     )
@@ -49,6 +50,19 @@ class SearchResultsViewModel(
     val navigationRequests = navigation.receiveAsFlow()
     private var loadJob: Job? = null
     private var generation = 0
+    private var pageJob: Job? = null
+    private var sessionKey: Long? = null
+
+    fun updateSession(signedIn: Boolean, key: Long) {
+        val changed = sessionKey != null && sessionKey != key
+        sessionKey = key
+        this.signedIn = signedIn
+        _state.update { it.copy(signedInPreview = signedIn) }
+        if (changed) {
+            overlay(SearchOverlay.None)
+            load()
+        }
+    }
 
     init {
         savedState["query"] = _state.value.query
@@ -60,6 +74,7 @@ class SearchResultsViewModel(
 
     fun onAction(action: SearchAction) {
         when (action) {
+            SearchAction.LoadMore -> loadMore()
             SearchAction.OpenSearch -> editSearch(true, uiState.value.query)
             SearchAction.CloseSearch -> editSearch(false, uiState.value.draftQuery)
             is SearchAction.QueryChanged -> editSearch(true, action.query)
@@ -117,7 +132,7 @@ class SearchResultsViewModel(
         if (uiState.value.filters.type == type) return
         val filters = uiState.value.filters.copy(type = type)
         persistFilters(filters)
-        _state.update { it.copy(filters = filters, signedInPreview = type == SearchResultType.All) }
+        _state.update { it.copy(filters = filters, signedInPreview = signedIn ?: (type == SearchResultType.All)) }
         load()
     }
 
@@ -172,18 +187,47 @@ class SearchResultsViewModel(
         val query = uiState.value.query
         val filters = uiState.value.filters
         loadJob?.cancel()
+        pageJob?.cancel()
         val requestGeneration = ++generation
         _state.update { it.copy(content = SearchContent.Loading) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.search(query, filters)
                 if (requestGeneration != generation) return@launch
-                _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty() && page.channels.isEmpty()) SearchContent.Empty(query) else SearchContent.Results(page)) }
+                _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty() && page.channels.isEmpty() && page.shorts.isEmpty() && page.nextCursor == null) SearchContent.Empty(query) else SearchContent.Results(page)) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = SearchContent.Failed) }
+            }
+        }
+    }
+
+    private fun loadMore() {
+        val ready = _state.value.content as? SearchContent.Results ?: return
+        val cursor = ready.page.nextCursor ?: return
+        if (ready.loadingMore) return
+        val requestedGeneration = generation
+        val query = _state.value.query
+        val filters = _state.value.filters
+        _state.update { it.copy(content = ready.copy(loadingMore = true, loadMoreFailed = false)) }
+        pageJob = viewModelScope.launch {
+            try {
+                val page = repository.next(query, filters, cursor)
+                if (requestedGeneration != generation) return@launch
+                if (page.nextCursor == cursor) throw java.io.IOException("repeated_cursor")
+                val combined = ready.page.copy(
+                    results = (ready.page.results + page.results).distinctBy { it.id },
+                    playlists = (ready.page.playlists + page.playlists).distinctBy { it.id },
+                    channels = (ready.page.channels + page.channels).distinctBy { it.id },
+                    shorts = (ready.page.shorts + page.shorts).distinctBy { it.id },
+                    nextCursor = page.nextCursor,
+                )
+                _state.update { it.copy(content = SearchContent.Results(combined)) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestedGeneration == generation) _state.update { it.copy(content = ready.copy(loadMoreFailed = true)) }
             }
         }
     }

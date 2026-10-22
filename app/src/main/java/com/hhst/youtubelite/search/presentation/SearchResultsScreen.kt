@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.search.presentation
 
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -55,11 +57,13 @@ fun SearchResultsScreen(
             val width = maxWidth.value
             val height = maxHeight.value
             val listState = rememberLazyListState()
+            val shortsState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
             // A new query or filter starts a new list; restoring the page keeps its scroll.
             var appliedQuery by remember { mutableStateOf(state.query) }
             var appliedFilters by remember { mutableStateOf(state.filters) }
             LaunchedEffect(state.query, state.filters) {
                 if (state.query != appliedQuery || state.filters != appliedFilters) {
+                    shortsState.scrollToItem(0)
                     appliedQuery = state.query
                     appliedFilters = state.filters
                     if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -67,6 +71,11 @@ fun SearchResultsScreen(
                     }
                 }
             }
+            val ready = state.content as? SearchContent.Results
+            val footer: (@Composable () -> Unit)? = if (ready != null &&
+                (ready.page.nextCursor != null || ready.loadingMore || ready.loadMoreFailed)) {
+                { com.hhst.youtubelite.ui.components.PagingFooter(ready.loadingMore, ready.loadMoreFailed) { onAction(SearchAction.LoadMore) } }
+            } else null
             val backgroundHidden = state.searchOpen || state.overlay is SearchOverlay.ItemMenu || state.overlay is SearchOverlay.PlaylistMenu
             Column(Modifier.fillMaxSize().then(if (backgroundHidden) Modifier.clearAndSetSemantics {} else Modifier)) {
                 SearchTopBar(state.query, onAction, onBack)
@@ -79,12 +88,12 @@ fun SearchResultsScreen(
                         is SearchContent.Results -> if (state.filters.type == SearchResultType.Playlists)
                             com.hhst.youtubelite.playlist.presentation.PlaylistSearchList(content.page.playlists, width, height, listState,
                                 { onAction(SearchAction.OpenPlaylist(it)) }, { onAction(SearchAction.OpenChannel(it)) },
-                                { onAction(SearchAction.OpenPlaylistMenu(it)) })
+                                { onAction(SearchAction.OpenPlaylistMenu(it)) }, footer)
                             else if (state.filters.type == SearchResultType.Channels)
-                                ChannelResultsList(content.page.channels, listState, onAction)
+                                ChannelResultsList(content.page.channels, listState, onAction, footer)
                             else if (state.filters.type == SearchResultType.Shorts)
-                                ShortsResultsList(content.page.shorts, listState, onAction)
-                            else SearchList(content.page.results, width, height, listState, onAction)
+                                ShortsResultsList(content.page.shorts, shortsState, onAction, footer)
+                            else SearchList(content.page.results, width, height, listState, onAction, footer)
                     }
                 }
                 SearchNavigationBar(state.signedInPreview, onAction)
@@ -239,6 +248,7 @@ private fun SearchList(
     height: Float,
     listState: LazyListState,
     onAction: (SearchAction) -> Unit,
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val viewport = rememberUpdatedState(width to height)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -258,6 +268,7 @@ private fun SearchList(
                     ListResultRow(result, itemWidth, itemHeight, onAction)
                 } else StackedResultRow(result, itemWidth, itemHeight, onAction)
             }
+            if (footer != null) item(key = "pagination") { footer() }
         }
     }
 }
@@ -309,7 +320,7 @@ private fun ResultThumbnail(
     onAction: (SearchAction) -> Unit,
 ) {
     Box(modifier.testTag("search-thumb-${result.id}").clip(RoundedCornerShape(radius))
-        .clickable(role = Role.Button) { onAction(SearchAction.OpenResult(result.id)) }
+        .mediaActions(MediaActionItem(result.id, result.title, result.channel, result.artwork)) { onAction(SearchAction.OpenResult(result.id)) }
         .semantics { contentDescription = "${result.title}, ${result.duration}" }) {
         Artwork(result.artwork, Modifier.fillMaxSize())
         result.progress?.let { progress ->
@@ -366,7 +377,7 @@ private fun ChannelAvatar(result: SearchResult, modifier: Modifier, onAction: (S
     Box(modifier.size(40.dp).clip(CircleShape).testTag("search-channel-${result.id}")
         .clickable(role = Role.Button) { onAction(SearchAction.OpenChannel(result.channelId)) }
         .semantics { contentDescription = "Go to channel ${result.channel}" }) {
-        Artwork(result.artwork, Modifier.fillMaxSize())
+        Artwork(result.avatar ?: result.artwork, Modifier.fillMaxSize())
     }
 }
 
@@ -379,11 +390,7 @@ private fun ResultMenu(result: SearchResult, size: Dp, onAction: (SearchAction) 
 
 @Composable
 private fun Artwork(asset: String, modifier: Modifier = Modifier) {
-    Image(painterResource(when (asset) {
-        "dream" -> R.drawable.sample_dream
-        "sintel" -> R.drawable.sample_sintel
-        else -> R.drawable.sample_bunny
-    }), contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
 @Composable

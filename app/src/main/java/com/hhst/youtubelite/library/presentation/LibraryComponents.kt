@@ -2,6 +2,8 @@ package com.hhst.youtubelite.library.presentation
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import com.hhst.youtubelite.ui.components.mediaActions
+import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,11 +37,7 @@ import com.hhst.youtubelite.ui.design.*
 
 @Composable
 internal fun LibraryArtwork(asset: String, modifier: Modifier = Modifier) {
-    Image(painterResource(when (asset) {
-        "dream" -> R.drawable.sample_dream
-        "sintel" -> R.drawable.sample_sintel
-        else -> R.drawable.sample_bunny
-    }), contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
+    com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
 /** The 48px message card reused for signed-out, empty and failed states. */
@@ -110,7 +108,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
     Row(Modifier.fillMaxWidth().heightIn(min = 90.dp).testTag("history-item-${entry.id}")) {
         Box(Modifier.padding(start = 12.dp).width(160.dp).height(90.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onOpen)
+            .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)
             .semanticsLabel("${entry.title}, ${entry.duration}")) {
             LibraryArtwork(entry.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(5.dp)
@@ -121,7 +119,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
         }
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Column(Modifier.padding(start = 8.dp, end = 48.dp)
-                .clickable(role = Role.Button, onClick = onOpen)) {
+                .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)) {
                 AppText(entry.title, size = 14, exactLineHeight = 17.5.sp, maxLines = if (compact) 3 else 1)
                 AppText(entry.author, size = 12, line = 15, color = DesignTokens.Secondary, maxLines = 1)
                 if (entry.views.isNotEmpty()) {
@@ -151,7 +149,7 @@ internal fun PlaylistShelf(playlists: List<PlaylistSummary>, onOpen: (String) ->
                         .padding(horizontal = 4.dp, vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
                         AppIcon(AppIcon.Playlist, Modifier.size(12.dp), color = Color.White)
                         Spacer(Modifier.width(4.dp))
-                        AppText("${playlist.videoCount}", size = 12, line = 18, color = Color.White, maxLines = 1)
+                        AppText(playlist.videoCount?.toString() ?: playlist.countLabel.orEmpty(), size = 12, line = 18, color = Color.White, maxLines = 1)
                     }
                 }
                 AppText(playlist.title, Modifier.padding(top = 6.dp), size = 14, line = 20, weight = FontWeight.Medium, maxLines = 1)
@@ -167,7 +165,7 @@ internal fun HistoryShelf(entries: List<HistoryEntry>, onOpen: (String) -> Unit)
         horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         items(entries, key = { it.id }) { entry ->
             Column(Modifier.width(175.dp).testTag("library-history-${entry.id}")
-                .clickable(role = Role.Button) { onOpen(entry.videoId) }) {
+                .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork)) { onOpen(entry.videoId) }) {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp))) {
                     LibraryArtwork(entry.artwork, Modifier.fillMaxSize())
                     entry.progress?.let { progress ->

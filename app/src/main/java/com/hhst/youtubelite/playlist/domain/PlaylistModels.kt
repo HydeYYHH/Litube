@@ -5,12 +5,15 @@ data class PlaylistSummary(
     val title: String,
     val owner: String,
     val channelId: String,
-    val videoCount: Int,
+    val videoCount: Int?,
     val artwork: String,
     val views: String,
     val updatedDays: Int,
     val accent: Long = 0xFF2D4F72,
-)
+    val videoCountText: String? = null,
+) {
+    val countLabel: String? get() = videoCountText ?: videoCount?.let { "$it videos" }
+}
 
 data class PlaylistEntry(
     val id: String,
@@ -70,6 +73,7 @@ sealed interface PlaylistAction {
     data class VideoMenuAction(val action: PlaylistVideoAction) : PlaylistAction
     data class Destination(val destination: PlaylistDestination) : PlaylistAction
     data object VoiceSearch : PlaylistAction
+    data object Download : PlaylistAction
 }
 
 enum class PlaylistVideoAction(val label: String) {
@@ -86,6 +90,7 @@ sealed interface PlaylistNavigationRequest {
     data class VideoAction(val playlistId: String, val entryId: String, val videoId: String, val action: PlaylistVideoAction) : PlaylistNavigationRequest
     data class Destination(val destination: PlaylistDestination) : PlaylistNavigationRequest
     data object VoiceSearch : PlaylistNavigationRequest
+    data class Download(val playlistId: String) : PlaylistNavigationRequest
 }
 
 object PlaylistLayout {

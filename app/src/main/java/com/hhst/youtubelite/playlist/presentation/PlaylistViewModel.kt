@@ -70,6 +70,10 @@ class PlaylistViewModel(
                         overlay(PlaylistOverlay.None)
                         if (page.entries.isNotEmpty()) send(PlaylistNavigationRequest.Queue(id, page.entries.map { it.videoId }, action == PlaylistAction.Shuffle))
                     }
+                    PlaylistAction.Download -> {
+                        overlay(PlaylistOverlay.None)
+                        send(PlaylistNavigationRequest.Download(id))
+                    }
                     PlaylistAction.Save -> send(PlaylistNavigationRequest.Save(id))
                     PlaylistAction.Share -> send(PlaylistNavigationRequest.Share(id))
                     PlaylistAction.OpenOwner -> send(PlaylistNavigationRequest.Channel(page.summary.channelId))

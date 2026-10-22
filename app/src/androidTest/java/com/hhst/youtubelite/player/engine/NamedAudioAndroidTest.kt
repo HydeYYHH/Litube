@@ -13,8 +13,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
-import com.hhst.youtubelite.MainActivity
-import com.hhst.youtubelite.browser.PageOrigin
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -46,13 +45,12 @@ class NamedAudioAndroidTest {
         val id = args.getString("videoId") ?: "0e3GPea1Tyg"
         val app = instrumentation.targetContext
         val engine = GlobalContext.get().get<PlaybackApi>() as PlaybackEngine
-        val scenario = ActivityScenario.launch<MainActivity>(
-            Intent(Intent.ACTION_VIEW, Uri.parse(VideoId.watchUrl(id)),
-                app, MainActivity::class.java))
+        val scenario = ActivityScenario.launch<WatchActivity>(
+            com.hhst.youtubelite.watch.WatchActivity.intent(app, id))
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
         try {
             instrumentation.runOnMainSync {
-                GlobalContext.get().get<PlayerViewModel>().playVideo(VideoId.watchUrl(id), PageOrigin.HOST)
+                GlobalContext.get().get<PlayerViewModel>().openVideo(id)
             }
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 60_000

@@ -6,8 +6,6 @@ import android.content.ContextWrapper
 import android.view.SurfaceView
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
-import com.hhst.youtubelite.browser.PageOrigin
-import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.cast.CastUiState
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -62,6 +60,70 @@ class PlayerViewModelTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun nativeEntryLoadsOnceAndRestoresThePreservedEngine() {
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        engine.settle(watchId, 42_000)
+        engine.pause()
+        viewModel.enterMiniPlayer()
+        viewModel.openVideo(watchId)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(42_000L, engine.snapshot.value.positionMs)
+        assertFalse(engine.snapshot.value.isPlaying)
+        assertFalse(viewModel.uiState.value.mini)
+    }
+
+    @Test fun nativeAutoplayUsesTheServiceOncePerPlayback() {
+        var calls = 0
+        bindViewModel { calls++; "bbbbbbbbbbb" }
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        engine.finish()
+        assertEquals(1, calls)
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+    }
+
+    @Test fun pausedOrReplacedPlaybackRejectsDelayedNativeAutoplay() {
+        val answer = kotlinx.coroutines.CompletableDeferred<String?>()
+        bindViewModel { answer.await() }
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        engine.finish()
+        PlaybackCommandRouter.handler!!.onPause()
+        answer.complete("bbbbbbbbbbb")
+        assertEquals(listOf(watchUrl), engine.playCalls)
+    }
+
+    @Test fun explicitPlaylistPreservesItsHeadAndOverridesAnOldQueue() {
+        bindViewModel()
+        queue.setEnabled(true)
+        queue.add(QueueItem("ccccccccccc", title = "Old queue"))
+        val items = listOf(watchId, "bbbbbbbbbbb", "ddddddddddd").map { QueueItem(it, title = it) }
+        viewModel.startPlaylist(items, startId = "bbbbbbbbbbb")
+        engine.settle("bbbbbbbbbbb")
+        viewModel.skipToPrevious()
+        assertEquals(watchUrl, engine.playCalls.last())
+        assertEquals(1, queue.state.value.items.size)
+        engine.settle(watchId)
+        viewModel.skipToNext()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+    }
+
+    @Test fun autoplayPreferenceStopsServiceRequestsWithoutBreakingManualQueue() {
+        var calls = 0
+        bindViewModel { calls++; "bbbbbbbbbbb" }
+        preferences.setEnabled(PreferenceKeys.ENABLE_AUTOPLAY, false)
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        engine.finish()
+        assertEquals(0, calls)
+        viewModel.onQueueAdd(QueueItem("bbbbbbbbbbb", title = "Next"))
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        viewModel.skipToNext()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+    }
+
     @Test
     fun gesturePrefKey_picksEmbeddedOrFullscreen() {
         assertEquals(
@@ -83,44 +145,6 @@ class PlayerViewModelTest {
     }
 
     // -- queue navigation priority (pure rules) --
-
-    @Test
-    fun queueNav_activeQueueWinsOverPagePlaylist() {
-        // The local queue owns "next" even when the page advertises a playlist;
-        // "previous" only comes from the queue (or page back as fallback).
-        val nav = PlayerViewModel.queueNav(
-            queueActive = true,
-            queueHasNext = true,
-            inQueueAndHasPrevious = false,
-            pageHasPlaylist = true,
-            pageCanGoBack = false,
-        )
-        assertEquals(PlayerViewModel.QueueNav(next = true, previous = false), nav)
-    }
-
-    @Test
-    fun queueNav_pageBackIsPreviousOnlyFallback() {
-        val nav = PlayerViewModel.queueNav(
-            queueActive = true,
-            queueHasNext = false,
-            inQueueAndHasPrevious = false,
-            pageHasPlaylist = false,
-            pageCanGoBack = true,
-        )
-        assertEquals(PlayerViewModel.QueueNav(next = false, previous = true), nav)
-    }
-
-    @Test
-    fun queueNav_withoutQueue_pagePlaylistOwnsBoth() {
-        val nav = PlayerViewModel.queueNav(
-            queueActive = false,
-            queueHasNext = true,
-            inQueueAndHasPrevious = true,
-            pageHasPlaylist = true,
-            pageCanGoBack = true,
-        )
-        assertEquals(PlayerViewModel.QueueNav(next = true, previous = true), nav)
-    }
 
     // -- cast handoff readiness (pure predicate of startPlayback's wait) --
 
@@ -160,65 +184,14 @@ class PlayerViewModelTest {
         assertFalse(PlayerViewModel.loadSettledFor(snapshot, null))
     }
 
-    // -- Page ownership and native playback isolation --
-
-    @Test
-    fun acceptsPageCallback_rejectsOtherTabAndOlderDocument() {
-        val owner = PageOrigin(tabId = 1L, documentGeneration = 4L)
-        assertTrue(PlayerViewModel.acceptsPageCallback(owner, PageOrigin.HOST))
-        assertTrue(
-            PlayerViewModel.acceptsPageCallback(
-                owner,
-                PageOrigin(tabId = 1L, documentGeneration = 4L),
-            ),
-        )
-        assertTrue(
-            PlayerViewModel.acceptsPageCallback(
-                owner,
-                PageOrigin(tabId = 1L, documentGeneration = 5L),
-            ),
-        )
-        assertFalse(
-            PlayerViewModel.acceptsPageCallback(
-                owner,
-                PageOrigin(tabId = 2L, documentGeneration = 9L),
-            ),
-        )
-        assertFalse(
-            PlayerViewModel.acceptsPageCallback(
-                owner,
-                PageOrigin(tabId = 1L, documentGeneration = 3L),
-            ),
-        )
-        assertTrue(
-            PlayerViewModel.acceptsPageCallback(
-                owner = null,
-                incoming = PageOrigin(tabId = 2L, documentGeneration = 1L),
-            ),
-        )
-    }
-
-    @Test
-    fun shouldExpandMiniOnReturn_watchOnly() {
-        assertFalse(
-            PlayerViewModel.shouldExpandMiniOnReturn(
-                "https://m.youtube.com/shorts/aaaaaaaaaaa",
-            ),
-        )
-        assertTrue(
-            PlayerViewModel.shouldExpandMiniOnReturn(
-                "https://m.youtube.com/watch?v=watchAAAAAA",
-            ),
-        )
-        assertFalse(PlayerViewModel.shouldExpandMiniOnReturn("https://m.youtube.com/"))
-    }
+    // -- Playback lifecycle --
 
     private val watchId = "watchAAAAA1"
     private val shortsId = "shortszzzz1"
     private val watchUrl = "https://www.youtube.com/watch?v=$watchId"
     private val shortsUrl = "https://m.youtube.com/shorts/$shortsId"
 
-    private fun bindViewModel() {
+    private fun bindViewModel(nextVideo: (suspend (String) -> String?)? = null) {
         engine = FakeEngine()
         val cache = MemJsonCache()
         cast = CastController(ContextWrapper(null), OkHttpClient())
@@ -230,83 +203,39 @@ class PlayerViewModelTest {
             preferences,
             cache,
             cast,
+            nextVideo = nextVideo,
         )
     }
 
-    @Test
-    fun compactLayout_preservesPlaybackAndOnlyCollapsesTheOwningWatchPage() {
+    @Test fun leavingForShortsPausesAndReopeningTheVideoPreservesPosition() {
         bindViewModel()
-        val owner = PageOrigin(tabId = 1L, documentGeneration = 2L)
-        viewModel.playVideo(watchUrl, owner)
-        engine.settle(watchId, positionMs = 42_000L)
-        viewModel.setCompactPlayer(true)
-        assertTrue(viewModel.isPlayerCompact(owner))
-        assertFalse(viewModel.isPlayerCompact(PageOrigin(2L, 2L)))
-        assertFalse(viewModel.isPlayerCompact(PageOrigin(1L, 1L)))
-        assertFalse(viewModel.uiState.value.mini)
-        assertEquals(42_000L, engine.snapshot.value.positionMs)
-        assertEquals(listOf(watchUrl), engine.playCalls)
-        assertTrue(engine.snapshot.value.isPlaying)
-
-        viewModel.setFullscreen(true)
-        assertFalse(viewModel.isPlayerCompact(owner))
-        viewModel.setFullscreen(false)
-        assertTrue(viewModel.isPlayerCompact(owner))
-        viewModel.setCompactPlayer(false)
-        assertFalse(viewModel.isPlayerCompact(owner))
-        assertTrue(engine.snapshot.value.isPlaying)
-
-        viewModel.setCompactPlayer(true)
-        viewModel.enterMiniPlayer()
-        assertFalse(viewModel.isPlayerCompact(owner))
-        viewModel.onMiniClose()
-        assertFalse(viewModel.isPlayerCompact(owner))
-    }
-
-    @Test
-    fun shortsPausesLongVideoPreservesPositionAndRejectsLatePlayCallbacks() {
-        bindViewModel()
-        viewModel.playVideo(watchUrl)
-        engine.settle(watchId, positionMs = 42_000L)
+        viewModel.openVideo(watchId)
+        engine.settle(watchId, 42_000L)
         viewModel.onShortsOpened()
-        viewModel.playVideo(shortsUrl)
-        viewModel.playVideo(watchUrl, PageOrigin(1, 1))
-        assertEquals(listOf(watchUrl), engine.playCalls)
-        assertEquals(watchId, viewModel.uiState.value.videoId)
         assertFalse(viewModel.uiState.value.visible)
-        assertFalse(viewModel.uiState.value.mini)
+        assertFalse(engine.snapshot.value.isPlaying)
         viewModel.onShortsClosed()
-        viewModel.onReturnToWatch(watchUrl)
-        viewModel.playVideo(watchUrl)
+        viewModel.openVideo(watchId)
         assertTrue(viewModel.uiState.value.visible)
-        assertFalse(viewModel.uiState.value.isPlaying)
+        assertFalse(viewModel.uiState.value.mini)
+        assertFalse(engine.snapshot.value.isPlaying)
         assertEquals(42_000L, engine.snapshot.value.positionMs)
         assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
-    @Test
-    fun hidePlayer_fromOtherTabDoesNotHideCurrentPlayback() {
-        bindViewModel()
-        val owner = PageOrigin(tabId = 1L, documentGeneration = 1L)
-        viewModel.playVideo(watchUrl, owner)
+    @Test fun queueTakesPriorityOverServiceAutoplayAndPreviousAtTheHeadDoesNotChangeVideo() {
+        var requests = 0
+        bindViewModel { requests++; "ccccccccccc" }
+        queue.setEnabled(true)
+        queue.add(QueueItem(watchId, watchUrl, "First"))
+        queue.add(QueueItem("bbbbbbbbbbb", VideoId.watchUrl("bbbbbbbbbbb"), "Second"))
+        viewModel.openVideo(watchId)
         engine.settle(watchId)
-        viewModel.setPlayerLayout(10, 180, PageOrigin(tabId = 2L, documentGeneration = 1L))
-        assertNull(viewModel.uiState.value.pageHeightDp)
-        viewModel.setPlayerLayout(10, 180, owner)
-        assertEquals(180, viewModel.uiState.value.pageHeightDp)
-        viewModel.hidePlayer(PageOrigin(tabId = 2L, documentGeneration = 1L))
-        assertTrue(viewModel.uiState.value.visible)
-        viewModel.hidePlayer(owner)
-        assertFalse(viewModel.uiState.value.visible)
-    }
-
-    @Test
-    fun onReturnToWatch_shortsCannotRestoreNativeSurface() {
-        bindViewModel()
-        viewModel.playVideo(shortsUrl)
-        viewModel.onReturnToWatch(shortsUrl)
-        assertFalse(viewModel.uiState.value.visible)
-        assertTrue(engine.playCalls.isEmpty())
+        viewModel.skipToPrevious()
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        engine.finish()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+        assertEquals(0, requests)
     }
 
     @Test
@@ -319,7 +248,7 @@ class PlayerViewModelTest {
     @Test
     fun onMiniClose_cancelsLongVideoWithoutRestoringIt() {
         bindViewModel()
-        viewModel.playVideo(watchUrl)
+        viewModel.openVideo(watchId)
         engine.settle(watchId)
         viewModel.enterMiniPlayer()
         viewModel.onMiniClose()
@@ -327,18 +256,18 @@ class PlayerViewModelTest {
         assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
-    @Test fun documentReloadPreservesPausedPlaybackAndPosition() {
+    @Test fun reopeningPreservesPausedPlaybackAndPosition() {
         bindViewModel()
-        viewModel.playVideo(watchUrl, PageOrigin(1, 1))
+        viewModel.openVideo(watchId)
         engine.settle(watchId, 42_000)
         engine.pause()
-        viewModel.playVideo(watchUrl, PageOrigin(1, 2))
+        viewModel.openVideo(watchId)
         assertEquals(listOf(watchUrl), engine.playCalls)
         assertEquals(42_000L, engine.snapshot.value.positionMs)
         assertFalse(engine.snapshot.value.isPlaying)
         engine.settle(watchId, 120_000)
         engine.finish()
-        viewModel.playVideo(watchUrl, PageOrigin(1, 3))
+        viewModel.openVideo(watchId)
         assertEquals(listOf(watchUrl), engine.playCalls)
         assertEquals(120_000L, engine.snapshot.value.positionMs)
         assertTrue(engine.snapshot.value.ended)
@@ -348,7 +277,7 @@ class PlayerViewModelTest {
         bindViewModel()
         for (enabled in listOf(false, true)) {
             preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, enabled)
-            viewModel.playVideo(watchUrl)
+            viewModel.openVideo(watchId)
             engine.settle(watchId)
             viewModel.onPipDismissed()
             assertFalse(viewModel.uiState.value.visible)
@@ -357,48 +286,9 @@ class PlayerViewModelTest {
         assertEquals(2, engine.stopCalls)
     }
 
-    @Test fun ordinaryAutoplayAdvancesOnceOnlyWithExplicitEnabledTarget() {
-        bindViewModel()
-        val page = FakeWatchPage()
-        viewModel.watchPage = page
-        viewModel.playVideo(watchUrl)
-        engine.settle(watchId)
-        engine.finish()
-        engine.onEnded?.invoke()
-        assertEquals(1, page.scripts.size)
-        page.callbacks.removeAt(0)(autoplayResult())
-        assertEquals(2, page.scripts.size)
-        assertTrue(page.scripts.last().contains("__watchAutoplayAdvance"))
-        val request = Regex(",([0-9]+)\\)").find(page.scripts.last())!!.groupValues[1].toLong()
-        assertTrue(viewModel.canAutoplayAdvance(watchId, request, page.pageOrigin))
-        assertFalse(viewModel.canAutoplayAdvance(watchId, request, PageOrigin(2, 1)))
-        viewModel.onSeek(0)
-        assertFalse(viewModel.canAutoplayAdvance(watchId, request, page.pageOrigin))
-    }
-
-    @Test fun notificationPlayAndPauseDiscardPendingAutoplayEvenBeforeTheSnapshotChanges() {
-        bindViewModel()
-        val page = FakeWatchPage()
-        viewModel.watchPage = page
-        for (command in listOf<() -> Unit>(
-            { PlaybackCommandRouter.handler!!.onPlay() },
-            { PlaybackCommandRouter.handler!!.onPause() },
-        )) {
-            page.scripts.clear(); page.callbacks.clear()
-            viewModel.playVideo(watchUrl)
-            engine.settle(watchId)
-            engine.finish()
-            val callback = page.callbacks.removeAt(0)
-            command()
-            assertTrue(engine.snapshot.value.ended)
-            callback(autoplayResult())
-            assertEquals(1, page.scripts.size)
-        }
-    }
-
     @Test fun pipDismissalKeepsTheConnectedCastAndOnlyPausesLocalPlayback() {
         bindViewModel()
-        viewModel.playVideo(watchUrl)
+        viewModel.openVideo(watchId)
         engine.settle(watchId)
         @Suppress("UNCHECKED_CAST")
         val state = cast.javaClass.getDeclaredField("_state").apply { isAccessible = true }
@@ -410,82 +300,6 @@ class PlayerViewModelTest {
         assertEquals(0, engine.stopCalls)
         assertFalse(engine.snapshot.value.isPlaying)
         assertFalse(viewModel.uiState.value.visible)
-    }
-
-    @Test fun autoplayOffUnknownAndPauseAtEndNeverAdvance() {
-        bindViewModel()
-        val page = FakeWatchPage()
-        viewModel.watchPage = page
-        for (result in listOf(autoplayResult("false"), autoplayResult("null"), "null")) {
-            page.scripts.clear()
-            viewModel.playVideo(watchUrl)
-            engine.settle(watchId)
-            engine.finish()
-            assertEquals(1, page.scripts.size)
-            page.callbacks.removeAt(0)(result)
-            assertEquals(1, page.scripts.size)
-        }
-        page.scripts.clear()
-        viewModel.playVideo(watchUrl)
-        engine.settle(watchId)
-        engine.setLoopMode(LoopMode.PAUSE_AT_END)
-        engine.finish()
-        assertTrue(page.scripts.isEmpty())
-    }
-
-    @Test fun delayedAutoplayIsDiscardedAfterReplayPageReplacementOrClose() {
-        bindViewModel()
-        val page = FakeWatchPage()
-        viewModel.watchPage = page
-        for (cancel in listOf<() -> Unit>(
-            { engine.seekTo(0); engine.finish() },
-            { page.pageOrigin = PageOrigin(1, page.pageOrigin.documentGeneration + 1) },
-            { viewModel.onMiniClose() },
-        )) {
-            page.scripts.clear(); page.callbacks.clear()
-            viewModel.playVideo(watchUrl)
-            engine.settle(watchId)
-            engine.finish()
-            val oldCallback = page.callbacks.removeAt(0)
-            cancel()
-            val queries = page.scripts.size
-            oldCallback(autoplayResult())
-            assertEquals(queries, page.scripts.size)
-        }
-    }
-
-    @Test fun queueAndPlaylistRetainPriorityOverOrdinaryAutoplay() {
-        bindViewModel()
-        val page = FakeWatchPage()
-        viewModel.watchPage = page
-        queue.setEnabled(true)
-        queue.add(QueueItem(watchId, watchUrl, "First"))
-        queue.add(QueueItem("bbbbbbbbbbb", VideoId.watchUrl("bbbbbbbbbbb"), "Second"))
-        viewModel.playVideo(watchUrl)
-        engine.settle(watchId)
-        engine.finish()
-        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
-        assertTrue(page.scripts.isEmpty())
-        queue.clear(); queue.setEnabled(false)
-        viewModel.playVideo(watchUrl)
-        engine.settle(watchId)
-        viewModel.onPageHasPlaylist(true)
-        engine.finish()
-        assertEquals(1, page.scripts.size)
-        assertTrue(page.scripts.single().contains("__playlistNav"))
-    }
-
-    private fun autoplayResult(enabled: String = "true") =
-        """{"videoId":"$watchId","enabled":$enabled,"url":"https://m.youtube.com/watch?v=bbbbbbbbbbb"}"""
-
-    private class FakeWatchPage : WatchPage {
-        var pageOrigin = PageOrigin(1, 1)
-        val scripts = mutableListOf<String>()
-        val callbacks = mutableListOf<(String?) -> Unit>()
-        override fun origin() = pageOrigin
-        override fun evaluate(js: String, onResult: (String?) -> Unit) { scripts += js; callbacks += onResult }
-        override fun canGoBack() = false
-        override fun goBack() = Unit
     }
 
     /**
@@ -537,7 +351,7 @@ class PlayerViewModelTest {
         override fun play() = Unit
         override fun pause() { _snapshot.value = _snapshot.value.copy(isPlaying = false) }
         override fun cancelPending(pausePlayback: Boolean) {
-            _snapshot.value = _snapshot.value.copy(isPlaying = false, prepared = false)
+            if (pausePlayback) _snapshot.value = _snapshot.value.copy(isPlaying = false)
         }
 
         override fun pauseLocal() {

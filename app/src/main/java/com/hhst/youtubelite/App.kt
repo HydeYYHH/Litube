@@ -22,10 +22,10 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
 
-/** Lightweight process entry. Browser/playback/download startup is explicitly opt-in. */
+/** Lightweight process entry. Playback/download startup is explicitly opt-in. */
 class App : Application(), Configuration.Provider {
 
-    @Volatile var legacyRuntimeStarted = false
+    @Volatile var mediaRuntimeStarted = false
         private set
 
     override val workManagerConfiguration: Configuration
@@ -41,11 +41,12 @@ class App : Application(), Configuration.Provider {
             androidContext(this@App)
             modules(appModule)
         }
+        registerActivityLifecycleCallbacks(com.hhst.youtubelite.player.PlaybackLifecycle())
     }
 
-    /** Initializes browser and download services when their entry points are opened. */
-    @Synchronized fun startLegacyRuntime() {
-        if (legacyRuntimeStarted) return
+    /** Initializes playback and download services when their entry points are opened. */
+    @Synchronized fun startMediaRuntime() {
+        if (mediaRuntimeStarted) return
         Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
         MMKV.defaultMMKV().let { kv ->
@@ -64,6 +65,6 @@ class App : Application(), Configuration.Provider {
         }
         get<DownloadNotificationWatcher>().start()
         DownloadNetworkRestore.start(this)
-        legacyRuntimeStarted = true
+        mediaRuntimeStarted = true
     }
 }

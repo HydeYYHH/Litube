@@ -19,6 +19,8 @@ class WatchViewModel(
     private val savedState: SavedStateHandle,
     videoId: String,
     scenario: WatchScenario = WatchScenario.Content,
+    private val voteRepository: VoteCountRepository? = null,
+    private val videoActions: VideoActions? = null,
 ) : ViewModel() {
     private val restoredId = savedState.get<String>("videoId") ?: videoId
     private val restoredOverlay = when (savedState.get<String>("overlay")) {
@@ -52,8 +54,58 @@ class WatchViewModel(
     val uiState = _state.asStateFlow()
     private val navigation = Channel<WatchNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
+    private val notices = Channel<WatchNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
+    private var actionJob: Job? = null
     private var loadJob: Job? = null
     private var generation = 0
+    private var voteJob: Job? = null
+    private var voteFlags: Pair<Boolean, Boolean>? = null
+    private var counts: VoteCounts? = null
+
+    fun selectVideo(id: String) {
+        if (id == uiState.value.videoId) return
+        voteJob?.cancel()
+        actionJob?.cancel()
+        counts = null
+        val flags = voteFlags
+        voteFlags = null
+        savedState["videoId"] = id
+        savedState["commentsOpen"] = false
+        savedState["descriptionExpanded"] = false
+        _state.value = WatchUiState(videoId = id)
+        persistOverlay(WatchOverlay.None)
+        load()
+        flags?.let { refreshVoteCounts(it.first, it.second) }
+    }
+
+    fun refreshVoteCounts(showLikes: Boolean, showDislikes: Boolean) {
+        if (voteRepository == null) return
+        val flags = showLikes to showDislikes
+        if (voteFlags == flags) return
+        voteFlags = flags
+        voteJob?.cancel()
+        updateCounts()
+        if (!showLikes && !showDislikes) return
+        voteJob = viewModelScope.launch {
+            try {
+                counts = voteRepository.counts(uiState.value.videoId)
+                updateCounts()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Counts are optional; metadata and playback remain available. */ }
+        }
+    }
+
+    private fun updateCounts() {
+        val flags = voteFlags ?: return
+        _state.update { state ->
+            val content = state.content as? WatchContent.Ready ?: return@update state
+            val likes = counts?.likes?.takeIf { flags.first }?.let { java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) }
+            val dislikes = counts?.dislikes?.takeIf { flags.second }?.let { java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) }
+            state.copy(content = content.copy(page = content.page.copy(video = content.page.video.copy(
+                likeCount = likes, dislikeCount = dislikes, likes = likes?.let { "$it likes" } ?: ""))))
+        }
+    }
 
     init {
         savedState["videoId"] = _state.value.videoId
@@ -78,8 +130,8 @@ class WatchViewModel(
                 }
             }
             WatchAction.OpenPageMenu -> navigation.trySend(WatchNavigationRequest.PageMenu)
-            WatchAction.Like -> navigation.trySend(WatchNavigationRequest.Like(videoId))
-            WatchAction.Dislike -> navigation.trySend(WatchNavigationRequest.Dislike(videoId))
+            WatchAction.Like -> if (videoActions == null) navigation.trySend(WatchNavigationRequest.Like(videoId)) else rate(VideoRating.Like)
+            WatchAction.Dislike -> if (videoActions == null) navigation.trySend(WatchNavigationRequest.Dislike(videoId)) else rate(VideoRating.Dislike)
             WatchAction.Download -> navigation.trySend(WatchNavigationRequest.Download(videoId))
             WatchAction.Queue -> navigation.trySend(WatchNavigationRequest.Queue(videoId))
             WatchAction.OpenWith -> navigation.trySend(WatchNavigationRequest.OpenWith(videoId))
@@ -120,7 +172,12 @@ class WatchViewModel(
             }
             WatchAction.Subscribe -> {
                 val channel = (uiState.value.content as? WatchContent.Ready)?.page?.video?.channelId ?: return
-                navigation.trySend(WatchNavigationRequest.Subscribe(channel))
+                if (videoActions == null) navigation.trySend(WatchNavigationRequest.Subscribe(channel))
+                else performVideoAction { current ->
+                    val subscribed = !current.subscribed
+                    videoActions.subscribe(channel, subscribed)
+                    current.copy(subscribed = subscribed)
+                }
             }
             is WatchAction.OpenChannel -> navigation.trySend(WatchNavigationRequest.Channel(action.channelId))
             is WatchAction.OpenComments -> {
@@ -148,6 +205,32 @@ class WatchViewModel(
                     WatchVideoMenuAction.DontRecommend -> overlay(WatchOverlay.Feedback(menu.videoId, WatchFeedbackKind.DontRecommend))
                 }
             }
+        }
+    }
+
+    private fun rate(selection: VideoRating) = performVideoAction { video ->
+        val next = if (video.rating == selection) VideoRating.None else selection
+        videoActions!!.rate(video.id, next, video.rating)
+        video.copy(rating = next)
+    }
+
+    private fun performVideoAction(action: suspend (WatchVideo) -> WatchVideo) {
+        if (actionJob?.isActive == true) return
+        val ready = _state.value.content as? WatchContent.Ready ?: return
+        val id = _state.value.videoId
+        _state.update { it.copy(actionPending = true) }
+        actionJob = viewModelScope.launch {
+            try {
+                val video = action(ready.page.video)
+                if (_state.value.videoId == id) _state.update { state ->
+                    val content = state.content as? WatchContent.Ready ?: return@update state
+                    state.copy(content = content.copy(page = content.page.copy(video = video)))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { notices.trySend(WatchNotice.SignIn) }
+            catch (_: UnconfirmedActionException) { notices.trySend(WatchNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+            catch (_: Exception) { notices.trySend(WatchNotice.Message("Couldn't update this video. Try again.")) }
+            finally { if (_state.value.videoId == id) _state.update { it.copy(actionPending = false) } }
         }
     }
 
@@ -215,6 +298,7 @@ class WatchViewModel(
                 val page = repository.watch(videoId)
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = WatchContent.Ready(page)) }
+                updateCounts()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

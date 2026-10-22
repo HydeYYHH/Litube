@@ -21,6 +21,7 @@ sealed interface FeedItem {
         val progress: Float? = null,
         val age: String? = null,
         val isNew: Boolean = false,
+        val avatar: String? = null,
     ) : FeedItem
     data class Mix(override val id: String, val title: String, val authors: String, val artwork: String, val palette: ThumbnailPalette) : FeedItem
     data class Shorts(override val id: String, val videos: List<Video>) : FeedItem
@@ -34,6 +35,7 @@ sealed interface FeedItem {
 data class ThumbnailPalette(val stackColor: Int, val badgeColor: Int)
 
 interface HomeRepository {
+    val filters: List<String> get() = HomeLayout.chips
     suspend fun loadHome(filter: String, continuation: String? = null): HomePage
 }
 
@@ -81,6 +83,7 @@ data class HomeUiState(
     val overlay: HomeOverlay = HomeOverlay.None,
     val signedInPreview: Boolean = false,
     val hideShorts: Boolean = false,
+    val chips: List<String> = HomeLayout.chips,
 ) {
     val suggestions: List<String> get() = if (query.isBlank()) emptyList() else listOf(
         query.trim(), "${query.trim()} documentary", "${query.trim()} music", "${query.trim()} live",

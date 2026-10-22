@@ -50,6 +50,7 @@ data class Extension(
                     toggle(PreferenceKeys.REMEMBER_LAST_POSITION, R.string.remember_last_position),
                     toggle(PreferenceKeys.REMEMBER_QUALITY, R.string.remember_quality),
                     toggle(PreferenceKeys.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
+                    toggle(PreferenceKeys.ENABLE_AUTOPLAY, R.string.autoplay),
                     toggle(PreferenceKeys.REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
                     toggle(PreferenceKeys.USE_ORIGINAL_TITLE, R.string.use_original_title),
                 ),

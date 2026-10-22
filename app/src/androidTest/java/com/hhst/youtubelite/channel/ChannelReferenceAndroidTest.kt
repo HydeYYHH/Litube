@@ -9,7 +9,7 @@ import android.webkit.WebView
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.debug.reference.PageReferenceActivity
 import com.hhst.youtubelite.browser.WebProbe
 import com.hhst.youtubelite.core.DeviceEvidence
 import org.junit.Assert.assertEquals
@@ -53,11 +53,11 @@ class ChannelReferenceAndroidTest {
 
     private fun sample(url: String, scene: String, readyExpression: String, requireVideos: Boolean, expectWidth: Int, collectSource: String = COLLECT) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val scenario = ActivityScenario.launch<MainActivity>(Intent(instrumentation.targetContext, MainActivity::class.java).apply {
+        val scenario = ActivityScenario.launch<PageReferenceActivity>(Intent(instrumentation.targetContext, PageReferenceActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             data = Uri.parse(url)
         })
-        lateinit var host: MainActivity
+        lateinit var host: PageReferenceActivity
         scenario.onActivity { host = it }
         try {
             val loadDeadline = SystemClock.elapsedRealtime() + 30_000

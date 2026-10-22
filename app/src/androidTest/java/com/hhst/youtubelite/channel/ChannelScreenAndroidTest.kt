@@ -58,7 +58,7 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-name").assertIsDisplayed()
         compose.onNodeWithTag("channel-home-list").assertIsDisplayed()
         channel?.onActivity { channelHost ->
-            assertFalse((channelHost.application as App).legacyRuntimeStarted)
+            assertFalse((channelHost.application as App).mediaRuntimeStarted)
             fun containsWebView(view: View): Boolean =
                 view is WebView || view is ViewGroup && (0 until view.childCount).any { index -> containsWebView(view.getChildAt(index)) }
             assertFalse(containsWebView(channelHost.window.decorView))
@@ -171,13 +171,7 @@ class ChannelScreenAndroidTest {
             assertEquals("draft", it.channelViewModel.uiState.value.searchQuery)
             assertEquals("bunny", it.channelViewModel.uiState.value.submittedQuery)
         }
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
-        compose.waitForIdle()
-        host.onActivity {
-            if (it.channelViewModel.uiState.value.overlay == com.hhst.youtubelite.channel.domain.ChannelOverlay.About) {
-                it.onBackPressedDispatcher.onBackPressed()
-            }
-        }
+        host.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         awaitNode("channel-search-list")
         compose.onNodeWithTag("channel-about-panel").assertDoesNotExist()
         compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-thumb-bunny"))

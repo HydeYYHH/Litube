@@ -45,7 +45,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 /** Hosts the watch history page. */
-class HistoryActivity : ComponentActivity() {
+class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var historyViewModel: HistoryViewModel
         private set
     var lastNavigationRequest: LibraryNavigationRequest? = null
@@ -55,13 +55,15 @@ class HistoryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val scenario = if (BuildConfig.DEBUG) LibraryScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else LibraryScenario.Content
         historyViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HistoryViewModel::class.java)
-                return HistoryViewModel(FixtureLibraryRepository(scenario), extras.createSavedStateHandle(), scenario) as T
+                return HistoryViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
             }
         })[HistoryViewModel::class.java]
         lifecycleScope.launch {
@@ -120,6 +122,13 @@ class HistoryActivity : ComponentActivity() {
         HistoryMenuAction.SaveToPlaylist -> AppIcon.Bookmark
         HistoryMenuAction.Share -> AppIcon.Share
         HistoryMenuAction.RemoveFromHistory -> AppIcon.Close
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            com.hhst.youtubelite.data.media.MediaSession.snapshot().let { historyViewModel.updateSession(it.signedIn, it.generation) }
+        }
     }
 
     companion object {

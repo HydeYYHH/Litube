@@ -4,18 +4,12 @@ package com.hhst.youtubelite.player.engine
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 
-import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.lifecycle.ViewModelProvider
-import com.hhst.youtubelite.MainActivity
-import com.hhst.youtubelite.browser.PageOrigin
-import com.hhst.youtubelite.diagnostics.BrowserDiagnostics
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
@@ -24,7 +18,6 @@ import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.QueueRepository
-import com.hhst.youtubelite.ui.browser.BrowserViewModel
 import fi.iki.elonen.NanoHTTPD
 import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
@@ -71,8 +64,8 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
             """.trimIndent())
         }
     }
-    lateinit var activity: MainActivity
-    private var scenario: ActivityScenario<MainActivity>? = null
+    lateinit var activity: WatchActivity
+    private var scenario: ActivityScenario<WatchActivity>? = null
     val url get() = VideoId.watchUrl(id)
 
     init {
@@ -89,11 +82,11 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
     }
 
     fun launch(settleUi: () -> Unit = {}) {
-        scenario = ActivityScenario.launch(Intent(Intent.ACTION_VIEW, Uri.parse(url), app, MainActivity::class.java))
+        scenario = ActivityScenario.launch(WatchActivity.intent(app, id))
         scenario!!.onActivity { activity = it }
-        instrumentation.runOnMainSync { model.playVideo(url, PageOrigin.HOST) }
+        instrumentation.runOnMainSync { model.openVideo(id) }
         settleUi()
-        await { model.uiState.value.visible && engine.snapshot.value.isPlaying && findWebView() != null }
+        await { model.uiState.value.visible && engine.snapshot.value.isPlaying && surface() != null }
     }
 
     fun await(condition: () -> Boolean) {
@@ -106,13 +99,9 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
         assertTrue("Offline condition failed: ${engine.snapshot.value}", ready)
     }
 
-    fun webView(): WebView = checkNotNull(findWebView())
-
-    private fun findWebView(): WebView? {
-        val active = ViewModelProvider(activity)[BrowserViewModel::class.java].uiState.value.activeId
-        fun find(view: View): WebView? {
-            if (view is WebView && view.isShown && VideoId.parse(view.url) == id &&
-                BrowserDiagnostics.context(view)?.tabId == active) return view
+    fun surface(): android.view.SurfaceView? {
+        fun find(view: View): android.view.SurfaceView? {
+            if (view is android.view.SurfaceView && view.isShown) return view
             if (view is ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))?.let { return it }
             return null
         }
@@ -122,14 +111,10 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
     override fun close() {
         instrumentation.runOnMainSync {
             model.onMiniClose(); engine.stop()
-            if (::activity.isInitialized && !activity.isFinishing) activity.finish()
-        }
-        // PiP can leave the activity PAUSED and block ActivityScenario.destroy.
-        runCatching {
-            Runtime.getRuntime().exec(arrayOf("am", "force-stop", app.packageName)).waitFor()
+            if (::activity.isInitialized && !activity.isFinishing) activity.finishAndRemoveTask()
         }
         try { scenario?.close() } catch (_: Exception) {
-            // Process was force-stopped; remaining teardown still runs below.
+            // Restore shared engine dependencies even if the host has already closed.
         } finally {
             instrumentation.runOnMainSync {
                 extractorField.set(engine, originalExtractor)

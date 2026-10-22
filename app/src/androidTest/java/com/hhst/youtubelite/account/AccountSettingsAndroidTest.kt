@@ -8,8 +8,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import com.hhst.youtubelite.MainActivity
-import com.hhst.youtubelite.browser.UrlPolicy
+import com.hhst.youtubelite.account.SignInActivity
+import com.hhst.youtubelite.core.UrlPolicy
 import com.hhst.youtubelite.channel.ChannelActivity
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -51,7 +51,7 @@ class AccountSettingsAndroidTest {
 
     @After fun close() {
         scenario?.close()
-        ActivityTestSupport.finish(MainActivity::class.java)
+        ActivityTestSupport.finish(SignInActivity::class.java)
         ActivityTestSupport.finish(SettingsActivity::class.java)
         ActivityTestSupport.finish(AboutActivity::class.java)
         ActivityTestSupport.finish(ChannelActivity::class.java)
@@ -87,12 +87,16 @@ class AccountSettingsAndroidTest {
         val host = launchYou()
         openAccountMenu(host)
         compose.onNodeWithTag("account-action-switch").performClick()
-        ActivityTestSupport.waitForResumed(compose, MainActivity::class.java)
+        ActivityTestSupport.waitForResumed(compose, SignInActivity::class.java)
         host.onActivity {
             assertEquals(LibraryNavigationRequest.SignIn, it.lastNavigationRequest)
         }
-        val url = ActivityTestSupport.intentExtra(MainActivity::class.java, MainActivity.EXTRA_OPEN_URL)
-        assertEquals(SignInFlow.SIGN_IN_URL, url)
+        var url: String? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            url = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<SignInActivity>().single().currentUrl
+        }
+        assertFalse("The credential window must request a URL", url.isNullOrBlank())
         assertTrue("sign-in URL must stay inside the allowlisted login boundary", UrlPolicy.isLoginUrl(url))
         // The account sheet never fabricates a second local session.
         compose.onNodeWithTag("account-menu").assertDoesNotExist()

@@ -17,6 +17,11 @@ data class WatchVideo(
     val topComment: WatchComment,
     val description: String,
     val live: Boolean = false,
+    val likeCount: String? = null,
+    val dislikeCount: String? = null,
+    val rating: VideoRating = VideoRating.None,
+    val subscribed: Boolean = false,
+    val avatar: String? = null,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
@@ -32,6 +37,7 @@ data class WatchRelated(
     val artwork: String,
     val badge: String? = null,
     val progress: Float? = null,
+    val avatar: String? = null,
 )
 
 data class WatchPage(val video: WatchVideo, val related: List<WatchRelated>)
@@ -53,6 +59,7 @@ data class WatchUiState(
     val overlay: WatchOverlay = WatchOverlay.None,
     val draftQuery: String = "",
     val commentsOpen: Boolean = false,
+    val actionPending: Boolean = false,
 ) {
     val searchOpen: Boolean get() = overlay == WatchOverlay.Search
 }

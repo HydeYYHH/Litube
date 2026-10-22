@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.shorts
 
+import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -9,6 +10,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,6 +70,9 @@ class ShortsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
+        val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
+        if (!fixtures) (application as com.hhst.youtubelite.App).startMediaRuntime()
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         val startItemId = intent.getStringExtra(EXTRA_START_ITEM)
         val scenario = if (BuildConfig.DEBUG) ShortsScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else ShortsScenario.Content
@@ -77,7 +82,7 @@ class ShortsActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == ShortsViewModel::class.java)
-                return ShortsViewModel(FixtureShortsRepository(scenario, intent.getStringExtra(EXTRA_CHANNEL_ID)), extras.createSavedStateHandle(), scenario, startItemId) as T
+                return ShortsViewModel(if (fixtures) FixtureShortsRepository(scenario, intent.getStringExtra(EXTRA_CHANNEL_ID)) else sources.shorts(startItemId, intent.getStringExtra(EXTRA_CHANNEL_ID)), extras.createSavedStateHandle(), scenario, startItemId) as T
             }
         })[ShortsViewModel::class.java]
         commentsViewModel = commentsFor(commentsVideoId)
@@ -99,7 +104,7 @@ class ShortsActivity : ComponentActivity() {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
                         Lifecycle.Event.ON_START -> playerViewModel.onShortsOpened()
-                        Lifecycle.Event.ON_STOP -> playerViewModel.onShortsClosed()
+                        Lifecycle.Event.ON_STOP -> if (fixtures) playerViewModel.onShortsClosed() else playerViewModel.pauseShort()
                         else -> Unit
                     }
                 }
@@ -135,7 +140,19 @@ class ShortsActivity : ComponentActivity() {
                     ShortsOverlay.None -> Unit
                 }
             }
-            ShortsScreen(state, shortsViewModel::onAction, Modifier.fillMaxSize())
+            if (!fixtures) {
+                LaunchedEffect(state.currentItemId, lifecycle) {
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                        state.currentItemId?.let(playerViewModel::openShort)
+                        kotlinx.coroutines.awaitCancellation()
+                    }
+                }
+            }
+            ShortsScreen(state, shortsViewModel::onAction, Modifier.fillMaxSize(), videoContent = if (fixtures) null else { _ ->
+                Box(Modifier.fillMaxSize().clickable { playerViewModel.onPlayPause() }) {
+                    com.hhst.youtubelite.watch.presentation.WatchPlayer(Modifier.fillMaxSize(), { finish() }, pip = true)
+                }
+            })
             if (state.overlay is ShortsOverlay.Comments) {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("comments-panel-host")) {
                     CommentsPanel(
@@ -157,11 +174,15 @@ class ShortsActivity : ComponentActivity() {
         }
     }
 
+    private val boundCommentModels = mutableSetOf<String>()
+
     private fun commentsFor(itemId: String): CommentsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T =
-            CommentsViewModel(FixtureCommentsRepository(commentsScenario), extras.createSavedStateHandle(), itemId) as T
-    })["short-comments:$itemId", CommentsViewModel::class.java]
+            CommentsViewModel(if (com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) FixtureCommentsRepository(commentsScenario) else org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>().comments(), extras.createSavedStateHandle(), itemId) as T
+    })["short-comments:$itemId", CommentsViewModel::class.java].also { model ->
+        if (boundCommentModels.add(itemId)) bindCommentNotices(model)
+    }
 
     private fun FeedMenuAction.icon() = when (this) {
         FeedMenuAction.NotInterested -> AppIcon.Block

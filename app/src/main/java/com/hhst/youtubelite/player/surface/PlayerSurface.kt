@@ -126,9 +126,6 @@ fun PlayerSurface(
     val topInsetDp = with(density) {
         WindowInsets.safeDrawing.getTop(this).toDp().value.toInt()
     }
-    // Embedded top in window space = WebView's inset top + the page player's
-    // viewport-relative top (player-hook.js reports it): this overlay is a
-    // child of the window root, one level above the inset-padded WebView.
     val topDp = PlayerUi.playerTopOffsetDp(state.fullscreen, embeddedBounds.top, topInsetDp)
     val chromeLeft = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(leftInsetDp) else 0
     val chromeRight = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(rightInsetDp) else 0

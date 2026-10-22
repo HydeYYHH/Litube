@@ -53,7 +53,7 @@ class HomeScreenAndroidTest {
         compose.onNodeWithTag("home-feed").assertDoesNotExist()
         compose.onNodeWithTag("nav-Subscriptions").assertDoesNotExist()
         host.onActivity {
-            assertFalse((it.application as App).legacyRuntimeStarted)
+            assertFalse((it.application as App).mediaRuntimeStarted)
             fun containsWebView(view: View): Boolean = view is WebView || view is ViewGroup && (0 until view.childCount).any { index -> containsWebView(view.getChildAt(index)) }
             assertFalse(containsWebView(it.window.decorView))
         }
