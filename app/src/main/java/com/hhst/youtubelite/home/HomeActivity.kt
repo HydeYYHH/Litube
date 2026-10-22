@@ -53,13 +53,15 @@ class HomeActivity : ComponentActivity() {
                 return HomeViewModel(FixtureHomeRepository(scenario), extras.createSavedStateHandle(), scenario) as T
             }
         })[HomeViewModel::class.java]
+        if (intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 homeViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
-                    // The results and watch pages are the implemented destinations; everything else stays a request.
                     if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
                     if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
+                    if (request is HomeNavigationRequest.Shorts) startActivity(
+                        com.hhst.youtubelite.shorts.ShortsActivity.intent(this@HomeActivity, request.itemId))
                     if (request is HomeNavigationRequest.Channel) startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
                     if (request is HomeNavigationRequest.OpenPost) startActivity(
                         PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
@@ -67,21 +69,38 @@ class HomeActivity : ComponentActivity() {
                     if (request is HomeNavigationRequest.MenuAction && request.action == FeedMenuAction.Share) {
                         shareGateway.share(request.itemId)
                     }
+                    if (request is HomeNavigationRequest.Explore) startActivity(
+                        com.hhst.youtubelite.explore.ExploreActivity.intent(this@HomeActivity))
+                    if (request is HomeNavigationRequest.Destination && request.destination != HomeDestination.Home) {
+                        com.hhst.youtubelite.ui.components.MainTabs.intent(this@HomeActivity,
+                            com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name),
+                            homeViewModel.uiState.value.signedInPreview)?.let(::startActivity)
+                    }
                 }
             }
         }
         setContent {
             val state by homeViewModel.uiState.collectAsStateWithLifecycle()
-            BackHandler(state.overlay != HomeOverlay.None) { homeViewModel.onAction(HomeAction.CloseOverlay) }
+            BackHandler {
+                if (state.overlay != HomeOverlay.None) homeViewModel.onAction(HomeAction.CloseOverlay)
+                else moveTaskToBack(true)
+            }
             HomeScreen(state, homeViewModel::onAction, Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                 .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
         }
         if (savedInstanceState == null) receiveLink(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        val preferences = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
+        homeViewModel.setHideShorts(preferences.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_HIDE_SHORTS))
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         receiveLink(intent)
     }
 
@@ -91,5 +110,8 @@ class HomeActivity : ComponentActivity() {
         homeViewModel.onAction(HomeAction.Navigate(HomeNavigationRequest.OpenLink(link)))
     }
 
-    companion object { const val EXTRA_SCENARIO = "home_scenario" }
+    companion object {
+        const val EXTRA_SCENARIO = "home_scenario"
+        const val EXTRA_SIGNED_IN = "signed_in_preview"
+    }
 }

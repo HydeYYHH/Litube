@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,7 +69,7 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                             contentPadding = PaddingValues(bottom = 16.dp)) {
                             item(key = "header") {
                                 val w = viewport.value
-                                PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), onAction)
+                                PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
                             }
                             if (content.page.entries.isEmpty()) item {
                                 AppText("No videos in this playlist yet", Modifier.fillMaxWidth().padding(24.dp).testTag("playlist-empty"),
@@ -101,7 +103,13 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
 }
 
 @Composable
-private fun PlaylistHero(page: PlaylistPage, width: Float, wide: Boolean, onAction: (PlaylistAction) -> Unit) {
+private fun PlaylistHero(
+    page: PlaylistPage,
+    width: Float,
+    wide: Boolean,
+    descriptionExpanded: Boolean,
+    onAction: (PlaylistAction) -> Unit,
+) {
     val accent = Color(page.summary.accent)
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(0.dp)).background(accent).testTag("playlist-hero")) {
         Box(Modifier.matchParentSize()) {
@@ -116,7 +124,7 @@ private fun PlaylistHero(page: PlaylistPage, width: Float, wide: Boolean, onActi
                     .clip(RoundedCornerShape(8.dp)).clickable { onAction(PlaylistAction.PlayAll) }.testTag("playlist-hero-cover"))
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    PlaylistIdentity(page, width, onAction)
+                    PlaylistIdentity(page, width, descriptionExpanded, onAction)
                     PlaylistButtons(onAction, stretch = false)
                     Spacer(Modifier.height(8.dp))
                 }
@@ -126,7 +134,7 @@ private fun PlaylistHero(page: PlaylistPage, width: Float, wide: Boolean, onActi
                 PlaylistArtwork(page.summary.artwork, Modifier.fillMaxWidth().aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(8.dp)).clickable { onAction(PlaylistAction.PlayAll) }.testTag("playlist-hero-cover"))
                 Spacer(Modifier.height(16.dp))
-                PlaylistIdentity(page, width, onAction)
+                PlaylistIdentity(page, width, descriptionExpanded, onAction)
                 PlaylistButtons(onAction, stretch = width < 600f)
             }
         }
@@ -134,7 +142,12 @@ private fun PlaylistHero(page: PlaylistPage, width: Float, wide: Boolean, onActi
 }
 
 @Composable
-private fun PlaylistIdentity(page: PlaylistPage, width: Float, onAction: (PlaylistAction) -> Unit) {
+private fun PlaylistIdentity(
+    page: PlaylistPage,
+    width: Float,
+    descriptionExpanded: Boolean,
+    onAction: (PlaylistAction) -> Unit,
+) {
     val large = PlaylistLayout.largeText(width)
     val medium = PlaylistLayout.mediumText(width)
     val text = if (medium) 14 else 12
@@ -169,8 +182,11 @@ private fun PlaylistIdentity(page: PlaylistPage, width: Float, onAction: (Playli
         }
     }
     AppText(page.description, Modifier.padding(top = 12.dp).widthIn(max = 600.dp)
-        .clickable { onAction(PlaylistAction.OpenDescription) }.testTag("playlist-description"),
-        size = text, line = line, color = Color.White.copy(alpha = 0.7f), maxLines = 2)
+        .clickable(role = Role.Button) { onAction(PlaylistAction.ToggleDescription) }
+        .semantics { contentDescription = if (descriptionExpanded) "Show less description" else "Show full description" }
+        .testTag("playlist-description"),
+        size = text, line = line, color = Color.White.copy(alpha = 0.7f),
+        maxLines = if (descriptionExpanded) Int.MAX_VALUE else 2)
 }
 
 @Composable

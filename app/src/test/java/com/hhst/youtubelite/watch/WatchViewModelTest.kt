@@ -87,8 +87,6 @@ class WatchViewModelTest {
             WatchAction.Queue to WatchNavigationRequest.Queue("harbour"),
             WatchAction.OpenWith to WatchNavigationRequest.OpenWith("harbour"),
             WatchAction.Share to WatchNavigationRequest.Share("harbour"),
-            WatchAction.Save to WatchNavigationRequest.Save("harbour"),
-            WatchAction.Report to WatchNavigationRequest.Report("harbour"),
             WatchAction.Subscribe to WatchNavigationRequest.Subscribe("northlight"),
             WatchAction.OpenChannel("studio") to WatchNavigationRequest.Channel("studio"),
             WatchAction.OpenComments("harbour") to WatchNavigationRequest.Comments("harbour"),
@@ -104,7 +102,7 @@ class WatchViewModelTest {
         assertEquals("harbour", vm.uiState.value.videoId)
     }
 
-    @Test fun relatedCardMenuIsPageStateAndItsShareRowIsTheOnlyExit() = runTest {
+    @Test fun relatedCardMenuKeepsSaveLocalAndEmitsTypedWatchLater() = runTest {
         val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "harbour")
         advanceUntilIdle()
         vm.onAction(WatchAction.OpenItemMenu("studio"))
@@ -115,10 +113,66 @@ class WatchViewModelTest {
         assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
         vm.onAction(WatchAction.OpenItemMenu("meadow"))
         vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.WatchLater))
-        assertEquals(WatchNavigationRequest.MenuAction("meadow", WatchVideoMenuAction.WatchLater), vm.navigationRequests.first())
+        assertEquals(WatchNavigationRequest.SaveToWatchLater("meadow"), vm.navigationRequests.first())
+        vm.onAction(WatchAction.OpenItemMenu("meadow"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.SaveToPlaylist))
+        assertEquals(WatchOverlay.Save("meadow"), vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
         vm.onAction(WatchAction.OpenItemMenu("orbit"))
         vm.onAction(WatchAction.CloseOverlay)
         assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun reportAndRecommendationRowsOpenLocalReasonChoosers() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "harbour")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Report)
+        assertEquals(WatchOverlay.Feedback("harbour", WatchFeedbackKind.Report), vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(WatchAction.FeedbackReason("Harmful content"))
+        assertEquals(
+            WatchNavigationRequest.Feedback("harbour", WatchFeedbackKind.Report, "Harmful content"),
+            vm.navigationRequests.first(),
+        )
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+
+        vm.onAction(WatchAction.OpenItemMenu("meadow"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.NotInterested))
+        assertEquals(WatchOverlay.Feedback("meadow", WatchFeedbackKind.NotInterested), vm.uiState.value.overlay)
+        vm.onAction(WatchAction.FeedbackReason("It's repetitive"))
+        assertEquals(
+            WatchNavigationRequest.Feedback("meadow", WatchFeedbackKind.NotInterested, "It's repetitive"),
+            vm.navigationRequests.first(),
+        )
+        vm.onAction(WatchAction.OpenItemMenu("orbit"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.DontRecommend))
+        assertEquals(WatchOverlay.Feedback("orbit", WatchFeedbackKind.DontRecommend), vm.uiState.value.overlay)
+        assertTrue(vm.uiState.value.content is WatchContent.Ready)
+    }
+
+    @Test fun saveChooserAndNewPlaylistOnlyEmitTypedRequests() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "harbour")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        assertEquals(WatchOverlay.Save("harbour"), vm.uiState.value.overlay)
+        vm.onAction(WatchAction.SaveDestinationSelected(
+            com.hhst.youtubelite.saves.domain.SaveDestination.Playlist("LL", "Liked videos")))
+        assertEquals(WatchNavigationRequest.SaveToPlaylist("harbour", "LL", "Liked videos"), vm.navigationRequests.first())
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+
+        vm.onAction(WatchAction.Save)
+        vm.onAction(WatchAction.SaveDestinationSelected(com.hhst.youtubelite.saves.domain.SaveDestination.WatchLater))
+        assertEquals(WatchNavigationRequest.SaveToWatchLater("harbour"), vm.navigationRequests.first())
+
+        vm.onAction(WatchAction.Save)
+        vm.onAction(WatchAction.OpenNewPlaylist)
+        assertEquals(WatchOverlay.Save("harbour", newPlaylist = true), vm.uiState.value.overlay)
+        vm.onAction(WatchAction.SubmitNewPlaylist)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(WatchAction.SaveDraftChanged("Trip", "Later"))
+        vm.onAction(WatchAction.SubmitNewPlaylist)
+        assertEquals(WatchNavigationRequest.CreatePlaylist("harbour", "Trip", "Later"), vm.navigationRequests.first())
+        assertTrue(vm.uiState.value.content is WatchContent.Ready)
     }
 
     @Test fun relatedCardMenuRestoresThroughSavedState() = runTest {

@@ -88,6 +88,8 @@ class PlaylistScreenAndroidTest {
         }
         compose.onNodeWithTag("playlist-play-all").performClick()
         assertEquals(PlaylistAction.PlayAll, actions.last())
+        compose.onNodeWithTag("playlist-description").performClick()
+        assertEquals(PlaylistAction.ToggleDescription, actions.last())
         compose.onNodeWithContentDescription("More playlist actions").performClick()
         assertEquals(PlaylistAction.OpenMenu, actions.last())
         compose.runOnIdle { current = state(overlay = PlaylistOverlay.Menu) }

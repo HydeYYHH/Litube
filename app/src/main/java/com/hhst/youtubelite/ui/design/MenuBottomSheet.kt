@@ -76,6 +76,7 @@ fun MenuBottomSheet(
     bottomPadding: Dp = MenuSheetLayout.BottomInset.dp,
     rowStart: Dp = MenuSheetLayout.RowStart.dp,
     iconGap: Dp = MenuSheetLayout.IconGap.dp,
+    header: (@Composable () -> Unit)? = null,
 ) {
     var drag by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
@@ -113,6 +114,7 @@ fun MenuBottomSheet(
                 )
             }
             Column(Modifier.verticalScroll(rememberScrollState()).testTag("menu-actions")) {
+                header?.invoke()
                 items.forEachIndexed { index, item ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)

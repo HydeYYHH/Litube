@@ -63,9 +63,16 @@ class SearchResultsActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 searchViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
-                    if (request == SearchNavigationRequest.Destination(SearchDestination.Home)) finish()
+                    if (request is SearchNavigationRequest.Destination) {
+                        com.hhst.youtubelite.ui.components.MainTabs.intent(this@SearchResultsActivity,
+                            com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name),
+                            searchViewModel.uiState.value.signedInPreview)?.let { startActivity(it); finish() }
+                    }
                     if (request is SearchNavigationRequest.Watch) {
                         startActivity(WatchActivity.intent(this@SearchResultsActivity, request.videoId))
+                    }
+                    if (request is SearchNavigationRequest.Shorts) {
+                        startActivity(com.hhst.youtubelite.shorts.ShortsActivity.intent(this@SearchResultsActivity, request.itemId))
                     }
                     if (request is SearchNavigationRequest.Channel) {
                         startActivity(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))

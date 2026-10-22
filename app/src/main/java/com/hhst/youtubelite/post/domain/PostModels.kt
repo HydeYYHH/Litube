@@ -51,6 +51,7 @@ sealed interface PostDetailContent {
 sealed interface PostDetailOverlay {
     data object None : PostDetailOverlay
     data object Menu : PostDetailOverlay
+    data class Image(val index: Int) : PostDetailOverlay
 }
 
 data class PostDetailUiState(
@@ -58,6 +59,7 @@ data class PostDetailUiState(
     val content: PostDetailContent = PostDetailContent.Loading,
     val selectedImage: Int = 0,
     val overlay: PostDetailOverlay = PostDetailOverlay.None,
+    val commentsOpen: Boolean = false,
 ) {
     val post: PostDetail? get() = (content as? PostDetailContent.Ready)?.post
 }
@@ -75,9 +77,11 @@ sealed interface PostDetailNavigationRequest {
 sealed interface PostDetailAction {
     data object Retry : PostDetailAction
     data class SelectImage(val index: Int) : PostDetailAction
+    data class OpenImage(val index: Int) : PostDetailAction
     data object Like : PostDetailAction
     data object Dislike : PostDetailAction
     data object Comments : PostDetailAction
+    data object CloseComments : PostDetailAction
     data object OpenMenu : PostDetailAction
     data object CloseOverlay : PostDetailAction
     data class MenuSelected(val action: PostMenuAction) : PostDetailAction

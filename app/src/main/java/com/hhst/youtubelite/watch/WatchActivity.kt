@@ -34,6 +34,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.hhst.youtubelite.BuildConfig
+import com.hhst.youtubelite.R
 import com.hhst.youtubelite.comments.data.CommentsScenario
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.presentation.CommentsPanel
@@ -55,7 +56,11 @@ import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
 import com.hhst.youtubelite.comments.domain.CommentsContent
 import com.hhst.youtubelite.comments.domain.CommentsOverlay
+import com.hhst.youtubelite.downloader.ui.DownloadEntries
+import com.hhst.youtubelite.downloader.ui.DownloadSingleSpec
+import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.share.ShareGateway
+import com.hhst.youtubelite.share.VideoShare
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import com.hhst.youtubelite.watch.domain.WatchOverlay
 import com.hhst.youtubelite.watch.presentation.WatchPlayer
@@ -64,6 +69,7 @@ import com.hhst.youtubelite.watch.presentation.WatchVideoMenu
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 
 class WatchActivity : ComponentActivity() {
@@ -71,11 +77,19 @@ class WatchActivity : ComponentActivity() {
         private set
     lateinit var commentsViewModel: CommentsViewModel
         private set
+    private val playerViewModel: PlayerViewModel by inject()
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     var lastNavigationRequest: WatchNavigationRequest? = null
         private set
     var lastCommentRequest: CommentNavigationRequest? = null
         private set
+
+    /** Test seams: recorded payloads plus launch suppression for instrumentation runs. */
+    var lastDownloadSpec: DownloadSingleSpec? = null
+        private set
+    var lastQueuedItem: QueueItem? = null
+        private set
+    var launchDownload: Boolean = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +134,34 @@ class WatchActivity : ComponentActivity() {
                         is WatchNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@WatchActivity, request.query))
                         is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId))
                         is WatchNavigationRequest.Share -> shareGateway.share(request.videoId)
+                        is WatchNavigationRequest.Download -> {
+                            val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
+                            // Fixture ids map onto their public stand-ins, the same way sharing resolves them.
+                            val source = VideoShare.urlFor(request.videoId) ?: return@collect
+                            val spec = DownloadEntries.single(
+                                source,
+                                video?.title.orEmpty(),
+                                video?.channel,
+                                null,
+                            )
+                            lastDownloadSpec = spec
+                            if (spec != null && launchDownload) DownloadEntries.show(this@WatchActivity, spec)
+                        }
+                        is WatchNavigationRequest.Queue -> {
+                            val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
+                            val canonicalId = VideoShare.urlFor(request.videoId)?.substringAfterLast('/') ?: return@collect
+                            val item = QueueItem(
+                                videoId = canonicalId,
+                                title = video?.title.orEmpty().ifBlank { request.videoId },
+                                author = video?.channel,
+                            )
+                            lastQueuedItem = item
+                            playerViewModel.onQueueAdd(item)
+                            android.widget.Toast.makeText(
+                                this@WatchActivity, getString(R.string.queue_item_added), android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                        is WatchNavigationRequest.OpenWith -> shareGateway.openWith(request.videoId)
                         else -> Unit
                     }
                 }
@@ -152,7 +194,8 @@ class WatchActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(fullscreen, state.overlay) {
-                if (fullscreen && state.overlay is WatchOverlay.ItemMenu) {
+                if (fullscreen && (state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
+                        state.overlay is WatchOverlay.Feedback)) {
                     watchViewModel.onAction(WatchAction.CloseOverlay)
                 }
             }
@@ -162,7 +205,9 @@ class WatchActivity : ComponentActivity() {
             }
             val back: () -> Unit = {
                 when {
-                    state.overlay is WatchOverlay.ItemMenu -> watchViewModel.onAction(WatchAction.CloseOverlay)
+                    state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
+                        state.overlay is WatchOverlay.Feedback ->
+                        watchViewModel.onAction(WatchAction.CloseOverlay)
                     state.searchOpen -> watchViewModel.onAction(WatchAction.CloseSearch)
                     state.commentsOpen && !fullscreen && commentsState.overlay != CommentsOverlay.None ->
                         commentsViewModel.onAction(CommentAction.CloseMenu)
@@ -178,6 +223,7 @@ class WatchActivity : ComponentActivity() {
             Box(Modifier.fillMaxSize().background(ComposeColor.White)) {
                 BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
+                        state.overlay is WatchOverlay.Save || state.overlay is WatchOverlay.Feedback ||
                         (state.commentsOpen && !fullscreen && !WatchLayout.sidebar(maxWidth.value, maxHeight.value))
                     WatchScreen(
                         state = state,
@@ -230,6 +276,11 @@ class WatchActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        playerViewModel.refreshPipAvailability()
     }
 
     companion object {

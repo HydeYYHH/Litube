@@ -36,7 +36,7 @@ class CommentsViewModelTest {
     @After fun cleanup() { Dispatchers.resetMain() }
 
     private fun repository(block: suspend (String?, CommentSort) -> CommentsPage) = object : CommentsRepository {
-        override suspend fun comments(videoId: String, sort: CommentSort, cursor: String?) = block(cursor, sort)
+        override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget, sort: CommentSort, cursor: String?) = block(cursor, sort)
     }
 
     @Test fun firstPageLoadsTheLocalFixture() = runTest {
@@ -135,13 +135,10 @@ class CommentsViewModelTest {
         val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
         advanceUntilIdle()
         val expectations = listOf(
-            CommentAction.Compose to CommentNavigationRequest.Compose("bunny"),
             CommentAction.LikeThread("c1") to CommentNavigationRequest.LikeComment("bunny", "c1"),
             CommentAction.DislikeThread("c1") to CommentNavigationRequest.DislikeComment("bunny", "c1"),
             CommentAction.ReportThread("c1") to CommentNavigationRequest.ReportComment("bunny", "c1", "c1"),
             CommentAction.OpenThreadMenu("c1") to CommentNavigationRequest.OpenCommentMenu("bunny", "c1"),
-            CommentAction.Reply("c1") to CommentNavigationRequest.Reply("bunny", "c1", "c1"),
-            CommentAction.Reply("c1", "c1r1") to CommentNavigationRequest.Reply("bunny", "c1", "c1r1"),
             CommentAction.OpenAuthor("blender") to CommentNavigationRequest.OpenAuthor("blender"),
             CommentAction.LikeReply("c1", "c1r1") to CommentNavigationRequest.LikeComment("bunny", "c1r1"),
             CommentAction.DislikeReply("c1", "c1r1") to CommentNavigationRequest.DislikeComment("bunny", "c1r1"),
@@ -155,6 +152,93 @@ class CommentsViewModelTest {
         }
         assertTrue(vm.uiState.value.content is CommentsContent.Ready)
         assertTrue(vm.uiState.value.expanded.isEmpty())
+    }
+
+    @Test fun composerSubmitsTypedTextWithoutFakingAPostedComment() = runTest {
+        val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        assertEquals(CommentsOverlay.Composer(), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.DraftChanged("  A new thought  "))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(CommentNavigationRequest.SubmitComment("bunny", "A new thought"), vm.navigationRequests.first())
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+        assertEquals("", vm.uiState.value.draft)
+        assertEquals(4, (vm.uiState.value.content as CommentsContent.Ready).threads.size)
+
+        vm.onAction(CommentAction.Reply("c1"))
+        assertEquals(CommentsOverlay.Composer("c1", null, editing = false), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.DraftChanged("Reply body"))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(CommentNavigationRequest.SubmitReply("bunny", "c1", "c1", "Reply body"), vm.navigationRequests.first())
+
+        vm.onAction(CommentAction.Reply("c1", "c1r1"))
+        vm.onAction(CommentAction.DraftChanged("Reply to reply"))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(
+            CommentNavigationRequest.SubmitReply("bunny", "c1", "c1r1", "Reply to reply"),
+            vm.navigationRequests.first(),
+        )
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("   "))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    @Test fun ownerOnlyRowsOpenEditAndDeleteWithoutChangingTheFixture() = runTest {
+        val repo = repository { cursor, sort ->
+            val page = FixtureCommentsRepository().comments("bunny", sort, cursor)
+            page.copy(threads = page.threads.mapIndexed { index, thread ->
+                if (index != 0) thread else thread.copy(
+                    ownedByViewer = true,
+                    replies = thread.replies.mapIndexed { replyIndex, reply ->
+                        if (replyIndex == 0) reply.copy(ownedByViewer = true) else reply
+                    },
+                )
+            })
+        }
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        assertEquals(CommentNavigationRequest.OpenCommentMenu("bunny", "c1"), vm.navigationRequests.first())
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Edit))
+        assertEquals(CommentsOverlay.Composer("c1", null, editing = true), vm.uiState.value.overlay)
+        assertEquals("The lighting still holds up. Every rewatch turns up a detail I missed the first time.", vm.uiState.value.draft)
+        vm.onAction(CommentAction.DraftChanged("edited body"))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(
+            CommentNavigationRequest.EditComment("bunny", "c1", "c1", "edited body"),
+            vm.navigationRequests.first(),
+        )
+        vm.onAction(CommentAction.RequestDelete("c1"))
+        assertEquals(CommentsOverlay.DeleteConfirm("c1", null), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.ConfirmDelete)
+        assertEquals(CommentNavigationRequest.DeleteComment("bunny", "c1", "c1"), vm.navigationRequests.first())
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+
+        vm.onAction(CommentAction.OpenReplyMenu("c1", "c1r1"))
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Delete))
+        assertEquals(CommentsOverlay.DeleteConfirm("c1", "c1r1"), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.CancelDelete)
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun publicCommentsNeverExposeOwnerOnlyMenuRows() = runTest {
+        val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        assertEquals(
+            listOf(CommentMenuAction.Reply, CommentMenuAction.Report),
+            CommentMenuAction.forComment(ownedByViewer = false),
+        )
+        assertEquals(
+            listOf(CommentMenuAction.Reply, CommentMenuAction.Report, CommentMenuAction.Edit, CommentMenuAction.Delete),
+            CommentMenuAction.forComment(ownedByViewer = true),
+        )
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Edit))
+        assertEquals(CommentsOverlay.ThreadMenu("c1"), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.RequestDelete("c1"))
+        assertEquals(CommentsOverlay.ThreadMenu("c1"), vm.uiState.value.overlay)
     }
 
     @Test fun sortAndExpansionSurviveRecreation() = runTest {
@@ -225,7 +309,10 @@ class CommentsViewModelTest {
         assertEquals(CommentsOverlay.ThreadMenu("c1"), vm.uiState.value.overlay)
         assertEquals(CommentNavigationRequest.OpenCommentMenu("bunny", "c1"), vm.navigationRequests.first())
         vm.onAction(CommentAction.MenuAction(CommentMenuAction.Reply))
-        assertEquals(CommentNavigationRequest.Reply("bunny", "c1", "c1"), vm.navigationRequests.first())
+        assertEquals(CommentsOverlay.Composer("c1", null, editing = false), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.DraftChanged("A reply"))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(CommentNavigationRequest.SubmitReply("bunny", "c1", "c1", "A reply"), vm.navigationRequests.first())
         assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
         vm.onAction(CommentAction.OpenThreadMenu("c1"))
         assertEquals(CommentNavigationRequest.OpenCommentMenu("bunny", "c1"), vm.navigationRequests.first())
@@ -235,7 +322,13 @@ class CommentsViewModelTest {
         assertEquals(CommentsOverlay.ReplyMenu("c1", "c1r1"), vm.uiState.value.overlay)
         assertEquals(CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"), vm.navigationRequests.first())
         vm.onAction(CommentAction.MenuAction(CommentMenuAction.Reply))
-        assertEquals(CommentNavigationRequest.Reply("bunny", "c1", "c1r1"), vm.navigationRequests.first())
+        assertEquals(CommentsOverlay.Composer("c1", "c1r1", editing = false), vm.uiState.value.overlay)
+        vm.onAction(CommentAction.DraftChanged("A reply to a reply"))
+        vm.onAction(CommentAction.SubmitDraft)
+        assertEquals(
+            CommentNavigationRequest.SubmitReply("bunny", "c1", "c1r1", "A reply to a reply"),
+            vm.navigationRequests.first(),
+        )
         vm.onAction(CommentAction.OpenReplyMenu("c1", "c1r1"))
         assertEquals(CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"), vm.navigationRequests.first())
         vm.onAction(CommentAction.MenuAction(CommentMenuAction.Report))
@@ -273,4 +366,21 @@ class CommentsViewModelTest {
         )
         assertEquals(CommentsOverlay.None, restored.uiState.value.overlay)
     }
+
+    @Test fun postSubmissionsRetainBothChannelAndPostIdentityAcrossRecreation() = runTest {
+        val target = com.hhst.youtubelite.comments.domain.CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity("studio", "post-2"))
+        val handle = SavedStateHandle()
+        val vm = CommentsViewModel(com.hhst.youtubelite.post.data.FixturePostCommentsRepository(), handle, target)
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("A post reply"))
+        val restored = CommentsViewModel(com.hhst.youtubelite.post.data.FixturePostCommentsRepository(), handle, "wrong-video")
+        advanceUntilIdle()
+        restored.onAction(CommentAction.SubmitDraft)
+        val request = restored.navigationRequests.first()
+        assertEquals(CommentNavigationRequest.SubmitComment(target, "A post reply"), request)
+        assertEquals("", request.videoId)
+        assertEquals(target, restored.uiState.value.target)
+    }
+
 }

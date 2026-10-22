@@ -9,7 +9,7 @@ import com.hhst.youtubelite.R
 
 /** Fixed local artwork used by every fixture surface. No remote image is loaded. */
 @Composable
-fun Artwork(asset: String, modifier: Modifier = Modifier) {
+fun Artwork(asset: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
     Image(
         painterResource(when (asset) {
             "dream" -> R.drawable.sample_dream
@@ -18,6 +18,6 @@ fun Artwork(asset: String, modifier: Modifier = Modifier) {
         }),
         contentDescription = null,
         modifier = modifier,
-        contentScale = ContentScale.Crop,
+        contentScale = contentScale,
     )
 }

@@ -10,6 +10,7 @@ data class CommentThread(
     val replyCount: Int,
     val replies: List<CommentReply> = emptyList(),
     val authorChannelId: String = "",
+    val ownedByViewer: Boolean = false,
 )
 
 data class CommentAuthor(val displayName: String, val handle: String, val artwork: String)
@@ -21,6 +22,7 @@ data class CommentReply(
     val body: String,
     val likes: String,
     val authorChannelId: String = "",
+    val ownedByViewer: Boolean = false,
 )
 
 data class CommentsPage(
@@ -30,8 +32,15 @@ data class CommentsPage(
     val turnedOff: Boolean = false,
 )
 
+sealed interface CommentTarget {
+    data class Video(val id: String) : CommentTarget
+    data class Post(val identity: com.hhst.youtubelite.post.domain.PostIdentity) : CommentTarget
+}
+
 interface CommentsRepository {
-    suspend fun comments(videoId: String, sort: CommentSort, cursor: String?): CommentsPage
+    suspend fun comments(target: CommentTarget, sort: CommentSort, cursor: String?): CommentsPage
+    suspend fun comments(videoId: String, sort: CommentSort, cursor: String?): CommentsPage =
+        comments(CommentTarget.Video(videoId), sort, cursor)
 }
 
 enum class CommentSort { Top, Newest }
@@ -57,6 +66,8 @@ data class CommentsUiState(
     val expanded: Set<String> = emptySet(),
     val total: String = "",
     val overlay: CommentsOverlay = CommentsOverlay.None,
+    val draft: String = "",
+    val target: CommentTarget = CommentTarget.Video(videoId),
 )
 
 /**
@@ -68,23 +79,67 @@ sealed interface CommentsOverlay {
     data object SortMenu : CommentsOverlay
     data class ThreadMenu(val threadId: String) : CommentsOverlay
     data class ReplyMenu(val threadId: String, val replyId: String) : CommentsOverlay
+
+    /** `replyId` is null for a new thread and for the thread's own reply action target. */
+    data class Composer(
+        val threadId: String? = null,
+        val replyId: String? = null,
+        val editing: Boolean = false,
+    ) : CommentsOverlay
+
+    data class DeleteConfirm(val threadId: String, val replyId: String? = null) : CommentsOverlay
 }
 
-/** Public comment actions only; owner-only edit/delete are never offered for anonymous samples. */
-enum class CommentMenuAction(val label: String) { Reply("Reply"), Report("Report") }
+/**
+ * Public rows plus the owner-only rows. Edit/Delete are never added to a menu for a
+ * comment the local viewer does not own; the anonymous sample exposes only Reply/Report.
+ */
+enum class CommentMenuAction(val label: String, val ownerOnly: Boolean = false) {
+    Reply("Reply"),
+    Report("Report"),
+    Edit("Edit", ownerOnly = true),
+    Delete("Delete", ownerOnly = true);
+
+    companion object {
+        fun forComment(ownedByViewer: Boolean): List<CommentMenuAction> =
+            entries.filter { !it.ownerOnly || ownedByViewer }
+    }
+}
 
 /**
  * Typed boundaries for interactions this screen does not implement. The host records
  * them; nothing is simulated as a successful write.
  */
 sealed interface CommentNavigationRequest {
-    data class Compose(val videoId: String) : CommentNavigationRequest
-    data class LikeComment(val videoId: String, val commentId: String) : CommentNavigationRequest
-    data class DislikeComment(val videoId: String, val commentId: String) : CommentNavigationRequest
-    data class ReportComment(val videoId: String, val threadId: String, val commentId: String) : CommentNavigationRequest
-    data class OpenCommentMenu(val videoId: String, val threadId: String) : CommentNavigationRequest
-    data class OpenReplyMenu(val videoId: String, val threadId: String, val replyId: String) : CommentNavigationRequest
-    data class Reply(val videoId: String, val threadId: String, val commentId: String) : CommentNavigationRequest
+    val target: CommentTarget? get() = null
+    val videoId: String get() = (target as? CommentTarget.Video)?.id.orEmpty()
+    data class SubmitComment(override val target: CommentTarget, val body: String) : CommentNavigationRequest {
+        constructor(videoId: String, body: String) : this(CommentTarget.Video(videoId), body)
+    }
+    data class SubmitReply(override val target: CommentTarget, val threadId: String, val commentId: String, val body: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String, commentId: String, body: String) : this(CommentTarget.Video(videoId), threadId, commentId, body)
+    }
+    data class EditComment(override val target: CommentTarget, val threadId: String, val commentId: String, val body: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String, commentId: String, body: String) : this(CommentTarget.Video(videoId), threadId, commentId, body)
+    }
+    data class DeleteComment(override val target: CommentTarget, val threadId: String, val commentId: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String, commentId: String) : this(CommentTarget.Video(videoId), threadId, commentId)
+    }
+    data class LikeComment(override val target: CommentTarget, val commentId: String) : CommentNavigationRequest {
+        constructor(videoId: String, commentId: String) : this(CommentTarget.Video(videoId), commentId)
+    }
+    data class DislikeComment(override val target: CommentTarget, val commentId: String) : CommentNavigationRequest {
+        constructor(videoId: String, commentId: String) : this(CommentTarget.Video(videoId), commentId)
+    }
+    data class ReportComment(override val target: CommentTarget, val threadId: String, val commentId: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String, commentId: String) : this(CommentTarget.Video(videoId), threadId, commentId)
+    }
+    data class OpenCommentMenu(override val target: CommentTarget, val threadId: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String) : this(CommentTarget.Video(videoId), threadId)
+    }
+    data class OpenReplyMenu(override val target: CommentTarget, val threadId: String, val replyId: String) : CommentNavigationRequest {
+        constructor(videoId: String, threadId: String, replyId: String) : this(CommentTarget.Video(videoId), threadId, replyId)
+    }
     data class OpenAuthor(val channelId: String) : CommentNavigationRequest
 }
 
@@ -97,6 +152,12 @@ sealed interface CommentAction {
     data class MenuAction(val action: CommentMenuAction) : CommentAction
     data class ToggleReplies(val commentId: String) : CommentAction
     data object Compose : CommentAction
+    data class DraftChanged(val text: String) : CommentAction
+    data object SubmitDraft : CommentAction
+    data object DismissComposer : CommentAction
+    data class RequestDelete(val threadId: String, val commentId: String = threadId) : CommentAction
+    data object ConfirmDelete : CommentAction
+    data object CancelDelete : CommentAction
     data class LikeThread(val commentId: String) : CommentAction
     data class DislikeThread(val commentId: String) : CommentAction
     data class ReportThread(val commentId: String) : CommentAction

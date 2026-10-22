@@ -35,4 +35,12 @@ class VideoShareTest {
                 assertEquals(VideoShare.urlFor(it.artwork), VideoShare.urlFor(it.id))
             }
     }
+
+    @Test fun newFixtureAliasesResolveOnlyKnownMedia() {
+        assertEquals(VideoShare.urlFor("bunny"), VideoShare.urlFor("music-bunny"))
+        assertEquals(VideoShare.urlFor("dream"), VideoShare.urlFor("gaming-dream"))
+        assertEquals(VideoShare.urlFor("sintel"), VideoShare.urlFor("live-2"))
+        assertNull(VideoShare.urlFor("music-unknown"))
+        assertNull(VideoShare.urlFor("madeup-bunny"))
+    }
 }

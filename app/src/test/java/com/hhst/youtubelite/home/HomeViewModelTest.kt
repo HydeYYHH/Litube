@@ -24,9 +24,9 @@ class HomeViewModelTest {
             val invalid = FeedMenuAction.entries.first { it !in kind.actions }
             vm.onAction(HomeAction.MenuSelected(invalid))
             assertEquals(HomeOverlay.Menu("item", kind), vm.uiState.value.overlay)
-            vm.onAction(HomeAction.MenuSelected(kind.actions.first()))
+            assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+            vm.onAction(HomeAction.CloseOverlay)
             assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
-            assertEquals(HomeNavigationRequest.MenuAction("item", kind.actions.first()), vm.navigationRequests.first())
         }
     }
 
@@ -164,6 +164,25 @@ class HomeViewModelTest {
         assertEquals(FixtureHomeRepository.samplePage(), (vm.uiState.value.content as HomeContent.Feed).page)
     }
 
+    @Test fun saveToPlaylistIsLocalUntilTheTargetIsChosen() = runTest {
+        val vm = HomeViewModel(FixtureHomeRepository(), SavedStateHandle(), HomeScenario.Feed)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        assertEquals(HomeOverlay.Save("bunny"), vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(HomeAction.SaveDestinationSelected(
+            com.hhst.youtubelite.saves.domain.SaveDestination.Playlist("LL", "Liked videos")))
+        assertEquals(HomeNavigationRequest.SaveToPlaylist("bunny", "LL", "Liked videos"), vm.navigationRequests.first())
+        assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        vm.onAction(HomeAction.OpenNewPlaylist)
+        vm.onAction(HomeAction.SaveDraftChanged("Road trip", ""))
+        vm.onAction(HomeAction.SubmitNewPlaylist)
+        assertEquals(HomeNavigationRequest.CreatePlaylist("bunny", "Road trip", ""), vm.navigationRequests.first())
+        assertEquals(FixtureHomeRepository.samplePage(), (vm.uiState.value.content as HomeContent.Feed).page)
+    }
+
     @Test fun doubleAppendDoesNotStartDuplicateRequests() = runTest {
         var calls = 0
         val vm = HomeViewModel(repository { _, _ -> calls++; delay(100); FixtureHomeRepository.samplePage().copy(nextKey = null) }, SavedStateHandle(), HomeScenario.Feed)
@@ -190,5 +209,16 @@ class HomeViewModelTest {
             assertEquals(index + 2, HomeLayout.columns(width + 0.5f))
         }
         assertEquals(listOf(1, 1, 1, 2, 2, 3, 4), listOf(320f, 390f, 411f, 600f, 840f, 1280f, 1600f).map(HomeLayout::columns))
+    }
+
+    @Test fun newPlaylistDraftRestoresWithItsVideoIdentity() = runTest {
+        val saved = SavedStateHandle()
+        val vm = HomeViewModel(FixtureHomeRepository(HomeScenario.Feed), saved, HomeScenario.Feed)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        vm.onAction(HomeAction.OpenNewPlaylist)
+        vm.onAction(HomeAction.SaveDraftChanged("Films", "Weekend"))
+        val restored = HomeViewModel(FixtureHomeRepository(HomeScenario.Feed), saved, HomeScenario.Feed)
+        assertEquals(HomeOverlay.Save("bunny", true, "Films", "Weekend"), restored.uiState.value.overlay)
     }
 }

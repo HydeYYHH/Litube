@@ -61,6 +61,21 @@ class PlaylistViewModelTest {
         assertEquals(PlaylistNavigationRequest.Share(FixturePlaylistRepository.MOVIES), model.navigationRequests.first())
     }
 
+    @Test fun descriptionExpansionIsLocalAndSurvivesRecreation() = runTest {
+        val saved = SavedStateHandle()
+        val model = vm(saved)
+        advanceUntilIdle()
+        assertFalse(model.uiState.value.descriptionExpanded)
+        model.onAction(PlaylistAction.ToggleDescription)
+        assertTrue(model.uiState.value.descriptionExpanded)
+        assertNull(withTimeoutOrNull(1) { model.navigationRequests.first() })
+        val restored = vm(saved)
+        advanceUntilIdle()
+        assertTrue(restored.uiState.value.descriptionExpanded)
+        restored.onAction(PlaylistAction.ToggleDescription)
+        assertFalse(restored.uiState.value.descriptionExpanded)
+    }
+
     @Test fun overlaysQueryAndIdentityRestore() = runTest {
         val saved = SavedStateHandle()
         val model = vm(saved)

@@ -16,6 +16,7 @@ data class WatchVideo(
     val commentCount: String,
     val topComment: WatchComment,
     val description: String,
+    val live: Boolean = false,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
@@ -61,6 +62,26 @@ sealed interface WatchOverlay {
     data object None : WatchOverlay
     data object Search : WatchOverlay
     data class ItemMenu(val videoId: String) : WatchOverlay
+    data class Save(
+        val videoId: String,
+        val newPlaylist: Boolean = false,
+        val title: String = "",
+        val description: String = "",
+    ) : WatchOverlay
+    data class Feedback(val videoId: String, val kind: WatchFeedbackKind) : WatchOverlay
+}
+
+/** Reason chooser for the video report and recommendation rows. */
+enum class WatchFeedbackKind(val title: String, val reasons: List<String>) {
+    Report("Report video", listOf(
+        "Spam or misleading", "Harmful content", "Something else",
+    )),
+    NotInterested("Tell us why", listOf(
+        "I'm not interested in this video", "It's repetitive", "I've already seen it",
+    )),
+    DontRecommend("Tell us why", listOf(
+        "I don't like this channel", "This channel is misleading", "I've already seen enough",
+    )),
 }
 
 /** Ordinary-video menu rows. Share is the only row this build performs; the rest stay typed exits. */
@@ -89,8 +110,10 @@ sealed interface WatchNavigationRequest {
     data class Queue(val videoId: String) : WatchNavigationRequest
     data class OpenWith(val videoId: String) : WatchNavigationRequest
     data class Share(val videoId: String) : WatchNavigationRequest
-    data class Save(val videoId: String) : WatchNavigationRequest
-    data class Report(val videoId: String) : WatchNavigationRequest
+    data class SaveToWatchLater(val videoId: String) : WatchNavigationRequest
+    data class SaveToPlaylist(val videoId: String, val playlistId: String, val title: String) : WatchNavigationRequest
+    data class CreatePlaylist(val videoId: String, val title: String, val description: String) : WatchNavigationRequest
+    data class Feedback(val videoId: String, val kind: WatchFeedbackKind, val reason: String) : WatchNavigationRequest
 }
 
 sealed interface WatchAction {
@@ -110,6 +133,11 @@ sealed interface WatchAction {
     data object OpenWith : WatchAction
     data object Share : WatchAction
     data object Save : WatchAction
+    data class SaveDestinationSelected(val destination: com.hhst.youtubelite.saves.domain.SaveDestination) : WatchAction
+    data object OpenNewPlaylist : WatchAction
+    data class SaveDraftChanged(val title: String, val description: String) : WatchAction
+    data object SubmitNewPlaylist : WatchAction
+    data class FeedbackReason(val reason: String) : WatchAction
     data object Report : WatchAction
     data class OpenChannel(val channelId: String) : WatchAction
     data class OpenComments(val videoId: String) : WatchAction

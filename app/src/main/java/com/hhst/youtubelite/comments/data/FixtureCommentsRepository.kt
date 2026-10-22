@@ -13,7 +13,7 @@ import kotlinx.coroutines.delay
 class FixtureCommentsRepository(
     private val scenario: CommentsScenario = CommentsScenario.Content,
 ) : CommentsRepository {
-    override suspend fun comments(videoId: String, sort: CommentSort, cursor: String?): CommentsPage {
+    override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget, sort: CommentSort, cursor: String?): CommentsPage {
         delay(120)
         if (scenario == CommentsScenario.Error) throw IOException("Local comments error")
         if (scenario == CommentsScenario.Disabled) {

@@ -24,6 +24,19 @@ class WatchViewModel(
     private val restoredOverlay = when (savedState.get<String>("overlay")) {
         "search" -> WatchOverlay.Search
         "menu" -> savedState.get<String>("menuVideo")?.let { WatchOverlay.ItemMenu(it) }
+        "save" -> savedState.get<String>("saveVideo")?.let {
+            WatchOverlay.Save(
+                it,
+                savedState.get<Boolean>("saveNewPlaylist") == true,
+                savedState.get<String>("saveTitle").orEmpty(),
+                savedState.get<String>("saveDescription").orEmpty(),
+            )
+        }
+        "feedback" -> {
+            val id = savedState.get<String>("feedbackVideo")
+            val kind = savedState.get<String>("feedbackKind")?.let { WatchFeedbackKind.valueOf(it) }
+            if (id != null && kind != null) WatchOverlay.Feedback(id, kind) else null
+        }
         else -> WatchOverlay.None
     } ?: WatchOverlay.None
     private val _state = MutableStateFlow(
@@ -71,8 +84,40 @@ class WatchViewModel(
             WatchAction.Queue -> navigation.trySend(WatchNavigationRequest.Queue(videoId))
             WatchAction.OpenWith -> navigation.trySend(WatchNavigationRequest.OpenWith(videoId))
             WatchAction.Share -> navigation.trySend(WatchNavigationRequest.Share(videoId))
-            WatchAction.Save -> navigation.trySend(WatchNavigationRequest.Save(videoId))
-            WatchAction.Report -> navigation.trySend(WatchNavigationRequest.Report(videoId))
+            WatchAction.Save -> overlay(WatchOverlay.Save(videoId))
+            is WatchAction.SaveDestinationSelected -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                overlay(WatchOverlay.None)
+                when (val destination = action.destination) {
+                    com.hhst.youtubelite.saves.domain.SaveDestination.WatchLater ->
+                        navigation.trySend(WatchNavigationRequest.SaveToWatchLater(save.videoId))
+                    is com.hhst.youtubelite.saves.domain.SaveDestination.Playlist ->
+                        navigation.trySend(
+                            WatchNavigationRequest.SaveToPlaylist(save.videoId, destination.id, destination.title),
+                        )
+                }
+            }
+            WatchAction.OpenNewPlaylist -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                overlay(save.copy(newPlaylist = true, title = "", description = ""))
+            }
+            is WatchAction.SaveDraftChanged -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                overlay(save.copy(title = action.title, description = action.description))
+            }
+            WatchAction.SubmitNewPlaylist -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                val title = save.title.trim()
+                if (title.isEmpty()) return
+                overlay(WatchOverlay.None)
+                navigation.trySend(WatchNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+            }
+            WatchAction.Report -> overlay(WatchOverlay.Feedback(videoId, WatchFeedbackKind.Report))
+            is WatchAction.FeedbackReason -> {
+                val feedback = uiState.value.overlay as? WatchOverlay.Feedback ?: return
+                overlay(WatchOverlay.None)
+                navigation.trySend(WatchNavigationRequest.Feedback(feedback.videoId, feedback.kind, action.reason))
+            }
             WatchAction.Subscribe -> {
                 val channel = (uiState.value.content as? WatchContent.Ready)?.page?.video?.channelId ?: return
                 navigation.trySend(WatchNavigationRequest.Subscribe(channel))
@@ -89,11 +134,18 @@ class WatchViewModel(
             WatchAction.CloseOverlay -> overlay(WatchOverlay.None)
             is WatchAction.MenuAction -> {
                 val menu = uiState.value.overlay as? WatchOverlay.ItemMenu ?: return
-                overlay(WatchOverlay.None)
-                if (action.action == WatchVideoMenuAction.Share) {
-                    navigation.trySend(WatchNavigationRequest.Share(menu.videoId))
-                } else {
-                    navigation.trySend(WatchNavigationRequest.MenuAction(menu.videoId, action.action))
+                when (action.action) {
+                    WatchVideoMenuAction.WatchLater -> {
+                        overlay(WatchOverlay.None)
+                        navigation.trySend(WatchNavigationRequest.SaveToWatchLater(menu.videoId))
+                    }
+                    WatchVideoMenuAction.SaveToPlaylist -> overlay(WatchOverlay.Save(menu.videoId))
+                    WatchVideoMenuAction.Share -> {
+                        overlay(WatchOverlay.None)
+                        navigation.trySend(WatchNavigationRequest.Share(menu.videoId))
+                    }
+                    WatchVideoMenuAction.NotInterested -> overlay(WatchOverlay.Feedback(menu.videoId, WatchFeedbackKind.NotInterested))
+                    WatchVideoMenuAction.DontRecommend -> overlay(WatchOverlay.Feedback(menu.videoId, WatchFeedbackKind.DontRecommend))
                 }
             }
         }
@@ -117,8 +169,26 @@ class WatchViewModel(
                 savedState["menuVideo"] = overlay.videoId
                 "menu"
             }
+            is WatchOverlay.Save -> {
+                savedState["saveVideo"] = overlay.videoId
+                savedState["saveNewPlaylist"] = overlay.newPlaylist
+                savedState["saveTitle"] = overlay.title
+                savedState["saveDescription"] = overlay.description
+                "save"
+            }
+            is WatchOverlay.Feedback -> {
+                savedState["feedbackVideo"] = overlay.videoId
+                savedState["feedbackKind"] = overlay.kind.name
+                "feedback"
+            }
             WatchOverlay.None -> {
                 savedState.remove<String>("menuVideo")
+                savedState.remove<String>("saveVideo")
+                savedState.remove<Boolean>("saveNewPlaylist")
+                savedState.remove<String>("saveTitle")
+                savedState.remove<String>("saveDescription")
+                savedState.remove<String>("feedbackVideo")
+                savedState.remove<String>("feedbackKind")
                 "none"
             }
         }

@@ -47,6 +47,7 @@ data class PlaylistUiState(
     val content: PlaylistContent = PlaylistContent.Loading,
     val overlay: PlaylistOverlay = PlaylistOverlay.None,
     val query: String = "",
+    val descriptionExpanded: Boolean = false,
 )
 
 enum class PlaylistDestination { Home, Shorts, You }
@@ -63,7 +64,7 @@ sealed interface PlaylistAction {
     data object Save : PlaylistAction
     data object Share : PlaylistAction
     data object OpenOwner : PlaylistAction
-    data object OpenDescription : PlaylistAction
+    data object ToggleDescription : PlaylistAction
     data class OpenVideo(val entryId: String) : PlaylistAction
     data class OpenVideoMenu(val entryId: String) : PlaylistAction
     data class VideoMenuAction(val action: PlaylistVideoAction) : PlaylistAction
@@ -83,7 +84,6 @@ sealed interface PlaylistNavigationRequest {
     data class Save(val playlistId: String) : PlaylistNavigationRequest
     data class Queue(val playlistId: String, val videoIds: List<String>, val shuffle: Boolean) : PlaylistNavigationRequest
     data class VideoAction(val playlistId: String, val entryId: String, val videoId: String, val action: PlaylistVideoAction) : PlaylistNavigationRequest
-    data class Description(val playlistId: String) : PlaylistNavigationRequest
     data class Destination(val destination: PlaylistDestination) : PlaylistNavigationRequest
     data object VoiceSearch : PlaylistNavigationRequest
 }

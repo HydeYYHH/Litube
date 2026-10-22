@@ -48,7 +48,7 @@
         <activity
             android:name=".home.HomeActivity"
             android:exported="true"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.App.Home"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -80,6 +80,18 @@
 
         <!-- Local search results page; it opens a typed request for every later destination. -->
         <activity android:name=".playlist.PlaylistActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.YouActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.HistoryActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.PlaylistsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".notifications.NotificationsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+
+        <!-- Standalone shorts browse host; playback reuses the shared player ViewModel hooks. -->
+        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+
+        <!-- Explore entry with the four fixed category containers. -->
+        <activity android:name=".explore.ExploreActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity
             android:name=".search.SearchResultsActivity"
             android:exported="false"

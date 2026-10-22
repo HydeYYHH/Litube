@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
 import com.hhst.youtubelite.post.domain.PostDetailNavigationRequest
 import com.hhst.youtubelite.post.domain.PostIdentity
 import com.hhst.youtubelite.post.domain.PostMenuAction
@@ -59,6 +60,9 @@ class PostDetailHostAndroidTest {
         host.onActivity {
             assertEquals(PostDetailNavigationRequest.Comments(PostIdentity("studio", "post")), it.lastNavigationRequest)
         }
+        awaitNode("comments-panel")
+        compose.onNodeWithTag("comments-close").performClick()
+        compose.waitUntil(5_000) { nodeCount("comments-panel") == 0 }
 
         compose.onNodeWithTag("post-detail-more").performClick()
         awaitNode("post-detail-menu")
@@ -88,5 +92,60 @@ class PostDetailHostAndroidTest {
         awaitNode("post-detail-page")
         awaitNode("post-detail-body")
         assertEquals("The selected image must survive recreation", swiped, counter())
+    }
+
+    @Test fun postCommentsUseTheMeasuredPanelAndKeepPostIdentity() {
+        val host = launch()
+        compose.onNodeWithTag("post-detail-comments").performClick()
+        compose.waitUntil(15_000) { nodeCount("comments-list") > 0 }
+        compose.onNodeWithTag("comment-p1").assertExists()
+        compose.onAllNodes(hasText("184")).assertCountEquals(1)
+        compose.onNodeWithTag("comment-p1-more").performScrollTo().performClick()
+        awaitNode("comments-menu")
+        compose.onNodeWithTag("comment-menu-reply").performClick()
+        awaitNode("comment-composer")
+        compose.onNodeWithTag("comment-composer-input").performTextInput("Great update")
+        compose.onNodeWithTag("comment-composer-submit").performClick()
+        compose.waitUntil(10_000) {
+            var request: CommentNavigationRequest? = null
+            host.onActivity { request = it.lastCommentRequest }
+            request == CommentNavigationRequest.SubmitReply(com.hhst.youtubelite.comments.domain.CommentTarget.Post(PostIdentity("studio", "post")), "p1", "p1", "Great update")
+        }
+        host.onActivity {
+            assertEquals(PostIdentity("studio", "post"), it.postIdentity)
+            assertEquals("post", it.postIdentity.postId)
+            assertEquals(com.hhst.youtubelite.comments.domain.CommentTarget.Post(it.postIdentity), it.lastCommentRequest?.target)
+            assertEquals("", it.lastCommentRequest?.videoId)
+        }
+        compose.onNodeWithTag("comments-panel").assertExists()
+    }
+
+    @Test fun backClosesComposerBeforePostComments() {
+        val host = launch()
+        compose.onNodeWithTag("post-detail-comments").performClick()
+        awaitNode("comments-list")
+        host.onActivity { it.postCommentsViewModel.onAction(com.hhst.youtubelite.comments.domain.CommentAction.Compose) }
+        awaitNode("comment-composer")
+        host.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("comment-composer").assertDoesNotExist()
+        compose.onNodeWithTag("comments-panel").assertIsDisplayed()
+        host.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("comments-panel").assertDoesNotExist()
+        host.onActivity { assertFalse(it.isFinishing) }
+    }
+
+    @Test fun postImageOpensTheLocalViewerAndClosesWithoutNavigation() {
+        val host = launch()
+        compose.onNodeWithTag("post-detail-list").performScrollToNode(hasTestTag("post-detail-images"))
+        compose.onNodeWithTag("post-image-0").performClick()
+        awaitNode("post-image-viewer")
+        compose.onAllNodes(hasText("1/3")).assertCountEquals(1)
+        compose.onNodeWithTag("post-image-viewer-close").performClick()
+        compose.waitUntil(5_000) { nodeCount("post-image-viewer") == 0 }
+        compose.onNodeWithTag("post-detail-page").assertIsDisplayed()
+        host.onActivity {
+            assertNull(it.lastNavigationRequest)
+            assertNull(it.lastCommentRequest)
+        }
     }
 }

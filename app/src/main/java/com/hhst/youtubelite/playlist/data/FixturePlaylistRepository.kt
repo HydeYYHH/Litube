@@ -8,7 +8,7 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
         delay(140)
         if (scenario == PlaylistScenario.Error) throw java.io.IOException("Local error scenario")
         if (scenario == PlaylistScenario.Unavailable) return null
-        val summary = summaries().firstOrNull { it.id == id } ?: return null
+        val summary = personalLists().firstOrNull { it.id == id } ?: summaries().firstOrNull { it.id == id } ?: return null
         return PlaylistPage(if (scenario == PlaylistScenario.Empty) summary.copy(videoCount = 0) else summary, "Watch the open movies made with Blender!",
             if (scenario == PlaylistScenario.Empty) emptyList() else entries())
     }
@@ -16,6 +16,15 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
     companion object {
         const val MOVIES = "PL6B3937A5D230E335"
         const val STUDIO = "PLav47HAVZMjnTFVZL-aImCQIC0uLZtNCz"
+
+        /** The personal lists the site identifies by fixed ids. */
+        const val WATCH_LATER = "WL"
+        const val LIKED = "LL"
+
+        fun personalLists() = listOf(
+            PlaylistSummary(WATCH_LATER, "Watch later", "Litube Studio", "litube", 4, "dream", "Private", 0, 0xFF2D4F72),
+            PlaylistSummary(LIKED, "Liked videos", "Litube Studio", "litube", 12, "bunny", "Private", 0, 0xFF70513B),
+        )
 
         fun summaries() = listOf(
             PlaylistSummary(MOVIES, "Official Blender Open Movies", "Blender", "blender", 3, "bunny", "926K views", 21),

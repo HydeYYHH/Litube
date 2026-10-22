@@ -130,13 +130,18 @@ class WatchCommentsHostAndroidTest {
 
         compose.onNodeWithTag("comment-c1-more").performScrollTo().performClick()
         awaitNode("comments-menu")
+        compose.onAllNodesWithTag("comment-menu-edit").assertCountEquals(0)
+        compose.onAllNodesWithTag("comment-menu-delete").assertCountEquals(0)
         compose.onNodeWithTag("comment-menu-reply").performClick()
+        awaitNode("comment-composer")
+        compose.onNodeWithTag("comment-composer-input").performTextInput("Nice detail")
+        compose.onNodeWithTag("comment-composer-submit").performClick()
         compose.waitUntil(10_000) {
             var request: CommentNavigationRequest? = null
             host.onActivity { request = it.lastCommentRequest }
-            request == CommentNavigationRequest.Reply("bunny", "c1", "c1")
+            request == CommentNavigationRequest.SubmitReply("bunny", "c1", "c1", "Nice detail")
         }
-        awaitGone("comments-menu")
+        awaitGone("comment-composer")
         compose.onNodeWithTag("comments-panel").assertExists()
 
         compose.onNodeWithTag("comment-c1-reply-toggle").performScrollTo().performClick()

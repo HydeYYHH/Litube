@@ -27,13 +27,17 @@ object VideoShare {
         "short-6" to "TLkA0RELQ1g",
         "short-7" to "aqz-KE-bpKQ",
         "short-8" to "TLkA0RELQ1g",
-    )
+    ) + (1..8).associate { "live-$it" to listOf("TLkA0RELQ1g", "eRsGyueVLvQ", "aqz-KE-bpKQ")[(it - 1) % 3] } +
+        (1..12).associate { "shorts-$it" to listOf("aqz-KE-bpKQ", "TLkA0RELQ1g", "eRsGyueVLvQ")[(it - 1) % 3] }
 
     private val videoIdPattern = Regex("[A-Za-z0-9_-]{11}")
 
     /** Returns a public watch URL, or null rather than fabricating a link for an unknown local id. */
     fun urlFor(videoId: String): String? {
-        val canonical = fixtureIds[videoId]
+        val categoryBase = videoId.substringAfter('-').takeIf {
+            videoId.substringBefore('-') in setOf("music", "gaming", "news", "sports")
+        }
+        val canonical = fixtureIds[videoId] ?: fixtureIds[categoryBase]
             ?: videoId.takeIf { videoIdPattern.matches(it) }
             ?: return null
         return "https://youtu.be/$canonical"

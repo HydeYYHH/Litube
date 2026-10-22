@@ -42,6 +42,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.playlist.data.FixturePlaylistRepository
+import com.hhst.youtubelite.feedback.presentation.FeedbackReason
+import com.hhst.youtubelite.feedback.presentation.FeedbackSheet
+import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
+import com.hhst.youtubelite.saves.domain.SavePlaylist
+import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
+import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.watch.domain.*
 
@@ -64,7 +71,8 @@ fun WatchScreen(
         Box(modifier.fillMaxSize().background(Color.White).testTag("watch-screen")) {
             BoxWithConstraints(
                 Modifier.fillMaxSize().then(
-                    if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier,
+                    if (state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
+                        state.overlay is WatchOverlay.Feedback) Modifier.clearAndSetSemantics {} else Modifier,
                 ),
             ) {
                 val width = maxWidth.value
@@ -139,16 +147,43 @@ fun WatchScreen(
 
 @Composable
 internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit) {
-    if (state.overlay is WatchOverlay.ItemMenu) MenuBottomSheet(
-        items = WatchVideoMenuAction.entries.map {
-            MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
-        },
-        onDismiss = { onAction(WatchAction.CloseOverlay) },
-        onSelect = { index -> onAction(WatchAction.MenuAction(WatchVideoMenuAction.entries[index])) },
-        tag = "watch-video-menu",
-        paneTitle = "Video actions",
-    )
+    when (val overlay = state.overlay) {
+        is WatchOverlay.ItemMenu -> MenuBottomSheet(
+            items = WatchVideoMenuAction.entries.map {
+                MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
+            },
+            onDismiss = { onAction(WatchAction.CloseOverlay) },
+            onSelect = { index -> onAction(WatchAction.MenuAction(WatchVideoMenuAction.entries[index])) },
+            tag = "watch-video-menu",
+            paneTitle = "Video actions",
+        )
+        is WatchOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
+            draft = NewPlaylistDraft(overlay.title, overlay.description),
+            onDismiss = { onAction(WatchAction.CloseOverlay) },
+            onDraftChange = { onAction(WatchAction.SaveDraftChanged(it.title, it.description)) },
+            onSubmit = { onAction(WatchAction.SubmitNewPlaylist) },
+        ) else SaveToPlaylistSheet(
+            playlists = savePlaylists,
+            onDismiss = { onAction(WatchAction.CloseOverlay) },
+            onSelect = { onAction(WatchAction.SaveDestinationSelected(it)) },
+            onNewPlaylist = { onAction(WatchAction.OpenNewPlaylist) },
+        )
+        is WatchOverlay.Feedback -> FeedbackSheet(
+            title = overlay.kind.title,
+            reasons = overlay.kind.reasons.mapIndexed { index, reason ->
+                FeedbackReason(reason, "feedback-reason-$index")
+            },
+            onDismiss = { onAction(WatchAction.CloseOverlay) },
+            onSelect = { onAction(WatchAction.FeedbackReason(it.label)) },
+        )
+        else -> Unit
+    }
 }
+
+private val savePlaylists: List<SavePlaylist> =
+    FixturePlaylistRepository.personalLists()
+        .filter { it.id != FixturePlaylistRepository.WATCH_LATER }
+        .map { SavePlaylist(it.id, it.title) }
 
 private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
     WatchVideoMenuAction.WatchLater -> AppIcon.Clock
@@ -367,10 +402,16 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
         Modifier.fillMaxWidth().heightIn(min = 18.dp).horizontalScroll(rememberScrollState()).testTag("watch-meta"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (video.live) {
+            // The live badge replaces the age text for currently-live entries.
+            Box(Modifier.padding(end = 8.dp).background(DesignTokens.Red, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp).testTag("watch-live-badge")) {
+                AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
+            }
+        }
         AppText(video.handle, Modifier.padding(end = 8.dp), size = 12, line = 18, weight = FontWeight.Medium)
         AppText(video.likes, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         AppText(video.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
-        AppText(video.age, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
+        if (!video.live) AppText(video.age, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         AppText(
             "more",
             Modifier.testTag("watch-more").semantics {
@@ -423,19 +464,28 @@ private fun WatchActionBar(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                     )
                 }
                 Spacer(Modifier.width((12f + growth).dp))
-                Box(Modifier.width(212.dp).height(WatchLayout.ActionBarHeight.dp)) {
+                Box(Modifier.width(356.dp).height(WatchLayout.ActionBarHeight.dp)) {
                     listOf(
                         Triple(AppIcon.Like, "Like this video", WatchAction.Like),
                         Triple(AppIcon.Dislike, "Dislike this video", WatchAction.Dislike),
+                        Triple(AppIcon.Download, "Download", WatchAction.Download),
+                        Triple(AppIcon.QueueAdd, "Add to queue", WatchAction.Queue),
+                        Triple(AppIcon.OpenWith, "Open with", WatchAction.OpenWith),
                         Triple(AppIcon.Share, "Share", WatchAction.Share),
                         Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
                         Triple(AppIcon.Report, "Report", WatchAction.Report),
                     ).forEachIndexed { index, (icon, description, action) ->
+                        val offsetX = when {
+                            index < 2 -> index * 41f
+                            index < 5 -> 82f + (index - 2) * 48f
+                            else -> 226f + (index - 5) * 41f
+                        }
                         WatchSlotButton(
                             icon = icon, description = description,
                             sizeWidth = 48f, sizeHeight = 48f, radius = 24f,
-                            offsetX = index * 41f, offsetY = 0f,
-                            testTag = "watch-action-${listOf("like", "dislike", "share", "save", "report")[index]}",
+                            offsetX = offsetX, offsetY = 0f,
+                            compactSurface = index in 2..4,
+                            testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")[index]}",
                             onClick = { onAction(action) },
                         )
                     }
@@ -456,6 +506,7 @@ private fun WatchSlotButton(
     offsetY: Float,
     testTag: String,
     onClick: () -> Unit,
+    compactSurface: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
@@ -463,12 +514,18 @@ private fun WatchSlotButton(
         Modifier.offset(x = offsetX.dp, y = offsetY.dp)
             .size(sizeWidth.dp, sizeHeight.dp)
             .clip(RoundedCornerShape(radius.dp))
-            .background(if (pressed) DesignTokens.Surface else Color.Transparent)
+            .background(if (pressed && !compactSurface) DesignTokens.Surface else Color.Transparent)
             .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
             .testTag(testTag),
         contentAlignment = Alignment.Center,
-    ) { AppIcon(icon) }
+    ) {
+        if (compactSurface) {
+            Box(Modifier.size(40.dp, 36.dp).clip(RoundedCornerShape(18.dp))
+                .background(if (pressed) DesignTokens.Surface else Color.Transparent)
+                .testTag("$testTag-surface"), contentAlignment = Alignment.Center) { AppIcon(icon) }
+        } else AppIcon(icon)
+    }
 }
 
 @Composable

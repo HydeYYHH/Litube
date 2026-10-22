@@ -38,6 +38,13 @@ import kotlin.math.roundToInt
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.home.domain.*
+import com.hhst.youtubelite.playlist.data.FixturePlaylistRepository
+import com.hhst.youtubelite.feedback.presentation.FeedbackReason
+import com.hhst.youtubelite.feedback.presentation.FeedbackSheet
+import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
+import com.hhst.youtubelite.saves.domain.SavePlaylist
+import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
+import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 
 /** Stateless rendering boundary; local state is limited to saved scroll/focus state. */
 @Composable
@@ -117,7 +124,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 contentPadding = PaddingValues(start = HomeLayout.outerPadding(width).dp, end = HomeLayout.outerPadding(width).dp, top = (if (width < 528f) 98.dp else 110.dp) + chipExtraHeight, bottom = 24.dp),
                                 horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
                             ) {
-                                items(content.page.items, key = { it.id }, span = { if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1) }, contentType = { it.javaClass.simpleName }) { item ->
+                                items(content.page.items.filterNot { state.hideShorts && it is FeedItem.Shorts }, key = { it.id }, span = { if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1) }, contentType = { it.javaClass.simpleName }) { item ->
                                     Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
                                         FeedCard(item, compact = width < 528, windowWidth = width, onAction)
                                     }
@@ -143,10 +150,34 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                 HomeOverlay.None -> Unit
                 HomeOverlay.Search -> SearchOverlay(state, onAction)
                 is HomeOverlay.Menu -> if (overlay.kind == FeedMenuKind.Mix) MixMenu(onAction) else VideoMenu(onAction, overlay.kind)
+                is HomeOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
+                    draft = NewPlaylistDraft(overlay.title, overlay.description),
+                    onDismiss = { onAction(HomeAction.CloseOverlay) },
+                    onDraftChange = { onAction(HomeAction.SaveDraftChanged(it.title, it.description)) },
+                    onSubmit = { onAction(HomeAction.SubmitNewPlaylist) },
+                ) else SaveToPlaylistSheet(
+                    playlists = homeSavePlaylists,
+                    onDismiss = { onAction(HomeAction.CloseOverlay) },
+                    onSelect = { onAction(HomeAction.SaveDestinationSelected(it)) },
+                    onNewPlaylist = { onAction(HomeAction.OpenNewPlaylist) },
+                )
+                is HomeOverlay.Feedback -> FeedbackSheet(
+                    title = overlay.kind.title,
+                    reasons = overlay.kind.reasons.mapIndexed { index, reason ->
+                        FeedbackReason(reason, "feedback-reason-$index")
+                    },
+                    onDismiss = { onAction(HomeAction.CloseOverlay) },
+                    onSelect = { onAction(HomeAction.FeedbackReason(it.label)) },
+                )
             }
         }
     }
 }
+
+private val homeSavePlaylists: List<SavePlaylist> =
+    FixturePlaylistRepository.personalLists()
+        .filter { it.id != FixturePlaylistRepository.WATCH_LATER }
+        .map { SavePlaylist(it.id, it.title) }
 
 @Composable
 private fun HomeTopBar(onAction: (HomeAction) -> Unit) {

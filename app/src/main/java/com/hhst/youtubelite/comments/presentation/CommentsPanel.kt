@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
@@ -25,9 +26,11 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -58,6 +61,7 @@ import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
+import com.hhst.youtubelite.ui.design.MenuSheetLayout
 import com.hhst.youtubelite.ui.design.messageCardShadow
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import androidx.compose.runtime.snapshotFlow
@@ -71,6 +75,7 @@ fun CommentsPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    sheetTopOverride: Float? = null,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val width = maxWidth.value
@@ -93,7 +98,7 @@ fun CommentsPanel(
             }
         } else {
             // The page rounds the fractional 16:9 player; the sheet must start on the same pixel.
-            val top = CommentsLayout.sheetTop(
+            val top = sheetTopOverride ?: CommentsLayout.sheetTop(
                 topBar = WatchLayout.TopBarHeight,
                 playerHeight = WatchLayout.playerHeight(width, height),
                 windowHeight = height,
@@ -143,7 +148,8 @@ private fun CommentsSurface(
 
     val shape = if (compact) RoundedCornerShape(topStart = CommentsLayout.SheetRadius.dp, topEnd = CommentsLayout.SheetRadius.dp)
     else RectangleShape
-    val modal = state.overlay is CommentsOverlay.ThreadMenu || state.overlay is CommentsOverlay.ReplyMenu
+    val modal = state.overlay is CommentsOverlay.ThreadMenu || state.overlay is CommentsOverlay.ReplyMenu ||
+        state.overlay is CommentsOverlay.Composer || state.overlay is CommentsOverlay.DeleteConfirm
     BoxWithConstraints(modifier) {
         Column(
             Modifier.fillMaxSize().background(Color.White, shape)
@@ -192,18 +198,211 @@ private fun CommentsSurface(
                         .heightIn(max = maxHeight - menuTop),
                 )
             }
-            is CommentsOverlay.ThreadMenu, is CommentsOverlay.ReplyMenu -> MenuBottomSheet(
-                items = listOf(
-                    MenuSheetItem(AppIcon.Comment, CommentMenuAction.Reply.label, "comment-menu-reply"),
-                    MenuSheetItem(AppIcon.Report, CommentMenuAction.Report.label, "comment-menu-report"),
-                ),
-                onDismiss = { onAction(CommentAction.CloseMenu) },
-                onSelect = { index -> onAction(CommentAction.MenuAction(CommentMenuAction.entries[index])) },
-                tag = "comments-menu",
-                paneTitle = "Comment actions",
+            is CommentsOverlay.ThreadMenu, is CommentsOverlay.ReplyMenu -> {
+                val actions = menuActions(state)
+                MenuBottomSheet(
+                    items = actions.map { action ->
+                        MenuSheetItem(
+                            icon = when (action) {
+                                CommentMenuAction.Reply -> AppIcon.Comment
+                                CommentMenuAction.Report -> AppIcon.Report
+                                CommentMenuAction.Edit, CommentMenuAction.Delete -> null
+                            },
+                            label = action.label,
+                            tag = "comment-menu-${action.name.lowercase()}",
+                        )
+                    },
+                    onDismiss = { onAction(CommentAction.CloseMenu) },
+                    onSelect = { index -> if (index in actions.indices) onAction(CommentAction.MenuAction(actions[index])) },
+                    tag = "comments-menu",
+                    paneTitle = "Comment actions",
+                )
+            }
+            is CommentsOverlay.Composer -> CommentComposerSheet(
+                draft = state.draft,
+                editing = state.overlay.editing,
+                reply = state.overlay.threadId != null,
+                onDraft = { onAction(CommentAction.DraftChanged(it)) },
+                onCancel = { onAction(CommentAction.DismissComposer) },
+                onSubmit = { onAction(CommentAction.SubmitDraft) },
+            )
+            is CommentsOverlay.DeleteConfirm -> DeleteCommentSheet(
+                ownComment = state.overlay.replyId == null,
+                onCancel = { onAction(CommentAction.CancelDelete) },
+                onDelete = { onAction(CommentAction.ConfirmDelete) },
             )
             CommentsOverlay.None -> Unit
         }
+    }
+}
+
+/**
+ * Rows follow the opened comment's ownership. No fixture comment is owned, so the
+ * public view keeps the sampled Reply/Report pair; tests and previews can supply an
+ * owned thread to exercise Edit/Delete without fabricating a signed-in session.
+ */
+private fun menuActions(state: CommentsUiState): List<CommentMenuAction> {
+    val ready = state.content as? CommentsContent.Ready
+    return when (val overlay = state.overlay) {
+        is CommentsOverlay.ThreadMenu -> ready?.threads?.firstOrNull { it.id == overlay.threadId }
+            ?.let { CommentMenuAction.forComment(it.ownedByViewer) }
+        is CommentsOverlay.ReplyMenu -> ready?.threads?.firstOrNull { it.id == overlay.threadId }
+            ?.replies?.firstOrNull { it.id == overlay.replyId }
+            ?.let { CommentMenuAction.forComment(it.ownedByViewer) }
+        else -> null
+    } ?: CommentMenuAction.forComment(ownedByViewer = false)
+}
+
+@Composable
+private fun CommentComposerSheet(
+    draft: String,
+    editing: Boolean,
+    reply: Boolean,
+    onDraft: (String) -> Unit,
+    onCancel: () -> Unit,
+    onSubmit: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(Unit) {
+        withFrameNanos {}
+        runCatching { focus.requestFocus() }
+        keyboard?.show()
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            keyboard?.hide()
+            focusManager.clearFocus()
+        }
+    }
+    Box(
+        Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onCancel() }
+            .semantics { contentDescription = "Close comment editor" },
+    )
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
+        Column(
+            Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)
+                .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
+                .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
+                .verticalScroll(rememberScrollState())
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(Color.White)
+                .testTag("comment-composer").semantics { paneTitle = "Comment editor" },
+        ) {
+            AppText(
+                if (editing) "Edit comment" else if (reply) "Reply" else "Add a comment",
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                size = 16, line = 22, weight = FontWeight.Medium,
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DefaultAvatar(CommentsLayout.AvatarLarge.dp)
+                Spacer(Modifier.width(CommentsLayout.AvatarGap.dp))
+                BasicTextField(
+                    draft, onDraft,
+                    Modifier.weight(1f).heightIn(min = CommentsLayout.InputHeight.dp)
+                        .clip(RoundedCornerShape(CommentsLayout.InputRadius.dp))
+                        .border(1.dp, Color.Black.copy(alpha = CommentsLayout.DividerAlpha),
+                            RoundedCornerShape(CommentsLayout.InputRadius.dp))
+                        .padding(horizontal = CommentsLayout.InputTextInset.dp, vertical = 8.dp)
+                        .focusRequester(focus)
+                        .testTag("comment-composer-input")
+                        .semantics { contentDescription = if (editing) "Edit comment text" else "Comment text" },
+                    maxLines = 6,
+                    textStyle = DesignTokens.text(14, 20),
+                    cursorBrush = SolidColor(DesignTokens.Ink),
+                    decorationBox = { inner ->
+                        Box {
+                            if (draft.isEmpty()) AppText(
+                                if (reply) "Add a reply..." else "Add a comment...",
+                                size = 14, line = 20, color = DesignTokens.Secondary,
+                            )
+                            inner()
+                        }
+                    },
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ComposerAction("Cancel", "comment-composer-cancel", onClick = onCancel)
+                Spacer(Modifier.width(8.dp))
+                ComposerAction(
+                    if (editing) "Save" else "Comment",
+                    "comment-composer-submit",
+                    enabled = draft.isNotBlank(),
+                    onClick = onSubmit,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteCommentSheet(ownComment: Boolean, onCancel: () -> Unit, onDelete: () -> Unit) {
+    Box(
+        Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onCancel() }
+            .semantics { contentDescription = "Close delete confirmation" },
+    )
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
+        Column(
+            Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)
+                .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
+                .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
+                .verticalScroll(rememberScrollState())
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(Color.White)
+                .testTag("comment-delete-sheet").semantics { paneTitle = "Delete confirmation" },
+        ) {
+            AppText(
+                if (ownComment) "Delete comment?" else "Delete reply?",
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                size = 18, line = 26, weight = FontWeight.Bold,
+            )
+            AppText(
+                "This action cannot be undone.",
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                size = 14, line = 20, color = DesignTokens.Secondary,
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ComposerAction("Cancel", "comment-delete-cancel", onClick = onCancel)
+                Spacer(Modifier.width(8.dp))
+                ComposerAction("Delete", "comment-delete-confirm", onClick = onDelete, destructive = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerAction(
+    label: String,
+    tag: String,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, enabled = enabled) { if (enabled) onClick() }
+            .testTag(tag).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        AppText(
+            label,
+            size = 14, line = 20, weight = FontWeight.Medium,
+            color = when {
+                !enabled -> DesignTokens.Secondary.copy(alpha = 0.5f)
+                destructive -> DesignTokens.Red
+                else -> DesignTokens.Ink
+            },
+        )
     }
 }
 

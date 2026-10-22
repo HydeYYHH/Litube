@@ -132,7 +132,10 @@ class ChannelCommunityHostAndroidTest {
         host.onActivity {
             assertEquals(ChannelNavigationRequest.Short("blender", "shorts-1"), it.lastNavigationRequest)
         }
-        compose.onNodeWithTag("channel-shorts-list").assertIsDisplayed()
+        awaitNode("short-page-shorts-1")
+        compose.onNodeWithTag("short-page-shorts-1").assertIsDisplayed()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        awaitNode("channel-shorts-list")
         compose.onNodeWithTag("watch-screen").assertDoesNotExist()
     }
 
@@ -188,6 +191,10 @@ class ChannelCommunityHostAndroidTest {
         host.onActivity {
             assertEquals(ChannelNavigationRequest.PostComments(identity), it.lastNavigationRequest)
         }
+        awaitNode("comments-panel")
+        composerBack()
+        composerBack()
+        awaitNode("channel-posts-list")
 
         val expanded = nodeCount("channel-post-read-more-community-1") > 0
         if (expanded) {

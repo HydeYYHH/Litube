@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 
 class ShareGateway(
@@ -15,12 +16,29 @@ class ShareGateway(
     var launchChooser: Boolean = true
     var lastShareIntent: Intent? = null
         private set
+    var lastOpenWithIntent: Intent? = null
+        private set
     var lastCopiedUrl: String? = null
         private set
 
     fun share(videoId: String): Boolean {
         val url = VideoShare.urlFor(videoId) ?: return false
         return shareUrl(url)
+    }
+
+    fun openWith(videoId: String): Boolean {
+        val url = VideoShare.urlFor(videoId) ?: return false
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+        lastOpenWithIntent = intent
+        if (!launchChooser) return true
+        return try {
+            startChooser(Intent.createChooser(intent, "Open with"))
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     fun sharePlaylist(playlistId: String): Boolean {

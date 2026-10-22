@@ -22,14 +22,21 @@ class HomeViewModel(
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
         selectedChip = savedState["chip"] ?: "All",
-        signedInPreview = scenario != HomeScenario.Empty,
-        overlay = if (savedState.get<Boolean>("searchOpen") == true) HomeOverlay.Search else HomeOverlay.None,
+        signedInPreview = savedState.get<Boolean>("signedInPreview") ?: (scenario != HomeScenario.Empty),
+        overlay = restoreOverlay(),
     ))
     val uiState = _state.asStateFlow()
     private val navigation = Channel<HomeNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
     private var loadJob: Job? = null
     private var generation = 0
+
+    fun setHideShorts(hidden: Boolean) { _state.update { it.copy(hideShorts = hidden) } }
+
+    fun setSignedInPreview(signedIn: Boolean) {
+        savedState["signedInPreview"] = signedIn
+        _state.update { it.copy(signedInPreview = signedIn) }
+    }
 
     fun onAction(action: HomeAction) {
         when (action) {
@@ -55,8 +62,55 @@ class HomeViewModel(
             is HomeAction.MenuSelected -> {
                 val menu = uiState.value.overlay as? HomeOverlay.Menu ?: return
                 if (action.action !in menu.kind.actions) return
+                if (menu.kind == FeedMenuKind.Video && action.action == FeedMenuAction.SaveToPlaylist) {
+                    overlay(HomeOverlay.Save(menu.itemId))
+                    return
+                }
+                val feedback = when (action.action) {
+                    FeedMenuAction.NotInterested -> HomeFeedbackKind.NotInterested
+                    FeedMenuAction.DontRecommend -> HomeFeedbackKind.DontRecommend
+                    FeedMenuAction.SendFeedback -> HomeFeedbackKind.SendFeedback
+                    FeedMenuAction.Report -> HomeFeedbackKind.Report
+                    else -> null
+                }
+                if (feedback != null) {
+                    overlay(HomeOverlay.Feedback(menu.itemId, feedback))
+                    return
+                }
                 overlay(HomeOverlay.None)
                 navigation.trySend(HomeNavigationRequest.MenuAction(menu.itemId, action.action))
+            }
+            is HomeAction.SaveDestinationSelected -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                overlay(HomeOverlay.None)
+                when (val destination = action.destination) {
+                    com.hhst.youtubelite.saves.domain.SaveDestination.WatchLater ->
+                        navigation.trySend(HomeNavigationRequest.SaveToWatchLater(save.videoId))
+                    is com.hhst.youtubelite.saves.domain.SaveDestination.Playlist ->
+                        navigation.trySend(
+                            HomeNavigationRequest.SaveToPlaylist(save.videoId, destination.id, destination.title),
+                        )
+                }
+            }
+            HomeAction.OpenNewPlaylist -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                overlay(save.copy(newPlaylist = true, title = "", description = ""))
+            }
+            is HomeAction.SaveDraftChanged -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                overlay(save.copy(title = action.title, description = action.description))
+            }
+            HomeAction.SubmitNewPlaylist -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                val title = save.title.trim()
+                if (title.isEmpty()) return
+                overlay(HomeOverlay.None)
+                navigation.trySend(HomeNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+            }
+            is HomeAction.FeedbackReason -> {
+                val feedback = uiState.value.overlay as? HomeOverlay.Feedback ?: return
+                overlay(HomeOverlay.None)
+                navigation.trySend(HomeNavigationRequest.Feedback(feedback.itemId, feedback.kind, action.reason))
             }
             is HomeAction.Navigate -> navigation.trySend(action.request)
             HomeAction.Refresh -> load(append = false)
@@ -64,8 +118,44 @@ class HomeViewModel(
         }
     }
 
+    private fun restoreOverlay(): HomeOverlay = when (savedState.get<String>("homeOverlay")) {
+        "search" -> HomeOverlay.Search
+        "menu" -> savedState.get<String>("overlayItem")?.let { HomeOverlay.Menu(it,
+            FeedMenuKind.entries.firstOrNull { kind -> kind.name == savedState.get<String>("overlayKind") } ?: FeedMenuKind.Video) } ?: HomeOverlay.None
+        "save" -> savedState.get<String>("overlayItem")?.let { HomeOverlay.Save(it,
+            savedState.get<Boolean>("newPlaylist") == true, savedState.get<String>("saveTitle").orEmpty(),
+            savedState.get<String>("saveDescription").orEmpty()) } ?: HomeOverlay.None
+        "feedback" -> {
+            val id = savedState.get<String>("overlayItem")
+            val kind = HomeFeedbackKind.entries.firstOrNull { it.name == savedState.get<String>("overlayKind") }
+            if (id != null && kind != null) HomeOverlay.Feedback(id, kind) else HomeOverlay.None
+        }
+        else -> if (savedState.get<Boolean>("searchOpen") == true) HomeOverlay.Search else HomeOverlay.None
+    }
+
     private fun overlay(overlay: HomeOverlay) {
         savedState["searchOpen"] = overlay == HomeOverlay.Search
+        savedState["homeOverlay"] = when (overlay) {
+            HomeOverlay.None -> "none"
+            HomeOverlay.Search -> "search"
+            is HomeOverlay.Menu -> {
+                savedState["overlayItem"] = overlay.itemId
+                savedState["overlayKind"] = overlay.kind.name
+                "menu"
+            }
+            is HomeOverlay.Save -> {
+                savedState["overlayItem"] = overlay.videoId
+                savedState["newPlaylist"] = overlay.newPlaylist
+                savedState["saveTitle"] = overlay.title
+                savedState["saveDescription"] = overlay.description
+                "save"
+            }
+            is HomeOverlay.Feedback -> {
+                savedState["overlayItem"] = overlay.itemId
+                savedState["overlayKind"] = overlay.kind.name
+                "feedback"
+            }
+        }
         _state.update { it.copy(overlay = overlay) }
     }
 

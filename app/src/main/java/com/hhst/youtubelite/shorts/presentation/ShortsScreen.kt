@@ -1,0 +1,154 @@
+package com.hhst.youtubelite.shorts.presentation
+
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.library.presentation.LibraryError
+import com.hhst.youtubelite.library.presentation.LibrarySkeleton
+import com.hhst.youtubelite.shorts.domain.ShortItem
+import com.hhst.youtubelite.shorts.domain.ShortsAction
+import com.hhst.youtubelite.shorts.domain.ShortsContent
+import com.hhst.youtubelite.shorts.domain.ShortsUiState
+import com.hhst.youtubelite.ui.design.AppIconButton
+import com.hhst.youtubelite.ui.design.AppIcon
+import com.hhst.youtubelite.ui.design.AppText
+import com.hhst.youtubelite.ui.design.DesignTokens
+
+@Composable
+fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
+        when (val content = state.content) {
+            ShortsContent.Loading -> Box(Modifier.fillMaxSize().background(Color.White)) { LibrarySkeleton("shorts-skeleton") }
+            ShortsContent.Failed -> Box(Modifier.fillMaxSize().background(Color.White)) { LibraryError("shorts-error") { onAction(ShortsAction.Retry) } }
+            ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AppText("No Shorts available", color = Color.White, size = 16, line = 22)
+            }
+            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction)
+        }
+    }
+}
+
+@Composable
+private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit) {
+    val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
+    val currentAction by rememberUpdatedState(onAction)
+    LaunchedEffect(pagerState, items) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            items.getOrNull(page)?.let { currentAction(ShortsAction.SelectItem(it.id)) }
+        }
+    }
+    VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
+        ShortPage(items[page], onAction)
+    }
+}
+
+@Composable
+private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit) {
+    Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
+        Image(item.artwork, Modifier.fillMaxSize(), "Play ${item.title}")
+        Box(Modifier.matchParentSize().background(
+            Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
+        BoxWithConstraints(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        AppIconButton(AppIcon.More, "More actions for ${item.title}",
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp), diameter = 32.dp, color = Color.White) {
+            onAction(ShortsAction.OpenMenu(item.id))
+        }
+        val railWidth = if (LocalDensity.current.fontScale > 1.5f) 80.dp else 56.dp
+        Column(Modifier.align(Alignment.BottomEnd).width(railWidth)
+            .padding(end = 8.dp, bottom = minOf(76.dp, maxHeight / 5))
+            .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            RailAction(AppIcon.Like, "Like ${item.title}", item.likes, onClick = { onAction(ShortsAction.Like(item.id)) })
+            Spacer(Modifier.height(12.dp))
+            RailAction(AppIcon.Comment, "Comments for ${item.title}", item.comments, onClick = {
+                onAction(ShortsAction.OpenComments(item.id))
+            })
+            Spacer(Modifier.height(12.dp))
+            RailAction(AppIcon.Share, "Share ${item.title}", "Share", onClick = { onAction(ShortsAction.Share(item.id)) })
+        }
+        Column(Modifier.align(Alignment.BottomStart).padding(start = 16.dp, end = railWidth + 8.dp, bottom = 16.dp)
+            .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState())) {
+            Row(Modifier.heightIn(min = 40.dp).testTag("short-channel-${item.id}"),
+                verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f, fill = false).clickable(role = Role.Button) {
+                    onAction(ShortsAction.OpenChannel(item.channelId))
+                }, verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(32.dp).clip(CircleShape).semantics { contentDescription = "Go to channel ${item.author}" }) {
+                        Artwork(item.artwork, Modifier.fillMaxSize())
+                    }
+                    AppText("@${item.author}", Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
+                }
+                AppText("Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
+                    .background(DesignTokens.Ink).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
+                    .padding(horizontal = 16.dp).heightIn(min = 40.dp),
+                    size = 14, line = 40, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
+            }
+            AppText(item.title, Modifier.padding(top = 8.dp).testTag("short-title-${item.id}"),
+                size = 14, line = 20, color = Color.White, maxLines = 3)
+            Row(Modifier.padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.1f)).padding(end = 8.dp).testTag("short-sound-${item.id}"),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(24.dp).clip(CircleShape)) { Artwork(item.artwork, Modifier.fillMaxSize()) }
+                AppText("${item.author} · Original", size = 12, line = 24,
+                    weight = FontWeight.Medium, color = Color.White, maxLines = 1)
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AppIconButton(icon, description, diameter = 32.dp, color = Color.White, onClick = onClick)
+        if (label.isNotEmpty()) {
+            AppText(label, Modifier.testTag("rail-label-$description"), size = 12, line = 16,
+                weight = FontWeight.Medium, color = Color.White, maxLines = 1)
+        } else {
+            // Keep the 60dp slot even when an action has no count label.
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun Image(asset: String, modifier: Modifier, description: String) {
+    androidx.compose.foundation.Image(
+        painterResource(when (asset) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
+        contentDescription = description, modifier = modifier, contentScale = ContentScale.Crop,
+    )
+}
+
+@Composable
+private fun Artwork(asset: String, modifier: Modifier) {
+    androidx.compose.foundation.Image(
+        painterResource(when (asset) { "dream" -> R.drawable.sample_dream; "sintel" -> R.drawable.sample_sintel; else -> R.drawable.sample_bunny }),
+        contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop,
+    )
+}

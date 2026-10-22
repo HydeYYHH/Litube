@@ -32,6 +32,12 @@ import com.hhst.youtubelite.post.domain.PostDetailAction
 import com.hhst.youtubelite.post.domain.PostDetailNavigationRequest
 import com.hhst.youtubelite.post.domain.PostDetailOverlay
 import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.post.data.FixturePostCommentsRepository
+import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentsOverlay
+import com.hhst.youtubelite.comments.domain.CommentTarget
+import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.comments.presentation.CommentsViewModel
 import com.hhst.youtubelite.post.presentation.PostDetailScreen
 import com.hhst.youtubelite.post.presentation.PostDetailViewModel
 import kotlinx.coroutines.launch
@@ -39,7 +45,16 @@ import kotlinx.coroutines.launch
 class PostDetailActivity : ComponentActivity() {
     lateinit var postDetailViewModel: PostDetailViewModel
         private set
+    lateinit var postCommentsViewModel: CommentsViewModel
+        private set
+    val postIdentity: PostIdentity
+        get() = PostIdentity(
+            intent.getStringExtra(EXTRA_CHANNEL_ID) ?: "studio",
+            intent.getStringExtra(EXTRA_POST_ID) ?: FixturePostRepository.HOME_POST_ID,
+        )
     var lastNavigationRequest: PostDetailNavigationRequest? = null
+        private set
+    var lastCommentRequest: CommentNavigationRequest? = null
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +76,30 @@ class PostDetailActivity : ComponentActivity() {
                 ) as T
             }
         })[PostDetailViewModel::class.java]
+        postCommentsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+                require(modelClass == CommentsViewModel::class.java)
+                return CommentsViewModel(
+                    FixturePostCommentsRepository(),
+                    extras.createSavedStateHandle(),
+                    CommentTarget.Post(identity),
+                ) as T
+            }
+        })[CommentsViewModel::class.java]
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
+            postDetailViewModel.onAction(PostDetailAction.Comments)
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                postCommentsViewModel.navigationRequests.collect { request ->
+                    lastCommentRequest = request
+                    if (request is CommentNavigationRequest.OpenAuthor) startActivity(
+                        ChannelActivity.intent(this@PostDetailActivity, request.channelId),
+                    )
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 postDetailViewModel.navigationRequests.collect { request ->
@@ -69,10 +108,8 @@ class PostDetailActivity : ComponentActivity() {
                         is PostDetailNavigationRequest.Channel -> startActivity(
                             ChannelActivity.intent(this@PostDetailActivity, request.channelId)
                         )
-                        PostDetailNavigationRequest.Destination(PostDestination.Home) -> startActivity(
-                            Intent(this@PostDetailActivity, HomeActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        )
+                        is PostDetailNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
+                            this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
                         else -> Unit
                     }
                 }
@@ -80,9 +117,12 @@ class PostDetailActivity : ComponentActivity() {
         }
         setContent {
             val state by postDetailViewModel.uiState.collectAsStateWithLifecycle()
+            val commentsState by postCommentsViewModel.uiState.collectAsStateWithLifecycle()
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
             val back = {
-                if (state.overlay != PostDetailOverlay.None) postDetailViewModel.onAction(PostDetailAction.CloseOverlay)
+                if (state.commentsOpen && commentsState.overlay != CommentsOverlay.None) postCommentsViewModel.onAction(CommentAction.CloseMenu)
+                else if (state.commentsOpen) postDetailViewModel.onAction(PostDetailAction.CloseComments)
+                else if (state.overlay != PostDetailOverlay.None) postDetailViewModel.onAction(PostDetailAction.CloseOverlay)
                 else finish()
             }
             BackHandler(onBack = back)
@@ -91,11 +131,14 @@ class PostDetailActivity : ComponentActivity() {
                 postDetailViewModel::onAction,
                 back,
                 Modifier.statusBarsPadding().navigationBarsPadding(),
+                commentsState = commentsState,
+                onCommentsAction = postCommentsViewModel::onAction,
             )
         }
     }
 
     companion object {
+        const val EXTRA_OPEN_COMMENTS = "open_comments"
         const val EXTRA_CHANNEL_ID = "channelId"
         const val EXTRA_POST_ID = "postId"
         const val EXTRA_SCENARIO = "scenario"

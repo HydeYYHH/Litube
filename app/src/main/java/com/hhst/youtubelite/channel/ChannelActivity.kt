@@ -65,15 +65,19 @@ class ChannelActivity : ComponentActivity() {
                 channelViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
+                        is ChannelNavigationRequest.Short -> startActivity(
+                            com.hhst.youtubelite.shorts.ShortsActivity.intent(this@ChannelActivity, request.shortId, channelId = request.channelId))
+                        is ChannelNavigationRequest.PostComments -> startActivity(
+                            PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
+                                .putExtra(PostDetailActivity.EXTRA_OPEN_COMMENTS, true))
                         is ChannelNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
                         is ChannelNavigationRequest.Playlist -> startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ChannelActivity, request.playlistId))
                         is ChannelNavigationRequest.SharePlaylist -> shareGateway.sharePlaylist(request.playlistId)
                         is ChannelNavigationRequest.Post -> startActivity(
                             PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
                         )
-                        ChannelNavigationRequest.Destination(ChannelDestination.Home) ->
-                            startActivity(Intent(this@ChannelActivity, HomeActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        is ChannelNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
+                            this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
                         else -> Unit
                     }
                 }

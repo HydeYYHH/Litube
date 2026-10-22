@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.post.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -40,6 +42,7 @@ fun PostImageCarousel(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onOpen: (Int) -> Unit = {},
 ) {
     if (images.isEmpty()) return
     val safeIndex = selectedIndex.coerceIn(0, images.lastIndex)
@@ -63,6 +66,7 @@ fun PostImageCarousel(
                 Box(
                     Modifier.size(imageWidth)
                         .clip(RoundedCornerShape(PostLayout.ImageRadius.dp))
+                        .clickable(role = Role.Button) { onOpen(index) }
                         .testTag("post-image-$index")
                         .semantics {
                             contentDescription = "Post image ${index + 1} of ${images.size}"

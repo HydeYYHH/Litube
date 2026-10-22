@@ -136,7 +136,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (Ho
                     row.forEach { video ->
                         Box(Modifier.weight(1f).aspectRatio(2f / 3f).testTag("short-${video.id}")
                             .clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) {
-                            onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(video.id)))
+                            onAction(HomeAction.Navigate(HomeNavigationRequest.Shorts(video.id)))
                         }.semanticsLabel(video.title)) {
                             Artwork(video.artwork, Modifier.fillMaxSize())
                             Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))

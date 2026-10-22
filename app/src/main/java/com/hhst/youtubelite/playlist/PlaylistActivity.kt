@@ -57,8 +57,8 @@ class PlaylistActivity : ComponentActivity() {
                         is PlaylistNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@PlaylistActivity, request.channelId))
                         is PlaylistNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@PlaylistActivity, request.query))
                         is PlaylistNavigationRequest.Share -> shareGateway.sharePlaylist(request.playlistId)
-                        PlaylistNavigationRequest.Destination(PlaylistDestination.Home) -> startActivity(Intent(this@PlaylistActivity, HomeActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        is PlaylistNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
+                            this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
                         else -> Unit
                     }
                 }

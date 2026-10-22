@@ -19,10 +19,18 @@ class FixtureSearchRepository(private val scenario: SearchScenario = SearchScena
                 filters.uploaded.maxAgeDays?.let { limit -> it.updatedDays <= limit } ?: true
             } else emptyList()
         val channels = if (filters.type == SearchResultType.Channels) sampleChannels() else emptyList()
-        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList(), playlists, channels)
+        val shorts = if (filters.type == SearchResultType.Shorts) sampleShorts() else emptyList()
+        return SearchPage(query, if (filters.type == SearchResultType.All) results else emptyList(), playlists, channels, shorts)
     }
 
     companion object {
+        /** The shorts shelf entries for the Shorts filter; ids match the shorts browse fixture. */
+        fun sampleShorts() = listOf(
+            SearchResult("short-1", "A whole world in a single frame", "Blender", "blender", "128K views", "1 week ago", "0:38", "bunny", uploadedDays = 7),
+            SearchResult("short-2", "The art behind the story", "Blender", "blender", "92K views", "1 week ago", "0:24", "dream", uploadedDays = 7),
+            SearchResult("short-3", "Behind the scenes", "Studio", "studio", "240K views", "1 week ago", "0:41", "dream", uploadedDays = 7),
+            SearchResult("short-4", "Every detail tells a story", "Blender", "blender", "38K views", "2 weeks ago", "0:28", "bunny", uploadedDays = 14),
+        )
         fun sampleChannels() = listOf(
             SearchChannel("blender", "Blender", "@blender", "30M subscribers", "bunny"),
             SearchChannel("studio", "Blender Studio", "@BlenderStudio", "577K subscribers", "sintel"),

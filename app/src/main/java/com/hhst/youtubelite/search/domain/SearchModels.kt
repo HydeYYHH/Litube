@@ -2,7 +2,8 @@ package com.hhst.youtubelite.search.domain
 
 data class SearchPage(val query: String, val results: List<SearchResult>,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
-    val channels: List<SearchChannel> = emptyList())
+    val channels: List<SearchChannel> = emptyList(),
+    val shorts: List<SearchResult> = emptyList())
 
 data class SearchChannel(val id: String, val name: String, val handle: String, val subscribers: String, val artwork: String)
 
@@ -22,7 +23,7 @@ data class SearchResult(
 )
 
 /** The two groups the mobile results page exposes behind its filter button. */
-enum class SearchResultType(val label: String) { All("All"), Channels("Channels"), Playlists("Playlists") }
+enum class SearchResultType(val label: String) { All("All"), Shorts("Shorts"), Channels("Channels"), Playlists("Playlists") }
 
 enum class SearchUploadDate(val label: String, val maxAgeDays: Int?) {
     Anytime("Anytime", null),
@@ -82,6 +83,7 @@ enum class SearchDestination(val label: String) {
 
 sealed interface SearchNavigationRequest {
     data class Watch(val videoId: String) : SearchNavigationRequest
+    data class Shorts(val itemId: String) : SearchNavigationRequest
     data class Subscribe(val channelId: String) : SearchNavigationRequest
     data class Channel(val channelId: String) : SearchNavigationRequest
     data class Destination(val destination: SearchDestination) : SearchNavigationRequest

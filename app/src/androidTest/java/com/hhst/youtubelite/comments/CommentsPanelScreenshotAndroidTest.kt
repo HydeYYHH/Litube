@@ -3,6 +3,9 @@ package com.hhst.youtubelite.comments
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
@@ -46,7 +49,7 @@ class CommentsPanelScreenshotAndroidTest {
     private fun Viewport(width: Int, height: Int, fontScale: Float, content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
-                Box(Modifier.requiredSize(width.dp, height.dp)) { content() }
+                Box(Modifier.consumeWindowInsets(WindowInsets.ime).requiredSize(width.dp, height.dp)) { content() }
             }
         }
     }
@@ -167,6 +170,63 @@ class CommentsPanelScreenshotAndroidTest {
         assertEquals(panel.right - 8f, sheet.right, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
         capture("comments-menu-1280", output, record, goldens)
+    }
+
+    /** Reply/edit composer and the owner-only delete confirmation. */
+    @Test fun commentComposerAndDeleteConfirmationMatchGoldens() {
+        val record = InstrumentationRegistry.getArguments().getString("recordCommentsGoldens") == "true"
+        val goldens = setOf("comments-composer-390", "comments-composer-1280", "comments-delete-390")
+        var width by mutableStateOf(390)
+        var height by mutableStateOf(844)
+        var overlay by mutableStateOf<CommentsOverlay>(CommentsOverlay.Composer("c1"))
+        var draft by mutableStateOf("A reply to this thread")
+        val threads = FixtureCommentsRepository.sampleThreads(CommentSort.Top)
+        compose.setContent {
+            Viewport(width, height, 1f) {
+                CommentsPanel(
+                    state = CommentsUiState(
+                        videoId = "bunny",
+                        content = CommentsContent.Ready(threads, "4"),
+                        overlay = overlay,
+                        draft = draft,
+                    ),
+                    commentCount = "5.2K",
+                    onAction = {},
+                    onClose = {},
+                )
+            }
+        }
+        val output = File(compose.activity.getExternalFilesDir(null), "comments-acceptance").apply { mkdirs() }
+        var panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
+        var sheet = compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot
+        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
+        assertTrue(compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot.height >= 100f)
+        compose.onNodeWithTag("comment-composer-input").assertIsDisplayed()
+        capture("comments-composer-390", output, record, goldens)
+
+        compose.runOnIdle {
+            width = 1280; height = 800; overlay = CommentsOverlay.Composer("c1", "c1r1", editing = true)
+            draft = "The forest scene is still my favourite."
+        }
+        panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
+        sheet = compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot
+        assertEquals(panel.width - 16f, sheet.width, 0.5f)
+        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
+        capture("comments-composer-1280", output, record, goldens)
+
+        compose.runOnIdle {
+            width = 390; height = 844; overlay = CommentsOverlay.DeleteConfirm("c1", "c1r1")
+            draft = ""
+        }
+        panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
+        sheet = compose.onNodeWithTag("comment-delete-sheet").fetchSemanticsNode().boundsInRoot
+        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
+        assertEquals(48f, compose.onNodeWithTag("comment-delete-confirm").fetchSemanticsNode().boundsInRoot.height, 0.5f)
+        capture("comments-delete-390", output, record, goldens)
     }
 
     private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {

@@ -82,6 +82,8 @@ fun SearchResultsScreen(
                                 { onAction(SearchAction.OpenPlaylistMenu(it)) })
                             else if (state.filters.type == SearchResultType.Channels)
                                 ChannelResultsList(content.page.channels, listState, onAction)
+                            else if (state.filters.type == SearchResultType.Shorts)
+                                ShortsResultsList(content.page.shorts, listState, onAction)
                             else SearchList(content.page.results, width, height, listState, onAction)
                     }
                 }
@@ -443,7 +445,11 @@ private fun SearchMessage(tag: String, content: @Composable ColumnScope.() -> Un
 private fun SearchNoResults(query: String, type: SearchResultType) {
     SearchMessage("search-empty") {
         AppText("No results found", size = 20, line = 28, weight = FontWeight.Bold)
-        val noun = if (type == SearchResultType.Playlists) "playlists" else "videos"
+        val noun = when (type) {
+            SearchResultType.Playlists -> "playlists"
+            SearchResultType.Shorts -> "shorts"
+            else -> "videos"
+        }
         AppText("Your search for \"$query\" did not match any $noun.", Modifier.padding(top = 8.dp),
             size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
     }

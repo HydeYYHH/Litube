@@ -20,6 +20,7 @@ import com.hhst.youtubelite.home.domain.HomeNavigationRequest
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.search.domain.SearchNavigationRequest
 import com.hhst.youtubelite.watch.data.WatchScenario
+import com.hhst.youtubelite.watch.domain.WatchFeedbackKind
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
 import com.hhst.youtubelite.watch.domain.WatchVideoMenuAction
 import org.junit.After
@@ -128,6 +129,22 @@ class WatchScreenAndroidTest {
         host.onActivity { assertFalse(it.isFinishing) }
     }
 
+    @Test fun homeLiveCardOpensTheLiveWatchProfile() {
+        val host = launchHome()
+        compose.onNodeWithTag("home-feed").performScrollToNode(hasTestTag("feed-item-live"))
+        compose.onNodeWithContentDescription("Open movie studio — animation and art, LIVE").performClick()
+        awaitNode("watch-screen")
+        host.onActivity { assertEquals(HomeNavigationRequest.Watch("live"), it.lastNavigationRequest) }
+        awaitReady()
+        compose.onNodeWithTag("watch-title", useUnmergedTree = true)
+            .assertTextEquals("Open movie studio — animation and art")
+        compose.onNodeWithTag("watch-live-badge").assertIsDisplayed()
+        compose.onNodeWithText("1.2K watching").assertIsDisplayed()
+        // The live profile replaces the age line instead of adding it after the view count.
+        compose.onAllNodes(hasText("LIVE") and hasAnyAncestor(hasTestTag("watch-meta")))
+            .assertCountEquals(1)
+    }
+
     @Test fun searchResultOpensWatchAndBackKeepsResults() {
         val host = launchResults()
         compose.onNodeWithTag("search-thumb-harbour", useUnmergedTree = true).performClick()
@@ -168,8 +185,38 @@ class WatchScreenAndroidTest {
         clickScrolled(tag("watch-action-dislike"), WatchNavigationRequest.Dislike("bunny"))
         clickScrolled(tag("watch-action-subscribe"), WatchNavigationRequest.Subscribe("blender"))
         clickScrolled(tag("watch-action-share"), WatchNavigationRequest.Share("bunny"))
-        clickScrolled(tag("watch-action-save"), WatchNavigationRequest.Save("bunny"))
-        clickScrolled(tag("watch-action-report"), WatchNavigationRequest.Report("bunny"))
+        tag("watch-action-save").performScrollTo().performClick()
+        compose.onNodeWithTag("save-to-playlist").assertIsDisplayed()
+        compose.onNodeWithText("Watch later").performClick()
+        assertWatchRequest(WatchNavigationRequest.SaveToWatchLater("bunny"))
+        compose.onNodeWithTag("save-to-playlist").assertDoesNotExist()
+        compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
+        tag("watch-action-report").performScrollTo().performClick()
+        compose.onNodeWithTag("feedback-sheet").assertIsDisplayed()
+        compose.onNodeWithText("Harmful content").performClick()
+        assertWatchRequest(WatchNavigationRequest.Feedback("bunny", WatchFeedbackKind.Report, "Harmful content"))
+        compose.onNodeWithTag("feedback-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
+        // Download would open the v3 confirm sheet; keep the host in front and check the payload.
+        watch?.onActivity { it.launchDownload = false }
+        clickScrolled(tag("watch-action-download"), WatchNavigationRequest.Download("bunny"))
+        watch?.onActivity {
+            assertEquals("aqz-KE-bpKQ", it.lastDownloadSpec?.videoId)
+            assertEquals("Big Buck Bunny | A short film by the Blender Foundation", it.lastDownloadSpec?.title)
+            assertEquals("Blender", it.lastDownloadSpec?.author)
+        }
+        clickScrolled(tag("watch-action-queue"), WatchNavigationRequest.Queue("bunny"))
+        watch?.onActivity {
+            assertEquals("aqz-KE-bpKQ", it.lastQueuedItem?.videoId)
+            assertEquals("Big Buck Bunny | A short film by the Blender Foundation", it.lastQueuedItem?.title)
+            assertEquals("Blender", it.lastQueuedItem?.author)
+        }
+        compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
+        clickScrolled(tag("watch-action-open-with"), WatchNavigationRequest.OpenWith("bunny"))
+        watch?.onActivity {
+            assertEquals(Intent.ACTION_VIEW, it.shareGateway.lastOpenWithIntent?.action)
+            assertEquals("https://youtu.be/aqz-KE-bpKQ", it.shareGateway.lastOpenWithIntent?.dataString)
+        }
         clickScrolled(
             compose.onNodeWithText("Comments"),
             WatchNavigationRequest.Comments("bunny"),
@@ -184,7 +231,7 @@ class WatchScreenAndroidTest {
             .performScrollTo().performClick()
         compose.onNodeWithTag("watch-video-menu").assertIsDisplayed()
         compose.onNodeWithText("Save to Watch later").performClick()
-        assertWatchRequest(WatchNavigationRequest.MenuAction("harbour", WatchVideoMenuAction.WatchLater))
+        assertWatchRequest(WatchNavigationRequest.SaveToWatchLater("harbour"))
         compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
         // The fixed top bar sits outside the scroll container.
         clickFixed(compose.onNodeWithContentDescription("More options"), WatchNavigationRequest.PageMenu)
@@ -200,6 +247,35 @@ class WatchScreenAndroidTest {
         awaitReady()
         compose.onNodeWithTag("watch-title", useUnmergedTree = true)
             .assertTextEquals("Big Buck Bunny | A short film by the Blender Foundation")
+    }
+
+    @Test fun saveChooserAndNewPlaylistStayLocalUntilARequest() {
+        val host = launchWatch()
+        awaitReady()
+        fun openMenu() = compose.onNodeWithContentDescription(
+            "More actions for City light trails — a night walk through the old harbour",
+        ).performScrollTo().performClick()
+        openMenu()
+        compose.onNodeWithText("Save to playlist").performClick()
+        compose.onNodeWithTag("save-to-playlist").assertIsDisplayed()
+        host.onActivity { assertNull(it.lastNavigationRequest) }
+        compose.onNodeWithTag("save-menu-playlist-LL").performClick()
+        assertWatchRequest(WatchNavigationRequest.SaveToPlaylist("harbour", "LL", "Liked videos"))
+        compose.onNodeWithTag("save-to-playlist").assertDoesNotExist()
+
+        openMenu()
+        compose.onNodeWithText("Save to playlist").performClick()
+        compose.onNodeWithTag("save-menu-new-playlist").performClick()
+        compose.onNodeWithTag("new-playlist-sheet").assertIsDisplayed()
+        compose.onNodeWithTag("new-playlist-title").performTextInput("Night walks")
+        compose.onNodeWithTag("new-playlist-create").performClick()
+        compose.waitUntil(10_000) {
+            var request: WatchNavigationRequest? = null
+            host.onActivity { request = it.lastNavigationRequest }
+            request == WatchNavigationRequest.CreatePlaylist("harbour", "Night walks", "")
+        }
+        compose.onNodeWithTag("new-playlist-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("watch-screen").assertIsDisplayed()
     }
 
     @Test fun backClosesRelatedMenuBeforeLeavingAndRestoresItOnRecreation() {

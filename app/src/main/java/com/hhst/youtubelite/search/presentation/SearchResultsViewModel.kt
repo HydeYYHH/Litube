@@ -67,7 +67,9 @@ class SearchResultsViewModel(
                 val query = action.query.trim()
                 if (query.isNotEmpty()) updateQuery(query)
             }
-            is SearchAction.OpenResult -> navigation.trySend(SearchNavigationRequest.Watch(action.videoId))
+            is SearchAction.OpenResult -> navigation.trySend(
+                if (uiState.value.filters.type == SearchResultType.Shorts) SearchNavigationRequest.Shorts(action.videoId)
+                else SearchNavigationRequest.Watch(action.videoId))
             is SearchAction.OpenPlaylist -> navigation.trySend(SearchNavigationRequest.Playlist(action.playlistId))
             is SearchAction.OpenPlaylistMenu -> overlay(SearchOverlay.PlaylistMenu(action.playlistId))
             SearchAction.SharePlaylist -> {

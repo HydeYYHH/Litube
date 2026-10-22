@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -14,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +27,9 @@ import com.hhst.youtubelite.post.domain.PostDetailUiState
 import com.hhst.youtubelite.post.domain.PostLayout
 import com.hhst.youtubelite.post.domain.PostMenuAction
 import com.hhst.youtubelite.post.domain.PostDestination
+import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentsUiState
+import com.hhst.youtubelite.comments.presentation.CommentsPanel
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppText
@@ -41,10 +46,15 @@ fun PostDetailScreen(
     onAction: (PostDetailAction) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    commentsState: CommentsUiState = CommentsUiState(),
+    onCommentsAction: (CommentAction) -> Unit = {},
 ) {
+    val commentsListState = rememberLazyListState()
     AppTheme {
         Box(modifier.fillMaxSize().background(Color.White).testTag("post-detail-page")) {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().then(
+                if (state.overlay != PostDetailOverlay.None || state.commentsOpen) Modifier.clearAndSetSemantics {} else Modifier,
+            )) {
                 PostDetailTopBar(state, onAction, onBack)
                 when (val content = state.content) {
                     PostDetailContent.Loading -> Box(
@@ -60,8 +70,9 @@ fun PostDetailScreen(
                 }
                 BrowseNavigationBar("post-detail") { onAction(PostDetailAction.SelectDestination(PostDestination.valueOf(it.name))) }
             }
-            if (state.overlay == PostDetailOverlay.Menu) {
-                MenuBottomSheet(
+            when (val overlay = state.overlay) {
+                PostDetailOverlay.None -> Unit
+                PostDetailOverlay.Menu -> MenuBottomSheet(
                     items = PostMenuAction.entries.map { action ->
                         MenuSheetItem(
                             icon = AppIcon.Report,
@@ -73,6 +84,23 @@ fun PostDetailScreen(
                     onSelect = { index -> onAction(PostDetailAction.MenuSelected(PostMenuAction.entries[index])) },
                     tag = "post-detail-menu",
                     paneTitle = "Post actions",
+                )
+                is PostDetailOverlay.Image -> PostImageViewer(
+                    images = state.post?.images.orEmpty(),
+                    initialIndex = overlay.index,
+                    onClose = { onAction(PostDetailAction.CloseOverlay) },
+                    onPageSelected = { onAction(PostDetailAction.SelectImage(it)) },
+                )
+            }
+            if (state.commentsOpen) {
+                CommentsPanel(
+                    state = commentsState,
+                    commentCount = commentsState.total,
+                    onAction = onCommentsAction,
+                    onClose = { onAction(PostDetailAction.CloseComments) },
+                    modifier = Modifier.fillMaxSize(),
+                    listState = commentsListState,
+                    sheetTopOverride = PostLayout.DetailToolbar,
                 )
             }
         }
@@ -155,6 +183,7 @@ private fun PostDetailContentColumn(
                     images = post.images,
                     selectedIndex = state.selectedImage,
                     onSelected = { onAction(PostDetailAction.SelectImage(it)) },
+                    onOpen = { onAction(PostDetailAction.OpenImage(it)) },
                     modifier = Modifier.testTag("post-detail-images"),
                 )
             }

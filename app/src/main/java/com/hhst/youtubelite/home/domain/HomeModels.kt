@@ -49,6 +49,29 @@ sealed interface HomeOverlay {
     data object None : HomeOverlay
     data object Search : HomeOverlay
     data class Menu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeOverlay
+    data class Save(
+        val videoId: String,
+        val newPlaylist: Boolean = false,
+        val title: String = "",
+        val description: String = "",
+    ) : HomeOverlay
+    data class Feedback(val itemId: String, val kind: HomeFeedbackKind) : HomeOverlay
+}
+
+/** Reason chooser opened by the feedback/report rows; no sample exposes these panels. */
+enum class HomeFeedbackKind(val title: String, val reasons: List<String>) {
+    NotInterested("Tell us why", listOf(
+        "I'm not interested in this video", "It's repetitive", "I've already seen it",
+    )),
+    DontRecommend("Tell us why", listOf(
+        "I don't like this channel", "This channel is misleading", "I've already seen enough",
+    )),
+    SendFeedback("Send feedback", listOf(
+        "Not interested", "Inappropriate", "Misleading", "Something else",
+    )),
+    Report("Report post", listOf(
+        "Spam or misleading", "Harmful content", "Something else",
+    )),
 }
 
 data class HomeUiState(
@@ -57,6 +80,7 @@ data class HomeUiState(
     val selectedChip: String = "All",
     val overlay: HomeOverlay = HomeOverlay.None,
     val signedInPreview: Boolean = false,
+    val hideShorts: Boolean = false,
 ) {
     val suggestions: List<String> get() = if (query.isBlank()) emptyList() else listOf(
         query.trim(), "${query.trim()} documentary", "${query.trim()} music", "${query.trim()} live",
@@ -82,9 +106,14 @@ enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
 sealed interface HomeNavigationRequest {
     data class Search(val query: String) : HomeNavigationRequest
     data class Watch(val videoId: String) : HomeNavigationRequest
+    data class Shorts(val itemId: String) : HomeNavigationRequest
     data class Channel(val channelId: String) : HomeNavigationRequest
     data class Destination(val destination: HomeDestination) : HomeNavigationRequest
     data class MenuAction(val itemId: String, val action: FeedMenuAction) : HomeNavigationRequest
+    data class SaveToWatchLater(val videoId: String) : HomeNavigationRequest
+    data class SaveToPlaylist(val videoId: String, val playlistId: String, val title: String) : HomeNavigationRequest
+    data class CreatePlaylist(val videoId: String, val title: String, val description: String) : HomeNavigationRequest
+    data class Feedback(val itemId: String, val kind: HomeFeedbackKind, val reason: String) : HomeNavigationRequest
     data class PostFeedback(val postId: String, val like: Boolean, val channelId: String = "studio") : HomeNavigationRequest
     data class PostComments(val postId: String, val channelId: String = "studio") : HomeNavigationRequest
     data class OpenPost(val channelId: String, val postId: String) : HomeNavigationRequest
@@ -101,6 +130,11 @@ sealed interface HomeAction {
     data class SelectChip(val chip: String) : HomeAction
     data class OpenMenu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeAction
     data class MenuSelected(val action: FeedMenuAction) : HomeAction
+    data class SaveDestinationSelected(val destination: com.hhst.youtubelite.saves.domain.SaveDestination) : HomeAction
+    data object OpenNewPlaylist : HomeAction
+    data class SaveDraftChanged(val title: String, val description: String) : HomeAction
+    data object SubmitNewPlaylist : HomeAction
+    data class FeedbackReason(val reason: String) : HomeAction
     data class Navigate(val request: HomeNavigationRequest) : HomeAction
     data object Refresh : HomeAction
     data object LoadNext : HomeAction

@@ -33,6 +33,7 @@ class PlaylistViewModel(
             "video" -> savedState.get<String>("entryId")?.let(PlaylistOverlay::VideoMenu) ?: PlaylistOverlay.None
             else -> PlaylistOverlay.None
         }, query = savedState["query"] ?: "",
+        descriptionExpanded = savedState["descriptionExpanded"] ?: false,
     ))
     val uiState = state.asStateFlow()
     private val navigation = Channel<PlaylistNavigationRequest>(Channel.BUFFERED)
@@ -72,7 +73,11 @@ class PlaylistViewModel(
                     PlaylistAction.Save -> send(PlaylistNavigationRequest.Save(id))
                     PlaylistAction.Share -> send(PlaylistNavigationRequest.Share(id))
                     PlaylistAction.OpenOwner -> send(PlaylistNavigationRequest.Channel(page.summary.channelId))
-                    PlaylistAction.OpenDescription -> send(PlaylistNavigationRequest.Description(id))
+                    PlaylistAction.ToggleDescription -> {
+                        val expanded = !state.value.descriptionExpanded
+                        savedState["descriptionExpanded"] = expanded
+                        state.update { it.copy(descriptionExpanded = expanded) }
+                    }
                     is PlaylistAction.OpenVideo -> page.entries.find { it.id == action.entryId }?.let { send(PlaylistNavigationRequest.Watch(it.videoId)) }
                     is PlaylistAction.OpenVideoMenu -> if (page.entries.any { it.id == action.entryId }) overlay(PlaylistOverlay.VideoMenu(action.entryId))
                     is PlaylistAction.VideoMenuAction -> {

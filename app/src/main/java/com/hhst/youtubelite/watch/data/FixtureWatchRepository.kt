@@ -47,6 +47,8 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
                 "Northlight Animation", "@northlight", "northlight", "6.7M views", "2 years ago", "sintel"),
             "river" to Entry("River sound — one hour of calm water",
                 "Quiet Place", "@quietplace", "quietplace", "315K views", "5 months ago", "dream"),
+            "live" to Entry("Open movie studio — animation and art",
+                "Blender Studio", "@BlenderStudio", "studio", "1.2K watching", "LIVE", "dream"),
             "live-1" to Entry("SINGULARITY Premiere Party", "Blender Studio", "@BlenderStudio", "studio", "8.7K views", "Streamed 5 months ago", "dream"),
             "live-2" to Entry("DOGWALK Release Party", "Blender Studio", "@BlenderStudio", "studio", "13K views", "Streamed 1 year ago", "sintel"),
             "live-3" to Entry("Rigging \"Critter\" with Demeter Dzadik", "Blender Studio", "@BlenderStudio", "studio", "14K views", "Streamed 1 year ago", "bunny"),
@@ -61,7 +63,14 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
 
         /** Fixed English sample; reaction counts are synthetic and shared by every entry. */
         fun sampleVideo(videoId: String): WatchVideo {
-            val entry = entries[videoId] ?: defaultEntry
+            val categoryItem = com.hhst.youtubelite.explore.domain.ExploreCategory.entries.asSequence()
+                .flatMap { com.hhst.youtubelite.explore.data.FixtureExploreRepository.sample(it).asSequence() }
+                .firstOrNull { it.id == videoId }
+            val entry = entries[videoId] ?: categoryItem?.let { item ->
+                val original = entries[item.id.substringAfter('-')] ?: defaultEntry
+                original.copy(title = item.title, channel = item.author, channelId = item.channelId,
+                    views = item.metadata, age = item.age.orEmpty(), artwork = item.artwork)
+            } ?: defaultEntry
             return WatchVideo(
                 id = videoId,
                 title = entry.title,
@@ -80,6 +89,7 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
                 ),
                 description = "An open movie short rendered end to end with free tools. " +
                     "This local sample never leaves the device: no link, chapter or external page is opened from it.",
+                live = categoryItem?.live ?: (videoId == "live"),
             )
         }
 

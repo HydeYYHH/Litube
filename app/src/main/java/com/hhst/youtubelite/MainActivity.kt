@@ -222,6 +222,11 @@ class MainActivity : ComponentActivity() {
      * through silently.
      */
     private fun handleLaunchIntent(intent: Intent?) {
+        val requested = intent?.getStringExtra(EXTRA_OPEN_URL)
+        if (requested != null && UrlPolicy.isAllowedUrl(requested)) {
+            sharedUrl.value = requested
+            return
+        }
         if (intent?.getBooleanExtra(DownloadShareParser.EXTRA_PENDING_PLAYLIST, false) == true) {
             val url = extractSharedUrl(intent)
             if (url != null) {
@@ -322,6 +327,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** First-party URL opened after the host is launched from an in-app entry. */
+        const val EXTRA_OPEN_URL = "com.hhst.youtubelite.OPEN_URL"
         private const val ACTION_PIP_AUDIO = "com.hhst.youtubelite.PIP_AUDIO"
         private const val ACTION_PIP_TOGGLE = "com.hhst.youtubelite.PIP_TOGGLE"
         private const val ACTION_PIP_PREVIOUS = "com.hhst.youtubelite.PIP_PREVIOUS"

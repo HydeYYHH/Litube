@@ -28,7 +28,13 @@ class PostDetailViewModel(
                 PostScenario.Content, PostScenario.Loading -> PostDetailContent.Loading
             },
             selectedImage = savedState.get<Int>("selectedImage") ?: 0,
-            overlay = if (savedState.get<Boolean>("menu") == true) PostDetailOverlay.Menu else PostDetailOverlay.None,
+            overlay = when {
+                savedState.get<Int>("imageOpen") != null ->
+                    PostDetailOverlay.Image(savedState.get<Int>("imageOpen")!!.coerceAtLeast(0))
+                savedState.get<Boolean>("menu") == true -> PostDetailOverlay.Menu
+                else -> PostDetailOverlay.None
+            },
+            commentsOpen = savedState.get<Boolean>("commentsOpen") == true,
         )
     )
     val uiState = _state.asStateFlow()
@@ -47,17 +53,33 @@ class PostDetailViewModel(
             is PostDetailAction.SelectDestination -> navigation.trySend(PostDetailNavigationRequest.Destination(action.destination))
             is PostDetailAction.SelectImage -> {
                 savedState["selectedImage"] = action.index
-                _state.update { it.copy(selectedImage = action.index) }
+                if (_state.value.overlay is PostDetailOverlay.Image) savedState["imageOpen"] = action.index
+                _state.update { it.copy(selectedImage = action.index,
+                    overlay = if (it.overlay is PostDetailOverlay.Image) PostDetailOverlay.Image(action.index) else it.overlay) }
+            }
+            is PostDetailAction.OpenImage -> {
+                savedState["imageOpen"] = action.index
+                savedState["selectedImage"] = action.index
+                _state.update { it.copy(selectedImage = action.index, overlay = PostDetailOverlay.Image(action.index)) }
             }
             PostDetailAction.Like -> navigation.trySend(PostDetailNavigationRequest.Feedback(_state.value.identity, true))
             PostDetailAction.Dislike -> navigation.trySend(PostDetailNavigationRequest.Feedback(_state.value.identity, false))
-            PostDetailAction.Comments -> navigation.trySend(PostDetailNavigationRequest.Comments(_state.value.identity))
+            PostDetailAction.Comments -> {
+                savedState["commentsOpen"] = true
+                _state.update { it.copy(commentsOpen = true) }
+                navigation.trySend(PostDetailNavigationRequest.Comments(_state.value.identity))
+            }
+            PostDetailAction.CloseComments -> {
+                savedState["commentsOpen"] = false
+                _state.update { it.copy(commentsOpen = false) }
+            }
             PostDetailAction.OpenMenu -> {
                 savedState["menu"] = true
                 _state.update { it.copy(overlay = PostDetailOverlay.Menu) }
             }
             PostDetailAction.CloseOverlay -> {
                 savedState["menu"] = false
+                savedState.remove<Int>("imageOpen")
                 _state.update { it.copy(overlay = PostDetailOverlay.None) }
             }
             is PostDetailAction.MenuSelected -> {

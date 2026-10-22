@@ -73,6 +73,7 @@ class HomeScreenAndroidTest {
         compose.waitForIdle()
         host.onActivity { assertEquals(HomeNavigationRequest.Search("nature"), it.lastNavigationRequest) }
         compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(15_000) { runCatching { compose.onAllNodesWithTag("home-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty() }
         compose.onNodeWithTag("home-empty").assertIsDisplayed()
         compose.onNodeWithTag("search-overlay").assertDoesNotExist()
         compose.onAllNodesWithContentDescription("Search YouTube").onFirst().performClick()
@@ -163,6 +164,43 @@ class HomeScreenAndroidTest {
         host.onActivity { assertEquals(HomeNavigationRequest.MenuAction("bunny", FeedMenuAction.WatchLater), it.lastNavigationRequest) }
         compose.onNodeWithTag("video-menu").assertDoesNotExist()
         compose.onNodeWithText("Saved").assertDoesNotExist()
+    }
+
+    @Test fun feedMenuSaveToPlaylistOpensTheChooserAndNewPlaylistForm() {
+        val host = launch(HomeScenario.Feed)
+        compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation").performClick()
+        compose.onNodeWithText("Save to playlist").performClick()
+        compose.onNodeWithTag("save-to-playlist").assertIsDisplayed()
+        compose.onNodeWithTag("save-menu-playlist-LL").assertIsDisplayed()
+        host.onActivity { assertNull(it.lastNavigationRequest) }
+        compose.onNodeWithTag("save-menu-new-playlist").performClick()
+        compose.onNodeWithTag("new-playlist-sheet").assertIsDisplayed()
+        compose.onNodeWithTag("new-playlist-title").performTextInput("Road trip")
+        compose.onNodeWithTag("new-playlist-create").performClick()
+        compose.waitUntil(10_000) {
+            var request: HomeNavigationRequest? = null
+            host.onActivity { request = it.lastNavigationRequest }
+            request == HomeNavigationRequest.CreatePlaylist("bunny", "Road trip", "")
+        }
+        compose.onNodeWithTag("new-playlist-sheet").assertDoesNotExist()
+        compose.onNodeWithText("Saved").assertDoesNotExist()
+        compose.onNodeWithTag("home-screen").assertIsDisplayed()
+    }
+
+    @Test fun feedbackRowsOpenAReasonChooserAndEmitTheTypedReason() {
+        val host = launch(HomeScenario.Feed)
+        compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation").performClick()
+        compose.onNodeWithText("Not interested").performClick()
+        compose.onNodeWithTag("feedback-sheet").assertIsDisplayed()
+        host.onActivity { assertNull(it.lastNavigationRequest) }
+        compose.onNodeWithText("It's repetitive").performClick()
+        compose.waitUntil(10_000) {
+            var request: HomeNavigationRequest? = null
+            host.onActivity { request = it.lastNavigationRequest }
+            request == HomeNavigationRequest.Feedback("bunny", HomeFeedbackKind.NotInterested, "It's repetitive")
+        }
+        compose.onNodeWithTag("feedback-sheet").assertDoesNotExist()
+        compose.onNodeWithTag("home-screen").assertIsDisplayed()
     }
 
     @Test fun feedMenuShareReachesTheSystemBoundaryWithoutOpeningAnotherScreen() {
