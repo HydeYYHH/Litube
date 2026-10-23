@@ -13,21 +13,26 @@ import com.hhst.youtubelite.channel.domain.ChannelPage as AppChannelPage
 class MediaWatchRepository(private val client: MediaClient) : WatchRepository {
     override suspend fun watch(videoId: String): AppWatchPage = client.read { context, http ->
         val page = loadWatch(videoId, context, http = http).requireValue()
-        val query = playerQuery(PlayerClient.WEB, videoId, context.visitor)
-        val reply = http.execute(query.request())
-        val details = if (reply.status == 200) playerAnswer(reply.body).details else null
-        if (page.title.isNullOrBlank() && details?.title.isNullOrBlank())
-            throw MediaException(RequestError(RequestFailure.PARSE, "missing_video_details"))
-        AppWatchPage(WatchVideo(videoId, details?.title ?: page.title.orEmpty(),
-            details?.author ?: page.author.orEmpty(), "", details?.channelId ?: page.channelId.orEmpty(),
-            details?.thumbnail.orEmpty(), "", details?.viewCount?.let { "$it views" }.orEmpty(), "", "",
-            WatchComment("", "", ""), details?.description ?: page.description.orEmpty(), details?.liveContent == true,
-            rating = when (page.rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
-            subscribed = page.subscribed == true, avatar = page.authorThumbnail.orEmpty()),
-            page.related.filter { it.kind == "video" }.map { WatchRelated(it.id, it.title.orEmpty(), it.author.orEmpty(),
-                it.channelId.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(), it.duration.orEmpty(), it.thumbnail.orEmpty(),
-                if (it.live) "LIVE" else null, it.progressPercent?.div(100f), it.authorThumbnail.orEmpty()) })
+        val details = loadPlayerDetails(videoId, context, http).value
+        page.toAppWatchPage(videoId, details)
     }
+}
+
+internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?): AppWatchPage {
+    fun String?.present() = this?.takeIf { it.isNotBlank() }
+    val title = title.present() ?: details?.title.present()
+        ?: throw MediaException(RequestError(RequestFailure.PARSE, "missing_video_details"))
+    return AppWatchPage(WatchVideo(id, title,
+        author.present() ?: details?.author.orEmpty(), "", channelId.present() ?: details?.channelId.orEmpty(),
+        details?.thumbnail.orEmpty(), "", viewCount.present() ?: details?.viewCount?.let {
+            java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
+        }.orEmpty(), published.orEmpty(), commentCount.orEmpty(), WatchComment("", "", ""),
+        description.present() ?: details?.description.orEmpty(), details?.liveContent == true,
+        rating = when (rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
+        subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading),
+        related.filter { it.kind == "video" }.map { WatchRelated(it.id, it.title.orEmpty(), it.author.orEmpty(),
+            it.channelId.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(), it.duration.orEmpty(), it.thumbnail.orEmpty(),
+            if (it.live) "LIVE" else null, it.progressPercent?.div(100f), it.authorThumbnail.orEmpty()) })
 }
 
 class MediaPlaylistRepository(private val client: MediaClient) : PlaylistRepository {
@@ -57,10 +62,18 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
         val playlistsTab = page.page.tabs.firstOrNull { it.title.equals("Playlists", true) }
         val playlists = if (playlistsTab?.params == null) page.page.items.filter { it.kind == "playlist" } else
             loadChannel(resolved, context, playlistsTab.params, http = http).requireValue().page.items.filter { it.kind == "playlist" }
-        AppChannelPage(ChannelProfile(resolved, page.title.orEmpty(), "", page.thumbnail.orEmpty(), null,
-            page.subscriberCount.orEmpty(), page.description.orEmpty(), canonicalUrl = "https://www.youtube.com/channel/$resolved"),
-            page.page.items.filter { it.kind == "video" }.map { ChannelVideo(it.id, it.title.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(),
-                it.duration.orEmpty(), it.thumbnail.orEmpty(), it.live) }, playlists.map(MediaItem::playlistSummary))
+        val videosTab = page.page.tabs.firstOrNull { it.title.equals("Videos", true) }
+        val videosPage = if (videosTab != null && !videosTab.selected) loadChannel(resolved, context, videosTab.params, http = http).requireValue() else page
+        AppChannelPage(ChannelProfile(resolved, page.title.orEmpty(), page.handle.orEmpty(), page.thumbnail.orEmpty(), page.banner,
+            page.subscriberCount.orEmpty(), page.description.orEmpty(), videoCount = page.videoCount.orEmpty(), canonicalUrl = "https://www.youtube.com/channel/$resolved"),
+            videosPage.page.items.filter { it.kind == "video" }.map { it.channelVideo() }, playlists.map(MediaItem::playlistSummary),
+            page.page.groups.mapNotNull { group ->
+                val videos = group.items.filter { it.kind == "video" }.map { it.channelVideo() }
+                if (videos.isEmpty()) null else ChannelHomeShelf(group.title.orEmpty(), videos = videos)
+            }.ifEmpty {
+                page.page.items.filter { it.kind == "video" }.map { it.channelVideo() }.takeIf { it.isNotEmpty() }
+                    ?.let { listOf(ChannelHomeShelf("", videos = it)) }.orEmpty()
+            })
     }
 
     private suspend fun tab(channelId: String, label: String): List<MediaItem> = client.read { context, http ->
@@ -70,10 +83,10 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
         if (tab.selected) first.page.items else loadChannel(resolved, context, tab.params, http = http).requireValue().page.items
     }
     override suspend fun shorts(channelId: String) = tab(channelId, "Shorts").filter { it.kind in setOf("video", "short") }
-        .mapIndexed { index, it -> ChannelShort(it.id, it.title.orEmpty(), it.viewCount.orEmpty(), it.thumbnail.orEmpty(), index) }
+        .mapIndexed { index, it -> ChannelShort(it.id, it.title.orEmpty(), it.viewCount.orEmpty(), it.thumbnail.orEmpty(), index, viewMagnitude(it.viewCount)) }
     override suspend fun live(channelId: String): ChannelLivePage {
         val videos = tab(channelId, "Live").filter { it.kind == "video" }.mapIndexed { index, it ->
-            ChannelLiveVideo(it.id, it.title.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(), it.duration.orEmpty(), it.thumbnail.orEmpty(), it.live, index)
+            ChannelLiveVideo(it.id, it.title.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(), it.duration.orEmpty(), it.thumbnail.orEmpty(), it.live, index, viewMagnitude(it.viewCount))
         }
         return ChannelLivePage(videos.filter { it.liveNow }, videos.filterNot { it.liveNow })
     }
@@ -97,4 +110,14 @@ internal fun resolveChannel(id: String, context: RequestContext, http: HttpClien
     if (reply.status !in 200..299) throw MediaException(RequestError(RequestFailure.HTTP, "http_" + reply.status, reply.status))
     return com.google.gson.JsonParser.parseString(reply.body).objects("browseEndpoint").firstNotNullOfOrNull { it.string("browseId") }
         ?: throw MediaException(RequestError(RequestFailure.PARSE, "channel_not_found"))
+}
+
+private fun MediaItem.channelVideo() = ChannelVideo(id, title.orEmpty(), viewCount.orEmpty(), published.orEmpty(),
+    duration.orEmpty(), thumbnail.orEmpty(), live)
+
+internal fun viewMagnitude(label: String?): Long {
+    val match = Regex("([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*([KMB]?)", RegexOption.IGNORE_CASE).find(label.orEmpty()) ?: return 0
+    val amount = match.groupValues[1].replace(",", "").toDoubleOrNull() ?: return 0
+    val scale = when (match.groupValues[2].uppercase()) { "K" -> 1e3; "M" -> 1e6; "B" -> 1e9; else -> 1.0 }
+    return (amount * scale).coerceAtMost(Long.MAX_VALUE.toDouble()).toLong()
 }

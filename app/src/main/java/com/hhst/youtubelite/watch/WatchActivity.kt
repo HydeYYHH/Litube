@@ -71,6 +71,8 @@ import com.hhst.youtubelite.watch.presentation.WatchVideoMenu
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 
@@ -196,6 +198,25 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                             commentsViewModel.selectVideo(id)
                         }
                     }
+                }
+            }
+        }
+        if (!fixtures) lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                kotlinx.coroutines.flow.combine(
+                    commentsViewModel.uiState,
+                    watchViewModel.uiState.map { it.videoId to (it.content is WatchContent.Ready) }.distinctUntilChanged(),
+                ) { comments, _ -> comments }.collect { commentsState ->
+                    val content = commentsState.content
+                    val first = (content as? CommentsContent.Ready)?.threads?.firstOrNull()
+                    watchViewModel.updateCommentsPreview(commentsState.videoId, when (content) {
+                        CommentsContent.Loading -> com.hhst.youtubelite.watch.domain.WatchCommentsStatus.Loading
+                        CommentsContent.Empty -> com.hhst.youtubelite.watch.domain.WatchCommentsStatus.Empty
+                        CommentsContent.Disabled -> com.hhst.youtubelite.watch.domain.WatchCommentsStatus.Disabled
+                        CommentsContent.Failed -> com.hhst.youtubelite.watch.domain.WatchCommentsStatus.Failed
+                        is CommentsContent.Ready -> com.hhst.youtubelite.watch.domain.WatchCommentsStatus.Ready
+                    }, commentsState.total, com.hhst.youtubelite.watch.domain.WatchComment(
+                        first?.author?.displayName.orEmpty(), first?.body.orEmpty(), first?.author?.artwork.orEmpty()))
                 }
             }
         }

@@ -667,6 +667,7 @@ fun ErrorOverlay(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val title = stringResource(R.string.player_error)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -674,13 +675,13 @@ fun ErrorOverlay(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.player_error),
+            text = title,
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
         )
-        Text(
+        if (message.isNotBlank() && !message.trim().equals(title.trim(), ignoreCase = true)) Text(
             text = message,
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 12.sp,

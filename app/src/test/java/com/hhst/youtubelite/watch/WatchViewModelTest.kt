@@ -29,6 +29,30 @@ class WatchViewModelTest {
         override suspend fun watch(videoId: String) = block(videoId)
     }
 
+    @Test fun confirmingARatingKeepsTheLatestCommentPreview() = runTest {
+        val result = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val actions = object : VideoActions {
+            override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) { result.await() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) = Unit
+        }
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Like)
+        runCurrent()
+        val preview = WatchComment("Reader", "A comment from the service", "avatar")
+        vm.updateCommentsPreview("bunny", WatchCommentsStatus.Ready, "5.2K", preview)
+        result.complete(Unit)
+        advanceUntilIdle()
+        val video = (vm.uiState.value.content as WatchContent.Ready).page.video
+        assertEquals(preview, video.topComment)
+        assertEquals("5.2K", video.commentCount)
+        assertEquals(VideoRating.Like, video.rating)
+        vm.selectVideo("sintel")
+        advanceUntilIdle()
+        vm.updateCommentsPreview("bunny", WatchCommentsStatus.Failed, "", preview)
+        assertNotEquals(preview, (vm.uiState.value.content as WatchContent.Ready).page.video.topComment)
+    }
+
     @Test fun ratingChangesOnlyAfterConfirmationAndBlocksDuplicateTaps() = runTest {
         val result = kotlinx.coroutines.CompletableDeferred<Unit>()
         var calls = 0
@@ -293,20 +317,6 @@ class WatchViewModelTest {
         assertEquals(WatchRelatedVariant.List, WatchLayout.relatedVariant(528f, 300f))
     }
 
-    @Test fun actionBarGrowthFollowsTheSampledNaturalRow() {
-        assertEquals(338f, WatchLayout.actionGrowth(700f, 820f), 0.01f)
-        assertEquals(418f, WatchLayout.actionGrowth(780f, 820f), 0.01f)
-        assertEquals(313f, WatchLayout.actionGrowth(931f, 744f), 0.01f)
-        assertEquals(418f, WatchLayout.actionGrowth(1280f, 725f), 0.01f)
-        assertEquals(738f, WatchLayout.actionGrowth(1600f, 915f), 0.01f)
-        // Below the natural row the buttons scroll at their natural positions.
-        listOf(Triple(320f, 658f, 0f), Triple(390f, 775f, 28f), Triple(411f, 714f, 49f)).forEach { (w, h, expected) ->
-            assertEquals(expected, WatchLayout.actionGrowth(w, h), 0.01f)
-        }
-        assertEquals(362f, WatchLayout.ActionRowNaturalWidth, 0.01f)
-        assertEquals(358f, WatchLayout.ActionRowNaturalEnd, 0.01f)
-    }
-
     @Test fun playerAndColumnFollowTheBreakpointMatrix() {
         // Phone / grid / stacked: the player is fixed at the column's 16:9.
         assertEquals(390f, WatchLayout.columnWidth(390f, 775f), 0.01f)
@@ -373,10 +383,10 @@ class WatchViewModelTest {
         assertEquals(244.1875f, WatchLayout.phoneCoverHeight(411f), 0.01f)
     }
 
-    @Test fun metadataSectionUsesThePinnedMajorityMarkup() {
+    @Test fun metadataIncludesIdentityAndSeparateActions() {
         assertEquals(48f, WatchLayout.TopBarHeight, 0.01f)
         assertEquals(70f, WatchLayout.InfoBlockHeight, 0.01f)
-        assertEquals(118f, WatchLayout.MetadataSectionHeight, 0.01f)
+        assertEquals(166f, WatchLayout.MetadataSectionHeight, 0.01f)
         assertEquals(48f, WatchLayout.ActionBarHeight, 0.01f)
         assertEquals(113f, WatchLayout.CommentsSectionHeight, 0.01f)
         assertEquals(92f, WatchLayout.CommentsCardHeight, 0.01f)

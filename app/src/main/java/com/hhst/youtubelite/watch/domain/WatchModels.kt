@@ -2,7 +2,6 @@ package com.hhst.youtubelite.watch.domain
 
 import kotlin.math.floor
 
-/** The ordinary-video watch page model. Every field is served by a local fixture. */
 data class WatchVideo(
     val id: String,
     val title: String,
@@ -22,9 +21,11 @@ data class WatchVideo(
     val rating: VideoRating = VideoRating.None,
     val subscribed: Boolean = false,
     val avatar: String? = null,
+    val commentsStatus: WatchCommentsStatus = WatchCommentsStatus.Ready,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
+enum class WatchCommentsStatus { Loading, Ready, Empty, Disabled, Failed }
 
 data class WatchRelated(
     val id: String,
@@ -167,14 +168,9 @@ object WatchLayout {
     const val ActionBarHeight = 48f
     /** info content (pad 12 + title 26 + gap 6 + meta 18 + pad 5) + header margin-bottom 3. */
     const val InfoBlockHeight = 70f
-    const val MetadataSectionHeight = 118f
+    const val MetadataSectionHeight = 166f
     const val CommentsSectionHeight = 113f
     const val CommentsCardHeight = 92f
-
-    const val ActionRowNaturalWidth = 362f
-    const val ActionRowNaturalEnd = 358f
-    const val ActionRowPadStart = 8f
-    const val ActionGrowEndGap = 4f
 
     const val GridBreakpoint = 550f
     const val WideShortMinWidth = 416f
@@ -204,9 +200,6 @@ object WatchLayout {
         if (sidebar(width, height)) width - sidebarWidth(width) else width
 
     fun playerHeight(width: Float, height: Float): Float = columnWidth(width, height) * 9f / 16f
-
-    fun actionGrowth(width: Float, height: Float): Float =
-        (columnWidth(width, height) - ActionGrowEndGap - ActionRowNaturalEnd).coerceAtLeast(0f)
 
     /** `cols = floor((width − 16) / 250)` → 2 for 550–750, 3 for ≥780. */
     fun gridColumns(width: Float): Int = floor((width - 16f) / 250f).toInt().coerceAtLeast(1)

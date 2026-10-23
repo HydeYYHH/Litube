@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -140,7 +141,6 @@ fun WatchScreen(
                         }
                     }
                 }
-                // Transparent fixed bar: content scrolls beneath it, exactly like the sampled page.
                 WatchTopBar(onAction, onBack)
             }
             menuContent()
@@ -199,7 +199,7 @@ private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
 @Composable
 private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).testTag("watch-topbar"),
+        Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).background(Color.White).testTag("watch-topbar"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconButton(AppIcon.Back, "Back", onClick = onBack)
@@ -272,27 +272,16 @@ private fun WatchSkeleton(includeRelated: Boolean) {
             }
             Spacer(Modifier.height(3.dp))
         }
-        Row(
-            Modifier.fillMaxWidth().height(WatchLayout.ActionBarHeight.dp)
-                .padding(start = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(32.dp).clip(CircleShape).background(DesignTokens.Ghost))
-            Spacer(Modifier.width(16.dp))
-            Box(
-                Modifier.size(78.dp, 32.dp).clip(RoundedCornerShape(16.dp))
-                    .background(DesignTokens.Ghost),
-            )
             Spacer(Modifier.width(12.dp))
-            Box(
-                Modifier.size(135.dp, 48.dp).clip(RoundedCornerShape(24.dp))
-                    .background(DesignTokens.Ghost),
-            )
-            Spacer(Modifier.width(1.dp))
-            Box(
-                Modifier.size(102.dp, 48.dp).clip(RoundedCornerShape(24.dp))
-                    .background(DesignTokens.Ghost),
-            )
+            Box(Modifier.weight(1f).height(16.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
+            Spacer(Modifier.width(24.dp))
+            Box(Modifier.size(78.dp, 32.dp).background(DesignTokens.Ghost, RoundedCornerShape(16.dp)))
+        }
+        Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            repeat(5) { Box(Modifier.weight(1f).height(36.dp).background(DesignTokens.Ghost, RoundedCornerShape(18.dp))) }
         }
         Column(Modifier.fillMaxWidth().height(WatchLayout.CommentsSectionHeight.dp)) {
             Spacer(Modifier.height(8.dp))
@@ -411,10 +400,9 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
                 AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
             }
         }
-        AppText(video.handle, Modifier.padding(end = 8.dp), size = 12, line = 18, weight = FontWeight.Medium)
-        AppText(video.likes, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
-        AppText(video.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
-        if (!video.live) AppText(video.age, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
+        if (video.handle.isNotBlank()) AppText(video.handle, Modifier.padding(end = 8.dp), size = 12, line = 18, weight = FontWeight.Medium)
+        if (video.views.isNotBlank()) AppText(video.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
+        if (!video.live && video.age.isNotBlank()) AppText(video.age, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         AppText(
             "more",
             Modifier.testTag("watch-more").semantics {
@@ -429,74 +417,45 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
 
 @Composable
 private fun WatchActionBar(video: WatchVideo, pending: Boolean, onAction: (WatchAction) -> Unit) {
-    BoxWithConstraints(
-        Modifier.fillMaxWidth().height(WatchLayout.ActionBarHeight.dp).testTag("watch-actions"),
-    ) {
-        val available = maxWidth.value
-        val growth = (available - WatchLayout.ActionRowNaturalEnd - WatchLayout.ActionGrowEndGap)
-            .coerceAtLeast(0f)
-
-        Box(Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
-            Row(
-                Modifier.fillMaxHeight()
-                    .padding(start = WatchLayout.ActionRowPadStart.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier.size(48.dp).testTag("watch-action-avatar")
-                        .clickable(role = Role.Button) { onAction(WatchAction.OpenChannel(video.channelId)) }
-                        .semantics { contentDescription = "Go to channel ${video.channel}" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Artwork(video.avatar ?: video.artwork, Modifier.size(32.dp).clip(CircleShape))
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).testTag("watch-action-avatar").semantics { contentDescription = "Go to channel ${video.channel}" }
+                    .clickable(enabled = video.channelId.isNotBlank(), role = Role.Button) { onAction(WatchAction.OpenChannel(video.channelId)) }, contentAlignment = Alignment.Center) {
+                    Artwork(video.avatar.orEmpty(), Modifier.size(32.dp).clip(CircleShape))
                 }
-                Box(
-                    Modifier.widthIn(min = 78.dp).heightIn(min = 32.dp)
-                        .clip(RoundedCornerShape(16.dp)).background(DesignTokens.Ink)
-                        .clickable(role = Role.Button) { onAction(WatchAction.Subscribe) }
-                        .testTag("watch-action-subscribe")
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AppText(
-                        if (video.subscribed) "Subscribed" else "Subscribe",
-                        size = 12,
-                        line = 16,
-                        weight = FontWeight.Medium,
-                        color = Color(0xFFF1F1F1),
-                    )
+                AppText(video.channel, Modifier.weight(1f).padding(end = 8.dp).testTag("watch-channel-name")
+                    .clickable(enabled = video.channelId.isNotBlank(), role = Role.Button) { onAction(WatchAction.OpenChannel(video.channelId)) },
+                    size = 14, line = 20, weight = FontWeight.Medium, maxLines = 2)
+            }
+            Box(Modifier.heightIn(min = 48.dp).clickable(enabled = !pending && video.channelId.isNotBlank(), role = Role.Button) {
+                onAction(WatchAction.Subscribe)
+            }.testTag("watch-action-subscribe"), contentAlignment = Alignment.Center) {
+                Box(Modifier.clip(RoundedCornerShape(18.dp)).background(DesignTokens.Ink)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    AppText(if (video.subscribed) "Subscribed" else "Subscribe", size = 12, line = 20,
+                        weight = FontWeight.Medium, color = Color.White)
                 }
-                Spacer(Modifier.width((12f + growth).dp))
-                Box(Modifier.width(356.dp).height(WatchLayout.ActionBarHeight.dp)) {
-                    listOf(
-                        Triple(AppIcon.Like, "Like this video", WatchAction.Like),
-                        Triple(AppIcon.Dislike, "Dislike this video", WatchAction.Dislike),
-                        Triple(AppIcon.Download, "Download", WatchAction.Download),
-                        Triple(AppIcon.QueueAdd, "Add to queue", WatchAction.Queue),
-                        Triple(AppIcon.OpenWith, "Open with", WatchAction.OpenWith),
-                        Triple(AppIcon.Share, "Share", WatchAction.Share),
-                        Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
-                        Triple(AppIcon.Report, "Report", WatchAction.Report),
-                    ).forEachIndexed { index, (icon, description, action) ->
-                        val offsetX = when {
-                            index < 2 -> index * 41f
-                            index < 5 -> 82f + (index - 2) * 48f
-                            else -> 226f + (index - 5) * 41f
-                        }
-                        WatchSlotButton(
-                            icon = icon, description = description,
-                            sizeWidth = 48f, sizeHeight = 48f, radius = 24f,
-                            offsetX = offsetX, offsetY = 0f,
-                            compactSurface = index in 2..4,
-                            selected = (index == 0 && video.rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) ||
-                                (index == 1 && video.rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike),
-                            enabled = index > 1 || !pending,
-                            count = when (index) { 0 -> video.likeCount; 1 -> video.dislikeCount; else -> null },
-                            testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")[index]}",
-                            onClick = { onAction(action) },
-                        )
-                    }
-                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("watch-actions")
+            .padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(
+                Triple(AppIcon.Like, "Like this video", WatchAction.Like),
+                Triple(AppIcon.Dislike, "Dislike this video", WatchAction.Dislike),
+                Triple(AppIcon.Download, "Download", WatchAction.Download),
+                Triple(AppIcon.QueueAdd, "Add to queue", WatchAction.Queue),
+                Triple(AppIcon.OpenWith, "Open with", WatchAction.OpenWith),
+                Triple(AppIcon.Share, "Share", WatchAction.Share),
+                Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
+                Triple(AppIcon.Report, "Report", WatchAction.Report),
+            ).forEachIndexed { index, (icon, description, action) ->
+                WatchSlotButton(icon, description,
+                    label = when (index) { 0 -> video.likeCount ?: video.likes.removeSuffix(" likes").takeIf { it.isNotBlank() }; 1 -> video.dislikeCount; else -> null },
+                    selected = (index == 0 && video.rating == VideoRating.Like) || (index == 1 && video.rating == VideoRating.Dislike),
+                    enabled = index > 1 || !pending,
+                    testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")[index]}",
+                    onClick = { onAction(action) })
             }
         }
     }
@@ -506,40 +465,31 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, onAction: (Watch
 private fun WatchSlotButton(
     icon: AppIcon,
     description: String,
-    sizeWidth: Float,
-    sizeHeight: Float,
-    radius: Float,
-    offsetX: Float,
-    offsetY: Float,
     testTag: String,
     onClick: () -> Unit,
-    compactSurface: Boolean = false,
-    count: String? = null,
+    label: String? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
 ) {
+    val surfaceHeight = with(LocalDensity.current) { maxOf(36.dp, 20.sp.toDp() + 12.dp) }
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     Box(
-        Modifier.offset(x = offsetX.dp, y = offsetY.dp)
-            .size(sizeWidth.dp, sizeHeight.dp)
-            .clip(RoundedCornerShape(radius.dp))
-            .background(if ((pressed || selected) && !compactSurface) DesignTokens.Surface else Color.Transparent)
+        Modifier.heightIn(min = surfaceHeight + 12.dp).widthIn(min = 48.dp)
             .clickable(enabled = enabled, interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description; this.selected = selected }
             .testTag(testTag),
         contentAlignment = Alignment.Center,
     ) {
-        if (compactSurface) {
-            Box(Modifier.size(40.dp, 36.dp).clip(RoundedCornerShape(18.dp))
-                .background(if (pressed) DesignTokens.Surface else Color.Transparent)
-                .testTag("$testTag-surface"), contentAlignment = Alignment.Center) { AppIcon(icon) }
-        } else if (count != null) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                AppIcon(icon)
-                AppText(count, size = 10, line = 12, maxLines = 1)
+        Row(Modifier.heightIn(min = surfaceHeight).clip(RoundedCornerShape(18.dp))
+            .background(if (pressed || selected) DesignTokens.Ghost else DesignTokens.Surface)
+            .testTag("$testTag-surface").padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            AppIcon(icon, Modifier.testTag("$testTag-icon"))
+            if (!label.isNullOrBlank()) {
+                Spacer(Modifier.width(8.dp))
+                AppText(label, Modifier.testTag("$testTag-count"), size = 14, line = 20, maxLines = 1)
             }
-        } else AppIcon(icon)
+        }
     }
 }
 
@@ -567,15 +517,17 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
-                    Spacer(Modifier.width(12.dp))
-                    AppText(
-                        video.topComment.text,
-                        Modifier.weight(1f),
-                        size = 14,
-                        line = 20,
-                        maxLines = 2,
-                    )
+                    if (video.commentsStatus == WatchCommentsStatus.Ready && video.topComment.text.isNotBlank()) {
+                        Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
+                        Spacer(Modifier.width(12.dp))
+                    }
+                    AppText(when (video.commentsStatus) {
+                        WatchCommentsStatus.Loading -> "Loading comments…"
+                        WatchCommentsStatus.Empty -> "No comments yet"
+                        WatchCommentsStatus.Disabled -> "Comments are turned off"
+                        WatchCommentsStatus.Failed -> "Couldn't load comments. Tap to view."
+                        WatchCommentsStatus.Ready -> video.topComment.text
+                    }, Modifier.weight(1f).testTag("watch-comment-preview"), size = 14, line = 20, maxLines = 2)
                 }
             }
         }
@@ -873,11 +825,10 @@ private fun RelatedText(
         )
         Spacer(Modifier.height(titleBottomDp.dp))
         FlowRow(Modifier.fillMaxWidth()) {
-            BylineItem(item.channel)
-            BylineSeparator()
-            BylineItem(item.views)
-            BylineSeparator()
-            BylineItem(item.age)
+            listOf(item.channel, item.views, item.age).filter { it.isNotBlank() }.forEachIndexed { index, text ->
+                if (index > 0) BylineSeparator()
+                BylineItem(text)
+            }
         }
         item.badge?.let { badge ->
             Spacer(Modifier.height(4.dp))

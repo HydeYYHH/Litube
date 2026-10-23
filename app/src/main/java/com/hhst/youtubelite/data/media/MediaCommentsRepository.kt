@@ -28,17 +28,17 @@ class MediaCommentsRepository(private val client: MediaClient) : CommentsReposit
         if (cursor == null && sort == AppSort.Newest) {
             val option = page.sortOptions.firstOrNull { it.title?.contains("newest", true) == true }
                 ?: throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "comment_sort_unavailable"))
-            if (!option.selected) page = loadCommentReplies(option.key, context, http).requireValue()
+            if (!option.selected) page = loadCommentReplies(option.key, context, http).requireValue().copy(total = page.total)
         }
         page.createKey?.let { createKeys[target] = context.generation to it }
-        CommentsPage("", page.comments.mapNotNull { comment ->
+        CommentsPage(page.total.orEmpty(), page.comments.mapNotNull { comment ->
             val id = comment.id ?: return@mapNotNull null
             actionComments["$target:$id"] = context.generation to comment
             comment.replyKey?.let { replyKeys["$target:$id"] = it }
             CommentThread(id, comment.author(), comment.published.orEmpty(), comment.text.orEmpty(), comment.likeCount.orEmpty(),
                 comment.replyCount?.filter(Char::isDigit)?.toIntOrNull() ?: 0,
                 authorChannelId = comment.authorId.orEmpty(), ownedByViewer = !comment.deleteKey.isNullOrBlank(), replyKey = comment.replyKey)
-        }, page.nextKey)
+        }, page.nextKey, turnedOff = page.turnedOff)
     }
 
     override suspend fun replies(target: CommentTarget, thread: CommentThread): List<CommentReply> {

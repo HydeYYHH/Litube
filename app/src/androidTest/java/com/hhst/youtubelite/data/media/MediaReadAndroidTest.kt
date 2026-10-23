@@ -26,11 +26,17 @@ class MediaReadAndroidTest {
         assertEquals(id, watch.video.id)
         assertTrue(watch.video.title.isNotBlank())
         assertFalse(watch.video.channelId.isBlank())
+        assertTrue("Watch author must be visible", watch.video.channel.isNotBlank())
+        assertTrue("Author artwork must not be a video cover", !watch.video.avatar.isNullOrBlank())
         val channel = repositories.channel.channel(watch.video.channelId)
         assertTrue(channel.profile.name.isNotBlank())
-        val comments = repositories.comments().comments(com.hhst.youtubelite.comments.domain.CommentTarget.Video(id),
+        assertTrue("Channel handle must be preserved", channel.profile.handle.isNotBlank())
+        assertTrue("Subscriber count must be preserved", channel.profile.subscribers.isNotBlank())
+        val comments = repositories.comments().comments(com.hhst.youtubelite.comments.domain.CommentTarget.Video("aqz-KE-bpKQ"),
             com.hhst.youtubelite.comments.domain.CommentSort.Top, null)
-        assertTrue(comments.threads.all { it.id.isNotBlank() })
+        assertTrue("Public reference video must return actual comments", comments.threads.isNotEmpty())
+        assertTrue(comments.threads.all { it.id.isNotBlank() && it.author.displayName.isNotBlank() && it.body.isNotBlank() })
+        assertTrue("Comment total must be preserved", comments.total.isNotBlank())
     }
     @Test fun normalEntryUsesNativeHostsAndTheRealRepositoryWithoutStartingPlayback() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("network") == "1")

@@ -63,6 +63,15 @@ class WatchViewModel(
     private var voteFlags: Pair<Boolean, Boolean>? = null
     private var counts: VoteCounts? = null
 
+    fun updateCommentsPreview(videoId: String, status: WatchCommentsStatus, total: String, comment: WatchComment) {
+        if (videoId != _state.value.videoId) return
+        _state.update { state ->
+            val ready = state.content as? WatchContent.Ready ?: return@update state
+            state.copy(content = ready.copy(page = ready.page.copy(video = ready.page.video.copy(
+                commentsStatus = status, commentCount = total.ifBlank { ready.page.video.commentCount }, topComment = comment))))
+        }
+    }
+
     fun selectVideo(id: String) {
         if (id == uiState.value.videoId) return
         voteJob?.cancel()
@@ -88,8 +97,11 @@ class WatchViewModel(
         updateCounts()
         if (!showLikes && !showDislikes) return
         voteJob = viewModelScope.launch {
+            val id = uiState.value.videoId
             try {
-                counts = voteRepository.counts(uiState.value.videoId)
+                val result = voteRepository.counts(id)
+                if (uiState.value.videoId != id || voteFlags != flags) return@launch
+                counts = result
                 updateCounts()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { /* Counts are optional; metadata and playback remain available. */ }
@@ -224,7 +236,8 @@ class WatchViewModel(
                 val video = action(ready.page.video)
                 if (_state.value.videoId == id) _state.update { state ->
                     val content = state.content as? WatchContent.Ready ?: return@update state
-                    state.copy(content = content.copy(page = content.page.copy(video = video)))
+                    state.copy(content = content.copy(page = content.page.copy(video = content.page.video.copy(
+                        rating = video.rating, subscribed = video.subscribed))))
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { notices.trySend(WatchNotice.SignIn) }

@@ -64,7 +64,9 @@ object DesignTokens {
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { content() }
+    com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = false) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { content() }
+    }
 }
 
 /** Draws the message card shadow without platform elevation. */

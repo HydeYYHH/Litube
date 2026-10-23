@@ -464,7 +464,7 @@ class CommentsViewModel(
                 val threads = (current.threads + page.threads).distinctBy { it.id }
                 savedState[KEY_LOADED] = threads.size
                 state.copy(
-                    total = page.total,
+                    total = page.total.ifBlank { state.total },
                     content = current.copy(
                         threads = threads,
                         nextCursor = page.nextCursor.takeUnless { it == ready.nextCursor },

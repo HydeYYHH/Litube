@@ -79,34 +79,36 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
     val callbacks = remember(playerViewModel, windowHost) {
         PlayerCallbackBridge(playerViewModel, windowHost)
     }
-    val immersive = playerState.fullscreen && playerState.visible && !playerState.mini
+    val immersive = playerState.fullscreen && playerState.visible && !playerState.mini && !pip
     PlayerWindowEffects(
         activity, windowHost, immersive, playerState.videoWidth, playerState.videoHeight,
     )
     LaunchedEffect(playerViewModel) { playerViewModel.initializeCast() }
-    Box(modifier.background(Color.Black)) {
-        PlayerSurface(
-            state = playerState,
-            callbacks = callbacks,
-            onAttachSurface = {
-                surface.value = it
-                if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) playerViewModel.attachSurface(it)
-            },
-            onDetachSurface = {
-                playerViewModel.detachSurface(it)
-                if (surface.value === it) surface.value = null
-            },
-            zoneEnabled = playerViewModel::gestureEnabled,
-            pip = pip,
-            onRefreshCastState = playerViewModel::refreshCastState,
-            positionState = playerViewModel.positionState,
-            bufferedPositionState = playerViewModel.bufferedPositionState,
-            gestureState = playerViewModel.gestureState,
-            hintState = playerViewModel.hintState,
-            subtitleCuesState = playerViewModel.subtitleCuesState,
-            modifier = Modifier.fillMaxSize(),
-            managedByHost = true,
-        )
+    com.hhst.youtubelite.ui.theme.AppTheme {
+        Box(modifier.background(Color.Black)) {
+            PlayerSurface(
+                state = playerState,
+                callbacks = callbacks,
+                onAttachSurface = {
+                    surface.value = it
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) playerViewModel.attachSurface(it)
+                },
+                onDetachSurface = {
+                    playerViewModel.detachSurface(it)
+                    if (surface.value === it) surface.value = null
+                },
+                zoneEnabled = playerViewModel::gestureEnabled,
+                pip = pip,
+                onRefreshCastState = playerViewModel::refreshCastState,
+                positionState = playerViewModel.positionState,
+                bufferedPositionState = playerViewModel.bufferedPositionState,
+                gestureState = playerViewModel.gestureState,
+                hintState = playerViewModel.hintState,
+                subtitleCuesState = playerViewModel.subtitleCuesState,
+                modifier = Modifier.fillMaxSize(),
+                managedByHost = true,
+            )
+        }
     }
 }
 

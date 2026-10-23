@@ -69,7 +69,7 @@ class WatchScreenshotAndroidTest {
     private fun viewportShift() =
         compose.onNodeWithTag("watch-screen").fetchSemanticsNode().boundsInRoot.left
 
-    /** Phone chrome at 411: pinned player, 118px metadata, natural action row, 113px comments. */
+    /** Phone chrome, author identity, and non-overlapping actions. */
     @Test fun phoneChromeMatchesMeasuredAnchors() {
         compose.setContent { Viewport(411, 844) { RenderScreen(contentOf("content")) } }
         val bar = bounds("watch-topbar")
@@ -92,7 +92,7 @@ class WatchScreenshotAndroidTest {
 
         val meta = bounds("watch-metadata")
         assertEquals(48f + 411f * 9f / 16f, meta.top, 0.6f)
-        assertEquals(118f, meta.height, 0.6f)
+        assertEquals(166f, meta.height, 0.6f)
 
         val title = bounds("watch-title")
         assertEquals(16f, title.left, 0.5f)
@@ -109,51 +109,27 @@ class WatchScreenshotAndroidTest {
 
         val actions = bounds("watch-actions")
         assertEquals(48f, actions.height, 0.5f)
-        assertEquals(meta.top + 70f, actions.top, 0.6f)
+        assertEquals(meta.top + 118f, actions.top, 0.6f)
         val avatar = bounds("watch-action-avatar")
         assertEquals(8f, avatar.left, 0.5f)
         assertEquals(48f, avatar.width, 0.5f)
         assertEquals(48f, avatar.height, 0.5f)
+        compose.onNodeWithTag("watch-channel-name", useUnmergedTree = true).assertTextEquals("Blender")
         val subscribe = bounds("watch-action-subscribe")
-        assertEquals(56f, subscribe.left, 0.5f)
-        assertEquals(78f, subscribe.width, 0.5f)
-        assertEquals(32f, subscribe.height, 0.5f)
-        assertEquals(8f, subscribe.top - actions.top, 0.6f)
-
-        fun rawBounds(tag: String): androidx.compose.ui.geometry.Rect {
-            val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-            return androidx.compose.ui.geometry.Rect(node.positionInRoot, androidx.compose.ui.geometry.Size(node.size.width.toFloat(), node.size.height.toFloat()))
-        }
+        assertEquals(403f, subscribe.right, 0.5f)
+        assertTrue(subscribe.height >= 48f)
         val like = bounds("watch-action-like")
-        assertEquals(195f, like.left, 0.6f)
+        val icon = bounds("watch-action-like-icon")
+        val count = bounds("watch-action-like-count")
+        assertTrue("Count belongs to the right of the icon", count.left >= icon.right + 7f)
+        assertEquals(icon.center.y, count.center.y, 1f)
         assertEquals(48f, like.height, 0.5f)
-        val dislike = bounds("watch-action-dislike")
-        val share = rawBounds("watch-action-share")
-        val save = rawBounds("watch-action-save")
-        val report = rawBounds("watch-action-report")
-        assertEquals(like.right - 7f, dislike.left, 0.6f)
-        assertEquals(share.right - 7f, save.left, 0.6f)
-        assertEquals(save.right - 7f, report.left, 0.6f)
-        assertEquals(551f, report.right, 0.6f)
-        fun slot(tag: String): Triple<Float, Float, Float> {
-            val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-            return Triple(node.positionInRoot.x, node.size.width.toFloat(), node.size.height.toFloat())
+        assertTrue(bounds("watch-action-dislike").left >= like.right + 7f)
+        for (tag in listOf("download", "queue", "open-with", "share", "save", "report")) {
+            compose.onNodeWithTag("watch-action-$tag", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+            assertEquals("Equal touch heights for $tag", 48f, bounds("watch-action-$tag").height, 0.5f)
+            assertEquals("Equal icon size for $tag", 24f, bounds("watch-action-$tag-icon").height, 0.5f)
         }
-        val download = slot("watch-action-download")
-        val queue = slot("watch-action-queue")
-        val openWith = slot("watch-action-open-with")
-        assertEquals(dislike.right - 7f, download.first, 0.6f)
-        assertEquals(48f, download.second, 0.5f)
-        assertEquals(48f, download.third, 0.5f)
-        assertEquals(48f, queue.first - download.first, 0.6f)
-        assertEquals(48f, openWith.first - queue.first, 0.6f)
-        assertEquals(openWith.first + 48f, slot("watch-action-share").first, 0.6f)
-        val surface = slot("watch-action-download-surface")
-        assertEquals(40f, surface.second, 0.5f)
-        assertEquals(36f, surface.third, 0.5f)
-        compose.onNodeWithContentDescription("Download").assertExists()
-        compose.onNodeWithContentDescription("Add to queue").assertExists()
-        compose.onNodeWithContentDescription("Open with").assertExists()
 
         val comments = bounds("watch-comments")
         assertEquals(actions.bottom, comments.top, 0.5f)
@@ -165,23 +141,17 @@ class WatchScreenshotAndroidTest {
         assertEquals(comments.top + 8f, card.top, 0.5f)
     }
 
-    @Test fun actionGrowthTracksTheColumnWidth() {
+    @Test fun actionsRemainReachableAcrossColumnWidths() {
         var width by mutableIntStateOf(411)
         var height by mutableIntStateOf(844)
         compose.setContent { Viewport(width, height) { RenderScreen(contentOf("content")) } }
-        assertEquals(195f, bounds("watch-action-like").left, 0.6f)
-        for ((w, h, likeLeft) in listOf(
-            Triple(780, 844, 564f),
-            // Portrait 1100 keeps the full column (landscape ≥931 would open the sidebar).
-            Triple(1100, 1200, 884f),
-        )) {
+        for ((w, h) in listOf(320 to 844, 411 to 844, 550 to 844, 780 to 844, 1100 to 1200)) {
             compose.runOnIdle { width = w; height = h }
-            assertEquals("$w like left", likeLeft + viewportShift(), bounds("watch-action-like").left, 0.6f)
+            for (tag in listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")) {
+                compose.onNodeWithTag("watch-action-$tag", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+                assertEquals("$w $tag height", 48f, bounds("watch-action-$tag").height, 0.5f)
+            }
         }
-        compose.runOnIdle { width = 550; height = 844 }
-        assertEquals("550 grows", 334f, bounds("watch-action-like").left, 0.6f)
-        compose.runOnIdle { width = 320 }
-        assertEquals("320 stays natural", 146f, bounds("watch-action-like").left, 0.6f)
     }
 
     /** Phone related lockup: full-bleed cover with +13, details at x12, kebab flush right. */
@@ -293,7 +263,7 @@ class WatchScreenshotAndroidTest {
         assertEquals(48f, player.top, 0.5f)
         assertEquals(675f, player.width, 0.5f)
         assertEquals(675f * 9f / 16f, player.height, 0.6f)
-        assertEquals(459f, bounds("watch-action-like").left, 0.6f)
+        assertEquals(12f, bounds("watch-action-like").left, 0.6f)
         val cell = bounds("watch-related-harbour")
         assertEquals(683f, cell.left, 0.5f)
         assertEquals(240f, cell.width, 0.5f)
@@ -309,7 +279,7 @@ class WatchScreenshotAndroidTest {
         assertEquals(780f + wideShift, widePane.left, 0.5f)
         assertEquals(500f, widePane.width, 0.5f)
         assertEquals(780f, bounds("watch-player-slot").width, 0.5f)
-        assertEquals(564f + wideShift, bounds("watch-action-like").left, 0.6f)
+        assertEquals(12f + wideShift, bounds("watch-action-like").left, 0.6f)
         val wideCell = bounds("watch-related-harbour")
         assertEquals(788f + wideShift, wideCell.left, 0.5f)
         assertEquals(246f, wideCell.width, 0.5f)
@@ -324,7 +294,7 @@ class WatchScreenshotAndroidTest {
         assertEquals(1100f + tallShift, bounds("watch-related").left, 0.5f)
         assertEquals(500f, bounds("watch-related").width, 0.5f)
         assertEquals(1100f, bounds("watch-player-slot").width, 0.5f)
-        assertEquals(884f + tallShift, bounds("watch-action-like").left, 0.6f)
+        assertEquals(12f + tallShift, bounds("watch-action-like").left, 0.6f)
     }
 
     /** Content / loading / error are distinct surfaces; Retry emits exactly one typed action. */
@@ -384,7 +354,7 @@ class WatchScreenshotAndroidTest {
             assertEquals(w.toFloat(), player.width, 0.5f)
             // Short windows push the action bar below the fold; scroll it into view.
             compose.onNodeWithTag("watch-actions").performScrollTo()
-            assertEquals("$w × $h actions height", 48f, bounds("watch-actions").height, 0.5f)
+            assertTrue("$w × $h actions height", bounds("watch-actions").height >= 48f)
             capture("split-$w-$h", output, true, emptySet())
         }
     }

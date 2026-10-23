@@ -42,6 +42,24 @@ class IconRenderingAndroidTest {
         }
     }
 
+    @Test fun externalWindowAndChevronRetainTheirCompletePaths() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                Row(Modifier.background(Color.White)) {
+                    AppIcon(AppIcon.OpenWith, Modifier.testTag("external"))
+                    AppIcon(AppIcon.ChevronDown, Modifier.testTag("chevron"))
+                }
+            }
+        }
+        val external = compose.onNodeWithTag("external").captureToImage().toPixelMap()
+        assertTrue("Left frame", external[3, 12].red < 0.2f)
+        assertTrue("Bottom frame", external[12, 20].red < 0.2f)
+        assertTrue("Arrow head", external[20, 5].red < 0.2f)
+        val chevron = compose.onNodeWithTag("chevron").captureToImage().toPixelMap()
+        assertTrue("Left arm", chevron[7, 11].red < 0.6f)
+        assertTrue("Right arm", chevron[16, 11].red < 0.6f)
+    }
+
     @Test fun negativeViewBoxOriginsRemainInsideTheIcon() {
         val icons = listOf(AppIcon.Download, AppIcon.QueueAdd, AppIcon.OpenWith)
         compose.setContent {

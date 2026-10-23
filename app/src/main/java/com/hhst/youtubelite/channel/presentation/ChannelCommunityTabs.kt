@@ -191,7 +191,7 @@ private fun LiveCard(video: ChannelLiveVideo, tile: Boolean, onAction: (ChannelA
             LiveThumbnail(video, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
             AppText(video.title, Modifier.padding(top = 8.dp), size = 14, line = 20, maxLines = 2)
             AppText(
-                if (video.liveNow) video.views else "${video.views} · ${video.time}",
+                if (video.liveNow) video.views else listOf(video.views, video.time).filter { it.isNotBlank() }.joinToString(" · "),
                 Modifier.padding(top = 2.dp, bottom = 8.dp),
                 size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 2,
             )
@@ -212,7 +212,7 @@ private fun LiveCard(video: ChannelLiveVideo, tile: Boolean, onAction: (ChannelA
             Column(Modifier.weight(1f).padding(end = 8.dp)) {
                 AppText(video.title, size = 14, line = 20, maxLines = 2)
                 AppText(
-                    if (video.liveNow) video.views else "${video.views} · ${video.time}",
+                    if (video.liveNow) video.views else listOf(video.views, video.time).filter { it.isNotBlank() }.joinToString(" · "),
                     Modifier.padding(top = 2.dp),
                     size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 2,
                 )

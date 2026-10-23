@@ -33,11 +33,11 @@ import org.junit.Test
 class ChannelScreenshotAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun ready() = ChannelContent.Ready(ChannelPage(FixtureChannelRepository.profile(), FixtureChannelRepository.sampleVideos()))
+    private fun ready() = ChannelContent.Ready(FixtureChannelRepository.samplePage())
 
     private fun contentOf(scene: String) = when (scene) {
         "profile", "videos" -> ready()
-        "empty" -> ChannelContent.Ready(ChannelPage(FixtureChannelRepository.profile(), emptyList()))
+        "empty" -> ChannelContent.Ready(ChannelPage(FixtureChannelRepository.profile().copy(videoCount = "0 videos"), emptyList()))
         "loading" -> ChannelContent.Loading
         else -> ChannelContent.Failed
     }

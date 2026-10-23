@@ -37,7 +37,10 @@ data class ChannelPage(
     val profile: ChannelProfile,
     val videos: List<ChannelVideo>,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
+    val homeShelves: List<ChannelHomeShelf> = emptyList(),
 )
+
+data class ChannelHomeShelf(val title: String, val description: String = "", val videos: List<ChannelVideo>)
 
 /** The channel grid uses the measured 2:3 poster with a 1px outer and 2px inner gutter. */
 data class ChannelShort(

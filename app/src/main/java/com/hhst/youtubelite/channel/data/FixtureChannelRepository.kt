@@ -17,8 +17,8 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
     override suspend fun channel(channelId: String): ChannelPage {
         delay(160)
         if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
-        if (scenario == ChannelScenario.Empty) return ChannelPage(profile(channelId), emptyList())
-        return ChannelPage(profile(channelId), sampleVideos(), com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries())
+        if (scenario == ChannelScenario.Empty) return ChannelPage(profile(channelId).copy(videoCount = "0 videos"), emptyList())
+        return samplePage(channelId)
     }
 
     override suspend fun shorts(channelId: String): List<ChannelShort> {
@@ -43,6 +43,11 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
     }
 
     companion object {
+        fun samplePage(channelId: String = "blender") = ChannelPage(
+            profile(channelId), sampleVideos(), com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries(),
+            listOf(com.hhst.youtubelite.channel.domain.ChannelHomeShelf("Open movies", "The Blender Foundation's open movie projects", sampleVideos().filter { it.homeShelf })),
+        )
+
         /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
         fun profile(channelId: String = "blender") = ChannelProfile(
             channelId = channelId,

@@ -217,7 +217,10 @@ private fun ChannelHomeTab(
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
 ) {
-    val shelf = page.videos.filter { it.homeShelf }
+    val shelves = page.homeShelves.ifEmpty {
+        page.videos.filter { it.homeShelf }.takeIf { it.isNotEmpty() }
+            ?.let { listOf(com.hhst.youtubelite.channel.domain.ChannelHomeShelf("", videos = it)) }.orEmpty()
+    }
     val viewport = rememberUpdatedState(width)
     LazyColumn(
         state = state,
@@ -228,20 +231,19 @@ private fun ChannelHomeTab(
         // The sampled page scrolls the tab row with the channel header and pins it once
         // the header is gone, so tabs stay reachable from every scroll depth.
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Home, onAction) }
-        if (shelf.isEmpty()) {
+        if (shelves.isEmpty()) {
             item { ChannelNoVideos() }
-        } else {
-            // The reference adds shelf chrome around the home list; this scope keeps a small heading.
-            item {
+        } else shelves.forEachIndexed { index, shelf ->
+            if (shelf.title.isNotBlank() || shelf.description.isNotBlank()) item("shelf-$index") {
                 Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
                     Spacer(Modifier.height(12.dp))
-                    AppText("Open movies", size = 16, line = 22, weight = FontWeight.Bold, maxLines = 1)
-                    AppText("The Blender Foundation's open movie projects", Modifier.padding(top = 2.dp),
+                    if (shelf.title.isNotBlank()) AppText(shelf.title, size = 16, line = 22, weight = FontWeight.Bold, maxLines = 1)
+                    if (shelf.description.isNotBlank()) AppText(shelf.description, Modifier.padding(top = 2.dp),
                         size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                     Spacer(Modifier.height(8.dp))
                 }
             }
-            items(shelf, key = { it.id }) { video ->
+            items(shelf.videos, key = { "$index:${it.id}" }) { video ->
                 Box(Modifier.padding(horizontal = ChannelLayout.ListRowInset.dp)) {
                     ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction)
                 }
@@ -310,10 +312,10 @@ private fun ChannelVideoRow(
             .semantics { contentDescription = "${video.title}, ${video.duration}" }
             .testTag("channel-thumb-${video.id}")) {
             Artwork(video.artwork, Modifier.fillMaxSize())
-            Box(Modifier.align(Alignment.BottomEnd).padding(ChannelLayout.DurationBadgeInset.dp)
+            if (video.duration.isNotBlank() || video.live) Box(Modifier.align(Alignment.BottomEnd).padding(ChannelLayout.DurationBadgeInset.dp)
                 .background(if (video.live) DesignTokens.Red else Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)) {
-                AppText(video.duration, size = 12, line = 18, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
+                AppText(if (video.live) "LIVE" else video.duration, size = 12, line = 18, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -321,7 +323,7 @@ private fun ChannelVideoRow(
             .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }) {
             AppText(video.title, Modifier.fillMaxWidth(), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.sp)
             Spacer(Modifier.height(2.dp))
-            if (video.age.isNotBlank()) {
+            if (video.age.isNotBlank() && video.views.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AppText(video.views, size = 12, line = 16, maxLines = 1, color = VideoMeta)
                     Spacer(Modifier.width(4.dp))
@@ -330,7 +332,7 @@ private fun ChannelVideoRow(
                     AppText(video.age, size = 12, line = 16, maxLines = 1, color = VideoMeta)
                 }
             } else {
-                AppText(video.views, size = 12, line = 16, maxLines = 1, color = VideoMeta)
+                AppText(listOf(video.views, video.age).filter { it.isNotBlank() }.joinToString(" • "), size = 12, line = 16, maxLines = 1, color = VideoMeta)
             }
         }
         AppIconButton(AppIcon.More, "More actions for ${video.title}", diameter = menuDiameter) {
@@ -425,28 +427,32 @@ private fun ChannelIdentity(page: ChannelPage, width: Float) {
     Column(Modifier.fillMaxWidth().testTag("channel-identity")) {
         ChannelName(profile.name, width)
         Spacer(Modifier.height(ChannelLayout.identityNameGap(width).dp))
+        val stats = listOf(profile.subscribers, profile.videoCount).filter { it.isNotBlank() }
         if (ChannelLayout.mergesIdentityRows(width)) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                AppText(profile.handle, Modifier.testTag("channel-handle"), size = fontSize,
+                if (profile.handle.isNotBlank()) AppText(profile.handle, Modifier.testTag("channel-handle"), size = fontSize,
                     line = ChannelLayout.identityLine(fontSize.toFloat()), weight = FontWeight.Medium, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                BylineDot(fontSize)
-                Spacer(Modifier.width(4.dp))
-                BylineIdentity(profile.subscribers, fontSize)
-                Spacer(Modifier.width(4.dp))
-                BylineDot(fontSize)
-                Spacer(Modifier.width(4.dp))
-                BylineIdentity(page.videos.size.toString() + " videos", fontSize)
+                stats.forEachIndexed { index, text ->
+                    if (index > 0 || profile.handle.isNotBlank()) {
+                        Spacer(Modifier.width(4.dp))
+                        BylineDot(fontSize)
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    BylineIdentity(text, fontSize)
+                }
             }
         } else {
-            AppText(profile.handle, Modifier.fillMaxWidth().testTag("channel-handle"), size = fontSize,
+            if (profile.handle.isNotBlank()) AppText(profile.handle, Modifier.fillMaxWidth().testTag("channel-handle"), size = fontSize,
                 line = ChannelLayout.identityLine(fontSize.toFloat()), weight = FontWeight.Medium, maxLines = 1)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                BylineIdentity(profile.subscribers, fontSize)
-                Spacer(Modifier.width(4.dp))
-                BylineDot(fontSize)
-                Spacer(Modifier.width(4.dp))
-                BylineIdentity(page.videos.size.toString() + " videos", fontSize)
+                stats.forEachIndexed { index, text ->
+                    if (index > 0) {
+                        Spacer(Modifier.width(4.dp))
+                        BylineDot(fontSize)
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    BylineIdentity(text, fontSize)
+                }
             }
         }
     }
