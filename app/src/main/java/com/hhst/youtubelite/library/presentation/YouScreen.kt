@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -38,11 +39,16 @@ fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val content = state.content) {
                     LibraryContent.Loading -> LibrarySkeleton("you-skeleton")
-                    LibraryContent.Failed -> LibraryError("you-error") { onAction(LibraryAction.Retry) }
+                    LibraryContent.Failed -> if (state.verification != null) VerificationCard(
+                        state.verification,
+                        onVerify = { onAction(LibraryAction.OpenVerification(state.verification!!.challengeUrl)) },
+                        onDismiss = { onAction(LibraryAction.DismissVerification) },
+                        modifier = Modifier.testTag("you-verification"),
+                    ) else LibraryError("you-error") { onAction(LibraryAction.Retry) }
                     is LibraryContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "you-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
-                    is LibraryContent.Ready -> LibraryList(listState, content, width, onAction)
+                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, accountAvatar(state)) { tab ->
@@ -75,7 +81,7 @@ private fun YouTopBar(signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
 }
 
 @Composable
-private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, onAction: (LibraryAction) -> Unit) {
+private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
     val page = content.page
     LazyColumn(Modifier.fillMaxSize().testTag("you-library"), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
         item(key = "account") {
@@ -94,18 +100,37 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
                 LibraryRowItem(LibraryRow.History, AppIcon.Clock) { onAction(LibraryAction.OpenHistory) }
                 LibraryRowItem(LibraryRow.Playlists, AppIcon.Playlist) { onAction(LibraryAction.OpenPlaylists) }
                 LibraryRowItem(LibraryRow.WatchLater, AppIcon.Bookmark) { onAction(LibraryAction.OpenWatchLater) }
-                LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
+                if (signedIn) LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
                 LibraryRowItem(LibraryRow.Downloads, AppIcon.Download) { onAction(LibraryAction.OpenDownloads) }
             }
         }
-        if (page.history.isNotEmpty()) {
-            item(key = "history-header") { ShelfHeader("History") { onAction(LibraryAction.OpenHistory) } }
-            item(key = "history-shelf") { HistoryShelf(page.history) { onAction(LibraryAction.OpenVideo(it)) } }
+        when {
+            page.historyFailed -> item(key = "history-failed") {
+                ShelfRetry("Couldn't load history") { onAction(LibraryAction.Retry) }
+            }
+            page.history.isNotEmpty() -> {
+                item(key = "history-header") { ShelfHeader("History") { onAction(LibraryAction.OpenHistory) } }
+                item(key = "history-shelf") { HistoryShelf(page.history) { onAction(LibraryAction.OpenVideo(it)) } }
+            }
         }
-        if (page.playlists.isNotEmpty()) {
-            item(key = "playlists-header") { ShelfHeader("Playlists") { onAction(LibraryAction.OpenPlaylists) } }
-            item(key = "playlists-shelf") { PlaylistShelf(page.playlists) { onAction(LibraryAction.OpenPlaylist(it)) } }
+        when {
+            page.playlistsFailed -> item(key = "playlists-failed") {
+                ShelfRetry("Couldn't load playlists") { onAction(LibraryAction.Retry) }
+            }
+            page.playlists.isNotEmpty() -> {
+                item(key = "playlists-header") { ShelfHeader("Playlists") { onAction(LibraryAction.OpenPlaylists) } }
+                item(key = "playlists-shelf") { PlaylistShelf(page.playlists) { onAction(LibraryAction.OpenPlaylist(it)) } }
+            }
         }
+    }
+}
+
+/** A failed optional shelf keeps the page usable and offers the page retry. */
+@Composable
+private fun ShelfRetry(message: String, onRetry: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AppText(message, Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+        PillButton("Retry", onRetry)
     }
 }
 
@@ -133,7 +158,12 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 HistoryContent.Loading -> LibrarySkeleton("history-skeleton")
-                HistoryContent.Failed -> LibraryError("history-error") { onAction(LibraryAction.Retry) }
+                HistoryContent.Failed -> if (state.verification != null) VerificationCard(
+                    state.verification,
+                    onVerify = { onAction(LibraryAction.OpenVerification(state.verification!!.challengeUrl)) },
+                    onDismiss = { onAction(LibraryAction.DismissVerification) },
+                    modifier = Modifier.testTag("history-verification"),
+                ) else LibraryError("history-error") { onAction(LibraryAction.Retry) }
                 is HistoryContent.SignedOut -> LibraryMessageCard(
                     content.prompt.title, content.prompt.message, "history-signed-out",
                 ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
@@ -141,6 +171,16 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
                 is HistoryContent.Ready -> {
                     val grouped = remember(content) { content.page.entries.groupBy { it.section } }
                     val wide = width >= 600f
+                    val entryCount = content.page.entries.size
+                    val nearEnd by remember(content) { derivedStateOf {
+                        (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= entryCount - 2
+                    } }
+                    androidx.compose.runtime.LaunchedEffect(nearEnd, content.page.nextKey, state.append) {
+                        if (nearEnd && content.page.nextKey != null &&
+                            state.append == com.hhst.youtubelite.home.domain.AppendState.Idle) {
+                            onAction(LibraryAction.LoadHistoryNext)
+                        }
+                    }
                     LazyColumn(Modifier.fillMaxSize().testTag("history-list"), state = listState,
                         contentPadding = PaddingValues(top = if (wide) 16.dp else 8.dp, bottom = 24.dp)) {
                         item(key = "history-heading") {
@@ -161,6 +201,7 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
                                 }
                             }
                         }
+                        item(key = "history-append") { LibraryAppendRow(state.append) { onAction(LibraryAction.LoadHistoryNext) } }
                     }
                 }
             }
@@ -171,7 +212,7 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
 
 /** The personal playlists collection page. */
 @Composable
-fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>,
+fun CollectionScreen(state: CollectionUiState,
                      onAction: (LibraryAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen")) {
@@ -179,14 +220,29 @@ fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubel
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 CollectionContent.Loading -> LibrarySkeleton("playlists-skeleton")
-                CollectionContent.Failed -> LibraryError("playlists-error") { onAction(LibraryAction.Retry) }
+                CollectionContent.Failed -> if (state.verification != null) VerificationCard(
+                    state.verification,
+                    onVerify = { onAction(LibraryAction.OpenVerification(state.verification!!.challengeUrl)) },
+                    onDismiss = { onAction(LibraryAction.DismissVerification) },
+                    modifier = Modifier.testTag("playlists-verification"),
+                ) else LibraryError("playlists-error") { onAction(LibraryAction.Retry) }
                 is CollectionContent.SignedOut -> LibraryMessageCard(
                     content.prompt.title, content.prompt.message, "playlists-signed-out",
                 ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
                 is CollectionContent.Empty -> LibraryMessageCard(content.title, content.message, "playlists-empty")
-                is CollectionContent.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("playlists-list"), state = listState,
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
-                    items(playlists, key = { it.id }) { playlist ->
+                is CollectionContent.Ready -> {
+                    val nearEnd by remember(content) { derivedStateOf {
+                        (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= content.playlists.size - 2
+                    } }
+                    androidx.compose.runtime.LaunchedEffect(nearEnd, content.nextKey, state.append) {
+                        if (nearEnd && content.nextKey != null &&
+                            state.append == com.hhst.youtubelite.home.domain.AppendState.Idle) {
+                            onAction(LibraryAction.LoadCollectionNext)
+                        }
+                    }
+                    LazyColumn(Modifier.fillMaxSize().testTag("playlists-list"), state = listState,
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)) {
+                        items(content.playlists, key = { it.id }) { playlist ->
                         Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onAction(LibraryAction.OpenPlaylist(playlist.id)) }
                             .testTag("playlists-item-${playlist.id}").padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -208,6 +264,8 @@ fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubel
                                 }
                             }
                         }
+                        }
+                        item(key = "playlists-append") { LibraryAppendRow(state.append) { onAction(LibraryAction.LoadCollectionNext) } }
                     }
                 }
             }
@@ -215,10 +273,29 @@ fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubel
     }
 }
 
+/** Shared tail row for library lists that load further pages. */
+@Composable
+internal fun LibraryAppendRow(append: com.hhst.youtubelite.home.domain.AppendState, onRetry: () -> Unit) {
+    when (append) {
+        com.hhst.youtubelite.home.domain.AppendState.Loading -> Row(
+            Modifier.fillMaxWidth().padding(vertical = 12.dp).testTag("library-append-loading"),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            com.hhst.youtubelite.home.presentation.LoadingSpinner()
+        }
+        com.hhst.youtubelite.home.domain.AppendState.Failed -> Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("library-append-failed"),
+            verticalAlignment = Alignment.CenterVertically) {
+            AppText("Couldn't load more entries.", Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText("Retry", Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onRetry)
+                .padding(horizontal = 12.dp, vertical = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)
+        }
+        com.hhst.youtubelite.home.domain.AppendState.Idle -> Spacer(Modifier.height(1.dp))
+    }
+}
+
 @Composable
 internal fun LibrarySubPageBar(title: String, onBack: () -> Unit, onAction: (LibraryAction) -> Unit,
-    trailing: (@Composable () -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("library-subpage-bar"), verticalAlignment = Alignment.CenterVertically) {
+    trailing: (@Composable () -> Unit)? = null) {    Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("library-subpage-bar"), verticalAlignment = Alignment.CenterVertically) {
         AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
         AppText(title, Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
 

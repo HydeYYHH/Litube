@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.BlendMode
@@ -68,8 +69,8 @@ fun WatchScreen(
     menuContent: @Composable () -> Unit = { WatchVideoMenu(state, onAction) },
     sidebarCovered: Boolean = false,
 ) {
-    val mainScroll = rememberScrollState()
-    val sidebarMainScroll = rememberScrollState()
+    val mainScroll = rememberLazyListState()
+    val sidebarMainScroll = rememberLazyListState()
     val compactRelatedScroll = rememberLazyListState()
     val wideRelatedScroll = rememberLazyListState()
     AppTheme {
@@ -142,7 +143,6 @@ fun WatchScreen(
                         }
                     }
                 }
-                WatchTopBar(onAction, onBack, state.live)
             }
             menuContent()
         }
@@ -210,24 +210,9 @@ private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
 }
 
 @Composable
-private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit, live: Boolean = false) {
-    Row(
-        Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).background(DesignTokens.Background).testTag("watch-topbar"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppIconButton(AppIcon.Back, "Back", onClick = onBack)
-        Spacer(Modifier.weight(1f))
-        AppIconButton(AppIcon.Search, "Search", onClick = { onAction(WatchAction.OpenSearch) })
-        // The page menu's only entries need feedback tokens the page never carries; it hides in production.
-        if (!live) AppIconButton(AppIcon.More, "More options", onClick = { onAction(WatchAction.OpenPageMenu) })
-        Spacer(Modifier.width(8.dp))
-    }
-}
-
-@Composable
 private fun WatchMainBody(
     state: WatchUiState,
-    scroll: ScrollState,
+    scroll: LazyListState,
     viewportWidth: Float,
     viewportHeight: Float,
     playerHeight: Float,
@@ -238,40 +223,64 @@ private fun WatchMainBody(
     onAction: (WatchAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .testTag("watch-scroll"),
-    ) {
-        Spacer(Modifier.height(WatchLayout.TopBarHeight.dp))
-        if (pinned || !showPlayer) {
-            Spacer(Modifier.height(playerHeight.dp))
-        } else {
-            // Wide-short landscape: the player scrolls away with the content.
-            playerSlot(
-                Modifier.fillMaxWidth()
-                    .height(playerHeight.dp)
-                    .testTag("watch-player-slot"),
-            )
-        }
+    if (includeRelated) RelatedPaging(state, scroll, onAction)
+    Box(modifier.fillMaxSize().clipToBounds()) {
+    LazyColumn(Modifier.fillMaxSize().testTag("watch-scroll"), state = scroll) {
+        item("player") { Spacer(Modifier.height(playerHeight.dp)) }
         when (val content = state.content) {
-            WatchContent.Loading -> WatchSkeleton(includeRelated)
-            WatchContent.Failed -> if (state.verification != null) VerificationCard(
-                state.verification,
-                onVerify = { onAction(WatchAction.OpenVerification) },
-                onDismiss = { onAction(WatchAction.DismissVerification) },
-                modifier = Modifier.testTag("watch-verification"),
-            ) else WatchError(onAction)
+            WatchContent.Loading -> item("loading") { WatchSkeleton(includeRelated) }
+            WatchContent.Failed -> item("error") {
+                if (state.verification != null) VerificationCard(state.verification,
+                    onVerify = { onAction(WatchAction.OpenVerification) },
+                    onDismiss = { onAction(WatchAction.DismissVerification) },
+                    modifier = Modifier.testTag("watch-verification")) else WatchError(onAction)
+            }
             is WatchContent.Ready -> {
-                WatchMetadata(content.page.video, state, onAction)
-                WatchComments(content.page.video, onAction)
+                item("metadata") { WatchMetadata(content.page.video, state, onAction) }
+                item("comments") { WatchComments(content.page.video, onAction) }
                 if (includeRelated) {
-                    WatchRelatedFeed(content.page.related, viewportWidth, viewportHeight, onAction)
+                    val columns = if (WatchLayout.relatedVariant(viewportWidth, viewportHeight) == WatchRelatedVariant.Grid)
+                        WatchLayout.gridColumns(viewportWidth) else 1
+                    val grid = columns > 1
+                    item("related-start") { Spacer(Modifier.height(if (grid) 8.dp else 12.dp)) }
+                    items(content.page.related.chunked(columns), key = { row -> row.joinToString(":") { it.id } }) { row ->
+                        WatchRelatedFeed(row, viewportWidth, viewportHeight, onAction)
+                    }
+                    item("related-end") { Spacer(Modifier.height(8.dp)) }
+                    item("pagination") { RelatedFooter(state, onAction) }
                 }
             }
         }
     }
+    if (!pinned && showPlayer) {
+        val density = LocalDensity.current
+        playerSlot(Modifier.fillMaxWidth().height(playerHeight.dp).offset {
+            androidx.compose.ui.unit.IntOffset(0, if (scroll.firstVisibleItemIndex == 0)
+                -scroll.firstVisibleItemScrollOffset else -with(density) { playerHeight.dp.roundToPx() })
+        }.testTag("watch-player-slot"))
+    }
+    }
+}
+
+@Composable
+private fun RelatedPaging(state: WatchUiState, scroll: LazyListState, onAction: (WatchAction) -> Unit) {
+    val latestAction by rememberUpdatedState(onAction)
+    val cursor = (state.content as? WatchContent.Ready)?.page?.nextKey
+    LaunchedEffect(scroll, cursor, state.relatedFailed) {
+        if (cursor == null || state.relatedFailed) return@LaunchedEffect
+        snapshotFlow { scroll.layoutInfo.let { it.totalItemsCount > 0 &&
+            (it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 3 } }
+            .collect { if (it) latestAction(WatchAction.LoadRelated) }
+    }
+}
+
+@Composable
+private fun RelatedFooter(state: WatchUiState, onAction: (WatchAction) -> Unit) {
+    if (state.relatedLoading) Box(Modifier.fillMaxWidth().height(56.dp).testTag("watch-related-loading"), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Ink, strokeWidth = 2.dp)
+    }
+    if (state.relatedFailed) Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("watch-related-retry")
+        .clickable { onAction(WatchAction.LoadRelated) }, contentAlignment = Alignment.Center) { AppText("Retry") }
 }
 
 @Composable
@@ -556,6 +565,7 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
 
 @Composable
 private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: LazyListState, onAction: (WatchAction) -> Unit) {
+    RelatedPaging(state, scroll, onAction)
     val paneWidth = WatchLayout.sidebarWidth(viewportWidth)
     val wide = paneWidth >= WatchLayout.SidebarWideWidth
     Box(
@@ -591,6 +601,7 @@ private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: 
                                 row.forEach { SidebarCell(it, 246f, 238f, onAction) }
                             }
                         }
+                        item("pagination") { RelatedFooter(state, onAction) }
                     }
                 } else {
                     LazyColumn(
@@ -602,6 +613,7 @@ private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: 
                         items(related, key = { it.id }) { item ->
                             SidebarCell(item, 240f, 240f, onAction)
                         }
+                        item("pagination") { RelatedFooter(state, onAction) }
                     }
                 }
             }
@@ -678,7 +690,7 @@ private fun WatchRelatedFeed(
 @Composable
 private fun PhoneFeed(items: List<WatchRelated>, viewportWidth: Float, onAction: (WatchAction) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp),
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items.forEach { item ->
@@ -706,7 +718,7 @@ private fun PhoneFeed(items: List<WatchRelated>, viewportWidth: Float, onAction:
 @Composable
 private fun StackedFeed(items: List<WatchRelated>, viewportWidth: Float, onAction: (WatchAction) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp),
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items.forEach { item ->
@@ -737,7 +749,7 @@ private fun StackedFeed(items: List<WatchRelated>, viewportWidth: Float, onActio
 @Composable
 private fun ListFeed(items: List<WatchRelated>, onAction: (WatchAction) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp),
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items.forEach { item ->
@@ -763,7 +775,7 @@ private fun ListFeed(items: List<WatchRelated>, onAction: (WatchAction) -> Unit)
 private fun GridFeed(items: List<WatchRelated>, viewportWidth: Float, onAction: (WatchAction) -> Unit) {
     val cols = WatchLayout.gridColumns(viewportWidth)
     val cell = WatchLayout.gridCell(viewportWidth)
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         items.chunked(cols).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
                 row.forEach { item ->

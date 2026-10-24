@@ -20,8 +20,7 @@ class MediaCommentsRepository(private val client: MediaClient) : CommentsReposit
             cursor != null -> loadCommentReplies(cursor, context, http).requireValue()
             target is CommentTarget.Video -> loadComments(target.id, context, http = http).requireValue()
             target is CommentTarget.Post -> {
-                val root = MediaPostRepository.readPost(target.identity.postId, http)
-                val key = commentKey(root.toString())
+                val key = loadPost(target.identity.postId, http).requireValue().commentsKey
                 if (key == null) CommentPage(emptyList(), null, null) else loadCommentReplies(key, context, http).requireValue()
             }
             else -> error("Unknown comment target")

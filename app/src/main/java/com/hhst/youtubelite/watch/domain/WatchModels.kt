@@ -45,10 +45,13 @@ data class WatchRelated(
     val avatar: String? = null,
 )
 
-data class WatchPage(val video: WatchVideo, val related: List<WatchRelated>)
+data class WatchPage(val video: WatchVideo, val related: List<WatchRelated>, val nextKey: String? = null)
+
+data class RelatedPage(val items: List<WatchRelated>, val nextKey: String?)
 
 interface WatchRepository {
     suspend fun watch(videoId: String): WatchPage
+    suspend fun next(videoId: String, cursor: String): RelatedPage = RelatedPage(emptyList(), null)
 }
 
 sealed interface WatchContent {
@@ -65,6 +68,8 @@ data class WatchUiState(
     val draftQuery: String = "",
     val commentsOpen: Boolean = false,
     val actionPending: Boolean = false,
+    val relatedLoading: Boolean = false,
+    val relatedFailed: Boolean = false,
     /** Production mode: report/recommendation rows without server tokens hide. Fixtures keep the recorded layouts. */
     val live: Boolean = false,
     /** Set when the page read came back as a `/sorry` traffic challenge. */
@@ -153,6 +158,7 @@ sealed interface WatchAction {
     data class QueryChanged(val query: String) : WatchAction
     data class SubmitSearch(val query: String) : WatchAction
     data object Retry : WatchAction
+    data object LoadRelated : WatchAction
     data object ToggleDescription : WatchAction
     data class SeekToTimestamp(val seconds: Long) : WatchAction
     data class OpenDescriptionLink(val url: String) : WatchAction
@@ -193,7 +199,7 @@ enum class WatchRelatedVariant { Phone, Grid, List, Stacked, SidebarCompact, Sid
  * Every formula here is pinned in `docs/visual/home-measurements.md`.
  */
 object WatchLayout {
-    const val TopBarHeight = 48f
+    const val TopBarHeight = 0f
     const val ActionBarHeight = 48f
     /** info content (pad 12 + title 26 + gap 6 + meta 18 + pad 5) + header margin-bottom 3. */
     const val InfoBlockHeight = 70f

@@ -26,6 +26,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.BuildConfig
 import com.hhst.youtubelite.channel.ChannelActivity
+import com.hhst.youtubelite.core.trafficChallenge
 import com.hhst.youtubelite.explore.data.ExploreRepository
 import com.hhst.youtubelite.explore.data.ExploreScenario
 import com.hhst.youtubelite.explore.data.FixtureExploreRepository
@@ -72,6 +73,8 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
             }
             is ExploreAction.OpenVideo -> navigation.trySend(ExploreNavigationRequest.Watch(action.videoId))
             is ExploreAction.OpenChannel -> navigation.trySend(ExploreNavigationRequest.Channel(action.channelId))
+            ExploreAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is ExploreAction.OpenVerification -> navigation.trySend(ExploreNavigationRequest.OpenVerification(action.challengeUrl))
         }
     }
 
@@ -82,8 +85,11 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         loadJob = viewModelScope.launch {
             runCatching { repository.explore(category) }.fold(
                 onSuccess = { page -> if (request == generation) _uiState.update { it.copy(content = ExploreContent.Ready(page)) } },
-                onFailure = { if (it is kotlinx.coroutines.CancellationException) throw it
-                    if (request == generation) _uiState.update { it.copy(content = ExploreContent.Failed) } },
+                onFailure = { failure -> if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                        ?.let(::trafficChallenge)
+                    _uiState.update { it.copy(content = ExploreContent.Failed, verification = challenge ?: it.verification) } },
             )
         }
     }
@@ -95,6 +101,19 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: ExploreNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the card; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) {
+            val challenge = result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE)
+            if (challenge != null && exploreViewModel.uiState.value.verification?.challengeUrl == challenge) {
+                exploreViewModel.onAction(ExploreAction.DismissVerification)
+                exploreViewModel.onAction(ExploreAction.Retry)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,8 +136,11 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 exploreViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is ExploreNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ExploreActivity, request.videoId))
-                        is ExploreNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@ExploreActivity, request.channelId))
+                        is ExploreNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@ExploreActivity, request.videoId))
+                        is ExploreNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@ExploreActivity, request.channelId))
+                        is ExploreNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@ExploreActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         // No `else`: a new request type must fail to compile here.
                     }
                 }

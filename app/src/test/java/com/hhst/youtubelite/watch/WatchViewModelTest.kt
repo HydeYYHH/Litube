@@ -30,6 +30,52 @@ class WatchViewModelTest {
         override suspend fun watch(videoId: String) = block(videoId)
     }
 
+    @Test fun relatedPagesAppendWithoutDuplicatesAndStopRepeatedCursors() = runTest {
+        var calls = 0
+        val first = FixtureWatchRepository.samplePage("bunny")
+        val repository = object : WatchRepository {
+            override suspend fun watch(videoId: String) = first.copy(nextKey = "page-two")
+            override suspend fun next(videoId: String, cursor: String): RelatedPage {
+                calls++
+                return RelatedPage(listOf(first.related.first(), first.related.first().copy(id = "new")), "page-two")
+            }
+        }
+        val vm = WatchViewModel(repository, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.LoadRelated)
+        vm.onAction(WatchAction.LoadRelated)
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as WatchContent.Ready).page
+        assertEquals(first.related.size + 1, page.related.size)
+        assertNull(page.nextKey)
+        vm.onAction(WatchAction.LoadRelated)
+        advanceUntilIdle()
+        assertEquals(1, calls)
+    }
+
+    @Test fun failedRelatedPageKeepsLoadedContentAndCanBeRetried() = runTest {
+        var fail = true
+        val first = FixtureWatchRepository.samplePage("bunny")
+        val repository = object : WatchRepository {
+            override suspend fun watch(videoId: String) = first.copy(nextKey = "next")
+            override suspend fun next(videoId: String, cursor: String): RelatedPage {
+                if (fail) throw java.io.IOException("offline")
+                return RelatedPage(listOf(first.related.first().copy(id = "new")), null)
+            }
+        }
+        val vm = WatchViewModel(repository, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.LoadRelated)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.relatedFailed)
+        assertEquals(first.related, (vm.uiState.value.content as WatchContent.Ready).page.related)
+        fail = false
+        vm.onAction(WatchAction.LoadRelated)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.relatedFailed)
+        assertEquals(first.related.size + 1, (vm.uiState.value.content as WatchContent.Ready).page.related.size)
+    }
+
     @Test fun accountChangesReloadSubscriptionStateAndCloseOldSaveChoices() = runTest {
         var subscribed = false
         val vm = WatchViewModel(repository {
@@ -403,7 +449,7 @@ class WatchViewModelTest {
     }
 
     @Test fun metadataIncludesIdentityAndSeparateActions() {
-        assertEquals(48f, WatchLayout.TopBarHeight, 0.01f)
+        assertEquals(0f, WatchLayout.TopBarHeight, 0.01f)
         assertEquals(70f, WatchLayout.InfoBlockHeight, 0.01f)
         assertEquals(166f, WatchLayout.MetadataSectionHeight, 0.01f)
         assertEquals(48f, WatchLayout.ActionBarHeight, 0.01f)

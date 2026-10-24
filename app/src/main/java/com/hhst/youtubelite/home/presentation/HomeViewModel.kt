@@ -25,6 +25,9 @@ class HomeViewModel(
     scenario: HomeScenario = HomeScenario.Empty,
     loadOnStart: Boolean = false,
     private val saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
+    private val avatars: com.hhst.youtubelite.data.media.MediaAvatarDirectory? = null,
+    private val snapshots: com.hhst.youtubelite.core.ContentSnapshots? = null,
+    private val accountKey: () -> String = { "visitor" },
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
@@ -42,8 +45,21 @@ class HomeViewModel(
     private var generation = 0
 
     init {
+        seedSnapshot()
         if (loadOnStart) load(append = false)
         if ((_state.value.overlay as? HomeOverlay.Save)?.live == true) loadSaveChoices()
+    }
+
+    /** Cold start paints the last captured rows and the live load replaces them. */
+    private fun seedSnapshot() {
+        val store = snapshots ?: return
+        val rows = store.read<FeedItem.Video>("home", accountKey(), _state.value.selectedChip,
+            com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type) ?: return
+        if (rows.isEmpty()) return
+        _state.update { state ->
+            if (state.content !is HomeContent.Empty && state.content !is HomeContent.Loading) return@update state
+            state.copy(content = HomeContent.Feed(HomePage(items = rows), refreshing = true))
+        }
     }
 
     fun setHideShorts(hidden: Boolean) { _state.update { it.copy(hideShorts = hidden) } }
@@ -299,6 +315,46 @@ class HomeViewModel(
         savedState["saveDescription"] = save.description
     }
 
+    /** A shorts rail split across the page boundary reads as one shelf; ids stay unique per rail. */
+    private fun mergeFeed(loaded: List<FeedItem>, incoming: List<FeedItem>): List<FeedItem> {
+        val merged = ArrayList(loaded)
+        val tail = merged.lastOrNull() as? FeedItem.Shorts
+        val head = incoming.firstOrNull() as? FeedItem.Shorts
+        if (tail != null && head != null) {
+            merged[merged.size - 1] = FeedItem.Shorts(tail.id, tail.videos + head.videos)
+            merged.addAll(incoming.drop(1))
+        } else {
+            merged.addAll(incoming)
+        }
+        return merged.distinctBy { it.id }
+    }
+
+    /**
+     * One shared directory read per channel, capped and cached there; a stale application
+     * is identity-safe because it only rewrites rows still missing their avatar.
+     */
+    private var avatarJob: Job? = null
+    private fun fillMissingAvatars(items: List<FeedItem>) {
+        val directory = avatars ?: return
+        val missing = items.filterIsInstance<FeedItem.Video>()
+            .filter { it.avatar == null && it.channelId.isNotBlank() }
+            .distinctBy { it.channelId }.takeIf { it.isNotEmpty() } ?: return
+        avatarJob?.cancel()
+        avatarJob = viewModelScope.launch {
+            val resolved = missing.mapNotNull { video ->
+                directory.avatar(video.channelId)?.let { video.channelId to it }
+            }.toMap()
+            if (resolved.isEmpty()) return@launch
+            _state.update { state ->
+                val feed = state.content as? HomeContent.Feed ?: return@update state
+                state.copy(content = feed.copy(page = feed.page.copy(items = feed.page.items.map { item ->
+                    if (item is FeedItem.Video && item.avatar == null) resolved[item.channelId]?.let { item.copy(avatar = it) } ?: item
+                    else item
+                })))
+            }
+        }
+    }
+
     private fun load(append: Boolean) {
         val feed = uiState.value.content as? HomeContent.Feed
         val next = if (append) feed?.page?.nextKey ?: return else null
@@ -315,10 +371,12 @@ class HomeViewModel(
             try {
                 val page = repository.loadHome(filter, next)
                 if (requestGeneration != generation) return@launch
-                val combined = if (append && feed != null) page.copy(items = (feed.page.items + page.items).distinctBy { it.id }) else page
+                val combined = if (append && feed != null) page.copy(items = mergeFeed(feed.page.items, page.items)) else page
                 _state.update { it.copy(content = if (combined.items.isEmpty()) HomeContent.Empty(
                     title = combined.messages.firstOrNull() ?: HomeContent.Empty().title,
                 ) else HomeContent.Feed(combined)) }
+                snapshots?.write("home", accountKey(), filter, combined.items.filterIsInstance<FeedItem.Video>())
+                fillMissingAvatars(combined.items)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: com.hhst.youtubelite.data.media.MediaException) {

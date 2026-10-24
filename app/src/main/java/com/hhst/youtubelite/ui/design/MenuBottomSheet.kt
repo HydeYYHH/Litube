@@ -97,23 +97,27 @@ fun MenuBottomSheet(
     var settleJob by remember { mutableStateOf<Job?>(null) }
     var closing by remember { mutableStateOf(false) }
     val haptics = org.koin.compose.koinInject<com.hhst.youtubelite.core.HapticsController>()
+    val motion = LocalMotionScale.current
 
     LaunchedEffect(Unit) {
-        progress.animateTo(1f, tween(MenuMotion.enterMs, easing = FastOutSlowInEasing))
+        if (motion > 0f) progress.animateTo(1f, tween(scaledMotion(MenuMotion.enterMs, motion), easing = FastOutSlowInEasing))
+        else progress.snapTo(1f)
     }
     fun finish() {
         if (closing) return
         closing = true
         settleJob?.cancel()
         scope.launch {
-            progress.animateTo(0f, tween(MenuMotion.exitMs, easing = FastOutSlowInEasing))
+            if (motion > 0f) progress.animateTo(0f, tween(scaledMotion(MenuMotion.exitMs, motion), easing = FastOutSlowInEasing))
+            else progress.snapTo(0f)
             onDismiss()
         }
     }
     fun settle() {
         settleJob?.cancel()
         settleJob = scope.launch {
-            animate(drag, 0f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
+            if (motion > 0f) animate(drag, 0f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
+            else drag = 0f
         }
     }
     BackHandler { finish() }
@@ -124,7 +128,8 @@ fun MenuBottomSheet(
     )
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Column(
-            Modifier.padding(bottom = bottomPadding)
+            Modifier.heightIn(max = maxHeight)
+                .padding(bottom = bottomPadding)
                 .width(sheetWidth ?: MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .graphicsLayer {
                     translationY = (1f - progress.value) * (size.height + bottomPadding.toPx()) + drag

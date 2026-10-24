@@ -20,7 +20,7 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
     override suspend fun you(): YouPage {
         delay(140)
         guard()
-        return YouPage(profile(), historyEntries(), playlists())
+        return YouPage(profile(), historyEntries(), playlists().playlists)
     }
 
     override suspend fun history(): HistoryPage {
@@ -29,10 +29,10 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
         return HistoryPage(if (scenario == LibraryScenario.HistoryEmpty) emptyList() else historyEntries())
     }
 
-    override suspend fun playlists(): List<PlaylistSummary> {
+    override suspend fun playlists(): PlaylistCollectionPage {
         delay(140)
         guard()
-        return if (scenario == LibraryScenario.PlaylistsEmpty) emptyList() else collections()
+        return PlaylistCollectionPage(if (scenario == LibraryScenario.PlaylistsEmpty) emptyList() else collections())
     }
 
     companion object {
@@ -60,9 +60,16 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
 }
 
 interface LibraryRepository {
+    val supportsLocal: Boolean get() = false
     suspend fun you(): YouPage
     suspend fun history(): HistoryPage
-    suspend fun playlists(): List<PlaylistSummary>
+    suspend fun playlists(): PlaylistCollectionPage
+
+    /** Further history entries after [cursor]; the fixture history is finite. */
+    suspend fun historyNext(cursor: String): HistoryPage = HistoryPage(emptyList())
+
+    /** Further playlist rows after [cursor]; the fixture collection is finite. */
+    suspend fun playlistsNext(cursor: String): PlaylistCollectionPage = PlaylistCollectionPage(emptyList())
 
     /** Live-only removal write; fixtures never reach it because the menu stays a typed exit there. */
     suspend fun removeFromHistory(feedbackToken: String): Unit = throw UnsupportedOperationException("remove_from_history_unsupported")

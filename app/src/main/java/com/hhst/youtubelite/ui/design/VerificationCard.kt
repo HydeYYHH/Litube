@@ -39,11 +39,11 @@ fun VerificationCard(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AppText("Dismiss", Modifier.clip(RoundedCornerShape(999.dp))
                 .clickable(role = Role.Button, onClick = onDismiss)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
                 weight = FontWeight.Medium, color = DesignTokens.Secondary)
             AppText("Verify", Modifier.clip(RoundedCornerShape(999.dp)).background(DesignTokens.Surface)
                 .clickable(role = Role.Button, onClick = onVerify)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
                 weight = FontWeight.Medium)
         }
     }
@@ -65,9 +65,9 @@ fun VerificationBanner(
         }
         AppText("Verify", Modifier.clip(RoundedCornerShape(999.dp))
             .clickable(role = Role.Button, onClick = onVerify)
-            .padding(horizontal = 12.dp, vertical = 8.dp), weight = FontWeight.Medium)
+            .padding(horizontal = 12.dp, vertical = 14.dp), weight = FontWeight.Medium)
         AppText("Dismiss", Modifier.clip(RoundedCornerShape(999.dp))
             .clickable(role = Role.Button, onClick = onDismiss)
-            .padding(horizontal = 12.dp, vertical = 8.dp), weight = FontWeight.Medium, color = DesignTokens.Secondary)
+            .padding(horizontal = 12.dp, vertical = 14.dp), weight = FontWeight.Medium, color = DesignTokens.Secondary)
     }
 }

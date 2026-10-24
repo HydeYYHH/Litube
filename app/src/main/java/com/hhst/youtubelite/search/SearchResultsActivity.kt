@@ -48,6 +48,14 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     var lastNavigationRequest: SearchNavigationRequest? = null
         private set
 
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) searchViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
@@ -60,7 +68,7 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == SearchResultsViewModel::class.java)
                 return SearchResultsViewModel(if (fixtures) FixtureSearchRepository(scenario) else sources.search, extras.createSavedStateHandle(), query, scenario, if (fixtures) null else com.hhst.youtubelite.data.media.MediaSession.signedIn(),
-                    if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves) as T
+                    if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves, if (fixtures) null else sources.avatars) as T
             }
         })[SearchResultsViewModel::class.java]
         lifecycleScope.launch {
@@ -70,20 +78,23 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     if (request is SearchNavigationRequest.Destination) {
                         com.hhst.youtubelite.ui.components.MainTabs.intent(this@SearchResultsActivity,
                             com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name),
-                            searchViewModel.uiState.value.signedInPreview)?.let { startActivity(it); finish() }
+                            searchViewModel.uiState.value.signedInPreview)?.let { launchNavigation(it); finish() }
                     }
                     if (request is SearchNavigationRequest.Watch) {
-                        startActivity(WatchActivity.intent(this@SearchResultsActivity, request.videoId))
+                        launchNavigation(WatchActivity.intent(this@SearchResultsActivity, request.videoId))
                     }
                     if (request is SearchNavigationRequest.Shorts) {
-                        startActivity(com.hhst.youtubelite.shorts.ShortsActivity.intent(this@SearchResultsActivity, request.itemId))
+                        launchNavigation(com.hhst.youtubelite.shorts.ShortsActivity.intent(this@SearchResultsActivity, request.itemId))
                     }
                     if (request is SearchNavigationRequest.Channel) {
-                        startActivity(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))
+                        launchNavigation(ChannelActivity.intent(this@SearchResultsActivity, request.channelId))
                     }
+                    if (request is SearchNavigationRequest.OpenVerification) verificationLauncher.launch(
+                        android.content.Intent(this@SearchResultsActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                            .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                     if (request is SearchNavigationRequest.VoiceSearch && !fixtures) openVoiceSearch()
                     if (request is SearchNavigationRequest.Share) shareGateway.share(request.videoId)
-                    if (request is SearchNavigationRequest.Playlist) startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@SearchResultsActivity, request.playlistId))
+                    if (request is SearchNavigationRequest.Playlist) launchNavigation(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@SearchResultsActivity, request.playlistId))
                     if (request is SearchNavigationRequest.SharePlaylist) shareGateway.sharePlaylist(request.playlistId)
                 }
             }

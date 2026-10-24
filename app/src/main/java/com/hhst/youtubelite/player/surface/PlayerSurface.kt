@@ -437,7 +437,7 @@ fun PlayerSurface(
                             onCancel = callbacks::onSponsorSkipCancel,
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp),
+                                .padding(end = hudEnd.dp, bottom = if (showChrome) maxOf(PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp, with(density) { bottomBarHeightPx.toDp() } + 8.dp) else 12.dp),
                         )
                     }
                     if (!pip && state.sponsorChip) {
@@ -446,7 +446,7 @@ fun PlayerSurface(
                             onSkip = callbacks::onSponsorChipSkip,
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp),
+                                .padding(end = hudEnd.dp, bottom = if (showChrome) maxOf(PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp, with(density) { bottomBarHeightPx.toDp() } + 8.dp) else 12.dp),
                         )
                     }
 

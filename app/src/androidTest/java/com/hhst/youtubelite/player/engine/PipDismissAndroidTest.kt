@@ -25,15 +25,51 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class PipDismissAndroidTest {
+    /**
+     * Enters PiP and keeps the original assertion. A rejected request is a system-level
+     * answer, so the surrounding state is captured first to make the rare refusal diagnosable.
+     *
+     * The system accepts PiP entry only from RESUMED (or paused-before-stop). After a
+     * rotation the configuration flips before the shell transition resumes the activity,
+     * so the wait below is the platform's own precondition — entering earlier returns
+     * false by design on API 33+ shell transitions.
+     */
+    private fun enterPip(fixture: OfflineWatchFixture, tag: String) {
+        fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
+        var accepted = false
+        var lifecycleState: Lifecycle.State? = null
+        var pip = false
+        var surface = false
+        var pinned = -1
+        fixture.instrumentation.runOnMainSync {
+            lifecycleState = fixture.activity.lifecycle.currentState
+            pip = fixture.activity.isInPictureInPictureMode
+            surface = fixture.surface() != null
+            accepted = fixture.activity.enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+        }
+        if (!accepted) {
+            pinned = runCatching {
+                fixture.instrumentation.uiAutomation.windows.count { it.isInPictureInPictureMode }
+            }.getOrDefault(-1)
+            val stacks = DeviceEvidence.shell("dumpsys activity activities | grep -iE 'pin|pip'")
+            System.err.println("PIP-REJECTED tag=$tag lifecycle=$lifecycleState pip=$pip surface=$surface " +
+                "pinnedWindows=$pinned stacks=$stacks")
+            DeviceEvidence.captureScene("native-pip-$tag-rejected")
+            DeviceEvidence.writeJson("native-pip-$tag-rejected.json",
+                """{"tag":"$tag","lifecycle":"$lifecycleState","pip":$pip,"surface":$surface,"pinnedWindows":$pinned,
+                   "engine":"${fixture.engine.snapshot.value}","stacks":"${stacks.replace("\"", "'").trim()}"}""")
+        }
+        assertTrue("$tag: activity(state=$lifecycleState, pip=$pip, surface=$surface, pinnedWindows=$pinned) was refused PiP entry", accepted)
+        fixture.await { fixture.activity.isInPictureInPictureMode }
+    }
+
     @Test fun lockingScreenKeepsBackgroundPlayback() {
         assumeTrue(Build.VERSION.SDK_INT >= 26)
         OfflineWatchFixture("pipLock0001").use { fixture ->
             fixture.prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
             try {
                 fixture.launch()
-                fixture.instrumentation.runOnMainSync {
-                    assertTrue(fixture.activity.enterPictureInPictureMode(PictureInPictureParams.Builder().build()))
-                }
+                enterPip(fixture, "lock-first")
                 fixture.await { fixture.activity.isInPictureInPictureMode }
                 DeviceEvidence.shell("input keyevent 223") // KEYCODE_SLEEP, not a PiP dismissal.
                 fixture.await { !fixture.app.getSystemService(PowerManager::class.java).isInteractive &&
@@ -55,23 +91,35 @@ class PipDismissAndroidTest {
         for (background in listOf(false, true)) OfflineWatchFixture("pipWatch001").use { fixture ->
             fixture.prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, background)
             fixture.launch()
-            fun enter() {
-                fixture.instrumentation.runOnMainSync {
-                    assertTrue(fixture.activity.enterPictureInPictureMode(PictureInPictureParams.Builder().build()))
-                }
-                fixture.await { fixture.activity.isInPictureInPictureMode }
-            }
-            enter()
+            fun enter(tag: String) = enterPip(fixture, tag)
+            enter("round-$background-first")
             systemPipAction(fixture, "expand_button")
-            fixture.await { !fixture.activity.isInPictureInPictureMode && fixture.engine.snapshot.value.isPlaying }
+            // Requesting orientation while the exit transition still runs loses the
+            // request on shell-transition devices; resume returns only once it settled.
+            fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                !fixture.activity.isInPictureInPictureMode && fixture.engine.snapshot.value.isPlaying }
             fixture.instrumentation.runOnMainSync { fixture.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-            fixture.await { fixture.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && fixture.engine.snapshot.value.isPlaying }
+            // The configuration flips mid-transition; resume only returns once it has settled.
+            fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                fixture.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && fixture.engine.snapshot.value.isPlaying }
             fixture.instrumentation.runOnMainSync { fixture.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
-            fixture.await { fixture.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT && fixture.engine.snapshot.value.isPlaying }
-            enter()
+            fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                fixture.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT && fixture.engine.snapshot.value.isPlaying }
+            enter("round-$background-rotated")
             systemPipAction(fixture, "dismiss")
-            fixture.await { !fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
-                !fixture.engine.snapshot.value.isPlaying && !fixture.model.uiState.value.visible }
+            try {
+                fixture.await { !fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                    !fixture.engine.snapshot.value.isPlaying && !fixture.model.uiState.value.visible }
+            } catch (failure: AssertionError) {
+                val pinned = runCatching {
+                    fixture.instrumentation.uiAutomation.windows.count { it.isInPictureInPictureMode }
+                }.getOrDefault(-1)
+                System.err.println("PIP-DISMISS-STUCK background=$background lifecycle=${fixture.activity.lifecycle.currentState} " +
+                    "pip=${fixture.activity.isInPictureInPictureMode} pinnedWindows=$pinned " +
+                    DeviceEvidence.shell("dumpsys activity activities | grep -iE 'pin|pip|7104'").lineSequence().take(6).joinToString(" | "))
+                DeviceEvidence.captureScene("native-pip-dismiss-stuck")
+                throw failure
+            }
             val notificationId = PlaybackService::class.java.getDeclaredField("NOTIFICATION_ID").apply { isAccessible = true }.getInt(null)
             fixture.await { fixture.app.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == notificationId } }
             assertNull(fixture.engine.snapshot.value.videoId)

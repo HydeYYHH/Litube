@@ -5,6 +5,7 @@ object PreferenceKeys {
     const val HAPTIC_STRENGTH = "haptic_strength"
     const val ENABLE_DISPLAY_DISLIKES = "enable_display_dislikes"
     const val ENABLE_HIDE_SHORTS = "enable_hide_shorts"
+    const val PRIVATE_BROWSING = "private_browsing"
     const val REMEMBER_QUALITY = "remember_quality"
     const val REMEMBER_PLAYBACK_SPEED = "remember_playback_speed"
     const val REMEMBER_LAST_POSITION = "remember_last_position"
@@ -68,6 +69,7 @@ object PreferenceKeys {
         ENABLE_DISPLAY_DISLIKES to true,
         ENABLE_SHOW_LIKES to true,
         ENABLE_HIDE_SHORTS to false,
+        PRIVATE_BROWSING to false,
         SKIP_SPONSORS to true,
         SKIP_SELF_PROMO to true,
         SKIP_INTERACTION to true,

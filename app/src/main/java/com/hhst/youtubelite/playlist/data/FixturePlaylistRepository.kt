@@ -10,7 +10,16 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
         if (scenario == PlaylistScenario.Unavailable) return null
         val summary = personalLists().firstOrNull { it.id == id } ?: summaries().firstOrNull { it.id == id } ?: return null
         return PlaylistPage(if (scenario == PlaylistScenario.Empty) summary.copy(videoCount = 0) else summary, "Watch the open movies made with Blender!",
-            if (scenario == PlaylistScenario.Empty) emptyList() else entries())
+            if (scenario == PlaylistScenario.Empty) emptyList() else entries(),
+            if (scenario == PlaylistScenario.Paged) "fixture-page-2" else null)
+    }
+
+    override suspend fun playlistNext(id: String, cursor: String): PlaylistAppendPage? {
+        delay(140)
+        if (scenario == PlaylistScenario.Paged && cursor == "fixture-page-2") {
+            return PlaylistAppendPage(entries().map { it.copy(id = it.id + "-2", videoId = it.videoId + "2") }, null)
+        }
+        return null
     }
 
     companion object {
@@ -22,8 +31,8 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
         const val LIKED = "LL"
 
         fun personalLists() = listOf(
-            PlaylistSummary(WATCH_LATER, "Watch later", "Litube Studio", "litube", 4, "dream", "Private", 0, 0xFF2D4F72),
-            PlaylistSummary(LIKED, "Liked videos", "Litube Studio", "litube", 12, "bunny", "Private", 0, 0xFF70513B),
+            PlaylistSummary(WATCH_LATER, "Watch later", "Litube Studio", "litube", 4, "dream", "Private", null, 0xFF2D4F72),
+            PlaylistSummary(LIKED, "Liked videos", "Litube Studio", "litube", 12, "bunny", "Private", null, 0xFF70513B),
         )
 
         fun summaries() = listOf(
@@ -40,7 +49,9 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
 }
 
 enum class PlaylistScenario(val argument: String) {
-    Content("content"), Empty("empty"), Loading("loading"), Error("error"), Unavailable("unavailable");
+    Content("content"), Empty("empty"), Loading("loading"), Error("error"), Unavailable("unavailable"),
+    /** First page plus one server continuation, for the append and enumeration tests. */
+    Paged("paged");
 
     companion object { fun parse(value: String?) = entries.firstOrNull { it.argument == value } ?: Content }
 }

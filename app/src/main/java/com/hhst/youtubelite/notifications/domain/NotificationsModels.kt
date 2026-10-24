@@ -25,16 +25,21 @@ sealed interface NotificationsContent {
 data class NotificationsUiState(
     val signedIn: Boolean = false,
     val content: NotificationsContent = NotificationsContent.Loading,
+    /** Set when a read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 sealed interface NotificationsNavigationRequest {
     data class Watch(val videoId: String) : NotificationsNavigationRequest
     data class Channel(val channelId: String) : NotificationsNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : NotificationsNavigationRequest
     data object SignIn : NotificationsNavigationRequest
 }
 
 sealed interface NotificationsAction {
     data object Retry : NotificationsAction
+    data object DismissVerification : NotificationsAction
+    data class OpenVerification(val challengeUrl: String) : NotificationsAction
     data class OpenVideo(val videoId: String) : NotificationsAction
     data class OpenChannel(val channelId: String) : NotificationsAction
     data object SignIn : NotificationsAction

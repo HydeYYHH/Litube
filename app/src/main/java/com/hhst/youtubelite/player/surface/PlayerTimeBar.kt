@@ -50,6 +50,7 @@ fun PlayerTimeBar(
     onPreview: (Long?) -> Unit = {},
     /** Drag released (gesture overlay hides even when the seek is a no-op). */
     onCommit: () -> Unit = {},
+    chapterStarts: List<Long> = emptyList(),
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
@@ -134,6 +135,10 @@ fun PlayerTimeBar(
                 topLeft = Offset(startX, y),
                 size = Size(width, thickness),
             )
+        }
+        if (durationMs > 0) chapterStarts.distinct().filter { it > 0 && it < durationMs }.forEach { start ->
+            val x = size.width * (start.toFloat() / durationMs)
+            drawRect(androidx.compose.ui.graphics.Color.Black, Offset(x - 1.dp.toPx(), y), Size(2.dp.toPx(), thickness))
         }
         val thumbR = if (dragging) 7.dp.toPx() else 5.dp.toPx()
         drawCircle(

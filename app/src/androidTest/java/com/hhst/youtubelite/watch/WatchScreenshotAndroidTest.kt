@@ -66,32 +66,25 @@ class WatchScreenshotAndroidTest {
     private fun bounds(tag: String) =
         compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
 
+    private fun scrollToCard(tag: String) =
+        compose.onNodeWithTag("watch-scroll", useUnmergedTree = true).performScrollToNode(hasTestTag(tag))
+
     private fun viewportShift() =
         compose.onNodeWithTag("watch-screen").fetchSemanticsNode().boundsInRoot.left
 
     /** Phone chrome, author identity, and non-overlapping actions. */
     @Test fun phoneChromeMatchesMeasuredAnchors() {
         compose.setContent { Viewport(411, 844) { RenderScreen(contentOf("content")) } }
-        val bar = bounds("watch-topbar")
-        assertEquals(0f, bar.left, 0.5f)
-        assertEquals(0f, bar.top, 0.5f)
-        assertEquals(48f, bar.height, 0.5f)
-        assertEquals(411f, bar.width, 0.5f)
-        val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
-        assertEquals(0f, back.left, 0.5f)
-        assertEquals(48f, back.width, 0.5f)
-        val more = compose.onNodeWithContentDescription("More options").fetchSemanticsNode().boundsInRoot
-        assertEquals(403f, more.right, 0.5f)
-        assertEquals(48f, more.width, 0.5f)
+        compose.onNodeWithTag("watch-topbar").assertDoesNotExist()
 
         val player = bounds("watch-player-slot")
         assertEquals(0f, player.left, 0.5f)
-        assertEquals(48f, player.top, 0.5f)
+        assertEquals(0f, player.top, 0.5f)
         assertEquals(411f, player.width, 0.5f)
         assertEquals(411f * 9f / 16f, player.height, 0.6f)
 
         val meta = bounds("watch-metadata")
-        assertEquals(48f + 411f * 9f / 16f, meta.top, 0.6f)
+        assertEquals(411f * 9f / 16f, meta.top, 0.6f)
         assertEquals(166f, meta.height, 0.6f)
 
         val title = bounds("watch-title")
@@ -216,13 +209,13 @@ class WatchScreenshotAndroidTest {
         compose.setContent { Viewport(844, 342) { RenderScreen(contentOf("content")) } }
         val player = bounds("watch-player-slot")
         assertEquals(0f, player.left, 0.5f)
-        assertEquals(48f, player.top, 0.5f)
+        assertEquals(0f, player.top, 0.5f)
         assertEquals(844f, player.width, 0.5f)
         // The wide-short player scrolls with the content, so the window clips its tall box.
         assertEquals(342f, player.bottom, 0.5f)
-        compose.onNodeWithTag("watch-thumb-harbour", useUnmergedTree = true).performScrollTo()
-        compose.onNodeWithTag("watch-thumb-studio", useUnmergedTree = true).performScrollTo()
-        compose.onNodeWithTag("watch-thumb-harbour", useUnmergedTree = true).performScrollTo()
+        scrollToCard("watch-thumb-harbour")
+        scrollToCard("watch-thumb-studio")
+        scrollToCard("watch-thumb-harbour")
         val thumb = bounds("watch-thumb-harbour")
         assertEquals(12f, thumb.left, 0.5f)
         assertEquals(200f, thumb.width, 0.5f)
@@ -236,10 +229,10 @@ class WatchScreenshotAndroidTest {
     @Test fun stackedRelatedUsesTheInsetCover() {
         compose.setContent { Viewport(840, 725) { RenderScreen(contentOf("content")) } }
         val player = bounds("watch-player-slot")
-        assertEquals(48f, player.top, 0.5f)
+        assertEquals(0f, player.top, 0.5f)
         assertEquals(840f, player.width, 0.5f)
         assertEquals(840f * 9f / 16f, player.height, 0.6f)
-        compose.onNodeWithTag("watch-thumb-harbour", useUnmergedTree = true).performScrollTo()
+        scrollToCard("watch-thumb-harbour")
         val thumb = bounds("watch-thumb-harbour")
         assertEquals(12f, thumb.left, 0.5f)
         assertEquals(816f, thumb.width, 0.5f)
@@ -260,14 +253,14 @@ class WatchScreenshotAndroidTest {
         assertEquals(256f, pane.width, 0.5f)
         val player = bounds("watch-player-slot")
         assertEquals(0f, player.left, 0.5f)
-        assertEquals(48f, player.top, 0.5f)
+        assertEquals(0f, player.top, 0.5f)
         assertEquals(675f, player.width, 0.5f)
         assertEquals(675f * 9f / 16f, player.height, 0.6f)
         assertEquals(12f, bounds("watch-action-like").left, 0.6f)
         val cell = bounds("watch-related-harbour")
         assertEquals(683f, cell.left, 0.5f)
         assertEquals(240f, cell.width, 0.5f)
-        assertEquals(52f, cell.top, 1f)
+        assertEquals(4f, cell.top, 1f)
         val thumb = bounds("watch-thumb-harbour")
         assertEquals(683f, thumb.left, 0.5f)
         assertEquals(240f, thumb.width, 0.5f)
@@ -283,7 +276,7 @@ class WatchScreenshotAndroidTest {
         val wideCell = bounds("watch-related-harbour")
         assertEquals(788f + wideShift, wideCell.left, 0.5f)
         assertEquals(246f, wideCell.width, 0.5f)
-        assertEquals(48f, wideCell.top, 1f)
+        assertEquals(0f, wideCell.top, 1f)
         val wideThumb = bounds("watch-thumb-harbour")
         assertEquals(238f, wideThumb.width, 0.5f)
         assertEquals(133.875f, wideThumb.height, 0.6f)
@@ -346,11 +339,9 @@ class WatchScreenshotAndroidTest {
             assertEquals("$w × $h root width", w.toFloat(), root.width, 0.5f)
             assertEquals("$w × $h root height", h.toFloat(), root.height, 0.5f)
             assertEquals(0f, root.left, 0.5f)
-            val bar = bounds("watch-topbar")
-            assertEquals(48f, bar.height, 0.5f)
-            assertEquals(0f, compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot.left, 0.5f)
+            compose.onNodeWithTag("watch-topbar").assertDoesNotExist()
             val player = bounds("watch-player-slot")
-            assertEquals(48f, player.top, 0.5f)
+            assertEquals(0f, player.top, 0.5f)
             assertEquals(w.toFloat(), player.width, 0.5f)
             // Short windows push the action bar below the fold; scroll it into view.
             compose.onNodeWithTag("watch-actions").performScrollTo()
@@ -468,6 +459,36 @@ class WatchScreenshotAndroidTest {
         compose.onNodeWithTag("watch-related").assertIsDisplayed()
         compose.runOnIdle { width = 390; height = 844 }
         assertEquals(before, scrollValue(), 1f)
+    }
+
+    @Test fun relatedPaginationStopsOnFailureUntilRetryAndKeepsLoadedRows() {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        val rows = (0 until 20).map { page.related.first().copy(id = "item-$it") }
+        var state by mutableStateOf(WatchUiState(videoId = "bunny",
+            content = WatchContent.Ready(page.copy(related = rows, nextKey = "next"))))
+        var loads = 0
+        compose.setContent { Viewport(390, 844) {
+            WatchScreen(state, { action ->
+                if (action == WatchAction.LoadRelated) {
+                    loads++
+                    state = if (loads == 1) state.copy(relatedFailed = true) else state.copy(
+                        relatedFailed = false,
+                        content = WatchContent.Ready(page.copy(related = rows + page.related.first().copy(id = "appended"))))
+                }
+            }, {}, playerSlot = { Box(it.background(Color.Black)) })
+        } }
+        scrollToCard("watch-thumb-item-19")
+        compose.onNodeWithTag("watch-related-retry").performScrollTo().assertIsDisplayed()
+        compose.waitForIdle()
+        assertEquals(1, loads)
+        compose.onNodeWithTag("watch-related-retry").performClick()
+        scrollToCard("watch-thumb-appended")
+        compose.onNodeWithTag("watch-thumb-appended", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("watch-related-retry").assertDoesNotExist()
+        compose.waitForIdle()
+        assertEquals(2, loads)
+        scrollToCard("watch-thumb-item-0")
+        compose.onNodeWithTag("watch-thumb-item-0", useUnmergedTree = true).assertIsDisplayed()
     }
 
     private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {

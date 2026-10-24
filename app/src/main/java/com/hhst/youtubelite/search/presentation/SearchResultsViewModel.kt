@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.trafficChallenge
 
 class SearchResultsViewModel(
     private val repository: SearchRepository,
@@ -23,6 +24,7 @@ class SearchResultsViewModel(
     private var signedIn: Boolean? = null,
     private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
+    private val avatars: com.hhst.youtubelite.data.media.MediaAvatarDirectory? = null,
 ) : ViewModel() {
     private val restoredQuery = savedState.get<String>("query") ?: query
     private val restoredFilters = SearchFilters(
@@ -70,6 +72,9 @@ class SearchResultsViewModel(
         this.signedIn = signedIn
         _state.update { it.copy(signedInPreview = signedIn) }
         if (changed) {
+            // The old account's save targets and in-flight writes must not survive the switch.
+            actionJob?.cancel()
+            saveSheet?.close()
             overlay(SearchOverlay.None)
             load()
         }
@@ -146,8 +151,17 @@ class SearchResultsViewModel(
             is SearchAction.SelectUploadDate -> selectDate(action.date)
             SearchAction.VoiceSearch -> navigation.trySend(SearchNavigationRequest.VoiceSearch)
             SearchAction.OpenPageMenu -> navigation.trySend(SearchNavigationRequest.PageMenu)
+            SearchAction.DismissVerification -> _state.update { it.copy(verification = null) }
+            is SearchAction.OpenVerification -> navigation.trySend(SearchNavigationRequest.OpenVerification(action.challengeUrl))
             SearchAction.Retry -> load()
         }
+    }
+
+    /** One typed retry after a completed `/sorry` verification; the host launcher calls this with the solved challenge. */
+    fun verificationCompleted(challengeUrl: String?) {
+        if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+        onAction(SearchAction.DismissVerification)
+        onAction(SearchAction.Retry)
     }
 
     fun updateQuery(query: String) {
@@ -225,11 +239,43 @@ class SearchResultsViewModel(
                 val page = repository.search(query, filters)
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty() && page.channels.isEmpty() && page.shorts.isEmpty() && page.nextCursor == null) SearchContent.Empty(query) else SearchContent.Results(page)) }
+                fillMissingAvatars(page)
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
                 if (requestGeneration != generation) return@launch
-                _state.update { it.copy(content = SearchContent.Failed) }
+                val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                    ?.let(::trafficChallenge)
+                _state.update { it.copy(content = SearchContent.Failed, verification = challenge ?: it.verification) }
+            }
+        }
+    }
+
+    /**
+     * One shared directory read per channel, capped and cached there; the rewrite only
+     * touches rows still missing their avatar, so a stale application is identity-safe.
+     */
+    private var avatarJob: Job? = null
+    private fun fillMissingAvatars(page: com.hhst.youtubelite.search.domain.SearchPage) {
+        val directory = avatars ?: return
+        val resolved = (page.results + page.shorts)
+            .filter { it.avatar == null && it.channelId.isNotBlank() }
+            .distinctBy { it.channelId }
+            .takeIf { it.isNotEmpty() } ?: return
+        avatarJob?.cancel()
+        avatarJob = viewModelScope.launch {
+            val byChannel = resolved.mapNotNull { row ->
+                directory.avatar(row.channelId)?.let { row.channelId to it }
+            }.toMap()
+            if (byChannel.isEmpty()) return@launch
+            fun <T> List<T>.filled(avatar: (T) -> String?, channelId: (T) -> String, copy: (T, String) -> T) =
+                map { row -> if (avatar(row) == null) byChannel[channelId(row)]?.let { copy(row, it) } ?: row else row }
+            _state.update { state ->
+                val ready = state.content as? SearchContent.Results ?: return@update state
+                state.copy(content = SearchContent.Results(ready.page.copy(
+                    results = ready.page.results.filled({ it.avatar }, { it.channelId }, { row, a -> row.copy(avatar = a) }),
+                    shorts = ready.page.shorts.filled({ it.avatar }, { it.channelId }, { row, a -> row.copy(avatar = a) }),
+                )))
             }
         }
     }
@@ -255,9 +301,13 @@ class SearchResultsViewModel(
                     nextCursor = page.nextCursor,
                 )
                 _state.update { it.copy(content = SearchContent.Results(combined)) }
+                fillMissingAvatars(combined)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
-                if (requestedGeneration == generation) _state.update { it.copy(content = ready.copy(loadMoreFailed = true)) }
+            catch (failure: Exception) {
+                if (requestedGeneration != generation) return@launch
+                val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                    ?.let(::trafficChallenge)
+                _state.update { it.copy(content = ready.copy(loadMoreFailed = true), verification = challenge ?: it.verification) }
             }
         }
     }

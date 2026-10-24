@@ -62,7 +62,9 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HomeViewModel::class.java)
-                return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures, if (fixtures) null else sources.saves) as T
+                return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures, if (fixtures) null else sources.saves, if (fixtures) null else sources.avatars,
+                    if (fixtures) null else sources.snapshots,
+                    { com.hhst.youtubelite.data.media.MediaSession.snapshot().accountId ?: "visitor" }) as T
             }
         })[HomeViewModel::class.java]
         if (fixtures && intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
@@ -80,12 +82,12 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     when (request) {
                         is HomeNavigationRequest.OpenLink -> openContentLink(request.url)
                         HomeNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
-                        is HomeNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
-                        is HomeNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
-                        is HomeNavigationRequest.Shorts -> startActivity(
+                        is HomeNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@HomeActivity, request.query))
+                        is HomeNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@HomeActivity, request.videoId))
+                        is HomeNavigationRequest.Shorts -> launchNavigation(
                             com.hhst.youtubelite.shorts.ShortsActivity.intent(this@HomeActivity, request.itemId))
-                        is HomeNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
-                        is HomeNavigationRequest.OpenPost -> startActivity(
+                        is HomeNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@HomeActivity, request.channelId))
+                        is HomeNavigationRequest.OpenPost -> launchNavigation(
                             PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
                         )
                         is HomeNavigationRequest.MenuAction -> if (request.action == FeedMenuAction.Share) {
@@ -97,7 +99,7 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is HomeNavigationRequest.OpenVerification -> verificationLauncher.launch(
                             android.content.Intent(this@HomeActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
                                 .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
-                        is HomeNavigationRequest.Explore -> startActivity(
+                        is HomeNavigationRequest.Explore -> launchNavigation(
                             com.hhst.youtubelite.explore.ExploreActivity.intent(this@HomeActivity))
                         is HomeNavigationRequest.Destination -> if (request.destination != HomeDestination.Home) {
                             com.hhst.youtubelite.ui.components.MainTabs.intent(this@HomeActivity,

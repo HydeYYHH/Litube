@@ -44,6 +44,7 @@ import com.hhst.youtubelite.library.domain.LibraryNavigationRequest
 import com.hhst.youtubelite.library.domain.LibraryOverlay
 import com.hhst.youtubelite.library.presentation.YouScreen
 import com.hhst.youtubelite.library.presentation.YouViewModel
+import com.hhst.youtubelite.library.presentation.verificationCompleted
 import com.hhst.youtubelite.notifications.NotificationsActivity
 import com.hhst.youtubelite.playlist.PlaylistActivity
 import com.hhst.youtubelite.search.SearchResultsActivity
@@ -65,6 +66,14 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: LibraryNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the card; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) youViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
 
     /** Test seam: records the typed request without opening the downloads manager. */
     var launchDownloads: Boolean = true
@@ -98,13 +107,16 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             shareGateway.share(request.videoId)
                         }
 
-                        is LibraryNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@YouActivity, request.videoId))
-                        is LibraryNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@YouActivity, request.channelId))
-                        is LibraryNavigationRequest.Playlist -> startActivity(PlaylistActivity.intent(this@YouActivity, request.playlistId))
-                        is LibraryNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@YouActivity, request.query))
-                        LibraryNavigationRequest.OpenHistory -> startActivity(HistoryActivity.intent(this@YouActivity, scenario))
-                        LibraryNavigationRequest.OpenPlaylists -> startActivity(PlaylistsActivity.intent(this@YouActivity, scenario))
-                        LibraryNavigationRequest.OpenNotifications -> startActivity(NotificationsActivity.intent(this@YouActivity, signedIn))
+                        is LibraryNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@YouActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
+                        is LibraryNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@YouActivity, request.videoId))
+                        is LibraryNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@YouActivity, request.channelId))
+                        is LibraryNavigationRequest.Playlist -> launchNavigation(PlaylistActivity.intent(this@YouActivity, request.playlistId))
+                        is LibraryNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@YouActivity, request.query))
+                        LibraryNavigationRequest.OpenHistory -> launchNavigation(HistoryActivity.intent(this@YouActivity, scenario))
+                        LibraryNavigationRequest.OpenPlaylists -> launchNavigation(PlaylistsActivity.intent(this@YouActivity, scenario))
+                        LibraryNavigationRequest.OpenNotifications -> launchNavigation(NotificationsActivity.intent(this@YouActivity, signedIn))
                         LibraryNavigationRequest.OpenDownloads ->
                             if (launchDownloads) com.hhst.youtubelite.downloader.ui.DownloadUi.openManager(this@YouActivity)
                         LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
@@ -281,7 +293,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     private fun openTab(tab: MainTab) {
         val intent = MainTabs.intent(this, tab, intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
-        if (intent != null) startActivity(intent)
+        if (intent != null) launchNavigation(intent)
     }
 
     override fun onResume() {

@@ -31,7 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.library.presentation.LibraryError
-import com.hhst.youtubelite.library.presentation.LibrarySkeleton
 import com.hhst.youtubelite.shorts.domain.ShortItem
 import com.hhst.youtubelite.shorts.domain.ShortsAction
 import com.hhst.youtubelite.shorts.domain.ShortsContent
@@ -45,12 +44,33 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier, videoContent: (@Composable (String) -> Unit)? = null) {
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
-            ShortsContent.Loading -> Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { LibrarySkeleton("shorts-skeleton") }
+            ShortsContent.Loading -> ShortsSkeleton()
             ShortsContent.Failed -> Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { LibraryError("shorts-error") { onAction(ShortsAction.Retry) } }
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
             is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent, state)
+        }
+    }
+}
+
+@Composable
+private fun ShortsSkeleton() {
+    val ghost = Color(0xFF272727)
+    Box(Modifier.fillMaxSize().background(Color.Black).testTag("shorts-skeleton")
+        .windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 80.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(36.dp).background(ghost, CircleShape))
+                Box(Modifier.width(112.dp).height(16.dp).background(ghost, RoundedCornerShape(4.dp)))
+            }
+            Box(Modifier.fillMaxWidth().height(16.dp).background(ghost, RoundedCornerShape(4.dp)))
+            Box(Modifier.fillMaxWidth(0.65f).height(16.dp).background(ghost, RoundedCornerShape(4.dp)))
+        }
+        Column(Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            repeat(4) { Box(Modifier.size(40.dp).background(ghost, CircleShape)) }
         }
     }
 }

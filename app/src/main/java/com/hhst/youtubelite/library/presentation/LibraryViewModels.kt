@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.trafficChallenge
 
 /** Hosts the You page. Library screens keep one VM per page, mirroring the search host. */
 class YouViewModel(
@@ -46,7 +47,7 @@ class YouViewModel(
 
     init {
         when {
-            !signedIn -> _uiState.update { it.copy(content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
+            !signedIn && !repository.supportsLocal -> _uiState.update { it.copy(content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
             scenario == LibraryScenario.Loading -> _uiState.update { it.copy(content = LibraryContent.Loading) }
             else -> refresh()
         }
@@ -66,7 +67,7 @@ class YouViewModel(
         saveSheet?.close()
         showOverlay(LibraryOverlay.None)
         _uiState.update { it.copy(signedIn = value, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
-        if (value) refresh()
+        if (value || repository.supportsLocal) refresh()
     }
 
     fun onAction(action: LibraryAction) {
@@ -132,9 +133,12 @@ class YouViewModel(
                 navigation.trySend(LibraryNavigationRequest.Destination(action.tab))
             }
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            LibraryAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is LibraryAction.OpenVerification -> navigation.trySend(LibraryNavigationRequest.OpenVerification(action.challengeUrl))
             // History-page management actions are unreachable from the You page.
             LibraryAction.OpenManageHistory, LibraryAction.PauseHistory, LibraryAction.ResumeHistory,
-            LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory -> Unit
+            LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,
+            LibraryAction.LoadHistoryNext, LibraryAction.LoadCollectionNext -> Unit
         }
     }
 
@@ -179,15 +183,18 @@ class YouViewModel(
     }
 
     private fun refresh() {
-        if (!signedIn) return
+        if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(content = LibraryContent.Loading) }
             runCatching { repository.you() }.fold(
                 onSuccess = { page -> if (request == generation) _uiState.update { it.copy(content = LibraryContent.Ready(page)) } },
-                onFailure = { if (it is CancellationException) throw it
-                    if (request == generation) _uiState.update { it.copy(content = LibraryContent.Failed) } },
+                onFailure = { failure -> if (failure is CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                        ?.let(::trafficChallenge)
+                    _uiState.update { it.copy(content = LibraryContent.Failed, verification = challenge ?: it.verification) } },
             )
         }
     }
@@ -218,10 +225,11 @@ class HistoryViewModel(
     private var actionJob: Job? = null
 
     private var loadJob: Job? = null
+    private var appendJob: Job? = null
     private var generation = 0
 
     init {
-        if (!signedIn) _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
+        if (!signedIn && !repository.supportsLocal) _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = HistoryContent.Loading) }
         } else refresh()
@@ -237,18 +245,23 @@ class HistoryViewModel(
         signedIn = value
         ++generation
         loadJob?.cancel()
+        appendJob?.cancel()
         actionJob?.cancel()
         saveSheet?.close()
         savedState["confirmClear"] = false
         showOverlay(LibraryOverlay.None)
         _uiState.update { it.copy(confirmClear = false) }
-        _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
-        if (value) refresh()
+        _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+        if (value || repository.supportsLocal) refresh()
     }
 
     fun onAction(action: LibraryAction) {
         when (action) {
             LibraryAction.Retry -> refresh()
+            LibraryAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is LibraryAction.OpenVerification -> navigation.trySend(LibraryNavigationRequest.OpenVerification(action.challengeUrl))
+            LibraryAction.LoadHistoryNext -> loadHistoryNext()
             LibraryAction.OpenSearch -> showOverlay(LibraryOverlay.Search)
             LibraryAction.CloseOverlay -> {
                 savedState["confirmClear"] = false
@@ -297,7 +310,36 @@ class HistoryViewModel(
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
             LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
             LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads,
-            is LibraryAction.OpenPlaylist, is LibraryAction.Destination -> Unit
+            is LibraryAction.OpenPlaylist, is LibraryAction.Destination,
+            LibraryAction.LoadCollectionNext -> Unit
+        }
+    }
+
+    /** Appends the next history page; a failure keeps the loaded entries. */
+    private fun loadHistoryNext() {
+        val ready = _uiState.value.content as? HistoryContent.Ready ?: return
+        val cursor = ready.page.nextKey ?: return
+        if (_uiState.value.append == com.hhst.youtubelite.home.domain.AppendState.Loading) return
+        appendJob?.cancel()
+        val requestGeneration = generation
+        _uiState.update { it.copy(append = com.hhst.youtubelite.home.domain.AppendState.Loading) }
+        appendJob = viewModelScope.launch {
+            try {
+                val page = repository.historyNext(cursor)
+                if (requestGeneration != generation) return@launch
+                _uiState.update { current ->
+                    val existing = (current.content as? HistoryContent.Ready)?.page ?: return@update current
+                    current.copy(content = HistoryContent.Ready(existing.copy(
+                        entries = (existing.entries + page.entries).distinctBy { it.id },
+                        nextKey = page.nextKey.takeUnless { it == cursor })),
+                        append = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) _uiState.update {
+                    it.copy(append = com.hhst.youtubelite.home.domain.AppendState.Failed)
+                }
+            }
         }
     }
 
@@ -382,7 +424,7 @@ class HistoryViewModel(
     }
 
     private fun refresh() {
-        if (!signedIn) return
+        if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
@@ -397,8 +439,11 @@ class HistoryViewModel(
                     }
                     _uiState.update { it.copy(content = content) }
                 },
-                onFailure = { if (it is CancellationException) throw it
-                    if (request == generation) _uiState.update { it.copy(content = HistoryContent.Failed) } },
+                onFailure = { failure -> if (failure is CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                        ?.let(::trafficChallenge)
+                    _uiState.update { it.copy(content = HistoryContent.Failed, verification = challenge ?: it.verification) } },
             )
         }
     }
@@ -420,10 +465,11 @@ class CollectionViewModel(
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
 
     private var loadJob: Job? = null
+    private var appendJob: Job? = null
     private var generation = 0
 
     init {
-        if (!signedIn) _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
+        if (!signedIn && !repository.supportsLocal) _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = CollectionContent.Loading) }
         } else refresh()
@@ -439,13 +485,18 @@ class CollectionViewModel(
         signedIn = value
         ++generation
         loadJob?.cancel()
-        _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
-        if (value) refresh()
+        appendJob?.cancel()
+        _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+        if (value || repository.supportsLocal) refresh()
     }
 
     fun onAction(action: LibraryAction) {
         when (action) {
             LibraryAction.Retry -> refresh()
+            LibraryAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is LibraryAction.OpenVerification -> navigation.trySend(LibraryNavigationRequest.OpenVerification(action.challengeUrl))
+            LibraryAction.LoadCollectionNext -> loadCollectionNext()
             LibraryAction.OpenSearch -> showOverlay(LibraryOverlay.Search)
             LibraryAction.CloseOverlay -> showOverlay(LibraryOverlay.None)
             is LibraryAction.QueryChanged -> {
@@ -469,7 +520,35 @@ class CollectionViewModel(
             is LibraryAction.OpenVideo, is LibraryAction.OpenChannel, is LibraryAction.OpenMenu,
             is LibraryAction.MenuSelected, LibraryAction.OpenManageHistory, LibraryAction.PauseHistory,
             LibraryAction.ResumeHistory, LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,
-            is LibraryAction.Destination -> Unit
+            is LibraryAction.Destination, LibraryAction.LoadHistoryNext -> Unit
+        }
+    }
+
+    /** Appends the next collection page; a failure keeps the loaded rows. */
+    private fun loadCollectionNext() {
+        val ready = _uiState.value.content as? CollectionContent.Ready ?: return
+        val cursor = ready.nextKey ?: return
+        if (_uiState.value.append == com.hhst.youtubelite.home.domain.AppendState.Loading) return
+        appendJob?.cancel()
+        val requestGeneration = generation
+        _uiState.update { it.copy(append = com.hhst.youtubelite.home.domain.AppendState.Loading) }
+        appendJob = viewModelScope.launch {
+            try {
+                val page = repository.playlistsNext(cursor)
+                if (requestGeneration != generation) return@launch
+                _uiState.update { current ->
+                    val existing = (current.content as? CollectionContent.Ready) ?: return@update current
+                    current.copy(content = existing.copy(
+                        playlists = (existing.playlists + page.playlists).distinctBy { it.id },
+                        nextKey = page.nextKey.takeUnless { it == cursor }),
+                        append = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) _uiState.update {
+                    it.copy(append = com.hhst.youtubelite.home.domain.AppendState.Failed)
+                }
+            }
         }
     }
 
@@ -486,19 +565,22 @@ class CollectionViewModel(
     }
 
     private fun refresh() {
-        if (!signedIn) return
+        if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(content = CollectionContent.Loading) }
             runCatching { repository.playlists() }.fold(
-                onSuccess = { playlists ->
+                onSuccess = { page ->
                     if (request != generation) return@fold
-                    val content = if (playlists.isEmpty()) CollectionContent.Empty() else CollectionContent.Ready(playlists)
+                    val content = if (page.playlists.isEmpty()) CollectionContent.Empty() else CollectionContent.Ready(page.playlists, page.nextKey)
                     _uiState.update { it.copy(content = content) }
                 },
-                onFailure = { if (it is CancellationException) throw it
-                    if (request == generation) _uiState.update { it.copy(content = CollectionContent.Failed) } },
+                onFailure = { failure -> if (failure is CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                        ?.let(::trafficChallenge)
+                    _uiState.update { it.copy(content = CollectionContent.Failed, verification = challenge ?: it.verification) } },
             )
         }
     }
@@ -514,4 +596,23 @@ private fun SavedStateHandle.libraryOverlay(): LibraryOverlay = when (get<String
     "menu" -> get<String>("menuItem")?.let { LibraryOverlay.Menu(it) } ?: LibraryOverlay.None
     "manage" -> LibraryOverlay.ManageHistory
     else -> LibraryOverlay.None
+}
+
+/** One typed retry after a completed `/sorry` verification; hosts call it with their VM. */
+fun YouViewModel.verificationCompleted(challengeUrl: String?) {
+    if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+    onAction(LibraryAction.DismissVerification)
+    onAction(LibraryAction.Retry)
+}
+
+fun HistoryViewModel.verificationCompleted(challengeUrl: String?) {
+    if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+    onAction(LibraryAction.DismissVerification)
+    onAction(LibraryAction.Retry)
+}
+
+fun CollectionViewModel.verificationCompleted(challengeUrl: String?) {
+    if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+    onAction(LibraryAction.DismissVerification)
+    onAction(LibraryAction.Retry)
 }

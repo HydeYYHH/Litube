@@ -49,6 +49,14 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: ChannelNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) channelViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
     /** Identity of the video whose overflow menu opened the shared actions dialog, if any. */
@@ -90,22 +98,25 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 channelViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is ChannelNavigationRequest.Short -> startActivity(
+                        is ChannelNavigationRequest.Short -> launchNavigation(
                             com.hhst.youtubelite.shorts.ShortsActivity.intent(this@ChannelActivity, request.shortId, channelId = request.channelId))
-                        is ChannelNavigationRequest.PostComments -> startActivity(
+                        is ChannelNavigationRequest.PostComments -> launchNavigation(
                             PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
                                 .putExtra(PostDetailActivity.EXTRA_OPEN_COMMENTS, true))
-                        is ChannelNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
-                        is ChannelNavigationRequest.Playlist -> startActivity(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ChannelActivity, request.playlistId))
+                        is ChannelNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                        is ChannelNavigationRequest.Playlist -> launchNavigation(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ChannelActivity, request.playlistId))
                         is ChannelNavigationRequest.SharePlaylist -> shareGateway.sharePlaylist(request.playlistId)
-                        is ChannelNavigationRequest.Post -> startActivity(
+                        is ChannelNavigationRequest.Post -> launchNavigation(
                             PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
                         )
                         is ChannelNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
-                        is ChannelNavigationRequest.LiveStream -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                            this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
+                        is ChannelNavigationRequest.LiveStream -> launchNavigation(WatchActivity.intent(this@ChannelActivity, request.videoId))
                         is ChannelNavigationRequest.Share -> shareGateway.shareChannel(resolvedChannelId)
                         is ChannelNavigationRequest.OpenLink -> openContentLink(request.url)
+                        is ChannelNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@ChannelActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         is ChannelNavigationRequest.PostFeedback -> if (!fixtures) {
                             com.hhst.youtubelite.post.openPostVoteRoute(this@ChannelActivity)
                         }

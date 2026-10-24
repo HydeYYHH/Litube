@@ -38,6 +38,7 @@ import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import com.hhst.youtubelite.ui.design.VerificationCard
 
 @Composable
 fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -53,7 +54,12 @@ fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBa
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val content = state.content) {
                     ExploreContent.Loading -> LibrarySkeleton("explore-skeleton")
-                    ExploreContent.Failed -> LibraryError("explore-error") { onAction(ExploreAction.Retry) }
+                    ExploreContent.Failed -> if (state.verification != null) VerificationCard(
+                        state.verification,
+                        onVerify = { onAction(ExploreAction.OpenVerification(state.verification!!.challengeUrl)) },
+                        onDismiss = { onAction(ExploreAction.DismissVerification) },
+                        modifier = Modifier.testTag("explore-verification"),
+                    ) else LibraryError("explore-error") { onAction(ExploreAction.Retry) }
                     is ExploreContent.Ready -> CategoryContainer(content.page.videos, width, onAction)
                 }
             }

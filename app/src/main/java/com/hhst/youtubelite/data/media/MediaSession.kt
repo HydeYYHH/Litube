@@ -56,12 +56,15 @@ object MediaSession {
     internal const val KEY_ACCESS_EXPIRES = "auth:access_expires"
     internal const val KEY_ACCOUNT_ID = "auth:account_id"
     internal const val KEY_ACCOUNTS = "auth:accounts"
+    internal const val KEY_VISITOR = "visitor:identity"
 
     private val lock = Any()
     private var store: AuthStore? = null
     private var session = AccountSession()
     private var token: AccountToken? = null
     private var client: SignInClient? = null
+    private var visitor: String? = null
+    private var privateMode: () -> Boolean = { false }
     private val _changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
     val changes: kotlinx.coroutines.flow.StateFlow<Long> = _changes
 
@@ -73,9 +76,11 @@ object MediaSession {
     }
 
     /** Rebuilds the session from the store; safe to call again (tests reset state this way). */
-    fun initialize(store: AuthStore) {
+    fun initialize(store: AuthStore, privateMode: () -> Boolean = { false }) {
         synchronized(lock) {
             this.store = store
+            this.privateMode = privateMode
+            visitor = store.read(KEY_VISITOR)?.takeIf { it.isNotBlank() }
             session = AccountSession()
             token = null
             client = null
@@ -98,7 +103,23 @@ object MediaSession {
     }
 
     /** Main-thread safe: the cached context, possibly holding a stale access token. */
-    fun snapshot(): RequestContext = session.snapshot()
+    fun snapshot(): RequestContext = synchronized(lock) { session.snapshot().let {
+        if (it.signedIn) it else it.copy(visitor = visitor)
+    } }
+    fun privateBrowsing(): Boolean = privateMode()
+
+    internal fun <T> withAnonymousSession(generation: Long, block: () -> T): T = synchronized(lock) {
+        val current = session.snapshot()
+        if (current.signedIn || current.generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
+        block()
+    }
+
+    fun rememberVisitor(value: String?, generation: Long) = synchronized(lock) {
+        if (value.isNullOrBlank() || value.length > 4096 || session.snapshot().generation != generation ||
+            session.snapshot().signedIn || visitor != null) return@synchronized
+        visitor = value
+        store?.write(KEY_VISITOR, value)
+    }
     fun signedIn(): Boolean = snapshot().signedIn
     fun accounts(): List<Account> = session.accounts()
     fun signInClient(): SignInClient? = synchronized(lock) { client }
@@ -113,7 +134,7 @@ object MediaSession {
      * generation never moves and in-flight reads stay valid.
      */
     fun freshContext(): RequestContext {
-        val (current, active) = synchronized(lock) { session.snapshot() to token }
+        val (current, active) = synchronized(lock) { snapshot() to token }
         active ?: return current
         val fresh = active.token().requireValue()
         return synchronized(lock) {

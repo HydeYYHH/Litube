@@ -65,6 +65,57 @@ class SubscriptionsViewModelTest {
         assertTrue(feed.page.items.isEmpty())
     }
 
+    @Test fun emptyFilteredPagesAutoContinueWithinTheBoundThenStop() = runTest {
+        var calls = 0
+        val vm = SubscriptionsViewModel(repository { _, _ ->
+            calls++
+            SubscriptionsPage(emptyList(), emptyList(), nextKey = "page-${calls + 1}")
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        assertEquals(4, calls) // the first page plus three bounded automatic continuations
+        val feed = vm.uiState.value.content as SubscriptionsContent.Feed
+        assertTrue(feed.page.items.isEmpty())
+        assertEquals(3, feed.emptyAutoLoads)
+        assertEquals("page-5", feed.page.nextKey)
+        advanceUntilIdle()
+        assertEquals(4, calls) // nothing pages on its own past the bound
+    }
+
+    @Test fun emptyFilteredPagesResumeTheFeedWhenResultsArrive() = runTest {
+        var calls = 0
+        val video = FixtureSubscriptionsRepository.sampleVideos().first()
+        val vm = SubscriptionsViewModel(repository { _, continuation ->
+            calls++
+            when (continuation) {
+                null -> SubscriptionsPage(emptyList(), emptyList(), nextKey = "page-2")
+                "page-2" -> SubscriptionsPage(listOf(video.copy(id = "${video.id}-3")), emptyList())
+                else -> error("unexpected continuation $continuation")
+            }
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+        val feed = vm.uiState.value.content as SubscriptionsContent.Feed
+        assertEquals(listOf("${video.id}-3"), feed.page.items.map { it.id })
+        assertEquals(0, feed.emptyAutoLoads)
+        assertNull(feed.page.nextKey)
+    }
+
+    @Test fun loadMoreAfterTheBoundFetchesOnePagePerTap() = runTest {
+        var calls = 0
+        val vm = SubscriptionsViewModel(repository { _, _ ->
+            calls++
+            SubscriptionsPage(emptyList(), emptyList(), nextKey = "page-${calls + 1}")
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        val settled = calls
+        vm.onAction(SubscriptionsAction.LoadNext)
+        advanceUntilIdle()
+        assertEquals(settled + 1, calls)
+        val feed = vm.uiState.value.content as SubscriptionsContent.Feed
+        assertTrue(feed.page.items.isEmpty())
+        assertEquals("page-${settled + 2}", feed.page.nextKey)
+    }
+
     @Test fun paginationAppendsAndFailureKeepsTheLoadedFeed() = runTest {
         var failAppend = false
         val vm = SubscriptionsViewModel(repository { _, continuation ->
@@ -86,6 +137,67 @@ class SubscriptionsViewModelTest {
         feed = vm.uiState.value.content as SubscriptionsContent.Feed
         assertEquals(initialSize * 2, feed.page.items.size)
         assertEquals(AppendState.Failed, feed.append)
+    }
+
+    @Test fun trafficChallengeShowsTheBannerAndCompletionRetriesOnce() = runTest {
+        val challenge = "https://www.google.com/sorry/index?q=E-ACAAQD"
+        var calls = 0
+        val vm = SubscriptionsViewModel(repository { _, continuation ->
+            calls++
+            if (continuation == null && calls == 1) throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION, "verification", detail = challenge))
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), FixtureSubscriptionsRepository.channels(), nextKey = null)
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is SubscriptionsContent.Failed)
+        assertEquals(challenge, vm.uiState.value.verification?.challengeUrl)
+        vm.verificationCompleted(challenge)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is SubscriptionsContent.Feed)
+        assertNull(vm.uiState.value.verification)
+        assertEquals(2, calls)
+        // A repeated completion must not form a retry loop.
+        vm.verificationCompleted(challenge)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test fun mismatchedChallengeUrlKeepsTheBannerWithoutRetrying() = runTest {
+        val challenge = "https://www.google.com/sorry/index?q=E-ACAAQD"
+        var calls = 0
+        val vm = SubscriptionsViewModel(repository { _, continuation ->
+            calls++
+            if (continuation == null && calls == 1) throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION, "verification", detail = challenge))
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), FixtureSubscriptionsRepository.channels(), nextKey = null)
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        assertEquals(challenge, vm.uiState.value.verification?.challengeUrl)
+        // A cancelled visit reports nothing; a wrong challenge must not clear the banner or reload.
+        vm.verificationCompleted(null)
+        advanceUntilIdle()
+        vm.verificationCompleted("https://www.google.com/sorry/other")
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(challenge, vm.uiState.value.verification?.challengeUrl)
+    }
+
+    @Test fun plainFailureLeavesNoVerificationToSolve() = runTest {
+        var calls = 0
+        val vm = SubscriptionsViewModel(repository { _, _ ->
+            calls++
+            throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.HTTP, "503"))
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is SubscriptionsContent.Failed)
+        assertNull(vm.uiState.value.verification)
+        vm.verificationCompleted(null)
+        advanceUntilIdle()
+        assertEquals(1, calls)
     }
 
     @Test fun menuMirrorsTheHomeVideoActionsAndEmitsIdentity() = runTest {
@@ -163,6 +275,78 @@ class SubscriptionsViewModelTest {
         assertEquals(SubscriptionsChip.Live, restored.uiState.value.selectedChip)
         assertEquals("films", restored.uiState.value.query)
         assertEquals(SubscriptionsOverlay.Search, restored.uiState.value.overlay)
+    }
+
+    private fun dualRepository(
+        feed: suspend (SubscriptionsFilter, String?) -> SubscriptionsPage,
+        channels: suspend () -> List<SubscribedChannel>,
+    ) = object : SubscriptionsRepository {
+        override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) = feed(filter, continuation)
+        override suspend fun subscribedChannels() = channels()
+    }
+
+    @Test fun failedFeedKeepsTheLoadedChannelGuide() = runTest {
+        val vm = SubscriptionsViewModel(dualRepository({ _, _ -> error("offline") }, {
+            FixtureSubscriptionsRepository.channels()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is SubscriptionsContent.Failed)
+        assertEquals(SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels()), vm.uiState.value.channels)
+    }
+
+    @Test fun failedChannelGuideDoesNotEraseTheFeedAndCanRetry() = runTest {
+        var failChannels = true
+        val vm = SubscriptionsViewModel(dualRepository({ _, _ ->
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList())
+        }, {
+            if (failChannels) error("guide offline")
+            FixtureSubscriptionsRepository.channels()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is SubscriptionsContent.Feed)
+        assertEquals(SubscriptionsChannels.Failed, vm.uiState.value.channels)
+        failChannels = false
+        vm.onAction(SubscriptionsAction.RetryChannels)
+        advanceUntilIdle()
+        assertEquals(SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels()), vm.uiState.value.channels)
+    }
+
+    @Test fun feedPaginationNeverInvalidatesTheChannelGuide() = runTest {
+        var channelLoads = 0
+        val vm = SubscriptionsViewModel(dualRepository({ _, continuation ->
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList(),
+                if (continuation == null) "next" else null)
+        }, {
+            channelLoads++
+            FixtureSubscriptionsRepository.channels()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertEquals(1, channelLoads)
+        vm.onAction(SubscriptionsAction.LoadNext)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChip(SubscriptionsChip.Live))
+        advanceUntilIdle()
+        assertEquals(1, channelLoads)
+        assertEquals(SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels()), vm.uiState.value.channels)
+    }
+
+    @Test fun accountSwitchResetsAndReloadsTheChannelGuide() = runTest {
+        var generations = 0
+        val vm = SubscriptionsViewModel(dualRepository({ _, _ ->
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList())
+        }, {
+            generations++
+            FixtureSubscriptionsRepository.channels()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertEquals(1, generations)
+        vm.updateSession(true, 1) // First snapshot only establishes the key.
+        advanceUntilIdle()
+        assertEquals(1, generations)
+        vm.updateSession(true, 2) // A moved generation means a different account.
+        advanceUntilIdle()
+        assertEquals(2, generations)
+        assertEquals(SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels()), vm.uiState.value.channels)
     }
 
     private class FakeSaveRepository : com.hhst.youtubelite.saves.domain.SaveRepository {

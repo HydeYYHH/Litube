@@ -94,7 +94,8 @@ import org.koin.dsl.module
 val appModule = module {
     // freshContext runs on the MediaClient pool: it may block on a token refresh.
     single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::freshContext) }
-    single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get()) }
+    single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots"), get()) }
+    single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get()) }
     single {
         DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)

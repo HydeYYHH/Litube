@@ -34,7 +34,9 @@ import com.hhst.youtubelite.ui.design.*
 @Composable
 internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, listState: LazyListState,
     query: String, submitted: String, onAction: (ChannelAction) -> Unit,
-    results: ChannelSection<List<ChannelVideo>>? = null) {
+    results: ChannelSection<List<ChannelVideo>>? = null,
+    canPage: Boolean = false,
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle) {
     val keyboard = LocalSoftwareKeyboardController.current
     val submit = { keyboard?.hide(); onAction(ChannelAction.SubmitSearch) }
     val videos = remember(page.videos, submitted, results) {
@@ -96,6 +98,19 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
                     AppText("No results found", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
                 }
                 items(videos, key = { it.id }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
+            }
+        }
+        if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-search-append") {
+            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-search-append"), contentAlignment = Alignment.Center) {
+                when (append) {
+                    com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                        AppText("Loading…", color = DesignTokens.Secondary)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                        AppText("Couldn't load more results. Tap to retry.",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadSearchNext) }.padding(8.dp),
+                            color = DesignTokens.Secondary)
+                    else -> Unit
+                }
             }
         }
     }

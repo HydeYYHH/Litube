@@ -32,7 +32,7 @@ class PlaylistScreenAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val summary = FixturePlaylistRepository.summaries().first()
     private fun ready() = PlaylistContent.Ready(PlaylistPage(summary, "Watch the open movies made with Blender!", FixturePlaylistRepository.entries()))
-    private fun state(content: PlaylistContent = ready(), overlay: PlaylistOverlay = PlaylistOverlay.None) = PlaylistUiState(summary.id, content, overlay)
+    private fun state(content: PlaylistContent = ready(), overlay: PlaylistOverlay = PlaylistOverlay.None) = PlaylistUiState(summary.id, content, overlay = overlay)
 
     @Test fun phoneAndWideAnchorsMatchTheReference() {
         var width by mutableIntStateOf(390)

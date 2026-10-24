@@ -36,6 +36,7 @@ import com.hhst.youtubelite.library.domain.LibraryNavigationRequest
 import com.hhst.youtubelite.library.domain.LibraryOverlay
 import com.hhst.youtubelite.library.presentation.HistoryScreen
 import com.hhst.youtubelite.library.presentation.HistoryViewModel
+import com.hhst.youtubelite.library.presentation.verificationCompleted
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.MenuBottomSheet
@@ -52,6 +53,14 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: LibraryNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the card; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) historyViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
 
     val shareGateway: com.hhst.youtubelite.share.ShareGateway by lazy { com.hhst.youtubelite.share.ShareGateway(this) }
 
@@ -78,9 +87,12 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             shareGateway.share(request.videoId)
                         }
 
-                        is LibraryNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@HistoryActivity, request.videoId))
-                        is LibraryNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@HistoryActivity, request.channelId))
-                        is LibraryNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@HistoryActivity, request.query))
+                        is LibraryNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@HistoryActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
+                        is LibraryNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@HistoryActivity, request.videoId))
+                        is LibraryNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@HistoryActivity, request.channelId))
+                        is LibraryNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@HistoryActivity, request.query))
                         LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@HistoryActivity)
                         // The shared library request type carries You-page entries (tabs, account,

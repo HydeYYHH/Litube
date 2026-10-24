@@ -48,8 +48,16 @@ fun ChannelShortsTab(
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
     production: Boolean = false,
+    canPage: Boolean = false,
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
 ) {
     val viewport = rememberUpdatedState(width)
+    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
+        val info = state.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
+            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadShortsNext)
+    }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-shorts-list"),
@@ -86,6 +94,19 @@ fun ChannelShortsTab(
                         }
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
+                }
+            }
+        }
+        if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-shorts-append") {
+            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-shorts-append"), contentAlignment = Alignment.Center) {
+                when (append) {
+                    com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                        AppText("Loading…", color = DesignTokens.Secondary)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                        AppText("Couldn't load more shorts. Tap to retry.",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadShortsNext) }.padding(8.dp),
+                            color = DesignTokens.Secondary)
+                    else -> Unit
                 }
             }
         }
@@ -138,8 +159,16 @@ fun ChannelLiveTab(
     width: Float,
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
+    canPage: Boolean = false,
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
 ) {
     val viewport = rememberUpdatedState(width)
+    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
+        val info = state.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
+            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadLiveNext)
+    }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-live-list"),
@@ -177,6 +206,19 @@ fun ChannelLiveTab(
                         }
                         repeat(columns - rows[rowIndex].size) { Spacer(Modifier.weight(1f)) }
                     }
+                }
+            }
+        }
+        if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-live-append") {
+            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-live-append"), contentAlignment = Alignment.Center) {
+                when (append) {
+                    com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                        AppText("Loading…", color = DesignTokens.Secondary)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                        AppText("Couldn't load more streams. Tap to retry.",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadLiveNext) }.padding(8.dp),
+                            color = DesignTokens.Secondary)
+                    else -> Unit
                 }
             }
         }
@@ -256,8 +298,16 @@ fun ChannelPostsTab(
     expandedPosts: Set<String>,
     onAction: (ChannelAction) -> Unit,
     production: Boolean = false,
+    canPage: Boolean = false,
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
 ) {
     val viewport = rememberUpdatedState(width)
+    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
+        val info = state.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
+            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadPostsNext)
+    }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-posts-list"),
@@ -277,6 +327,19 @@ fun ChannelPostsTab(
                     onAction = onAction,
                     production = production,
                 )
+            }
+        }
+        if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-posts-append") {
+            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-posts-append"), contentAlignment = Alignment.Center) {
+                when (append) {
+                    com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                        AppText("Loading…", color = DesignTokens.Secondary)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                        AppText("Couldn't load more posts. Tap to retry.",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadPostsNext) }.padding(8.dp),
+                            color = DesignTokens.Secondary)
+                    else -> Unit
+                }
             }
         }
     }
@@ -403,26 +466,37 @@ private fun ChannelSortChips(
     selected: ChannelSortOption,
     onSelect: (ChannelSortOption) -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp)
-            .horizontalScroll(rememberScrollState()).testTag("channel-${tab.name.lowercase()}-sort"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ChannelSortOption.entries.forEach { option ->
-            Box(
-                Modifier.defaultMinSize(minHeight = ChannelLayout.FilterChipHeight.dp)
-                    .clip(RoundedCornerShape(ChannelLayout.FilterChipRadius.dp))
-                    .background(if (option == selected) DesignTokens.Ink else DesignTokens.Surface)
-                    .clickable(role = Role.RadioButton) { onSelect(option) }
-                    .padding(horizontal = 12.dp)
-                    .testTag("channel-${tab.name.lowercase()}-sort-${option.name.lowercase()}"),
-                contentAlignment = Alignment.Center,
-            ) {
-                AppText(
-                    option.label, size = 14, line = 20, weight = FontWeight.Medium,
-                    color = if (option == selected) DesignTokens.Background else DesignTokens.Ink,
-                )
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp)
+                .horizontalScroll(rememberScrollState()).testTag("channel-${tab.name.lowercase()}-sort"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ChannelSortOption.entries.forEach { option ->
+                Box(
+                    Modifier.defaultMinSize(minHeight = ChannelLayout.FilterChipHeight.dp)
+                        .clip(RoundedCornerShape(ChannelLayout.FilterChipRadius.dp))
+                        .background(if (option == selected) DesignTokens.Ink else DesignTokens.Surface)
+                        .clickable(role = Role.RadioButton) { onSelect(option) }
+                        .padding(horizontal = 12.dp)
+                        .testTag("channel-${tab.name.lowercase()}-sort-${option.name.lowercase()}"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AppText(
+                        option.label, size = 14, line = 20, weight = FontWeight.Medium,
+                        color = if (option == selected) DesignTokens.Background else DesignTokens.Ink,
+                    )
+                }
             }
+        }
+        // No server sort lane exists for shorts/live: say so instead of implying a global order.
+        if (selected != ChannelSortOption.Latest) {
+            AppText(
+                "Sorted within loaded items only",
+                Modifier.padding(start = 16.dp, top = 6.dp)
+                    .testTag("channel-${tab.name.lowercase()}-sort-scope"),
+                size = 12, line = 16, color = DesignTokens.Secondary,
+            )
         }
     }
     Spacer(Modifier.height(16.dp))

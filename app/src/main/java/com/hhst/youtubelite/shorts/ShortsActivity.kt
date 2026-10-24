@@ -70,6 +70,13 @@ class ShortsActivity : ComponentActivity() {
 
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
+    /** Navigates to another in-app screen, carrying this screen's debug fixture scene with it. */
+    private fun launchNavigation(intent: android.content.Intent) {
+        if (com.hhst.youtubelite.data.media.ContentRepositories.fixtures(this.intent))
+            intent.putExtra(com.hhst.youtubelite.data.media.ContentRepositories.EXTRA_FIXTURE_SCENE, true)
+        startActivity(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
@@ -99,7 +106,7 @@ class ShortsActivity : ComponentActivity() {
                 shortsViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is ShortsNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@ShortsActivity, request.channelId))
+                        is ShortsNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@ShortsActivity, request.channelId))
                         is ShortsNavigationRequest.Share -> shareGateway.share(request.itemId)
                         // Fixture-only typed exits: the feedback-only menu hides in production
                         // (state.live) and rate/subscribe writes run in-VM there. No `else`: a new
@@ -139,7 +146,7 @@ class ShortsActivity : ComponentActivity() {
                 lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     activeComments.navigationRequests.collect { request ->
                         if (request is CommentNavigationRequest.OpenAuthor) {
-                            startActivity(ChannelActivity.intent(this@ShortsActivity, request.channelId))
+                            launchNavigation(ChannelActivity.intent(this@ShortsActivity, request.channelId))
                         }
                     }
                 }

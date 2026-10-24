@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.post.data
 
+import com.hhst.youtubelite.post.domain.ChannelPostsPage
 import com.hhst.youtubelite.post.domain.PostAuthor
 import com.hhst.youtubelite.post.domain.PostDetail
 import com.hhst.youtubelite.post.domain.PostIdentity
@@ -21,11 +22,11 @@ class FixturePostRepository(private val scenario: PostScenario = PostScenario.Co
         return sampleDetail(identity)
     }
 
-    override suspend fun channelPosts(channelId: String): List<PostSummary> {
+    override suspend fun channelPosts(channelId: String): ChannelPostsPage {
         delay(120)
         if (scenario == PostScenario.Error) throw java.io.IOException("Local post error scenario")
-        if (scenario == PostScenario.Empty) return emptyList()
-        return samplePosts(channelId)
+        if (scenario == PostScenario.Empty) return ChannelPostsPage(emptyList())
+        return ChannelPostsPage(samplePosts(channelId))
     }
 
     companion object {

@@ -105,6 +105,9 @@ private fun GeneralSettings(preferences: Map<String, Boolean>, onToggle: (String
     SettingsGroup("Feed")
     SettingsToggle("Hide Shorts", "Remove Shorts shelves from the feed",
         PreferenceKeys.ENABLE_HIDE_SHORTS, preferences, onToggle)
+    SettingsGroup("Privacy")
+    SettingsToggle("Private browsing", "Don't send watch progress or save local history",
+        PreferenceKeys.PRIVATE_BROWSING, preferences, onToggle)
 }
 
 @Composable

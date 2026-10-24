@@ -7,10 +7,17 @@ import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import com.hhst.youtubelite.data.media.ContentRepositories
 import com.hhst.youtubelite.search.SearchResultsActivity
 
 abstract class NativeActivity : ComponentActivity() {
     private var navigationPip: com.hhst.youtubelite.core.PipAutoEnter.Handle? = null
+
+    /** Navigates to another in-app screen, carrying this screen's debug fixture scene with it. */
+    protected fun launchNavigation(intent: Intent) {
+        if (ContentRepositories.fixtures(this.intent)) intent.putExtra(ContentRepositories.EXTRA_FIXTURE_SCENE, true)
+        startActivity(intent)
+    }
 
     override fun startActivity(intent: Intent) {
         suppressNavigationPip(intent)

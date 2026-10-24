@@ -3,6 +3,7 @@ package com.hhst.youtubelite.watch
 import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import com.hhst.youtubelite.navigation.openContentLink
 import android.content.Context
+import com.hhst.youtubelite.data.media.MediaSession
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -70,6 +71,7 @@ import com.hhst.youtubelite.watch.presentation.WatchScreen
 import com.hhst.youtubelite.watch.presentation.WatchVideoMenu
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -179,7 +181,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 commentsViewModel.navigationRequests.collect { request ->
                     lastCommentRequest = request
                     when (request) {
-                        is CommentNavigationRequest.OpenAuthor -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
+                        is CommentNavigationRequest.OpenAuthor -> launchNavigation(ChannelActivity.intent(this@WatchActivity, request.channelId))
                         // Comment writes and menus are handled in the CommentsViewModel (with server
                         // confirmation in production); the host only hands author opens off to the
                         // channel page. No `else`: a new request type must fail to compile here.
@@ -197,9 +199,9 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 watchViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is WatchNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
-                        is WatchNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@WatchActivity, request.query))
-                        is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId)
+                        is WatchNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@WatchActivity, request.channelId))
+                        is WatchNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@WatchActivity, request.query))
+                        is WatchNavigationRequest.Watch -> launchNavigation(intent(this@WatchActivity, request.videoId)
                             .putExtra(EXTRA_START_SECONDS, request.startSeconds ?: 0L))
                         is WatchNavigationRequest.SeekTo -> playerViewModel.onSeek(request.seconds * 1000)
                         is WatchNavigationRequest.OpenLink -> openDescriptionLink(request.url)
@@ -254,10 +256,41 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
                 intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { savedInstanceState == null && it > 0 })
             val watchTimeReporter = com.hhst.youtubelite.data.media.WatchTimeReporter(sources.client, lifecycleScope)
+            suspend fun recordLocalHistory() {
+                val playback = playerViewModel.uiState.value
+                val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
+                val generation = MediaSession.snapshot().generation
+                if (playback.isPlaying && !MediaSession.signedIn() && !MediaSession.privateBrowsing() && video != null && video.id == playback.videoId) {
+                    val entry = com.hhst.youtubelite.library.domain.HistoryEntry(video.id, video.id, video.title,
+                        video.channel, video.channelId, video.artwork, "",
+                        progress = if (playback.durationMs > 0) (playerViewModel.positionState.value.toFloat() / playback.durationMs).coerceIn(0f, 1f) else null,
+                        section = "On this device")
+                    try {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            MediaSession.withAnonymousSession(generation) {
+                                if (!MediaSession.privateBrowsing()) sources.localLibrary.record(entry)
+                            }
+                        }
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    } catch (error: Exception) {
+                        com.hhst.youtubelite.diagnostics.AppLog.event(
+                            com.hhst.youtubelite.diagnostics.AppLog.Category.STORAGE, "local_history.write_failed", failure = error)
+                    }
+                }
+            }
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    kotlinx.coroutines.flow.combine(
+                        playerViewModel.uiState.map { it.isPlaying to it.videoId }.distinctUntilChanged(),
+                        watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video?.id }.distinctUntilChanged(),
+                    ) { playback, video -> playback to video }.collect { recordLocalHistory() }
+                }
+            }
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video }
-                        .distinctUntilChanged { a, b -> a?.id == b?.id }
+                        .distinctUntilChanged()
                         .collect { video ->
                             if (video != null) watchTimeReporter.watch(video.id, video.tracking) else watchTimeReporter.stop()
                         }
@@ -267,6 +300,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     while (true) {
                         kotlinx.coroutines.delay(5_000)
+                        recordLocalHistory()
                         watchTimeReporter.tick(playerViewModel.positionState.value,
                             playerViewModel.uiState.value.durationMs, playerViewModel.uiState.value.isPlaying,
                             playerViewModel.uiState.value.videoId)

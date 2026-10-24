@@ -48,3 +48,7 @@
 -dontwarn com.google.re2j.**
 -dontwarn org.mozilla.javascript.engine.**
 
+
+-keep class com.hhst.youtubelite.data.media.LocalLibraryStore$Data { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.data.media.LocalLibraryStore$Collection { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.library.domain.HistoryEntry { <init>(...); <fields>; }

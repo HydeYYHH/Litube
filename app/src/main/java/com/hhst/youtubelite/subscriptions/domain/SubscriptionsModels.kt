@@ -19,11 +19,27 @@ data class SubscribedChannel(
 sealed interface SubscriptionsContent {
     data object Loading : SubscriptionsContent
     data class SignedOut(val prompt: com.hhst.youtubelite.library.domain.SignInPrompt) : SubscriptionsContent
-    data class Feed(val page: SubscriptionsPage, val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle) : SubscriptionsContent
+    /**
+     * A filtered page can come back empty while the server still has more; [emptyAutoLoads]
+     * counts the bounded automatic continuations in that case. Past the bound the screen
+     * offers an explicit Load more instead of paging forever on its own.
+     */
+    data class Feed(
+        val page: SubscriptionsPage,
+        val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+        val emptyAutoLoads: Int = 0,
+    ) : SubscriptionsContent
     data object Failed : SubscriptionsContent
 }
 
 sealed interface SubscriptionsTab { data object FeedTab : SubscriptionsTab; data object ChannelsTab : SubscriptionsTab }
+
+/** The subscribed-channel list is its own read: it loads and fails independently of the feed. */
+sealed interface SubscriptionsChannels {
+    data object Loading : SubscriptionsChannels
+    data class Ready(val channels: List<SubscribedChannel>) : SubscriptionsChannels
+    data object Failed : SubscriptionsChannels
+}
 
 sealed interface SubscriptionsOverlay {
     data object None : SubscriptionsOverlay
@@ -35,6 +51,8 @@ sealed interface SubscriptionsOverlay {
 data class SubscriptionsUiState(
     val signedIn: Boolean = false,
     val content: SubscriptionsContent = SubscriptionsContent.Loading,
+    /** Subscribed channels for the overlay and the phone avatar strip; separate from the feed read. */
+    val channels: SubscriptionsChannels = SubscriptionsChannels.Loading,
     val overlay: SubscriptionsOverlay = SubscriptionsOverlay.None,
     val query: String = "",
     val selectedChip: SubscriptionsChip = SubscriptionsChip.All,
@@ -42,6 +60,8 @@ data class SubscriptionsUiState(
     val chips: List<SubscriptionsChip> = SubscriptionsChip.entries,
     /** Production mode: the item menu writes through the save sheet and feedback rows hide. */
     val live: Boolean = false,
+    /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 enum class SubscriptionsChip(val label: String) {
@@ -55,6 +75,7 @@ sealed interface SubscriptionsNavigationRequest {
     data class Search(val query: String) : SubscriptionsNavigationRequest
     data class MenuAction(val videoId: String, val action: com.hhst.youtubelite.home.domain.FeedMenuAction) : SubscriptionsNavigationRequest
     data class Destination(val tab: com.hhst.youtubelite.ui.components.MainTab) : SubscriptionsNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : SubscriptionsNavigationRequest
     data object Manage : SubscriptionsNavigationRequest
     data object SignIn : SubscriptionsNavigationRequest
     data object VoiceSearch : SubscriptionsNavigationRequest
@@ -70,6 +91,7 @@ sealed interface SubscriptionsAction {
     data class SelectChip(val chip: SubscriptionsChip) : SubscriptionsAction
     data object ShowChannels : SubscriptionsAction
     data object CloseChannels : SubscriptionsAction
+    data object RetryChannels : SubscriptionsAction
     data class OpenVideo(val videoId: String) : SubscriptionsAction
     data class OpenChannel(val channelId: String) : SubscriptionsAction
     data class OpenMenu(val videoId: String) : SubscriptionsAction
@@ -78,6 +100,8 @@ sealed interface SubscriptionsAction {
     data object SignIn : SubscriptionsAction
     data object Manage : SubscriptionsAction
     data object VoiceSearch : SubscriptionsAction
+    data object DismissVerification : SubscriptionsAction
+    data class OpenVerification(val challengeUrl: String) : SubscriptionsAction
 }
 
 object SubscriptionsLayout {

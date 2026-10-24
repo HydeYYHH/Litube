@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +32,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -133,6 +131,7 @@ fun MiniPlayerWindow(
     var closeArmed by remember { mutableStateOf(false) }
     var dismissScale by remember { mutableFloatStateOf(1f) }
     var dismissAlpha by remember { mutableFloatStateOf(1f) }
+    var attraction by remember { mutableFloatStateOf(0f) }
     var viewport by remember { mutableStateOf(Rect.Zero) }
     var previousMini by remember { mutableStateOf(mini) }
     var previousFillsWindow by remember { mutableStateOf(fillsWindow) }
@@ -288,6 +287,9 @@ fun MiniPlayerWindow(
                 restY + dragY + heightPx / 2, closeBounds.left, closeBounds.top, closeBounds.right, closeBounds.bottom)
             if (hit && !closeArmed) haptics.perform(HapticsController.Event.DROP_TARGET)
             closeArmed = hit
+            val distance = (androidx.compose.ui.geometry.Offset(restX + dragX + widthPx / 2,
+                restY + dragY + heightPx / 2) - closeBounds.center).getDistance()
+            attraction = (1f - distance / with(density) { 128.dp.toPx() }).coerceIn(0f, 1f)
         }
         handle.pinchScale = { scale ->
             dragging = false
@@ -303,6 +305,7 @@ fun MiniPlayerWindow(
             }
         }
         handle.end = fun(moved) {
+            attraction = 0f
             dragging = false
             closeArmed = false
             if (!mini || dismissing || transitionRunning) return
@@ -359,17 +362,14 @@ fun MiniPlayerWindow(
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade)))
             }
             if (mini && dragging && !dismissing) {
-                val shade = if (closeArmed) MaterialTheme.colorScheme.error else Color(0xFF606060)
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .height((bottomInsetDp + 156).dp)
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(Brush.verticalGradient(
-                        listOf(shade.copy(alpha = 0.56f), shade.copy(alpha = 0.72f)))))
                 Box(Modifier.zIndex(2f).absoluteOffset { IntOffset(closeBounds.left.roundToInt(), closeBounds.top.roundToInt()) }
                     .size(96.dp, 72.dp), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.close_player),
+                    Box(Modifier.size(if (closeArmed) 64.dp else 56.dp)
+                        .background(Color(0xCC303030), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.close_player),
                         tint = Color.White.copy(alpha = if (closeArmed) 1f else 0.95f),
-                        modifier = Modifier.size(36.dp))
+                        modifier = Modifier.size(32.dp))
+                    }
                 }
             }
             // Wait until the parent reports its size. With restX and restY still
@@ -378,11 +378,15 @@ fun MiniPlayerWindow(
             if (parentSize.width > 0 && parentSize.height > 0 && viewport.width > 0 && viewport.height > 0) {
                 Box(
                     modifier = Modifier
-                        .graphicsLayer { alpha = dismissAlpha; scaleX = dismissScale; scaleY = dismissScale }
                         .absoluteOffset {
                             IntOffset(viewport.left.roundToInt(), viewport.top.roundToInt())
                         }
                         .size(with(density) { viewport.width.coerceAtLeast(1f).toDp() }, with(density) { viewport.height.coerceAtLeast(1f).toDp() })
+                        .graphicsLayer {
+                            alpha = dismissAlpha
+                            scaleX = dismissScale * (1f - attraction * 0.35f)
+                            scaleY = scaleX
+                        }
                         .clip(if (mini || transitionRunning) shape else RoundedCornerShape(0.dp))
                         .then(
                             if (mini && showStroke) {

@@ -32,10 +32,43 @@ class MediaSessionTest {
         Account("owner", "Owner", "owner@example.com", "https://photo/owner", selected = true, disabled = false, pageId = null),
         Account("brand", "Brand", null, "", selected = false, disabled = false, pageId = "brand-page"))
 
+    @Test fun anonymousVisitorPersistsWithoutBecomingAnAccountAndSurvivesSignOut() {
+        val generation = MediaSession.snapshot().generation
+        MediaSession.rememberVisitor("visitor-one", generation)
+        assertFalse(MediaSession.signedIn())
+        assertEquals("visitor-one", MediaSession.freshContext().visitor)
+        MediaSession.rememberVisitor("replacement", generation)
+        assertEquals("visitor-one", MediaSession.snapshot().visitor)
+        MediaSession.completeSignIn(client(), token(), accounts())
+        assertNull(MediaSession.snapshot().visitor)
+        MediaSession.signOut()
+        MediaSession.initialize(store)
+        assertEquals("visitor-one", MediaSession.snapshot().visitor)
+    }
+
     @Test fun startsAnonymousWithoutPersistedState() {
         assertFalse(MediaSession.signedIn())
         assertTrue(MediaSession.accounts().isEmpty())
         assertNull(MediaSession.snapshot().accessToken)
+    }
+
+    @Test fun localOperationCannotCrossAnIdentityChange() {
+        val generation = MediaSession.snapshot().generation
+        var writes = 0
+        MediaSession.withAnonymousSession(generation) { writes++ }
+        MediaSession.completeSignIn(client(), token(), accounts())
+        assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            MediaSession.withAnonymousSession(generation) { writes++ }
+        }
+        assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            MediaSession.withAnonymousSession(MediaSession.snapshot().generation) { writes++ }
+        }
+        MediaSession.signOut()
+        assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            MediaSession.withAnonymousSession(generation) { writes++ }
+        }
+        MediaSession.withAnonymousSession(MediaSession.snapshot().generation) { writes++ }
+        assertEquals(2, writes)
     }
 
     @Test fun completeSignInPersistsAndBumpsTheGeneration() {

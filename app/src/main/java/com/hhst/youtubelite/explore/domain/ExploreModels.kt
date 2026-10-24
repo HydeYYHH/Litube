@@ -23,15 +23,20 @@ sealed interface ExploreContent {
 data class ExploreUiState(
     val category: ExploreCategory = ExploreCategory.Music,
     val content: ExploreContent = ExploreContent.Loading,
+    /** Set when a read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 sealed interface ExploreNavigationRequest {
     data class Watch(val videoId: String) : ExploreNavigationRequest
     data class Channel(val channelId: String) : ExploreNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : ExploreNavigationRequest
 }
 
 sealed interface ExploreAction {
     data object Retry : ExploreAction
+    data object DismissVerification : ExploreAction
+    data class OpenVerification(val challengeUrl: String) : ExploreAction
     data class SelectCategory(val category: ExploreCategory) : ExploreAction
     data class OpenVideo(val videoId: String) : ExploreAction
     data class OpenChannel(val channelId: String) : ExploreAction

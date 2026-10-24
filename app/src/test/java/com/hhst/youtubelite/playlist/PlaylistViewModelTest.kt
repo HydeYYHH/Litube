@@ -3,6 +3,7 @@ package com.hhst.youtubelite.playlist
 import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.playlist.data.*
 import com.hhst.youtubelite.playlist.domain.*
+import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.playlist.presentation.PlaylistViewModel
 import com.hhst.youtubelite.share.PlaylistShare
 import kotlinx.coroutines.*
@@ -130,5 +131,101 @@ class PlaylistViewModelTest {
         assertNull(PlaylistShare.urlFor("movies"))
         assertNull(PlaylistShare.urlFor("${FixturePlaylistRepository.MOVIES}&x=1"))
         assertNull(PlaylistShare.urlFor("PL"))
+    }
+
+    private class PagedRepository(
+        private val failAppend: Boolean = false,
+        private val loopCursor: Boolean = false,
+    ) : PlaylistRepository {
+        var nextCalls = 0
+        val page1 = listOf(
+            PlaylistEntry("a1", "video-a", "A", "Owner", "", "art", "1:00", "", ""),
+            PlaylistEntry("b1", "video-b", "B", "Owner", "", "art", "2:00", "", ""))
+        private val page2 = listOf(
+            PlaylistEntry("c1", "video-c", "C", "Owner", "", "art", "3:00", "", ""),
+            PlaylistEntry("b1", "video-b", "B (repeat)", "Owner", "", "art", "2:00", "", ""),
+            PlaylistEntry("d1", "video-d", "D", "Owner", "", "art", "4:00", "", ""))
+        override suspend fun playlist(id: String) =
+            PlaylistPage(PlaylistSummary(id, "Paged", "Owner", "", null, "art", "", 0), "", page1, "cursor-1")
+        override suspend fun playlistNext(id: String, cursor: String): PlaylistAppendPage {
+            nextCalls++
+            if (failAppend) error("append offline")
+            delay(100)
+            if (loopCursor) return PlaylistAppendPage(page2.take(1), cursor) // never progresses
+            return PlaylistAppendPage(page2, null)
+        }
+    }
+
+    @Test fun playlistAppendsIncrementallyAndKeepsRowsOnFailure() = runTest {
+        val repo = PagedRepository()
+        val model = PlaylistViewModel(repo, SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        val ready = model.uiState.value.content as PlaylistContent.Ready
+        assertEquals(2, ready.page.entries.size)
+        assertEquals("cursor-1", ready.page.nextKey)
+        model.onAction(PlaylistAction.LoadNext)
+        advanceUntilIdle()
+        val appended = model.uiState.value.content as PlaylistContent.Ready
+        assertEquals(4, appended.page.entries.size) // duplicate video-b merges
+        assertNull(appended.page.nextKey)
+        assertEquals(AppendState.Idle, model.uiState.value.append)
+        // A failed append keeps the loaded rows and offers a retry.
+        val broken = PlaylistViewModel(PagedRepository(failAppend = true), SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        broken.onAction(PlaylistAction.LoadNext)
+        advanceUntilIdle()
+        assertEquals(2, ((broken.uiState.value.content as PlaylistContent.Ready).page.entries.size))
+        assertEquals(AppendState.Failed, broken.uiState.value.append)
+    }
+
+    @Test fun playAllEnumeratesTheFullPlaylistBeforeQueueing() = runTest {
+        val model = PlaylistViewModel(PagedRepository(), SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        model.onAction(PlaylistAction.PlayAll)
+        runCurrent()
+        assertEquals(PlaylistEnumeration.Running(2, null), model.uiState.value.enumeration)
+        advanceUntilIdle()
+        val request = model.navigationRequests.first()
+        assertEquals(PlaylistNavigationRequest.Queue(FixturePlaylistRepository.MOVIES,
+            listOf("video-a", "video-b", "video-c", "video-d"), false), request)
+        assertEquals(PlaylistEnumeration.Idle, model.uiState.value.enumeration)
+        // The loaded count is the whole truth only after enumeration completed.
+        val page = (model.uiState.value.content as PlaylistContent.Ready).page
+        assertEquals(4, page.summary.videoCount)
+        assertNull(page.nextKey)
+    }
+
+    @Test fun failedEnumerationRefusesToQueueAPartialList() = runTest {
+        val model = PlaylistViewModel(PagedRepository(failAppend = true), SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        model.onAction(PlaylistAction.PlayAll)
+        advanceUntilIdle()
+        assertEquals(PlaylistEnumeration.Failed, model.uiState.value.enumeration)
+        assertNull(withTimeoutOrNull(1) { model.navigationRequests.first() })
+        assertEquals(2, (model.uiState.value.content as PlaylistContent.Ready).page.entries.size)
+    }
+
+    @Test fun enumerationCanBeCancelledAndNeverRunsTheAction() = runTest {
+        val model = PlaylistViewModel(PagedRepository(), SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        model.onAction(PlaylistAction.PlayAll)
+        runCurrent()
+        assertTrue(model.uiState.value.enumeration is PlaylistEnumeration.Running)
+        model.onAction(PlaylistAction.CancelEnumeration)
+        advanceUntilIdle()
+        assertEquals(PlaylistEnumeration.Idle, model.uiState.value.enumeration)
+        assertNull(withTimeoutOrNull(1) { model.navigationRequests.first() })
+    }
+
+    @Test fun aRepeatingCursorEndsTheEnumerationInsteadOfLooping() = runTest {
+        val repo = PagedRepository(loopCursor = true)
+        val model = PlaylistViewModel(repo, SavedStateHandle(), FixturePlaylistRepository.MOVIES)
+        advanceUntilIdle()
+        model.onAction(PlaylistAction.PlayAll)
+        advanceUntilIdle()
+        assertEquals(1, repo.nextCalls) // a repeated cursor ends the walk; no infinite loop
+        assertEquals(PlaylistNavigationRequest.Queue(FixturePlaylistRepository.MOVIES,
+            listOf("video-a", "video-b", "video-c"), false), model.navigationRequests.first())
+        assertNull((model.uiState.value.content as PlaylistContent.Ready).page.nextKey)
     }
 }

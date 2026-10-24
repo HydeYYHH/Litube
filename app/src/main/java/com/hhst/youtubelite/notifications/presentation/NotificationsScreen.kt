@@ -41,7 +41,12 @@ fun NotificationsScreen(state: NotificationsUiState, onAction: (NotificationsAct
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 NotificationsContent.Loading -> LibrarySkeleton("notifications-skeleton")
-                NotificationsContent.Failed -> NotificationsError { onAction(NotificationsAction.Retry) }
+                NotificationsContent.Failed -> if (state.verification != null) VerificationCard(
+                    state.verification,
+                    onVerify = { onAction(NotificationsAction.OpenVerification(state.verification!!.challengeUrl)) },
+                    onDismiss = { onAction(NotificationsAction.DismissVerification) },
+                    modifier = Modifier.testTag("notifications-verification"),
+                ) else NotificationsError { onAction(NotificationsAction.Retry) }
                 is NotificationsContent.SignedOut -> LibraryMessageCard(
                     content.prompt.title, content.prompt.message, "notifications-signed-out",
                 ) { PillButton(content.prompt.action) { onAction(NotificationsAction.SignIn) } }

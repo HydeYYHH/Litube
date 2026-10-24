@@ -97,18 +97,34 @@ fun ChannelScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (val content = state.content) {
                         ChannelContent.Loading -> ChannelSkeleton(width)
-                        ChannelContent.Failed -> ChannelFailed(onAction)
+                        ChannelContent.Failed -> if (state.verification != null) VerificationCard(
+                            state.verification,
+                            onVerify = { onAction(ChannelAction.OpenVerification(state.verification!!.challengeUrl)) },
+                            onDismiss = { onAction(ChannelAction.DismissVerification) },
+                            modifier = Modifier.testTag("channel-verification"),
+                        ) else ChannelFailed(onAction)
                         is ChannelContent.Ready -> when (state.selectedTab) {
-                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction, state.searchResults)
+                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction,
+                                state.searchResults, canPage = state.searchNextKey != null, append = state.searchAppend)
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
                             ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
-                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction, production = state.production)
-                            ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction)
+                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction,
+                                production = state.production, canPage = state.shortsNextKey != null, append = state.shortsAppend)
+                            ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction,
+                                canPage = state.liveNextKey != null, append = state.liveAppend)
                             ChannelTab.Posts -> postState.SaveableStateProvider(state.channelId) {
-                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction, production = state.production)
+                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction,
+                                    production = state.production, canPage = state.postsNextKey != null, append = state.postsAppend)
                             }
                             else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend)
                         }
+                    }
+                    state.verification?.let { challenge ->
+                        VerificationBanner(challenge,
+                            onVerify = { onAction(ChannelAction.OpenVerification(challenge.challengeUrl)) },
+                            onDismiss = { onAction(ChannelAction.DismissVerification) },
+                            modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("channel-verification-banner"))
                     }
                 }
                 ChannelNavigationBar(onAction)
@@ -126,10 +142,13 @@ fun ChannelScreen(
 private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, state: LazyListState,
     sort: ChannelPlaylistSort, onAction: (ChannelAction) -> Unit) {
     val viewport = rememberUpdatedState(width)
+    // "Last video added" only exists when the source carries update dates; otherwise the
+    // control would present server order as a sort it cannot perform.
+    val canSortByUpdate = page.playlists.any { it.updatedDays != null }
     LazyColumn(Modifier.fillMaxSize().testTag("channel-playlists-list"), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ChannelHeader(page, viewport.value, onAction) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Playlists, onAction) }
-        item {
+        if (canSortByUpdate) item {
             val fieldHeight = maxOf(50.dp, with(androidx.compose.ui.platform.LocalDensity.current) { 14.sp.toDp() } + 28.dp)
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp).horizontalScroll(rememberScrollState())) {
                 SelectField("channel-playlist-sort", sort, ChannelPlaylistSort.entries, { it.label }, 176f, fieldHeight) {
@@ -142,7 +161,7 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
         if (page.playlists.isEmpty()) item {
             AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
         }
-        val playlists = if (sort == ChannelPlaylistSort.LastVideo) page.playlists.sortedBy { it.updatedDays } else page.playlists
+        val playlists = if (sort == ChannelPlaylistSort.LastVideo) page.playlists.sortedBy { it.updatedDays ?: Int.MAX_VALUE } else page.playlists
         items(playlists, key = { it.id }) { playlist ->
             com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
                 { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },

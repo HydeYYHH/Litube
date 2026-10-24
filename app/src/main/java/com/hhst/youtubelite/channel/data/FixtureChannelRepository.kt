@@ -7,8 +7,10 @@ import com.hhst.youtubelite.channel.domain.ChannelPage
 import com.hhst.youtubelite.channel.domain.ChannelProfile
 import com.hhst.youtubelite.channel.domain.ChannelRepository
 import com.hhst.youtubelite.channel.domain.ChannelShort
+import com.hhst.youtubelite.channel.domain.ChannelShortsPage
 import com.hhst.youtubelite.channel.domain.ChannelVideo
 import com.hhst.youtubelite.post.data.FixturePostRepository
+import com.hhst.youtubelite.post.domain.ChannelPostsPage
 import com.hhst.youtubelite.post.domain.PostSummary
 import kotlinx.coroutines.delay
 
@@ -21,11 +23,11 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
         return samplePage(channelId)
     }
 
-    override suspend fun shorts(channelId: String): List<ChannelShort> {
+    override suspend fun shorts(channelId: String): ChannelShortsPage {
         delay(160)
         if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
-        if (scenario == ChannelScenario.Empty) return emptyList()
-        return sampleShorts()
+        if (scenario == ChannelScenario.Empty) return ChannelShortsPage(emptyList())
+        return ChannelShortsPage(sampleShorts())
     }
 
     override suspend fun live(channelId: String): ChannelLivePage {
@@ -35,11 +37,11 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
         return sampleLive()
     }
 
-    override suspend fun posts(channelId: String): List<PostSummary> {
+    override suspend fun posts(channelId: String): ChannelPostsPage {
         delay(160)
         if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
-        if (scenario == ChannelScenario.Empty) return emptyList()
-        return FixturePostRepository.samplePosts(channelId)
+        if (scenario == ChannelScenario.Empty) return ChannelPostsPage(emptyList())
+        return ChannelPostsPage(FixturePostRepository.samplePosts(channelId))
     }
 
     companion object {

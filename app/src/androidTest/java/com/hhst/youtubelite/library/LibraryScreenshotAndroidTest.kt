@@ -78,8 +78,7 @@ class LibraryScreenshotAndroidTest {
                     if (history == HistoryUiState() && playlists == CollectionUiState()) YouScreen(you, {})
                     if (history != HistoryUiState()) HistoryScreen(history, {}, {})
                     if (playlists != CollectionUiState()) {
-                        val lists = (playlists.content as? CollectionContent.Ready)?.playlists ?: emptyList()
-                        CollectionScreen(playlists, lists, {}, {})
+                        CollectionScreen(playlists, {}, {})
                     }
                 }
                 }
@@ -124,10 +123,12 @@ class LibraryScreenshotAndroidTest {
             }
         }
         // nextKey stays null so the append row never enters the golden frames.
+        // The channel list now rides its own state; the goldens keep the same measured rows.
+        val channels = SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels())
         val feed = SubscriptionsContent.Feed(
-            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), FixtureSubscriptionsRepository.channels()))
+            SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList()))
         for ((w, h) in listOf(390 to 844, 1280 to 800)) {
-            compose.runOnIdle { width = w; height = h; subscriptions = SubscriptionsUiState(signedIn = true, content = feed); notifications = NotificationsUiState() }
+            compose.runOnIdle { width = w; height = h; subscriptions = SubscriptionsUiState(signedIn = true, content = feed, channels = channels); notifications = NotificationsUiState() }
             compose.waitForIdle()
             capture("subscriptions-$w", "subscriptions-screen", output, record, goldens)
             compose.runOnIdle { subscriptions = subscriptions.copy(overlay = SubscriptionsOverlay.Channels) }

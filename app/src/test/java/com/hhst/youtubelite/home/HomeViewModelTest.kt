@@ -56,6 +56,49 @@ class HomeViewModelTest {
             .forEach { (width, count) -> assertEquals("width=$width", count, HomeLayout.shortsColumns(width)) }
     }
 
+    @Test fun coldStartPaintsTheCapturedSnapshotAndTheLiveLoadReplacesIt() = runTest {
+        val dir = java.nio.file.Files.createTempDirectory("content-snapshots").toFile()
+        val store = com.hhst.youtubelite.core.ContentSnapshots(dir, com.google.gson.Gson())
+        store.write("home", "visitor", "All", listOf(
+            FeedItem.Video("cached-1", "Cached", "Blender", "1K views", "bunny", "9:56", "blender")))
+        val vm = HomeViewModel(repository { _, _ ->
+            HomePage(listOf(FeedItem.Video("live-1", "Live", "Blender", "2K views", "bunny", "9:56", "blender")))
+        }, SavedStateHandle(), snapshots = store)
+        // The snapshot paints before any request; it carries no cursor and no live claim.
+        val seeded = vm.uiState.value.content as HomeContent.Feed
+        assertEquals(listOf("cached-1"), seeded.page.items.map { it.id })
+        assertTrue(seeded.refreshing)
+        assertNull(seeded.page.nextKey)
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        val live = vm.uiState.value.content as HomeContent.Feed
+        assertEquals(listOf("live-1"), live.page.items.map { it.id })
+        assertEquals(listOf("live-1"), store.read<FeedItem.Video>("home", "visitor", "All",
+            com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type
+        )!!.map { it.id })
+        dir.deleteRecursively()
+    }
+
+    @Test fun appendedShelvesKeepTheirIdentityAndSplitRailsMerge() = runTest {
+        fun rail(id: String, videoId: String) = FeedItem.Shorts(id, listOf(
+            FeedItem.Video(videoId, videoId, "Blender", "1K views", "bunny", "0:30", "blender")))
+        fun row(id: String) = FeedItem.Video(id, id, "Blender", "1K views", "bunny", "9:56", "blender")
+        var appended = false
+        val vm = HomeViewModel(repository { _, _ ->
+            if (appended) HomePage(listOf(rail("shorts-a2", "a2"), row("v2"), rail("shorts-c", "c1")))
+            else { appended = true; HomePage(listOf(row("v1"), rail("shorts-a", "a1")), nextKey = "page-2") }
+        }, SavedStateHandle())
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        vm.onAction(HomeAction.LoadNext)
+        advanceUntilIdle()
+        val items = (vm.uiState.value.content as HomeContent.Feed).page.items
+        // A rail continued across the boundary reads as one shelf; the later distinct
+        // shelf survives append deduplication instead of losing its row.
+        assertEquals(listOf("v1", "shorts-a", "v2", "shorts-c"), items.map { it.id })
+        assertEquals(listOf("a1", "a2"), (items[1] as FeedItem.Shorts).videos.map { it.id })
+    }
+
     private fun repository(block: suspend (String, String?) -> HomePage) = object : HomeRepository {
         override suspend fun loadHome(filter: String, continuation: String?) = block(filter, continuation)
     }

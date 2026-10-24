@@ -8,7 +8,8 @@ data class PlaylistSummary(
     val videoCount: Int?,
     val artwork: String,
     val views: String,
-    val updatedDays: Int,
+    /** Days since the last update; null when the source does not say. Never fabricate zero. */
+    val updatedDays: Int?,
     val accent: Long = 0xFF2D4F72,
     val videoCountText: String? = null,
 ) {
@@ -27,9 +28,31 @@ data class PlaylistEntry(
     val age: String,
 )
 
-data class PlaylistPage(val summary: PlaylistSummary, val description: String, val entries: List<PlaylistEntry>)
+data class PlaylistPage(val summary: PlaylistSummary, val description: String, val entries: List<PlaylistEntry>,
+    /** Server continuation for the next entry page; null when the list ended or is unknown. */
+    val nextKey: String? = null)
 
-interface PlaylistRepository { suspend fun playlist(id: String): PlaylistPage? }
+/** One appended server page of playlist entries. */
+data class PlaylistAppendPage(val entries: List<PlaylistEntry>, val nextKey: String?)
+
+object PlaylistLimits {
+    /** YouTube's own playlist browse cap; enumeration stops here and says so. */
+    const val MAX_ENTRIES = 1000
+}
+
+/** A bounded full enumeration behind Play all/Shuffle/batch download; cancelled with its job. */
+sealed interface PlaylistEnumeration {
+    data object Idle : PlaylistEnumeration
+    data class Running(val loaded: Int, val total: Int?) : PlaylistEnumeration
+    data object Failed : PlaylistEnumeration
+}
+
+interface PlaylistRepository {
+    suspend fun playlist(id: String): PlaylistPage?
+
+    /** Further entries after [cursor]; null cursor on the response means the list ended. */
+    suspend fun playlistNext(id: String, cursor: String): PlaylistAppendPage? = null
+}
 
 sealed interface PlaylistContent {
     data object Loading : PlaylistContent
@@ -48,15 +71,26 @@ sealed interface PlaylistOverlay {
 data class PlaylistUiState(
     val playlistId: String,
     val content: PlaylistContent = PlaylistContent.Loading,
+    /** Independent append state for the entries list; a failed append keeps loaded rows. */
+    val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    /** Full enumeration behind the batch actions (Play all, Shuffle, Download). */
+    val enumeration: PlaylistEnumeration = PlaylistEnumeration.Idle,
     val overlay: PlaylistOverlay = PlaylistOverlay.None,
     val query: String = "",
     val descriptionExpanded: Boolean = false,
-)
+    /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
+) {
+    val nextKey: String? get() = (content as? PlaylistContent.Ready)?.page?.nextKey
+}
 
 enum class PlaylistDestination { Home, Shorts, You }
 
 sealed interface PlaylistAction {
     data object Retry : PlaylistAction
+    data object LoadNext : PlaylistAction
+    data object CancelEnumeration : PlaylistAction
+    data object RetryEnumeration : PlaylistAction
     data object OpenSearch : PlaylistAction
     data class QueryChanged(val query: String) : PlaylistAction
     data class Search(val query: String) : PlaylistAction
@@ -74,6 +108,8 @@ sealed interface PlaylistAction {
     data class Destination(val destination: PlaylistDestination) : PlaylistAction
     data object VoiceSearch : PlaylistAction
     data object Download : PlaylistAction
+    data object DismissVerification : PlaylistAction
+    data class OpenVerification(val challengeUrl: String) : PlaylistAction
 }
 
 enum class PlaylistVideoAction(val label: String) {
@@ -89,6 +125,7 @@ sealed interface PlaylistNavigationRequest {
     data class Queue(val playlistId: String, val videoIds: List<String>, val shuffle: Boolean) : PlaylistNavigationRequest
     data class VideoAction(val playlistId: String, val entryId: String, val videoId: String, val action: PlaylistVideoAction) : PlaylistNavigationRequest
     data class Destination(val destination: PlaylistDestination) : PlaylistNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : PlaylistNavigationRequest
     data object VoiceSearch : PlaylistNavigationRequest
     data class Download(val playlistId: String) : PlaylistNavigationRequest
 }

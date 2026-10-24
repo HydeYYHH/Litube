@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.channel.data.*
 import com.hhst.youtubelite.channel.domain.*
 import com.hhst.youtubelite.channel.presentation.ChannelViewModel
+import com.hhst.youtubelite.post.domain.ChannelPostsPage
 import com.hhst.youtubelite.post.domain.PostSummary
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -21,9 +22,31 @@ class ChannelViewModelTest {
 
     private fun repository(block: suspend (String) -> ChannelPage) = object : ChannelRepository {
         override suspend fun channel(channelId: String) = block(channelId)
-        override suspend fun shorts(channelId: String) = emptyList<ChannelShort>()
+        override suspend fun shorts(channelId: String) = ChannelShortsPage(emptyList())
         override suspend fun live(channelId: String) = ChannelLivePage()
-        override suspend fun posts(channelId: String) = emptyList<PostSummary>()
+        override suspend fun posts(channelId: String) = ChannelPostsPage(emptyList())
+    }
+
+    @Test fun appendedShortsPagesRenumberLoadedOrderForLocalSorts() = runTest {
+        val base = FixtureChannelRepository()
+        val repository = object : ChannelRepository by base {
+            override suspend fun shorts(channelId: String) = ChannelShortsPage(listOf(
+                ChannelShort("s1", "One", "1K views", "a", order = 0),
+                ChannelShort("s2", "Two", "2K views", "b", order = 1)), nextKey = "shorts-2")
+            override suspend fun shortsNext(channelId: String, cursor: String) = ChannelShortsPage(listOf(
+                ChannelShort("s3", "Three", "3K views", "c", order = 0),
+                ChannelShort("s4", "Four", "4K views", "d", order = 1)))
+        }
+        val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Shorts))
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.LoadShortsNext)
+        advanceUntilIdle()
+        val shorts = (vm.uiState.value.shorts as ChannelSection.Ready).value
+        assertEquals(listOf("s1", "s2", "s3", "s4"), shorts.map { it.id })
+        // Page-local indices restart at zero; the merged list must read as one loaded sequence.
+        assertEquals(listOf(0, 1, 2, 3), shorts.map { it.order })
     }
 
     @Test fun restoredServerSearchLoadsTheSubmittedQueryAndKeepsTheDraft() = runTest {
@@ -31,9 +54,9 @@ class ChannelViewModelTest {
         var searched: String? = null
         val repository = object : ChannelRepository by base {
             override val serverSearch = true
-            override suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> {
+            override suspend fun searchVideos(channelId: String, query: String): ChannelSearchResults {
                 searched = query
-                return base.channel(channelId).videos.take(1)
+                return ChannelSearchResults(base.channel(channelId).videos.take(1))
             }
         }
         val vm = ChannelViewModel(repository, SavedStateHandle(mapOf(
@@ -197,12 +220,12 @@ class ChannelViewModelTest {
                 banner = null, subscribers = "30M subscribers", description = "Studio.", subscribed = false),
             listOf(ChannelVideo("v1", "First", "1K views", "1 day", "1:00", "")),
             videosNextKey = "page-2")
-        override suspend fun shorts(channelId: String) = emptyList<ChannelShort>()
+        override suspend fun shorts(channelId: String) = ChannelShortsPage(emptyList())
         override suspend fun live(channelId: String) = ChannelLivePage()
-        override suspend fun posts(channelId: String) = emptyList<PostSummary>()
-        override suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> {
+        override suspend fun posts(channelId: String) = ChannelPostsPage(emptyList())
+        override suspend fun searchVideos(channelId: String, query: String): ChannelSearchResults {
             searches += query
-            return listOf(ChannelVideo("sv1", "Server hit", "2K views", "2 days", "2:00", ""))
+            return ChannelSearchResults(listOf(ChannelVideo("sv1", "Server hit", "2K views", "2 days", "2:00", "")))
         }
         override suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage {
             videoRequests += continuation

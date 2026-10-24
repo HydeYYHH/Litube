@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -74,7 +75,10 @@ object DesignTokens {
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     val darkTheme = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark ?: androidx.compose.foundation.isSystemInDarkTheme()
-    CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppPalette else LightAppPalette) {
+    val context = LocalContext.current
+    val motion = remember { readMotionScale(context.contentResolver) }
+    CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppPalette else LightAppPalette,
+        LocalMotionScale provides motion) {
         com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = darkTheme) { content() }
     }
 }

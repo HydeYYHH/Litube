@@ -14,8 +14,9 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.editPlaylist
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadPlaylistChoices
 import com.liskovsoft.youtubeapi.videoinfo.V2.savePlaylist
 
-class MediaSaveRepository(private val client: MediaClient) : SaveRepository {
-    override suspend fun choices(videoId: String): List<SaveChoice> = try {
+class MediaSaveRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : SaveRepository {
+    override suspend fun choices(videoId: String): List<SaveChoice> = if (!MediaSession.signedIn() && local != null)
+        device { it.choices(videoId) } else try {
         client.read { context, http ->
             if (!context.signedIn) throw SignInRequiredException()
             loadPlaylistChoices(videoId, context, http).requireValue()
@@ -27,6 +28,11 @@ class MediaSaveRepository(private val client: MediaClient) : SaveRepository {
     }
 
     override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {
+        if (!MediaSession.signedIn() && local != null) {
+            val generation = MediaSession.snapshot().generation
+            val video = localVideo(videoId)
+            return device(generation) { it.setContaining(playlistId, video, contains) }
+        }
         write { context, http ->
             editPlaylist(playlistId,
                 listOf(if (contains) PlaylistChange.Add(videoId) else PlaylistChange.RemoveByVideoId(videoId)),
@@ -35,6 +41,7 @@ class MediaSaveRepository(private val client: MediaClient) : SaveRepository {
     }
 
     override suspend fun saveWatchLater(videoId: String) {
+        if (!MediaSession.signedIn() && local != null) return setContaining(LocalLibraryStore.WATCH_LATER, videoId, true)
         write { context, http -> editPlaylist("WL", listOf(PlaylistChange.Add(videoId)), context, http).requireValue().action }
     }
 
@@ -43,6 +50,11 @@ class MediaSaveRepository(private val client: MediaClient) : SaveRepository {
     }
 
     override suspend fun create(title: String, description: String, videoId: String): SaveChoice {
+        if (!MediaSession.signedIn() && local != null) {
+            val generation = MediaSession.snapshot().generation
+            val video = localVideo(videoId)
+            return device(generation) { it.create(title, description, video) }
+        }
         var created: SaveChoice? = null
         write { context, http ->
             val reply = createPlaylist(title, videoId, context, description.ifBlank { null }, http).requireValue()
@@ -51,6 +63,23 @@ class MediaSaveRepository(private val client: MediaClient) : SaveRepository {
             reply.action
         }
         return created!!
+    }
+
+    private suspend fun <T> device(generation: Long = MediaSession.snapshot().generation, block: (LocalLibraryStore) -> T): T =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            MediaSession.withAnonymousSession(generation) { block(requireNotNull(local)) }
+        }
+
+    private suspend fun localVideo(id: String): com.hhst.youtubelite.library.domain.HistoryEntry {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            local?.history()?.entries?.firstOrNull { it.videoId == id }
+        }?.let { return it }
+        return client.read { context, http ->
+            val page = com.liskovsoft.youtubeapi.videoinfo.V2.loadWatch(id, context, http = http).requireValue()
+            val title = page.title?.takeIf { it.isNotBlank() } ?: throw UnconfirmedActionException()
+            com.hhst.youtubelite.library.domain.HistoryEntry(id, id, title, page.author.orEmpty(), page.channelId.orEmpty(),
+                "https://i.ytimg.com/vi/$id/hqdefault.jpg", "", section = "On this device")
+        }
     }
 
     private suspend fun write(block: (RequestContext, HttpClient) -> ActionReply) {

@@ -84,7 +84,12 @@ fun SearchResultsScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (val content = state.content) {
                         SearchContent.Loading -> SearchSkeleton(width, height)
-                        SearchContent.Failed -> SearchFailed(onAction)
+                        SearchContent.Failed -> if (state.verification != null) VerificationCard(
+                            state.verification,
+                            onVerify = { onAction(SearchAction.OpenVerification(state.verification!!.challengeUrl)) },
+                            onDismiss = { onAction(SearchAction.DismissVerification) },
+                            modifier = Modifier.testTag("search-verification"),
+                        ) else SearchFailed(onAction)
                         is SearchContent.Empty -> SearchNoResults(content.query, state.filters.type)
                         is SearchContent.Results -> if (state.filters.type == SearchResultType.Playlists)
                             com.hhst.youtubelite.playlist.presentation.PlaylistSearchList(content.page.playlists, width, height, listState,
@@ -95,6 +100,13 @@ fun SearchResultsScreen(
                             else if (state.filters.type == SearchResultType.Shorts)
                                 ShortsResultsList(content.page.shorts, shortsState, onAction, footer)
                             else SearchList(content.page.results, width, height, listState, onAction, footer)
+                    }
+                    state.verification?.let { challenge ->
+                        VerificationBanner(challenge,
+                            onVerify = { onAction(SearchAction.OpenVerification(challenge.challengeUrl)) },
+                            onDismiss = { onAction(SearchAction.DismissVerification) },
+                            modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("search-verification-banner"))
                     }
                 }
                 SearchNavigationBar(state.signedInPreview, onAction)

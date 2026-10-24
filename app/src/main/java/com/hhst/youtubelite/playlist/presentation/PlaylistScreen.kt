@@ -63,21 +63,46 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                     when (val content = state.content) {
                         PlaylistContent.Loading -> PlaylistSkeleton(width)
                         PlaylistContent.Unavailable -> PlaylistMessage("playlist-unavailable", "This playlist isn't available")
-                        PlaylistContent.Failed -> PlaylistMessage("playlist-error", "Something went wrong") {
+                        PlaylistContent.Failed -> if (state.verification != null) VerificationCard(
+                            state.verification,
+                            onVerify = { onAction(PlaylistAction.OpenVerification(state.verification!!.challengeUrl)) },
+                            onDismiss = { onAction(PlaylistAction.DismissVerification) },
+                            modifier = Modifier.testTag("playlist-verification"),
+                        ) else PlaylistMessage("playlist-error", "Something went wrong") {
                             AppText("Retry", Modifier.padding(top = 16.dp).clip(CircleShape).background(DesignTokens.Surface)
                                 .clickable { onAction(PlaylistAction.Retry) }.padding(horizontal = 20.dp, vertical = 10.dp), weight = FontWeight.Medium)
                         }
-                        is PlaylistContent.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("playlist-list"), state = listState,
-                            contentPadding = PaddingValues(bottom = 16.dp)) {
-                            item(key = "header") {
-                                val w = viewport.value
-                                PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
+                        is PlaylistContent.Ready -> {
+                            val nearEnd by remember(content) { derivedStateOf {
+                                (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= content.page.entries.size - 2
+                            } }
+                            androidx.compose.runtime.LaunchedEffect(nearEnd, content.page.nextKey, state.append) {
+                                if (nearEnd && content.page.nextKey != null && state.append == com.hhst.youtubelite.home.domain.AppendState.Idle) {
+                                    onAction(PlaylistAction.LoadNext)
+                                }
                             }
-                            if (content.page.entries.isEmpty()) item {
-                                AppText("No videos in this playlist yet", Modifier.fillMaxWidth().padding(24.dp).testTag("playlist-empty"),
-                                    color = DesignTokens.Secondary, align = TextAlign.Center)
+                            LazyColumn(Modifier.fillMaxSize().testTag("playlist-list"), state = listState,
+                                contentPadding = PaddingValues(bottom = 16.dp)) {
+                                item(key = "header") {
+                                    val w = viewport.value
+                                    PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
+                                }
+                                if (content.page.entries.isEmpty()) item {
+                                    AppText("No videos in this playlist yet", Modifier.fillMaxWidth().padding(24.dp).testTag("playlist-empty"),
+                                        color = DesignTokens.Secondary, align = TextAlign.Center)
+                                }
+                                items(content.page.entries, key = { it.id }) { entry -> PlaylistVideoRow(entry, onAction) }
+                                item(key = "append") {
+                                    PlaylistAppendRow(state, onAction)
+                                }
                             }
-                            items(content.page.entries, key = { it.id }) { entry -> PlaylistVideoRow(entry, onAction) }
+                            state.verification?.let { challenge ->
+                                VerificationBanner(challenge,
+                                    onVerify = { onAction(PlaylistAction.OpenVerification(challenge.challengeUrl)) },
+                                    onDismiss = { onAction(PlaylistAction.DismissVerification) },
+                                    modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .testTag("playlist-verification-banner"))
+                            }
                         }
                     }
                 }
@@ -244,9 +269,44 @@ private fun PlaylistVideoRow(entry: PlaylistEntry, onAction: (PlaylistAction) ->
     }
 }
 
+/** Tail row of the entries list: append state plus the batch-action enumeration progress. */
 @Composable
-private fun PlaylistNavigation(onAction: (PlaylistAction) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(DesignTokens.Background)) {
+private fun PlaylistAppendRow(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit) {
+    when {
+        state.enumeration is PlaylistEnumeration.Running -> Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("playlist-enumeration"),
+            verticalAlignment = Alignment.CenterVertically) {
+            com.hhst.youtubelite.home.presentation.LoadingSpinner()
+            AppText("Loading full playlist… ${state.enumeration.loaded} loaded", Modifier.weight(1f).padding(start = 12.dp),
+                size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText("Cancel", Modifier.clip(CircleShape).clickable(role = Role.Button) { onAction(PlaylistAction.CancelEnumeration) }
+                .padding(horizontal = 12.dp, vertical = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)
+        }
+        state.enumeration is PlaylistEnumeration.Failed -> Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("playlist-enumeration-failed"),
+            verticalAlignment = Alignment.CenterVertically) {
+            AppText("Couldn't load the full playlist.", Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText("Retry", Modifier.clip(CircleShape).clickable(role = Role.Button) { onAction(PlaylistAction.RetryEnumeration) }
+                .padding(horizontal = 12.dp, vertical = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)
+        }
+        state.append == com.hhst.youtubelite.home.domain.AppendState.Loading -> Row(
+            Modifier.fillMaxWidth().padding(top = 12.dp).testTag("playlist-append-loading"),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            com.hhst.youtubelite.home.presentation.LoadingSpinner()
+        }
+        state.append == com.hhst.youtubelite.home.domain.AppendState.Failed -> Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("playlist-append-failed"),
+            verticalAlignment = Alignment.CenterVertically) {
+            AppText("Couldn't load more entries.", Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText("Retry", Modifier.clip(CircleShape).clickable(role = Role.Button) { onAction(PlaylistAction.LoadNext) }
+                .padding(horizontal = 12.dp, vertical = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)
+        }
+        else -> Spacer(Modifier.height(1.dp))
+    }
+}
+
+@Composable
+private fun PlaylistNavigation(onAction: (PlaylistAction) -> Unit) {    Column(Modifier.fillMaxWidth().background(DesignTokens.Background)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(56.dp)) {
             listOf(PlaylistDestination.Home to AppIcon.HomeOutline, PlaylistDestination.Shorts to AppIcon.Shorts, PlaylistDestination.You to AppIcon.You).forEach { (destination, icon) ->

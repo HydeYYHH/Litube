@@ -36,6 +36,14 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: PlaylistNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) playlistViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     private var downloadPending = false
 
@@ -92,7 +100,7 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                                                                 val player = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.player.PlayerViewModel>()
                                 player.startPlaylist(entries.map { com.hhst.youtubelite.player.QueueItem(it.videoId, title = it.title, author = it.channel) }, startId = request.videoId)
                             }
-                            startActivity(WatchActivity.intent(this@PlaylistActivity, request.videoId))
+                            launchNavigation(WatchActivity.intent(this@PlaylistActivity, request.videoId))
                         }
                         is PlaylistNavigationRequest.Queue -> {
                             val entries = (playlistViewModel.uiState.value.content as? PlaylistContent.Ready)?.page?.entries.orEmpty()
@@ -100,16 +108,19 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             selected.firstOrNull()?.let { first ->
                                 if (!fixtures) org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.player.PlayerViewModel>()
                                     .startPlaylist(selected.map { com.hhst.youtubelite.player.QueueItem(it.videoId, title = it.title, author = it.channel) })
-                                startActivity(WatchActivity.intent(this@PlaylistActivity, first.videoId))
+                                launchNavigation(WatchActivity.intent(this@PlaylistActivity, first.videoId))
                             }
                         }
-                        is PlaylistNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@PlaylistActivity, request.channelId))
-                        is PlaylistNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@PlaylistActivity, request.query))
+                        is PlaylistNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@PlaylistActivity, request.channelId))
+                        is PlaylistNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@PlaylistActivity, request.query))
+                        is PlaylistNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@PlaylistActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         PlaylistNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is PlaylistNavigationRequest.Download -> downloadPlaylist()
                         is PlaylistNavigationRequest.Share -> shareGateway.sharePlaylist(request.playlistId)
                         is PlaylistNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
+                            this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
                         // Fixture-only typed exits: production runs saves and per-video actions
                         // through the in-VM save sheet. No `else`: a new request type must fail
                         // to compile here.
@@ -177,6 +188,15 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(EXTRA_DOWNLOAD, downloadPending)
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            com.hhst.youtubelite.data.media.MediaSession.snapshot().let {
+                playlistViewModel.updateSession(it.signedIn, it.generation)
+            }
+        }
     }
 
     companion object {

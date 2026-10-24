@@ -2,6 +2,7 @@ package com.hhst.youtubelite.library
 
 import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.home.data.FixtureHomeRepository
+import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.library.data.*
 import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.library.presentation.CollectionViewModel
@@ -125,16 +126,100 @@ class LibraryViewModelTest {
         assertEquals("open movies", vm.uiState.value.query)
     }
 
+    @Test fun aFailedYouReadShowsFailureAndRetryRecovers() = runTest {
+        val repository = object : LibraryRepository {
+            var failHistory = true
+            override suspend fun you(): YouPage {
+                if (failHistory) throw java.io.IOException("history offline")
+                return YouPage(FixtureLibraryRepository.profile(), emptyList(), FixtureLibraryRepository.collections())
+            }
+            override suspend fun history() = error("unused")
+            override suspend fun playlists() = PlaylistCollectionPage(FixtureLibraryRepository.collections())
+        }
+        val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is LibraryContent.Failed)
+        // The repository assembles the sections: an account failure still fails the page,
+        // while MediaLibraryRepository isolates shelf failures into the YouPage flags.
+        repository.failHistory = false
+        vm.onAction(LibraryAction.Retry)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is LibraryContent.Ready)
+    }
+
+    @Test fun historyAppendsPagesAndKeepsRowsOnFailure() = runTest {
+        var failNext = true
+        val page1 = listOf(FixtureLibraryRepository.historyEntries().first())
+        val page2 = listOf(FixtureLibraryRepository.historyEntries().last())
+        val repository = object : LibraryRepository {
+            override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), page1, emptyList())
+            override suspend fun history() = HistoryPage(page1, "cursor-1")
+            override suspend fun playlists() = PlaylistCollectionPage(emptyList())
+            override suspend fun historyNext(cursor: String): HistoryPage {
+                if (failNext) throw java.io.IOException("offline")
+                return HistoryPage(page2, null)
+            }
+        }
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content)
+        advanceUntilIdle()
+        assertEquals(1, (vm.uiState.value.content as HistoryContent.Ready).page.entries.size)
+        vm.onAction(LibraryAction.LoadHistoryNext)
+        advanceUntilIdle()
+        assertEquals(AppendState.Failed, vm.uiState.value.append)
+        assertEquals(1, (vm.uiState.value.content as HistoryContent.Ready).page.entries.size)
+        failNext = false
+        vm.onAction(LibraryAction.LoadHistoryNext)
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as HistoryContent.Ready).page
+        assertEquals(2, page.entries.size)
+        assertNull(page.nextKey)
+        assertEquals(AppendState.Idle, vm.uiState.value.append)
+    }
+
+    @Test fun collectionAppendsPagesAndACountSwitchResets() = runTest {
+        val page1 = listOf(FixtureLibraryRepository.collections().first())
+        val page2 = listOf(FixtureLibraryRepository.collections().last())
+        val repository = object : LibraryRepository {
+            override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), emptyList(), emptyList())
+            override suspend fun history() = HistoryPage(emptyList())
+            override suspend fun playlists() = PlaylistCollectionPage(page1, "cursor-1")
+            override suspend fun playlistsNext(cursor: String) = PlaylistCollectionPage(page2, null)
+        }
+        val vm = CollectionViewModel(repository, SavedStateHandle(), LibraryScenario.Content)
+        advanceUntilIdle()
+        assertEquals(1, (vm.uiState.value.content as CollectionContent.Ready).playlists.size)
+        vm.onAction(LibraryAction.LoadCollectionNext)
+        advanceUntilIdle()
+        assertEquals(2, (vm.uiState.value.content as CollectionContent.Ready).playlists.size)
+        // A moved generation invalidates the account-scoped collection and reloads it.
+        vm.updateSession(true, 1) // First snapshot only establishes the key.
+        advanceUntilIdle()
+        vm.updateSession(true, 2)
+        advanceUntilIdle()
+        assertEquals(1, (vm.uiState.value.content as CollectionContent.Ready).playlists.size)
+        assertEquals(AppendState.Idle, vm.uiState.value.append)
+    }
+
+    @Test fun youPageReportsFailedShelvesWithoutFailingTheAccount() = runTest {
+        // Mirrors MediaLibraryRepository.you(): shelves fail independently of the account read.
+        val page = YouPage(FixtureLibraryRepository.profile(), emptyList(), FixtureLibraryRepository.collections(),
+            historyFailed = true, playlistsFailed = false)
+        assertTrue(page.historyFailed)
+        assertTrue(page.history.isEmpty())
+        assertFalse(page.playlistsFailed)
+        assertTrue(page.playlists.isNotEmpty())
+    }
+
     private fun repository(block: suspend (String) -> HistoryPage) = object : LibraryRepository {
         override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), block("history").entries, FixtureLibraryRepository.collections())
         override suspend fun history() = block("history")
-        override suspend fun playlists() = FixtureLibraryRepository.collections()
+        override suspend fun playlists() = PlaylistCollectionPage(FixtureLibraryRepository.collections())
     }
 
     private fun recordingRepository(loads: MutableList<String>) = object : LibraryRepository {
         override suspend fun you(): com.hhst.youtubelite.library.domain.YouPage { loads += "you"; return YouPage(FixtureLibraryRepository.profile(), emptyList(), emptyList()) }
         override suspend fun history(): HistoryPage { loads += "history"; return HistoryPage(emptyList()) }
-        override suspend fun playlists(): List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> { loads += "playlists"; return emptyList() }
+        override suspend fun playlists(): com.hhst.youtubelite.library.domain.PlaylistCollectionPage { loads += "playlists"; return com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList()) }
     }
 
     @Test fun submittedSearchAndOpenOverlayRestoreWithoutExposingSignedOutContent() = runTest {
@@ -162,7 +247,7 @@ class LibraryViewModelTest {
         var cleared = 0
         override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), entries, FixtureLibraryRepository.collections())
         override suspend fun history() = HistoryPage(entries)
-        override suspend fun playlists() = FixtureLibraryRepository.collections()
+        override suspend fun playlists() = PlaylistCollectionPage(FixtureLibraryRepository.collections())
         override suspend fun removeFromHistory(feedbackToken: String) {
             removeError?.let { throw it }
             removed += feedbackToken

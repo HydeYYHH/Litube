@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.home.domain.AppendState
 
 class PlaylistViewModel(
     private val repository: PlaylistRepository,
@@ -47,16 +48,47 @@ class PlaylistViewModel(
         com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
     }
     private var loadJob: Job? = null
+    private var appendJob: Job? = null
+    private var enumerationJob: Job? = null
     private var generation = 0
+    private var sessionKey: Long? = null
+
+    /** The batch action waiting for the full enumeration to finish. */
+    private var pendingBatch: PendingBatch? = null
+
+    private sealed interface PendingBatch { data class Queue(val shuffle: Boolean) : PendingBatch; data object Download : PendingBatch }
 
     init {
         savedState["playlistId"] = id
         if (scenario == PlaylistScenario.Content || scenario == PlaylistScenario.Empty) load()
     }
 
+    /**
+     * Playlists are account-scoped (Watch later, Liked videos, private lists): a moved
+     * generation invalidates the whole page, its overlays and the open save sheet.
+     */
+    fun updateSession(value: Boolean, key: Long? = null) {
+        val changed = key != null && sessionKey != null && sessionKey != key
+        sessionKey = key
+        if (!changed) return
+        ++generation
+        loadJob?.cancel()
+        appendJob?.cancel()
+        enumerationJob?.cancel()
+        pendingBatch = null
+        saveSheet?.close()
+        overlay(PlaylistOverlay.None)
+        load()
+    }
+
     fun onAction(action: PlaylistAction) {
         when (action) {
             PlaylistAction.Retry -> load()
+            PlaylistAction.DismissVerification -> state.update { it.copy(verification = null) }
+            is PlaylistAction.OpenVerification -> navigation.trySend(PlaylistNavigationRequest.OpenVerification(action.challengeUrl))
+            PlaylistAction.LoadNext -> loadNext()
+            PlaylistAction.CancelEnumeration -> cancelEnumeration()
+            PlaylistAction.RetryEnumeration -> pendingBatch?.let { runBatch(it) }
             PlaylistAction.OpenSearch -> overlay(PlaylistOverlay.Search)
             PlaylistAction.OpenMenu -> overlay(PlaylistOverlay.Menu)
             PlaylistAction.CloseOverlay -> overlay(PlaylistOverlay.None)
@@ -76,11 +108,11 @@ class PlaylistViewModel(
                 when (action) {
                     PlaylistAction.PlayAll, PlaylistAction.Shuffle -> {
                         overlay(PlaylistOverlay.None)
-                        if (page.entries.isNotEmpty()) send(PlaylistNavigationRequest.Queue(id, page.entries.map { it.videoId }, action == PlaylistAction.Shuffle))
+                        runBatch(PendingBatch.Queue(action == PlaylistAction.Shuffle))
                     }
                     PlaylistAction.Download -> {
                         overlay(PlaylistOverlay.None)
-                        send(PlaylistNavigationRequest.Download(id))
+                        runBatch(PendingBatch.Download)
                     }
                     PlaylistAction.Save -> if (saveSheet == null) send(PlaylistNavigationRequest.Save(id)) else {
                         overlay(PlaylistOverlay.None)
@@ -126,19 +158,140 @@ class PlaylistViewModel(
 
     private fun load() {
         loadJob?.cancel()
+        appendJob?.cancel()
+        enumerationJob?.cancel()
+        pendingBatch = null
         val current = ++generation
-        state.update { it.copy(content = PlaylistContent.Loading) }
+        state.update { it.copy(content = PlaylistContent.Loading, append = AppendState.Idle, enumeration = PlaylistEnumeration.Idle) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.playlist(id)
                 if (current != generation) return@launch
                 state.update { it.copy(content = page?.let(PlaylistContent::Ready) ?: PlaylistContent.Unavailable) }
             } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: com.hhst.youtubelite.data.media.MediaException) {
+                if (current == generation) state.update { it.copy(content = PlaylistContent.Failed,
+                    verification = com.hhst.youtubelite.core.trafficChallenge(error) ?: it.verification) }
+            }
             catch (_: Exception) {
                 if (current == generation) state.update { it.copy(content = PlaylistContent.Failed) }
             }
         }
     }
 
-    override fun onCleared() { navigation.close() }
+    /**
+     * The host reports the verification screen finished with RESULT_OK. The read
+     * retries once with the current identity — never automatically on another
+     * failure, so no request loop can form.
+     */
+    fun verificationCompleted(challengeUrl: String? = state.value.verification?.challengeUrl) {
+        if (challengeUrl == null || state.value.verification?.challengeUrl != challengeUrl) return
+        state.update { it.copy(verification = null) }
+        load()
+    }
+
+    /** Appends one server page; a failure keeps the loaded rows and offers a retry. */
+    private fun loadNext() {
+        val ready = state.value.content as? PlaylistContent.Ready ?: return
+        val cursor = ready.page.nextKey ?: return
+        if (state.value.append == AppendState.Loading || enumerationJob?.isActive == true) return
+        appendJob?.cancel()
+        val requestGeneration = generation
+        state.update { it.copy(append = AppendState.Loading) }
+        appendJob = viewModelScope.launch {
+            try {
+                val page = repository.playlistNext(id, cursor) ?: throw java.io.IOException("missing_append")
+                if (requestGeneration != generation) return@launch
+                state.update { current ->
+                    val existing = (current.content as? PlaylistContent.Ready)?.page ?: return@update current
+                    current.copy(content = PlaylistContent.Ready(existing.copy(
+                        entries = (existing.entries + page.entries).distinctBy { it.id },
+                        // A repeated cursor means the server stopped making progress; treat it as the end.
+                        nextKey = page.nextKey.takeUnless { it == cursor },
+                    )), append = AppendState.Idle)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) state.update { it.copy(append = AppendState.Failed) }
+            }
+        }
+    }
+
+    /**
+     * Batch actions keep their full-playlist semantics: when entries remain unloaded, a
+     * bounded, cancellable enumeration completes the list first. The action runs on the
+     * complete list or fails honestly — never on a silently truncated prefix.
+     */
+    private fun runBatch(action: PendingBatch) {
+        val ready = state.value.content as? PlaylistContent.Ready ?: return
+        if (ready.page.entries.isEmpty()) return
+        if (enumerationJob?.isActive == true) return
+        if (ready.page.nextKey == null) {
+            markComplete(ready.page.entries)
+            execute(action)
+            return
+        }
+        pendingBatch = action
+        val requestGeneration = generation
+        val base = ready.page
+        state.update { it.copy(enumeration = PlaylistEnumeration.Running(base.entries.size, null)) }
+        enumerationJob = viewModelScope.launch {
+            try {
+                var entries = base.entries
+                var cursor = base.nextKey
+                val seenCursors = mutableSetOf(cursor)
+                var capped = false
+                while (cursor != null) {
+                    if (entries.size >= PlaylistLimits.MAX_ENTRIES) { capped = true; break }
+                    val page = repository.playlistNext(id, cursor) ?: throw java.io.IOException("missing_append")
+                    if (requestGeneration != generation) return@launch
+                    entries = (entries + page.entries).distinctBy { it.id }
+                    val next = page.nextKey
+                    cursor = if (next == null || !seenCursors.add(next)) null else next
+                }
+                if (requestGeneration != generation) return@launch
+                markComplete(entries)
+                if (capped) notices.trySend(AppNotice.Message(
+                    "This playlist exceeds the ${PlaylistLimits.MAX_ENTRIES}-item limit; the action uses the first ${entries.size} entries."))
+                execute(pendingBatch)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) {
+                    state.update { it.copy(enumeration = PlaylistEnumeration.Failed) }
+                    notices.trySend(AppNotice.Message("Couldn't load the full playlist. Try again."))
+                }
+            }
+        }
+    }
+
+    /** Enumeration finished: the loaded count is now the whole truth. */
+    private fun markComplete(entries: List<PlaylistEntry>) {
+        state.update { current ->
+            val ready = (current.content as? PlaylistContent.Ready) ?: return@update current
+            current.copy(content = PlaylistContent.Ready(ready.page.copy(
+                entries = entries, summary = ready.page.summary.copy(videoCount = entries.size), nextKey = null)),
+                enumeration = PlaylistEnumeration.Idle)
+        }
+    }
+
+    private fun execute(action: PendingBatch?) {
+        val page = (state.value.content as? PlaylistContent.Ready)?.page ?: return
+        when (action) {
+            is PendingBatch.Queue -> if (page.entries.isNotEmpty())
+                send(PlaylistNavigationRequest.Queue(id, page.entries.map { it.videoId }.distinct(), action.shuffle))
+            PendingBatch.Download -> send(PlaylistNavigationRequest.Download(id))
+            null -> Unit
+        }
+        pendingBatch = null
+    }
+
+    private fun cancelEnumeration() {
+        pendingBatch = null
+        enumerationJob?.cancel()
+        state.update { it.copy(enumeration = PlaylistEnumeration.Idle) }
+    }
+
+    override fun onCleared() {
+        navigation.close()
+    }
 }

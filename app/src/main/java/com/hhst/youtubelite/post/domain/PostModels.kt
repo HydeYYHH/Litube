@@ -35,8 +35,14 @@ data class PostDetail(
 interface PostRepository {
     suspend fun post(identity: PostIdentity): PostDetail?
 
-    suspend fun channelPosts(channelId: String): List<PostSummary>
+    suspend fun channelPosts(channelId: String): ChannelPostsPage
+
+    /** Further posts after [cursor]; finite lists return an empty page. */
+    suspend fun channelPostsNext(channelId: String, cursor: String): ChannelPostsPage = ChannelPostsPage(emptyList())
 }
+
+/** One server page of a channel's community posts. */
+data class ChannelPostsPage(val posts: List<PostSummary>, val nextKey: String? = null)
 
 enum class PostMenuAction(val label: String) {
     Report("Report"),

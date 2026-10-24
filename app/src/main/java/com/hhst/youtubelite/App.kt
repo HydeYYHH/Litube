@@ -36,7 +36,10 @@ class App : Application(), Configuration.Provider {
         AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
         MMKV.initialize(this)
-        com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.MmkvAuthStore(this))
+        com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.MmkvAuthStore(this)) {
+            get<com.hhst.youtubelite.extension.ExtensionManager>()
+                .isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.PRIVATE_BROWSING)
+        }
         startKoin {
             androidLogger(Level.ERROR)
             androidContext(this@App)

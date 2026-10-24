@@ -194,17 +194,7 @@ fun TopBar(
                         onClick = onQueue,
                         iconSize = sizing.iconDp,
                     )
-                    Box {
-                        PlayerIconButton(
-                            icon = R.drawable.ic_segment,
-                            contentDescription = stringResource(R.string.segments),
-                            onClick = onSegments,
-                            iconSize = sizing.iconDp,
-                        )
-                        if (menu == PlayerAnchorMenu.Segments && callbacks != null) {
-                            PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                        }
-                    }
+
                 }
                 if (!compact) {
                     PlayerIconButton(
@@ -385,6 +375,7 @@ fun BottomBar(
             bufferedPositionState = bufferedPositionState,
             durationMs = state.durationMs,
             segments = state.sponsorSegments,
+            chapterStarts = state.chapters.map { it.startSeconds.toLong() * 1000 },
             onSeek = onSeek,
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
             onCommit = { callbacks?.onTimeBarCommit() },

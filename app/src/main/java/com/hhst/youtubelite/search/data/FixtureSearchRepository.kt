@@ -15,8 +15,10 @@ class FixtureSearchRepository(private val scenario: SearchScenario = SearchScena
             days <= limit
         }
         val playlists = if (filters.type == SearchResultType.Playlists)
-            com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries().filter {
-                filters.uploaded.maxAgeDays?.let { limit -> it.updatedDays <= limit } ?: true
+            com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries().filter { summary ->
+                val limit = filters.uploaded.maxAgeDays ?: return@filter true
+                val days = summary.updatedDays ?: return@filter false
+                days <= limit
             } else emptyList()
         val channels = if (filters.type == SearchResultType.Channels) sampleChannels() else emptyList()
         val shorts = if (filters.type == SearchResultType.Shorts) sampleShorts() else emptyList()

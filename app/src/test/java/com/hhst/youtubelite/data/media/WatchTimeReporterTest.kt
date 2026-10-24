@@ -100,6 +100,34 @@ class WatchTimeReporterTest {
         assertEquals(0, requests.size)
     }
 
+    @Test fun anAnonymousVisitorCanReportButPrivateBrowsingCannot() {
+        var privateBrowsing = false
+        MediaSession.initialize(MemoryAuthStore()) { privateBrowsing }
+        MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        awaitRequests(2)
+        privateBrowsing = true
+        reporter.tick(20_000, 100_000, playing = true)
+        Thread.sleep(300)
+        assertEquals(2, requests.size)
+        reporter.stop()
+    }
+
+    @Test fun trackingFromThePreviousIdentityCannotBeSentAfterSignOut() {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        awaitRequests(2)
+        MediaSession.signOut()
+        MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
+        reporter.tick(20_000, 100_000, playing = true)
+        Thread.sleep(300)
+        assertEquals(2, requests.size)
+        reporter.stop()
+    }
+
     @Test fun missingTrackingDisablesReporting() {
         val reporter = reporter()
         reporter.watch("video", null)

@@ -263,32 +263,12 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
 
 @Composable
 private fun InfoLine(label: String, value: String, onCopy: () -> Unit = {}) {
-    Column(Modifier.padding(bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                label,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                painter = painterResource(R.drawable.ic_copy),
-                contentDescription = "${stringResource(R.string.copy)} $label",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onCopy)
-                    .padding(14.dp),
-            )
-        }
-        Text(
-            value,
-            fontSize = SettingsTokens.BodySize.sp,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        .clickable(onClick = onCopy).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(0.42f).padding(end = 12.dp), fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, Modifier.weight(0.58f), fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface)
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    Spacer(Modifier.height(8.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 }

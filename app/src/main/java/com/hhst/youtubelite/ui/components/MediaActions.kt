@@ -65,7 +65,7 @@ fun MediaActionsDialog(item: MediaActionItem, onDismiss: () -> Unit) {
     val url = VideoShare.urlFor(item.id)
     val executor = (context as? MediaActionHost)?.mediaActionExecutor
     val visibleActions = remember(url) {
-        MediaActionKind.entries.filter { url != null || it == MediaActionKind.CopyTitle }
+        MediaActionKind.entries.filter { url != null && it != MediaActionKind.CopyTitle }
     }
     Dialog(onDismissRequest = onDismiss) {
         AppTheme {

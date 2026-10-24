@@ -58,6 +58,14 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     val shareGateway: com.hhst.youtubelite.share.ShareGateway by lazy { com.hhst.youtubelite.share.ShareGateway(this) }
 
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) subscriptionsViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
@@ -82,13 +90,16 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             shareGateway.share(request.videoId)
                         }
 
-                        is SubscriptionsNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@SubscriptionsActivity, request.videoId))
-                        is SubscriptionsNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@SubscriptionsActivity, request.channelId))
-                        is SubscriptionsNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@SubscriptionsActivity, request.query))
+                        is SubscriptionsNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@SubscriptionsActivity, request.videoId))
+                        is SubscriptionsNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@SubscriptionsActivity, request.channelId))
+                        is SubscriptionsNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@SubscriptionsActivity, request.query))
                         SubscriptionsNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is SubscriptionsNavigationRequest.Destination -> openTab(request.tab)
                         SubscriptionsNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@SubscriptionsActivity)
                         SubscriptionsNavigationRequest.Manage -> subscriptionsViewModel.onAction(SubscriptionsAction.ShowChannels)
+                        is SubscriptionsNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@SubscriptionsActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         // No `else`: a new request type must fail to compile here.
                     }
                 }
@@ -189,7 +200,7 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     private fun openTab(tab: MainTab) {
         val intent = MainTabs.intent(this, tab, intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
-        if (intent != null) startActivity(intent)
+        if (intent != null) launchNavigation(intent)
     }
 
     override fun onResume() {

@@ -26,6 +26,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.BuildConfig
 import com.hhst.youtubelite.channel.ChannelActivity
+import com.hhst.youtubelite.core.trafficChallenge
 import com.hhst.youtubelite.notifications.data.FixtureNotificationsRepository
 import com.hhst.youtubelite.notifications.data.NotificationsScenario
 import com.hhst.youtubelite.notifications.data.notificationsSignedOutPrompt
@@ -52,6 +53,14 @@ class NotificationsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     var lastNavigationRequest: NotificationsNavigationRequest? = null
         private set
 
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) notificationsViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
@@ -71,8 +80,11 @@ class NotificationsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 notificationsViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is NotificationsNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@NotificationsActivity, request.videoId))
-                        is NotificationsNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@NotificationsActivity, request.channelId))
+                        is NotificationsNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@NotificationsActivity, request.videoId))
+                        is NotificationsNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@NotificationsActivity, request.channelId))
+                        is NotificationsNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@NotificationsActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         NotificationsNavigationRequest.SignIn ->
                             com.hhst.youtubelite.account.SignInFlow.open(this@NotificationsActivity)
                     }
@@ -144,12 +156,25 @@ class NotificationsViewModel(
     fun onAction(action: NotificationsAction) {
         when (action) {
             NotificationsAction.Retry -> refresh()
+            NotificationsAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is NotificationsAction.OpenVerification -> navigation.trySend(NotificationsNavigationRequest.OpenVerification(action.challengeUrl))
             is NotificationsAction.OpenVideo -> navigation.trySend(NotificationsNavigationRequest.Watch(action.videoId))
             is NotificationsAction.OpenChannel -> navigation.trySend(NotificationsNavigationRequest.Channel(action.channelId))
             NotificationsAction.SignIn -> navigation.trySend(NotificationsNavigationRequest.SignIn)
         }
     }
 
+
+    /**
+     * The host reports the verification screen finished with RESULT_OK. The read
+     * retries once with the current identity — never automatically on another
+     * failure, so no request loop can form.
+     */
+    fun verificationCompleted(challengeUrl: String? = _uiState.value.verification?.challengeUrl) {
+        if (challengeUrl == null || _uiState.value.verification?.challengeUrl != challengeUrl) return
+        _uiState.update { it.copy(verification = null) }
+        refresh()
+    }
 
     private fun refresh() {
         if (!signedIn) return
@@ -163,8 +188,12 @@ class NotificationsViewModel(
                     val content = if (page.items.isEmpty()) NotificationsContent.Empty else NotificationsContent.Ready(page)
                     _uiState.update { it.copy(content = content) }
                 },
-                onFailure = { if (it is kotlinx.coroutines.CancellationException) throw it
-                    if (request == generation) _uiState.update { it.copy(content = NotificationsContent.Failed) } },
+                onFailure = { failure -> if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
+                        ?.let(::trafficChallenge)
+                    _uiState.update { it.copy(content = NotificationsContent.Failed,
+                        verification = challenge ?: it.verification) } },
             )
         }
     }

@@ -26,6 +26,11 @@ class FixtureSubscriptionsRepository(private val scenario: SubscriptionsScenario
         return SubscriptionsPage(items, channels(), nextKey = if (continuation == null) "fixture-page-2" else null)
     }
 
+    override suspend fun subscribedChannels(): List<SubscribedChannel> {
+        delay(140)
+        return channels()
+    }
+
     companion object {
         fun sampleVideos(): List<FeedItem.Video> {
             val page = com.hhst.youtubelite.home.data.FixtureHomeRepository.samplePage()
@@ -44,6 +49,9 @@ interface SubscriptionsRepository {
     /** Filters the backend can actually serve; fixture builds serve everything. */
     val supportedFilters: Set<SubscriptionsFilter> get() = SubscriptionsFilter.entries.toSet()
     suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String? = null): SubscriptionsPage
+
+    /** Independent channel read so a guide failure cannot erase the feed. */
+    suspend fun subscribedChannels(): List<SubscribedChannel> = emptyList()
 }
 
 enum class SubscriptionsFilter(val chip: SubscriptionsChip) {

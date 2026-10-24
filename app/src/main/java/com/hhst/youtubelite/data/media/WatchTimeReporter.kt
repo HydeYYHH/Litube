@@ -8,7 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 
 /**
- * Reports watch progress to the server while signed in. The MSC [WatchHistory] keys its
+ * Reports watch progress for the current identity. The MSC [WatchHistory] keys its
  * position ledger by the session scope, so an account switch starts a fresh ledger automatically;
  * the reporter itself only throttles ticks to one per [REPORT_EVERY_MS] of watched progress.
  */
@@ -18,13 +18,16 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
     private var tracking: PlayerTracking? = null
     private var lastReportedMs = -1L
     private var job: Job? = null
+    private var identityGeneration = -1L
 
     /** Starts reporting for a video; null tracking (fixtures, old responses) disables reporting. */
     fun watch(videoId: String, tracking: PlayerTracking?) {
-        if (this.videoId == videoId && this.tracking == tracking) return
+        val generation = MediaSession.snapshot().generation
+        if (this.videoId == videoId && this.tracking == tracking && identityGeneration == generation) return
         job?.cancel()
         this.videoId = videoId
         this.tracking = tracking?.takeIf { it.watchTimeUrl != null }
+        identityGeneration = generation
         lastReportedMs = -1L
     }
 
@@ -32,20 +35,23 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
         job?.cancel()
         videoId = null
         tracking = null
+        identityGeneration = -1L
     }
 
     fun tick(positionMs: Long, durationMs: Long, playing: Boolean, playingVideoId: String? = videoId) {
         val video = videoId ?: return
         val track = tracking ?: return
         if (!playing || durationMs <= 0 || positionMs !in 0..durationMs ||
-            playingVideoId != video || !MediaSession.signedIn() || job?.isActive == true) return
+            playingVideoId != video || MediaSession.privateBrowsing() || job?.isActive == true) return
         // A backward seek starts a new range and reports at once.
         if (lastReportedMs >= 0 && positionMs >= lastReportedMs && positionMs - lastReportedMs < REPORT_EVERY_MS) return
         val generation = MediaSession.snapshot().generation
+        if (generation != identityGeneration) return
         job = scope.launch {
             try {
                 val reported = client.read { context, http ->
-                    if (context.generation != generation) return@read false
+                    if (context.generation != generation || MediaSession.privateBrowsing() ||
+                        (!context.signedIn && context.visitor.isNullOrBlank())) return@read false
                     history.update(video, positionMs, durationMs, track, context, http).requireValue()
                     true
                 }

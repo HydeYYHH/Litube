@@ -65,6 +65,29 @@ class ExperienceUpgradeAndroidTest {
         assertEquals(1, closed)
     }
 
+    @Test fun closingMiniShrinksAtItsExistingCenter() {
+        val store = MiniPlayerStore(MMKV.mmkvWithID("mini-close-center")!!.apply { clearAll() })
+        store.save(200, -30f, -180f)
+        var handle: MiniPlayerHandle? = null
+        compose.setContent { AppTheme {
+            MiniPlayerWindow(LocalConfiguration.current.screenWidthDp, 0, store, true, {}) {
+                handle = LocalMiniPlayerHandle.current
+                Box(Modifier.fillMaxSize().testTag("closing-window"))
+            }
+        } }
+        compose.waitForIdle()
+        val before = compose.onNodeWithTag("closing-window").fetchSemanticsNode().boundsInRoot
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { handle!!.dismiss() }
+        compose.mainClock.advanceTimeBy(80)
+        compose.waitForIdle()
+        val during = compose.onNodeWithTag("closing-window").fetchSemanticsNode().boundsInRoot
+        assertEquals(before.center.x, during.center.x, 1f)
+        assertEquals(before.center.y, during.center.y, 1f)
+        assertTrue(during.width < before.width)
+        compose.mainClock.autoAdvance = true
+    }
+
     @Test fun miniTouchShortSwipeAndFastOutsideFlingDoNotClose() {
         var closed = 0
         val store = MiniPlayerStore(MMKV.mmkvWithID("upgrade-close-touch")!!.apply { clearAll() })

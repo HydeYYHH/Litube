@@ -106,7 +106,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 postCommentsViewModel.navigationRequests.collect { request ->
                     lastCommentRequest = request
-                    if (request is CommentNavigationRequest.OpenAuthor) startActivity(
+                    if (request is CommentNavigationRequest.OpenAuthor) launchNavigation(
                         ChannelActivity.intent(this@PostDetailActivity, request.channelId),
                     )
                 }
@@ -117,11 +117,11 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 postDetailViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is PostDetailNavigationRequest.Channel -> startActivity(
+                        is PostDetailNavigationRequest.Channel -> launchNavigation(
                             ChannelActivity.intent(this@PostDetailActivity, request.channelId)
                         )
                         is PostDetailNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
+                            this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
                         is PostDetailNavigationRequest.Feedback -> if (!fixtures) {
                             com.hhst.youtubelite.post.openPostVoteRoute(this@PostDetailActivity)
                         }

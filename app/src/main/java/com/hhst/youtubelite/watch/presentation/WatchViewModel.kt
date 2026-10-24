@@ -64,6 +64,8 @@ class WatchViewModel(
     val actionNotices = notices.receiveAsFlow()
     private var actionJob: Job? = null
     private var loadJob: Job? = null
+    private var relatedJob: Job? = null
+    private val consumedCursors = mutableSetOf<String>()
     private var saveJob: Job? = null
     private var generation = 0
     private var voteJob: Job? = null
@@ -97,7 +99,7 @@ class WatchViewModel(
         savedState["videoId"] = id
         savedState["commentsOpen"] = false
         savedState["descriptionExpanded"] = false
-        _state.value = WatchUiState(videoId = id)
+        _state.value = WatchUiState(videoId = id, live = saveRepository != null)
         persistOverlay(WatchOverlay.None)
         load()
         flags?.let { refreshVoteCounts(it.first, it.second) }
@@ -145,6 +147,7 @@ class WatchViewModel(
         val videoId = uiState.value.videoId
         when (action) {
             WatchAction.Retry -> load()
+            WatchAction.LoadRelated -> loadRelated()
             WatchAction.VoiceSearch -> navigation.trySend(WatchNavigationRequest.VoiceSearch)
             WatchAction.ToggleDescription -> toggleDescription()
             is WatchAction.SeekToTimestamp -> {
@@ -424,11 +427,39 @@ class WatchViewModel(
         _state.update { it.copy(descriptionExpanded = expanded) }
     }
 
+    private fun loadRelated() {
+        val current = _state.value
+        val ready = current.content as? WatchContent.Ready ?: return
+        val cursor = ready.page.nextKey ?: return
+        if (current.relatedLoading || cursor in consumedCursors) return
+        val requestGeneration = generation
+        _state.update { it.copy(relatedLoading = true, relatedFailed = false) }
+        relatedJob = viewModelScope.launch {
+            try {
+                val page = repository.next(current.videoId, cursor)
+                if (requestGeneration != generation) return@launch
+                consumedCursors += cursor
+                _state.update { state ->
+                    val loaded = state.content as? WatchContent.Ready ?: return@update state
+                    state.copy(content = loaded.copy(page = loaded.page.copy(
+                        related = (loaded.page.related + page.items).distinctBy { it.id },
+                        nextKey = page.nextKey?.takeUnless { it in consumedCursors })),
+                        relatedLoading = false, relatedFailed = false)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (requestGeneration == generation) _state.update { it.copy(relatedLoading = false, relatedFailed = true) }
+            }
+        }
+    }
+
     private fun load() {
         val videoId = uiState.value.videoId
         loadJob?.cancel()
+        relatedJob?.cancel()
+        consumedCursors.clear()
         val requestGeneration = ++generation
-        _state.update { it.copy(content = WatchContent.Loading, verification = null) }
+        _state.update { it.copy(content = WatchContent.Loading, verification = null, relatedLoading = false, relatedFailed = false) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.watch(videoId)

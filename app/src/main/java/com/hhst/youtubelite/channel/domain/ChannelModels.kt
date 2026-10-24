@@ -2,6 +2,7 @@ package com.hhst.youtubelite.channel.domain
 
 import com.hhst.youtubelite.post.domain.PostIdentity
 import com.hhst.youtubelite.post.domain.PostMenuAction
+import com.hhst.youtubelite.post.domain.ChannelPostsPage
 import com.hhst.youtubelite.post.domain.PostSummary
 
 data class ChannelProfile(
@@ -75,23 +76,42 @@ data class ChannelLiveVideo(
 data class ChannelLivePage(
     val current: List<ChannelLiveVideo> = emptyList(),
     val past: List<ChannelLiveVideo> = emptyList(),
+    val nextKey: String? = null,
 ) {
     val all: List<ChannelLiveVideo> get() = current + past
 }
 
+/** One server page of the channel shorts tab. */
+data class ChannelShortsPage(val shorts: List<ChannelShort>, val nextKey: String? = null)
+
+/** One server page of the in-channel search. */
+data class ChannelSearchResults(val videos: List<ChannelVideo>, val nextKey: String? = null)
+
 interface ChannelRepository {
     suspend fun channel(channelId: String): ChannelPage
 
-    suspend fun shorts(channelId: String): List<ChannelShort>
+    suspend fun shorts(channelId: String): ChannelShortsPage
+
+    /** Further shorts after [cursor]; finite tabs return an empty page. */
+    suspend fun shortsNext(channelId: String, cursor: String): ChannelShortsPage = ChannelShortsPage(emptyList())
 
     suspend fun live(channelId: String): ChannelLivePage
 
-    suspend fun posts(channelId: String): List<PostSummary>
+    /** Further live rows after [cursor]; finite tabs return an empty page. */
+    suspend fun liveNext(channelId: String, cursor: String): ChannelLivePage = ChannelLivePage()
+
+    suspend fun posts(channelId: String): ChannelPostsPage
+
+    /** Further posts after [cursor]; finite tabs return an empty page. */
+    suspend fun postsNext(channelId: String, cursor: String): ChannelPostsPage = ChannelPostsPage(emptyList())
 
     /** True when the repository searches the channel on the server instead of filtering the first page. */
     val serverSearch: Boolean get() = false
 
-    suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> = emptyList()
+    suspend fun searchVideos(channelId: String, query: String): ChannelSearchResults = ChannelSearchResults(emptyList())
+
+    /** Further in-channel search results after [cursor]. */
+    suspend fun searchNext(channelId: String, cursor: String): ChannelSearchResults = ChannelSearchResults(emptyList())
 
     suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage = ChannelVideosPage(emptyList(), null)
 }
@@ -145,6 +165,15 @@ data class ChannelUiState(
     val shorts: ChannelSection<List<ChannelShort>> = ChannelSection.Loading,
     val live: ChannelSection<ChannelLivePage> = ChannelSection.Loading,
     val posts: ChannelSection<List<PostSummary>> = ChannelSection.Loading,
+    /** Server continuations and append states for the paginated sections. */
+    val shortsNextKey: String? = null,
+    val liveNextKey: String? = null,
+    val postsNextKey: String? = null,
+    val searchNextKey: String? = null,
+    val shortsAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    val liveAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    val postsAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    val searchAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val shortsSort: ChannelSortOption = ChannelSortOption.Latest,
     val liveSort: ChannelSortOption = ChannelSortOption.Latest,
     val expandedPosts: Set<String> = emptySet(),
@@ -154,6 +183,8 @@ data class ChannelUiState(
     val videosAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     /** Production mode: feedback-only menus (section/short/post) hide — their rows need tokens the server never sends. */
     val production: Boolean = false,
+    /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
     val isLocalTab: Boolean
         get() = selectedTab in listOf(
@@ -171,6 +202,7 @@ enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"
 
 sealed interface ChannelNavigationRequest {
     data class Destination(val destination: ChannelDestination) : ChannelNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : ChannelNavigationRequest
     data class ItemMenu(val videoId: String) : ChannelNavigationRequest
     data class Watch(val videoId: String) : ChannelNavigationRequest
     data class Playlist(val playlistId: String) : ChannelNavigationRequest
@@ -212,6 +244,8 @@ sealed interface ChannelAction {
     data class OpenPlaylistMenu(val playlistId: String) : ChannelAction
     data object SharePlaylist : ChannelAction
     data object CloseOverlay : ChannelAction
+    data object DismissVerification : ChannelAction
+    data class OpenVerification(val challengeUrl: String) : ChannelAction
     data class SortPlaylists(val sort: ChannelPlaylistSort) : ChannelAction
     data object Subscribe : ChannelAction
     data object Share : ChannelAction
@@ -237,6 +271,10 @@ sealed interface ChannelAction {
     data class PostComments(val identity: PostIdentity) : ChannelAction
     /** Loads the next server page of the videos tab. */
     data object LoadVideosNext : ChannelAction
+    data object LoadShortsNext : ChannelAction
+    data object LoadLiveNext : ChannelAction
+    data object LoadPostsNext : ChannelAction
+    data object LoadSearchNext : ChannelAction
     /** Re-runs a failed server channel search. */
     data object RetrySearch : ChannelAction
 }

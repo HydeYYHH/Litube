@@ -26,9 +26,15 @@ data class YouPage(
     val account: AccountProfile,
     val history: List<HistoryEntry>,
     val playlists: List<PlaylistSummary>,
+    /** Optional shelves fail independently; a failed shelf never fails the whole page. */
+    val historyFailed: Boolean = false,
+    val playlistsFailed: Boolean = false,
 )
 
-data class HistoryPage(val entries: List<HistoryEntry>)
+data class HistoryPage(val entries: List<HistoryEntry>, val nextKey: String? = null)
+
+/** One server page of the personal playlist collection. */
+data class PlaylistCollectionPage(val playlists: List<PlaylistSummary>, val nextKey: String? = null)
 
 data class SignInPrompt(val title: String, val message: String, val action: String)
 
@@ -50,7 +56,7 @@ sealed interface HistoryContent {
 sealed interface CollectionContent {
     data object Loading : CollectionContent
     data class SignedOut(val prompt: SignInPrompt) : CollectionContent
-    data class Ready(val playlists: List<PlaylistSummary>) : CollectionContent
+    data class Ready(val playlists: List<PlaylistSummary>, val nextKey: String? = null) : CollectionContent
     data class Empty(val title: String = "No playlists", val message: String = "Playlists you create will show up here.") : CollectionContent
     data object Failed : CollectionContent
 }
@@ -74,22 +80,30 @@ data class LibraryUiState(
     val content: LibraryContent = LibraryContent.Loading,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    /** Set when a read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 data class HistoryUiState(
     val content: HistoryContent = HistoryContent.Loading,
+    val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
     /** Production mode: manage-history entry and live menu writes enabled. */
     val live: Boolean = false,
     /** Two-step confirmation for the destructive clear action. */
     val confirmClear: Boolean = false,
+    /** Set when a read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 data class CollectionUiState(
     val content: CollectionContent = CollectionContent.Loading,
+    val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    /** Set when a read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
 
 enum class HistoryMenuAction(val label: String) {
@@ -99,6 +113,7 @@ enum class HistoryMenuAction(val label: String) {
 
 sealed interface LibraryNavigationRequest {
     data class Watch(val videoId: String) : LibraryNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : LibraryNavigationRequest
     data class Channel(val channelId: String) : LibraryNavigationRequest
     data class Playlist(val playlistId: String) : LibraryNavigationRequest
     data class Search(val query: String) : LibraryNavigationRequest
@@ -119,6 +134,10 @@ sealed interface LibraryNavigationRequest {
 
 sealed interface LibraryAction {
     data object Retry : LibraryAction
+    data object DismissVerification : LibraryAction
+    data class OpenVerification(val challengeUrl: String) : LibraryAction
+    data object LoadHistoryNext : LibraryAction
+    data object LoadCollectionNext : LibraryAction
     data object OpenSearch : LibraryAction
     data object CloseOverlay : LibraryAction
     data class QueryChanged(val query: String) : LibraryAction

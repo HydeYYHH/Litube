@@ -85,10 +85,10 @@ class WatchScreenAndroidTest {
     /** Content arrives after the fixture's 140ms delay. */
     private fun awaitReady() = awaitNode("watch-metadata")
 
-    /** The v3 player draws its own Back control; scope to the page's fixed top bar. */
-    private fun backToLeaveWatch() = compose
-        .onNode(hasContentDescription("Back") and hasAnyAncestor(hasTestTag("watch-topbar")))
-        .performClick()
+    private fun backToLeaveWatch() {
+        com.hhst.youtubelite.core.DeviceEvidence.shell("input keyevent KEYCODE_BACK")
+        compose.waitForIdle()
+    }
 
     private fun assertWatchRequest(expected: WatchNavigationRequest) {
         compose.waitUntil(5_000) {
@@ -116,7 +116,7 @@ class WatchScreenAndroidTest {
         host.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntil(5000) { !player.uiState.value.fullscreen }
         host.onActivity { assertFalse(it.isFinishing) }
-        awaitNode("watch-topbar")
+        awaitNode("watch-player-slot")
     }
 
     @Test fun homeFeedThumbnailOpensWatchAndBackKeepsHome() {
@@ -239,8 +239,8 @@ class WatchScreenAndroidTest {
         compose.onNodeWithText("Save to Watch later").performClick()
         assertWatchRequest(WatchNavigationRequest.SaveToWatchLater("harbour"))
         compose.onNodeWithTag("watch-video-menu").assertDoesNotExist()
-        // The fixed top bar sits outside the scroll container.
-        clickFixed(compose.onNodeWithContentDescription("More options"), WatchNavigationRequest.PageMenu)
+
+        compose.onNodeWithTag("watch-topbar").assertDoesNotExist()
 
         // Related videos open a new history entry.
         compose.onNodeWithTag("watch-thumb-harbour", useUnmergedTree = true)
@@ -329,7 +329,7 @@ class WatchScreenAndroidTest {
         compose.onNodeWithContentDescription("Close the channel page").performClick()
         awaitNode("watch-screen")
         compose.onNodeWithTag("watch-description", useUnmergedTree = true).assertExists()
-        compose.onNodeWithContentDescription("Search").performClick()
+        watch?.onActivity { it.watchViewModel.onAction(com.hhst.youtubelite.watch.domain.WatchAction.OpenSearch) }
         compose.onNodeWithTag("search-input").performTextInput("meadow")
         watch?.recreate()
         awaitNode("search-input")

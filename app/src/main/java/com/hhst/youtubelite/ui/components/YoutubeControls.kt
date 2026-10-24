@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -126,7 +128,9 @@ fun YoutubeLinearProgressIndicator(progress: () -> Float, modifier: Modifier = M
 @Composable
 fun YoutubeSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
-    val fraction by animateFloatAsState(if (checked) 1f else 0f, label = "switch")
+    // With system animations off the thumb snaps instead of gliding.
+    val fraction by animateFloatAsState(if (checked) 1f else 0f,
+        animationSpec = if (com.hhst.youtubelite.ui.design.LocalMotionScale.current > 0f) spring() else snap(), label = "switch")
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val track = (if (checked) YoutubeStyle.Action else MaterialTheme.colorScheme.onSurfaceVariant)
         .copy(alpha = if (enabled) 1f else .38f)

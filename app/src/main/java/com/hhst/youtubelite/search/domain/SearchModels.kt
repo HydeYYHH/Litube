@@ -80,6 +80,8 @@ data class SearchUiState(
     val live: Boolean = false,
     /** Confirmed subscription state per channel, applied only after the server confirms. */
     val subscriptions: Map<String, Boolean> = emptyMap(),
+    /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
     val searchOpen: Boolean get() = overlay == SearchOverlay.Search
 }
@@ -99,6 +101,7 @@ sealed interface SearchNavigationRequest {
     data class Share(val videoId: String) : SearchNavigationRequest
     data class Playlist(val playlistId: String) : SearchNavigationRequest
     data class SharePlaylist(val playlistId: String) : SearchNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : SearchNavigationRequest
     data object Filters : SearchNavigationRequest
     data object VoiceSearch : SearchNavigationRequest
     data object PageMenu : SearchNavigationRequest
@@ -125,6 +128,8 @@ sealed interface SearchAction {
     data class SelectUploadDate(val date: SearchUploadDate) : SearchAction
     data object VoiceSearch : SearchAction
     data object OpenPageMenu : SearchAction
+    data object DismissVerification : SearchAction
+    data class OpenVerification(val challengeUrl: String) : SearchAction
     data object LoadMore : SearchAction
     data object Retry : SearchAction
 }

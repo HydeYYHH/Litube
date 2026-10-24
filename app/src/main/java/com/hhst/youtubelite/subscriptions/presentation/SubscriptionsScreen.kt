@@ -61,17 +61,22 @@ fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAct
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val content = state.content) {
                     SubscriptionsContent.Loading -> LibrarySkeleton("subscriptions-skeleton")
-                    SubscriptionsContent.Failed -> SubscriptionsError { onAction(SubscriptionsAction.Retry) }
+                    SubscriptionsContent.Failed -> if (state.verification != null) VerificationCard(
+                        state.verification,
+                        onVerify = { onAction(SubscriptionsAction.OpenVerification(state.verification!!.challengeUrl)) },
+                        onDismiss = { onAction(SubscriptionsAction.DismissVerification) },
+                        modifier = Modifier.testTag("subscriptions-verification"),
+                    ) else SubscriptionsError { onAction(SubscriptionsAction.Retry) }
                     is SubscriptionsContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "subscriptions-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(SubscriptionsAction.SignIn) } }
-                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, width, state.selectedChip, state.chips, gridState, onAction)
+                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, state.channels, width, state.selectedChip, state.chips, gridState, state.verification, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, null, selected = MainTab.Subscriptions) { tab -> onAction(SubscriptionsAction.Destination(tab)) }
         }
         if (state.overlay == SubscriptionsOverlay.Channels) {
-            ChannelsOverlay(onAction)
+            ChannelsOverlay(state.channels, onAction)
         }
     }
 }
@@ -136,18 +141,27 @@ private fun ChannelAvatarStrip(channels: List<SubscribedChannel>, onAction: (Sub
 }
 
 @Composable
-private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, selectedChip: SubscriptionsChip, chips: List<SubscriptionsChip>, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, onAction: (SubscriptionsAction) -> Unit) {
+private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, channels: SubscriptionsChannels, width: Float, selectedChip: SubscriptionsChip, chips: List<SubscriptionsChip>, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, verification: com.hhst.youtubelite.core.VerificationRequired?, onAction: (SubscriptionsAction) -> Unit) {
     val compact = width < 600f
     val nearEnd by remember(content) { derivedStateOf {
         (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= content.page.items.size - 2
     } }
     androidx.compose.runtime.LaunchedEffect(nearEnd, content.page.nextKey, content.append) {
-        if (nearEnd && content.page.nextKey != null && content.append == AppendState.Idle) {
+        // Scroll pages the feed only while it shows rows; an empty filtered feed is
+        // continued by the view model within its bound, never by this effect alone.
+        if (nearEnd && content.page.items.isNotEmpty() && content.page.nextKey != null && content.append == AppendState.Idle) {
             onAction(SubscriptionsAction.LoadNext)
         }
     }
     Column(Modifier.fillMaxSize()) {
-        if (compact) ChannelAvatarStrip(content.page.channels, onAction) else SubscriptionsChipStrip(selectedChip, chips, onAction)
+        if (compact) ChannelAvatarStrip((channels as? SubscriptionsChannels.Ready)?.channels.orEmpty(), onAction)
+        else SubscriptionsChipStrip(selectedChip, chips, onAction)
+        verification?.let { challenge ->
+            VerificationBanner(challenge,
+                onVerify = { onAction(SubscriptionsAction.OpenVerification(challenge.challengeUrl)) },
+                onDismiss = { onAction(SubscriptionsAction.DismissVerification) },
+                modifier = Modifier.padding(start = SubscriptionsLayout.outerPadding(width).dp, end = SubscriptionsLayout.outerPadding(width).dp, top = 8.dp).testTag("subscriptions-verification-banner"))
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(if (compact) 1 else SubscriptionsLayout.columns(width)), state = gridState,
             modifier = Modifier.fillMaxSize().testTag("subscriptions-feed"),
@@ -160,12 +174,32 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
                 }
             }
             if (content.page.items.isEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            AppText("No videos", size = 20, line = 28, weight = FontWeight.Bold)
-                            AppText("New videos from your subscriptions will show up here.",
-                                Modifier.padding(top = 8.dp), color = DesignTokens.Secondary)
+                item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
+                    when {
+                        // The server said the feed ends here; the filter found nothing in it.
+                        content.page.nextKey == null ->
+                            Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    AppText("No videos", size = 20, line = 28, weight = FontWeight.Bold)
+                                    AppText("New videos from your subscriptions will show up here.",
+                                        Modifier.padding(top = 8.dp), color = DesignTokens.Secondary)
+                                }
+                            }
+                        // An empty filtered page is not the end; the model keeps reading a
+                        // bounded stretch, then this row hands control back to the user.
+                        content.append == AppendState.Idle && content.emptyAutoLoads >= 3 -> Box(
+                            Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center,
+                        ) {
+                            AppText(
+                                "Load more",
+                                Modifier.clip(RoundedCornerShape(8.dp))
+                                    .clickable { onAction(SubscriptionsAction.LoadNext) }.padding(12.dp)
+                                    .testTag("subscriptions-load-more"),
+                                color = DesignTokens.Secondary,
+                            )
+                        }
+                        else -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                            AppText("Looking for matching videos…", color = DesignTokens.Secondary)
                         }
                     }
                 }
@@ -262,7 +296,7 @@ internal fun SubscriptionsError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun ChannelsOverlay(onAction: (SubscriptionsAction) -> Unit) {
+private fun ChannelsOverlay(channels: SubscriptionsChannels, onAction: (SubscriptionsAction) -> Unit) {
     Box(Modifier.fillMaxSize().background(DesignTokens.Background).testTag("channels-overlay")) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight), verticalAlignment = Alignment.CenterVertically) {
@@ -270,23 +304,40 @@ private fun ChannelsOverlay(onAction: (SubscriptionsAction) -> Unit) {
                 AppText("All subscriptions", Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.weight(1f))
             }
-            LazyColumn(Modifier.fillMaxSize().testTag("channels-list"),
-                contentPadding = PaddingValues(top = 13.dp, bottom = 24.dp)) {
-                listItems(channelsFixture(), key = { it.channelId }) { channel ->
-                    // Measured row (`library-channels-390.json`): 72px pitch, 48px tap surface,
-                    // 48px circle avatar at x12, name 16/400 at x72; no trailing control.
-                    Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(channel.channelId)) }
-                        .testTag("channels-row-${channel.channelId}"),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(48.dp).clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
-                        AppText(channel.name, Modifier.padding(start = 12.dp), size = 16, line = 24, maxLines = 1)
+            when (channels) {
+                SubscriptionsChannels.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    LoadingSpinner()
+                }
+                SubscriptionsChannels.Failed -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    AppText("Couldn't load channels", size = 20, line = 28, weight = FontWeight.Bold)
+                    AppText("Your subscriptions feed is still available.", Modifier.padding(top = 8.dp, bottom = 20.dp),
+                        color = DesignTokens.Secondary)
+                    PillButton("Retry", retryable@{ onAction(SubscriptionsAction.RetryChannels) })
+                }
+                is SubscriptionsChannels.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("channels-list"),
+                    contentPadding = PaddingValues(top = 13.dp, bottom = 24.dp)) {
+                    if (channels.channels.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
+                                AppText("No channels yet", color = DesignTokens.Secondary)
+                            }
+                        }
+                    }
+                    listItems(channels.channels, key = { it.channelId }) { channel ->
+                        // Measured row (`library-channels-390.json`): 72px pitch, 48px tap surface,
+                        // 48px circle avatar at x12, name 16/400 at x72; no trailing control.
+                        Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(channel.channelId)) }
+                            .testTag("channels-row-${channel.channelId}"),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(48.dp).clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
+                            AppText(channel.name, Modifier.padding(start = 12.dp), size = 16, line = 24, maxLines = 1)
+                        }
                     }
                 }
             }
         }
     }
 }
-
-private fun channelsFixture() = com.hhst.youtubelite.subscriptions.data.FixtureSubscriptionsRepository.channels()

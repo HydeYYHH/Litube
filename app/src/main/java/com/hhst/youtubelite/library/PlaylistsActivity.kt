@@ -35,6 +35,7 @@ import com.hhst.youtubelite.library.domain.LibraryNavigationRequest
 import com.hhst.youtubelite.library.domain.LibraryOverlay
 import com.hhst.youtubelite.library.presentation.CollectionScreen
 import com.hhst.youtubelite.library.presentation.CollectionViewModel
+import com.hhst.youtubelite.library.presentation.verificationCompleted
 import com.hhst.youtubelite.playlist.PlaylistActivity
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.ui.design.SearchPanel
@@ -46,6 +47,14 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastNavigationRequest: LibraryNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the card; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) collectionViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,8 +74,11 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 collectionViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     when (request) {
-                        is LibraryNavigationRequest.Playlist -> startActivity(PlaylistActivity.intent(this@PlaylistsActivity, request.playlistId))
-                        is LibraryNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@PlaylistsActivity, request.query))
+                        is LibraryNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@PlaylistsActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
+                        is LibraryNavigationRequest.Playlist -> launchNavigation(PlaylistActivity.intent(this@PlaylistsActivity, request.playlistId))
+                        is LibraryNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@PlaylistsActivity, request.query))
                         LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@PlaylistsActivity)
                         // The shared library request type carries entries the collection screen
@@ -88,8 +100,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 if (state.overlay != LibraryOverlay.None) collectionViewModel.onAction(LibraryAction.CloseOverlay) else finish()
             }
             BackHandler(onBack = back)
-            val playlists = (state.content as? CollectionContent.Ready)?.playlists.orEmpty()
-            CollectionScreen(state, playlists, collectionViewModel::onAction, onBack = back,
+            CollectionScreen(state, collectionViewModel::onAction, onBack = back,
                 modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             if (state.overlay == LibraryOverlay.Search) {

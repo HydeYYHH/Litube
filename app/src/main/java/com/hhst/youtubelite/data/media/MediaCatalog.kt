@@ -7,13 +7,16 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.MediaItem
 import com.liskovsoft.youtubeapi.videoinfo.V2.HomeSection
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadHome
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadSearch
-import com.liskovsoft.youtubeapi.videoinfo.V2.request
 
-internal fun MediaItem.feedVideo() = FeedItem.Video(id, title.orEmpty(), author.orEmpty(), listOfNotNull(viewCount, published).joinToString(" · "), thumbnail.orEmpty(),
-    duration.orEmpty(), channelId.orEmpty(), live, progressPercent?.div(100f), avatar = authorThumbnail.orEmpty())
+// Metadata joins drop blank parts so a missing half cannot leave an orphaned separator;
+// the avatar is null (not "") when the response did not carry one, which is the signal
+// the shared avatar directory enriches from.
+internal fun MediaItem.feedVideo() = FeedItem.Video(id, title.orEmpty(), author.orEmpty(),
+    listOfNotNull(viewCount, published).filter(String::isNotBlank).joinToString(" · "), thumbnail.orEmpty(),
+    duration.orEmpty(), channelId.orEmpty(), live, progressPercent?.div(100f), avatar = authorThumbnail?.takeIf(String::isNotBlank))
 
 internal fun MediaItem.playlistSummary() = PlaylistSummary(id.removePrefix("VL"), title.orEmpty(), author.orEmpty(),
-    channelId.orEmpty(), null, thumbnail.orEmpty(), "", 0, videoCountText = videoCountText)
+    channelId.orEmpty(), null, thumbnail.orEmpty(), "", null, videoCountText = videoCountText)
 
 class MediaHomeRepository(private val client: MediaClient) : HomeRepository {
     override val filters = listOf("All", "Music", "Gaming", "Live", "News", "Sports")
@@ -29,10 +32,36 @@ class MediaHomeRepository(private val client: MediaClient) : HomeRepository {
                 com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.UNSUPPORTED, "filter_unavailable"))
         }
         val page = loadHome(section, context, continuation, http).requireValue()
-        val videos = page.items.filter { it.kind == "video" }.map(MediaItem::feedVideo)
-        val shorts = page.items.filter { it.kind == "short" }.map(MediaItem::feedVideo)
-        HomePage(videos + if (shorts.isEmpty()) emptyList() else listOf(FeedItem.Shorts("shorts", shorts)), page.messages, page.nextKey)
+        if (!context.signedIn) MediaSession.rememberVisitor(page.visitor, context.generation)
+        HomePage(homeFeed(page.items), page.messages, page.nextKey)
     }
+}
+
+/**
+ * Server order, shelf by shelf: consecutive shorts fold into one inline rail identified by
+ * its first video, so a rail keeps its identity across refreshes and appended rails cannot
+ * collide with a fixed id. Mix and Post containers appear only when the parse produced one,
+ * which the home document never does — none are fabricated to fill the layout.
+ */
+internal fun homeFeed(items: List<MediaItem>): List<FeedItem> {
+    val feed = ArrayList<FeedItem>()
+    var rail = ArrayList<FeedItem.Video>()
+    fun flushRail() {
+        if (rail.isNotEmpty()) {
+            feed += FeedItem.Shorts("shorts-" + rail.first().id, rail.toList())
+            rail = ArrayList()
+        }
+    }
+    for (item in items) when (item.kind) {
+        "short" -> rail += item.feedVideo()
+        "video" -> {
+            flushRail()
+            feed += item.feedVideo()
+        }
+        else -> Unit
+    }
+    flushRail()
+    return feed
 }
 
 class MediaSearchRepository(private val client: MediaClient) : SearchRepository {
@@ -54,11 +83,10 @@ class MediaSearchRepository(private val client: MediaClient) : SearchRepository 
                 else -> null
             } },
         )
+        // Each response carries the filter panel for its own state: the next label's
+        // cumulative params come from the page we already have, not from a refetch.
         for (label in labels) {
-            val reply = http.execute(com.liskovsoft.youtubeapi.videoinfo.V2.searchQuery(query, context, params).request())
-            if (reply.status !in 200..299) throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
-                com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.HTTP, "http_" + reply.status, reply.status))
-            val filter = com.liskovsoft.youtubeapi.videoinfo.V2.searchFilters(reply.body).firstOrNull {
+            val filter = page.filters.firstOrNull {
                 it.title.equals(label, true) || it.title.equals(label + "s", true)
             } ?: throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
                 com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.UNSUPPORTED, "filter_unavailable"))
@@ -75,7 +103,7 @@ class MediaSearchRepository(private val client: MediaClient) : SearchRepository 
 
 private fun com.liskovsoft.youtubeapi.videoinfo.V2.SearchPage.toSearchPage(query: String): SearchPage {
     fun MediaItem.result() = SearchResult(id, title.orEmpty(), author.orEmpty(), channelId.orEmpty(), viewCount.orEmpty(), published.orEmpty(),
-        duration.orEmpty(), thumbnail.orEmpty(), if (live) "LIVE" else null, progressPercent?.div(100f), avatar = authorThumbnail.orEmpty())
+        duration.orEmpty(), thumbnail.orEmpty(), if (live) "LIVE" else null, progressPercent?.div(100f), avatar = authorThumbnail?.takeIf(String::isNotBlank))
     return SearchPage(query, items.filter { it.kind == "video" }.map { it.result() },
         items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary),
         items.filter { it.kind == "channel" }.map { SearchChannel(it.id, it.title.orEmpty(), "", "", it.thumbnail.orEmpty()) },

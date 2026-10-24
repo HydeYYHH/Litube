@@ -59,12 +59,18 @@ class SubscriptionsViewModel(
 
     private var loadJob: Job? = null
     private var pageJob: Job? = null
+    private var channelsJob: Job? = null
     private var generation = 0
+    /** Channel reads follow the account, not the chip: a feed refresh never invalidates them. */
+    private var channelsGeneration = 0
 
     init {
         when {
             !signedIn -> _uiState.update { it.copy(content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
-            scenario == SubscriptionsScenario.Content -> refresh(SubscriptionsFilter.from(_uiState.value.selectedChip))
+            scenario == SubscriptionsScenario.Content -> {
+                refresh(SubscriptionsFilter.from(_uiState.value.selectedChip))
+                loadChannels()
+            }
             else -> Unit
         }
     }
@@ -77,16 +83,25 @@ class SubscriptionsViewModel(
         if (signedIn == value && !changed) return
         signedIn = value
         ++generation
+        ++channelsGeneration
         loadJob?.cancel()
         pageJob?.cancel()
-        _uiState.update { it.copy(signedIn = value, content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
-        if (value) refresh(SubscriptionsFilter.from(uiState.value.selectedChip))
+        channelsJob?.cancel()
+        saveSheet?.close()
+        _uiState.update { it.copy(signedIn = value, channels = SubscriptionsChannels.Loading,
+            content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
+        if (value) {
+            refresh(SubscriptionsFilter.from(uiState.value.selectedChip))
+            loadChannels()
+        }
     }
 
     fun onAction(action: SubscriptionsAction) {
         when (action) {
             SubscriptionsAction.Retry -> refresh(SubscriptionsFilter.from(_uiState.value.selectedChip))
             SubscriptionsAction.LoadNext -> loadNext()
+            SubscriptionsAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
+            is SubscriptionsAction.OpenVerification -> navigation.trySend(SubscriptionsNavigationRequest.OpenVerification(action.challengeUrl))
             SubscriptionsAction.OpenSearch -> showOverlay(SubscriptionsOverlay.Search)
             SubscriptionsAction.CloseOverlay -> showOverlay(SubscriptionsOverlay.None)
             is SubscriptionsAction.QueryChanged -> {
@@ -105,8 +120,12 @@ class SubscriptionsViewModel(
                 _uiState.update { it.copy(selectedChip = action.chip) }
                 refresh(SubscriptionsFilter.from(action.chip))
             }
-            SubscriptionsAction.ShowChannels -> showOverlay(SubscriptionsOverlay.Channels)
+            SubscriptionsAction.ShowChannels -> {
+                showOverlay(SubscriptionsOverlay.Channels)
+                if (_uiState.value.channels is SubscriptionsChannels.Failed) loadChannels()
+            }
             SubscriptionsAction.CloseChannels -> showOverlay(SubscriptionsOverlay.None)
+            SubscriptionsAction.RetryChannels -> loadChannels()
             is SubscriptionsAction.OpenVideo -> navigation.trySend(SubscriptionsNavigationRequest.Watch(action.videoId))
             is SubscriptionsAction.OpenChannel -> navigation.trySend(SubscriptionsNavigationRequest.Channel(action.channelId))
             is SubscriptionsAction.OpenMenu -> showOverlay(SubscriptionsOverlay.Menu(action.videoId))
@@ -144,6 +163,23 @@ class SubscriptionsViewModel(
         _uiState.update { it.copy(overlay = next) }
     }
 
+    private fun loadChannels() {
+        if (!signedIn) return
+        channelsJob?.cancel()
+        val request = ++channelsGeneration
+        _uiState.update { it.copy(channels = SubscriptionsChannels.Loading) }
+        channelsJob = viewModelScope.launch {
+            try {
+                val channels = repository.subscribedChannels()
+                if (request == channelsGeneration) _uiState.update { it.copy(channels = SubscriptionsChannels.Ready(channels)) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (request == channelsGeneration) _uiState.update { it.copy(channels = SubscriptionsChannels.Failed) }
+            }
+        }
+    }
+
     private fun refresh(filter: SubscriptionsFilter) {
         if (!signedIn) return
         loadJob?.cancel()
@@ -153,18 +189,39 @@ class SubscriptionsViewModel(
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.subscriptions(filter)
-                if (request == generation) _uiState.update { it.copy(content = SubscriptionsContent.Feed(page)) }
+                if (request == generation) {
+                    _uiState.update { it.copy(content = SubscriptionsContent.Feed(page)) }
+                    // A filter can empty the first page while the server keeps going.
+                    continuePastEmptyPage(autoLoads = 0)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: com.hhst.youtubelite.data.media.MediaException) {
+                if (request == generation) _uiState.update { it.copy(
+                    content = SubscriptionsContent.Failed,
+                    verification = com.hhst.youtubelite.core.trafficChallenge(error) ?: it.verification) }
             } catch (_: Exception) {
                 if (request == generation) _uiState.update { it.copy(content = SubscriptionsContent.Failed) }
             }
         }
     }
 
-    private fun loadNext() {
+    /**
+     * The host reports the verification screen finished with RESULT_OK. The feed
+     * retries once with the current identity — never automatically on another
+     * failure, so no request loop can form.
+     */
+    fun verificationCompleted(challengeUrl: String? = _uiState.value.verification?.challengeUrl) {
+        if (challengeUrl == null || _uiState.value.verification?.challengeUrl != challengeUrl) return
+        _uiState.update { it.copy(verification = null) }
+        notices.trySend(AppNotice.Message("Verification finished. Retrying…"))
+        refresh(SubscriptionsFilter.from(_uiState.value.selectedChip))
+    }
+
+    private fun loadNext(autoLoads: Int = MAX_EMPTY_AUTO_LOADS, automatic: Boolean = false) {
         val current = _uiState.value.content as? SubscriptionsContent.Feed ?: return
         if (current.page.nextKey == null || current.append == AppendState.Loading) return
+        if (automatic && autoLoads > MAX_EMPTY_AUTO_LOADS) return
         val request = generation
         val filter = SubscriptionsFilter.from(_uiState.value.selectedChip)
         _uiState.update { it.copy(content = current.copy(append = AppendState.Loading)) }
@@ -172,15 +229,25 @@ class SubscriptionsViewModel(
             try {
                 val page = repository.subscriptions(filter, current.page.nextKey)
                 if (request != generation) return@launch
+                var combinedEmpty = true
                 _uiState.update { state ->
                     val existing = (state.content as? SubscriptionsContent.Feed)?.page ?: return@update state
+                    val combined = (existing.items + page.items).distinctBy { it.id }
+                    combinedEmpty = combined.isEmpty()
                     state.copy(content = SubscriptionsContent.Feed(existing.copy(
-                        items = (existing.items + page.items).distinctBy { it.id },
+                        items = combined,
                         nextKey = page.nextKey.takeUnless { it == current.page.nextKey },
-                    )))
+                    ), emptyAutoLoads = if (combinedEmpty) autoLoads else 0))
                 }
+                if (combinedEmpty) continuePastEmptyPage(autoLoads)
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: com.hhst.youtubelite.data.media.MediaException) {
+                if (request == generation) _uiState.update { state ->
+                    val existing = state.content as? SubscriptionsContent.Feed ?: return@update state
+                    state.copy(content = existing.copy(append = AppendState.Failed),
+                        verification = com.hhst.youtubelite.core.trafficChallenge(error) ?: state.verification)
+                }
             } catch (_: Exception) {
                 if (request == generation) _uiState.update { state ->
                     val existing = state.content as? SubscriptionsContent.Feed ?: return@update state
@@ -190,10 +257,22 @@ class SubscriptionsViewModel(
         }
     }
 
+    /**
+     * Keeps reading when a filter emptied the current page. Automatic continuation stops at
+     * [MAX_EMPTY_AUTO_LOADS]; past that the screen offers an explicit Load more, and a manual
+     * load (the default budget) always fetches exactly one page per tap.
+     */
+    private fun continuePastEmptyPage(autoLoads: Int) {
+        val feed = _uiState.value.content as? SubscriptionsContent.Feed ?: return
+        if (feed.page.items.isEmpty() && feed.page.nextKey != null) loadNext(autoLoads = autoLoads + 1, automatic = true)
+    }
+
     /** The panel menu mirrors the home feed menu kinds. */
     val menuKind: FeedMenuKind = FeedMenuKind.Video
 
     companion object {
         private const val QUERY_KEY = "subscriptions_query"
+        /** How many extra pages an empty filtered feed may fetch on its own before it asks. */
+        private const val MAX_EMPTY_AUTO_LOADS = 3
     }
 }
