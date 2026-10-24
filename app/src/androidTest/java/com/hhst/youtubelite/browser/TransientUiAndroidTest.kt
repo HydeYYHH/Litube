@@ -9,9 +9,17 @@ import com.hhst.youtubelite.watch.domain.WatchContent
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 
 class TransientUiAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
+
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
+    }
 
     @Test fun modalInteractionPreservesPlayback() {
         OfflineWatchFixture().use { fixture ->

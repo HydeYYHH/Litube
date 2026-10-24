@@ -15,6 +15,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
 
 /**
  * Host-level checks for the watch page's comments panel: entry, overlay ordering,
@@ -34,6 +35,12 @@ class WatchCommentsHostAndroidTest {
     ).also {
         watch = it
         awaitNode(if (comments != null && open) "comments-panel" else "watch-screen")
+    }
+
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
     }
 
     @After fun close() {

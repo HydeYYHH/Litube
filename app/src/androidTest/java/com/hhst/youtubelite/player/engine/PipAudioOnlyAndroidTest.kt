@@ -32,8 +32,17 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.koin.core.context.GlobalContext
+import org.junit.After
+import org.junit.Before
 
 class PipAudioOnlyAndroidTest {
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
+    }
+
+
     @Test fun headphoneActionClosesPipKeepsAudioAndNotificationAndRestoresVideo() {
         assumeTrue(Build.VERSION.SDK_INT >= 26)
         val instrumentation = InstrumentationRegistry.getInstrumentation()

@@ -6,6 +6,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import java.util.concurrent.ConcurrentHashMap
 
 class MediaCommentsRepository(private val client: MediaClient) : CommentsRepository, CommentActions {
+    override val supportedMenuActions = setOf(CommentMenuAction.Reply, CommentMenuAction.Delete)
     private val actionComments = ConcurrentHashMap<String, Pair<Long, Comment>>()
     private val createKeys = ConcurrentHashMap<CommentTarget, Pair<Long, String>>()
     private var generation: Long? = null
@@ -25,10 +26,15 @@ class MediaCommentsRepository(private val client: MediaClient) : CommentsReposit
             }
             else -> error("Unknown comment target")
         }
+        var sortFallback = false
         if (cursor == null && sort == AppSort.Newest) {
             val option = page.sortOptions.firstOrNull { it.title?.contains("newest", true) == true }
-                ?: throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "comment_sort_unavailable"))
-            if (!option.selected) page = loadCommentReplies(option.key, context, http).requireValue().copy(total = page.total)
+            if (option == null) {
+                // Some videos only offer the Top lane; degrade honestly instead of failing the panel.
+                sortFallback = true
+            } else if (!option.selected) {
+                page = loadCommentReplies(option.key, context, http).requireValue().copy(total = page.total)
+            }
         }
         page.createKey?.let { createKeys[target] = context.generation to it }
         CommentsPage(page.total.orEmpty(), page.comments.mapNotNull { comment ->
@@ -38,7 +44,7 @@ class MediaCommentsRepository(private val client: MediaClient) : CommentsReposit
             CommentThread(id, comment.author(), comment.published.orEmpty(), comment.text.orEmpty(), comment.likeCount.orEmpty(),
                 comment.replyCount?.filter(Char::isDigit)?.toIntOrNull() ?: 0,
                 authorChannelId = comment.authorId.orEmpty(), ownedByViewer = !comment.deleteKey.isNullOrBlank(), replyKey = comment.replyKey)
-        }, page.nextKey, turnedOff = page.turnedOff)
+        }, page.nextKey, turnedOff = page.turnedOff, sortFallback = sortFallback)
     }
 
     override suspend fun replies(target: CommentTarget, thread: CommentThread): List<CommentReply> {

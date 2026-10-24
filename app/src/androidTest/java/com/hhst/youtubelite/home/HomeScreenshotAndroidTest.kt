@@ -290,6 +290,17 @@ class HomeScreenshotAndroidTest {
     }
 
     @Test fun firstVisitMatchesLayoutReference() {
+        // The 390x844 dp @ 3x reference viewport needs the 1170x2532 @ 480 window;
+        // pin it so the test also holds inside the 1600x1200 matrix suite.
+        com.hhst.youtubelite.core.PhoneWindow.enter()
+        try {
+        firstVisitMatchesLayoutReferenceBody()
+        } finally {
+            com.hhst.youtubelite.core.PhoneWindow.exit()
+        }
+    }
+
+    private fun firstVisitMatchesLayoutReferenceBody() {
         // Match the captured mobile viewport, including its 24 CSS px bottom safe area.
         val dpr = 3f
         compose.setContent {

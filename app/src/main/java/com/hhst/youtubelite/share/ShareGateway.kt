@@ -46,6 +46,12 @@ class ShareGateway(
         return shareUrl(url)
     }
 
+    fun shareChannel(channelId: String): Boolean {
+        if (channelId.isBlank()) return false
+        val path = if (channelId.startsWith("@")) channelId else "channel/$channelId"
+        return shareUrl("https://www.youtube.com/$path")
+    }
+
     private fun shareUrl(url: String): Boolean {
         val intent = VideoShare.sendIntent(url)
         lastShareIntent = intent

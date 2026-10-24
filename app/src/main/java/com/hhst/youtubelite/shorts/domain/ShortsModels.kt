@@ -26,6 +26,11 @@ data class ShortsUiState(
     val startItemId: String? = null,
     val overlay: ShortsOverlay = ShortsOverlay.None,
     val currentItemId: String? = startItemId,
+    /** Production mode: account writes run in the ViewModel and the feedback-only menu hides. */
+    val live: Boolean = false,
+    /** Confirmed viewer state per item/channel, applied only after the server confirms. */
+    val ratings: Map<String, com.hhst.youtubelite.watch.domain.VideoRating> = emptyMap(),
+    val subscriptions: Map<String, Boolean> = emptyMap(),
 )
 
 sealed interface ShortsOverlay {

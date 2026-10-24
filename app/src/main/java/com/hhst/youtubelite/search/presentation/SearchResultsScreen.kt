@@ -51,6 +51,7 @@ fun SearchResultsScreen(
     onAction: (SearchAction) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null,
 ) {
     AppTheme {
         BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("search-results")) {
@@ -100,26 +101,35 @@ fun SearchResultsScreen(
             }
             if (state.searchOpen) SearchPanel(
                 query = state.draftQuery,
-                suggestions = if (state.draftQuery.isBlank()) emptyList() else listOf(
+                suggestions = searchRows?.suggestions ?: if (state.draftQuery.isBlank()) emptyList() else listOf(
                     state.draftQuery.trim(), "${state.draftQuery.trim()} documentary",
                     "${state.draftQuery.trim()} music", "${state.draftQuery.trim()} live",
                 ).distinct(),
+                history = searchRows?.history.orEmpty(),
+                onRemoveHistory = searchRows?.onRemove,
                 onQueryChanged = { onAction(SearchAction.QueryChanged(it)) },
-                onSubmit = { onAction(SearchAction.SubmitSearch(it)) },
+                onSubmit = { onAction(SearchAction.SubmitSearch(it)); searchRows?.onSubmit?.invoke(it) },
                 onClose = { onAction(SearchAction.CloseSearch) },
                 onVoiceSearch = { onAction(SearchAction.VoiceSearch) },
             )
-            if (state.overlay is SearchOverlay.ItemMenu) MenuBottomSheet(
-                items = SearchVideoMenuAction.entries.map {
-                    MenuSheetItem(it.icon(), it.label, "search-menu-${it.name}")
-                },
-                onDismiss = { onAction(SearchAction.CloseItemMenu) },
-                onSelect = { index ->
-                    onAction(SearchAction.MenuAction(SearchVideoMenuAction.entries[index]))
-                },
-                tag = "search-video-menu",
-                paneTitle = "Video actions",
-            )
+            if (state.overlay is SearchOverlay.ItemMenu) {
+                // Feedback rows need a signed-in feedbackToken the anonymous menus never carry, so
+                // production only offers the rows that write through VideoActions/SaveSheetController.
+                val menuActions = if (state.live) SearchVideoMenuAction.entries.filter {
+                    it == SearchVideoMenuAction.WatchLater || it == SearchVideoMenuAction.SaveToPlaylist || it == SearchVideoMenuAction.Share
+                } else SearchVideoMenuAction.entries
+                MenuBottomSheet(
+                    items = menuActions.map {
+                        MenuSheetItem(it.icon(), it.label, "search-menu-${it.name}")
+                    },
+                    onDismiss = { onAction(SearchAction.CloseItemMenu) },
+                    onSelect = { index ->
+                        onAction(SearchAction.MenuAction(menuActions[index]))
+                    },
+                    tag = "search-video-menu",
+                    paneTitle = "Video actions",
+                )
+            }
             if (state.overlay is SearchOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
                 { onAction(SearchAction.CloseItemMenu) }, { onAction(SearchAction.SharePlaylist) })
         }

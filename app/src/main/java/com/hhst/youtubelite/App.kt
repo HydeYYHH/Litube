@@ -36,6 +36,7 @@ class App : Application(), Configuration.Provider {
         AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
         MMKV.initialize(this)
+        com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.MmkvAuthStore(this))
         startKoin {
             androidLogger(Level.ERROR)
             androidContext(this@App)

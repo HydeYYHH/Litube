@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -162,6 +163,41 @@ class SubscriptionsViewModelTest {
         assertEquals(SubscriptionsChip.Live, restored.uiState.value.selectedChip)
         assertEquals("films", restored.uiState.value.query)
         assertEquals(SubscriptionsOverlay.Search, restored.uiState.value.overlay)
+    }
+
+    private class FakeSaveRepository : com.hhst.youtubelite.saves.domain.SaveRepository {
+        var watchLaterCalls = 0
+        override suspend fun choices(videoId: String) =
+            listOf(com.hhst.youtubelite.saves.domain.SaveChoice("WL", "Watch later", false))
+        override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) = Unit
+        override suspend fun saveWatchLater(videoId: String) { watchLaterCalls++ }
+        override suspend fun create(title: String, description: String, videoId: String) =
+            com.hhst.youtubelite.saves.domain.SaveChoice("PLnew", title, true)
+        override suspend fun savePlaylistToLibrary(playlistId: String) = Unit
+    }
+
+    @Test fun liveMenuWritesThroughTheSaveSheetAndDropsFeedbackRows() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = SubscriptionsViewModel(FixtureSubscriptionsRepository(), SavedStateHandle(), SubscriptionsScenario.Content, true,
+            saveRepository = saves)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.live)
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        vm.onAction(SubscriptionsAction.MenuSelected(FeedMenuAction.WatchLater))
+        advanceUntilIdle()
+        assertEquals(1, saves.watchLaterCalls)
+        assertEquals(SubscriptionsOverlay.None, vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        vm.onAction(SubscriptionsAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        assertEquals("harbour", vm.saveSheet?.state?.value?.videoId)
+        vm.saveSheet?.close()
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        vm.onAction(SubscriptionsAction.MenuSelected(FeedMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertNull(vm.saveSheet?.state?.value)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
 }

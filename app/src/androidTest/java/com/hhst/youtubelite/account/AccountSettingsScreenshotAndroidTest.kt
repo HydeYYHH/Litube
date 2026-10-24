@@ -70,7 +70,7 @@ class AccountSettingsScreenshotAndroidTest {
         assertEquals(8f, phone.left, 0.5f)
         assertEquals(374f, phone.width, 0.5f)
         assertEquals(820f, phone.bottom, 0.5f)
-        assertEquals(13f + 58f + 3 * 48f, phone.height, 0.5f)
+        assertEquals(13f + 58f + 4 * 48f, phone.height, 0.5f)
         compose.runOnIdle { width = 1280; height = 800 }
         val wide = compose.onNodeWithTag("account-menu").fetchSemanticsNode().boundsInRoot
         assertEquals(440f, wide.left, 0.5f)

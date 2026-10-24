@@ -19,6 +19,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchResultsViewModelTest {
@@ -433,5 +434,105 @@ class SearchResultsViewModelTest {
         assertTrue(vm.uiState.value.signedInPreview)
     }
 
+    private class RecordingVideoActions : com.hhst.youtubelite.watch.domain.VideoActions {
+        val subscriptions = ArrayList<Pair<String, Boolean>>()
+        var error: Exception? = null
+        override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating, previous: com.hhst.youtubelite.watch.domain.VideoRating) = Unit
+        override suspend fun subscribe(channelId: String, subscribed: Boolean) {
+            error?.let { throw it }
+            subscriptions += channelId to subscribed
+        }
+    }
+
+    private class FakeSaveRepository(
+        var choicesError: Exception? = null,
+        var writeError: Exception? = null,
+    ) : com.hhst.youtubelite.saves.domain.SaveRepository {
+        var watchLaterCalls = 0
+        override suspend fun choices(videoId: String) = choicesError?.let { throw it }
+            ?: listOf(com.hhst.youtubelite.saves.domain.SaveChoice("WL", "Watch later", false))
+        override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {
+            writeError?.let { throw it }
+        }
+        override suspend fun saveWatchLater(videoId: String) {
+            writeError?.let { throw it }
+            watchLaterCalls++
+        }
+        override suspend fun create(title: String, description: String, videoId: String): com.hhst.youtubelite.saves.domain.SaveChoice {
+            writeError?.let { throw it }
+            return com.hhst.youtubelite.saves.domain.SaveChoice("PLnew", title, true)
+        }
+        override suspend fun savePlaylistToLibrary(playlistId: String) {
+            writeError?.let { throw it }
+        }
+    }
+
+    private fun liveViewModel(actions: RecordingVideoActions? = null, saves: FakeSaveRepository? = null) =
+        SearchResultsViewModel(repository { SearchPage(it, FixtureSearchRepository.sampleResults()) }, SavedStateHandle(), "open movie",
+            videoActions = actions, saveRepository = saves)
+
+    @Test fun liveSubscribeWritesThroughTheServerAndUpdatesTheState() = runTest {
+        val actions = RecordingVideoActions()
+        val vm = liveViewModel(actions = actions)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.live)
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        advanceUntilIdle()
+        assertEquals(listOf("northlight" to true), actions.subscriptions)
+        assertEquals(true, vm.uiState.value.subscriptions["northlight"])
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        advanceUntilIdle()
+        assertEquals(listOf("northlight" to true, "northlight" to false), actions.subscriptions)
+        assertEquals(false, vm.uiState.value.subscriptions["northlight"])
+    }
+
+    @Test fun failedLiveSubscribeKeepsTheStateAndNotifies() = runTest {
+        val actions = RecordingVideoActions().apply { error = com.hhst.youtubelite.watch.domain.SignInRequiredException() }
+        val vm = liveViewModel(actions = actions)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.subscriptions.isEmpty())
+        assertEquals(AppNotice.SignIn, vm.actionNotices.first())
+    }
+
+    @Test fun liveMenuWatchLaterWritesThroughTheSaveSheet() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveViewModel(saves = saves)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.WatchLater))
+        advanceUntilIdle()
+        assertEquals(1, saves.watchLaterCalls)
+        assertEquals(SearchOverlay.None, vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    @Test fun liveMenuSaveToPlaylistOpensTheSheetWithChoices() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveViewModel(saves = saves)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        val sheet = vm.saveSheet?.state?.value
+        assertEquals("harbour", sheet?.videoId)
+        assertEquals(listOf(com.hhst.youtubelite.saves.domain.SaveChoice("WL", "Watch later", false)), sheet?.choices)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    @Test fun liveMenuFeedbackRowsAreDropped() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveViewModel(saves = saves)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertEquals(SearchOverlay.None, vm.uiState.value.overlay)
+        assertEquals(0, saves.watchLaterCalls)
+        assertNull(vm.saveSheet?.state?.value)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
 
 }

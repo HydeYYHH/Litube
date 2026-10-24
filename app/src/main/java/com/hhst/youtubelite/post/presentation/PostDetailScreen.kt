@@ -127,7 +127,7 @@ private fun PostDetailTopBar(
             Modifier.weight(1f).padding(end = 4.dp).testTag("post-detail-title"),
             size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1,
         )
-        AppIconButton(
+        if (!state.live) AppIconButton(
             AppIcon.More, "Post actions",
             modifier = Modifier.testTag("post-detail-more"),
             diameter = 48.dp,

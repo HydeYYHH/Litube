@@ -44,11 +44,13 @@ import com.hhst.youtubelite.feedback.presentation.FeedbackSheet
 import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
 import com.hhst.youtubelite.saves.domain.SavePlaylist
 import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
+import com.hhst.youtubelite.saves.presentation.SaveSheetLive
 import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 
 /** Stateless rendering boundary; local state is limited to saved scroll/focus state. */
 @Composable
-fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier) {
+fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier,
+    searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null) {
     AppTheme {
         BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("home-screen")) {
             val width = maxWidth.value
@@ -127,7 +129,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                             ) {
                                 items(content.page.items.filterNot { state.hideShorts && it is FeedItem.Shorts }, key = { it.id }, span = { if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1) }, contentType = { it.javaClass.simpleName }) { item ->
                                     Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
-                                        FeedCard(item, compact = currentWidth < 528, windowWidth = currentWidth, onAction)
+                                        FeedCard(item, compact = currentWidth < 528, windowWidth = currentWidth, state.live, onAction)
                                     }
                                 }
                                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -145,17 +147,29 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     }
                     }
                 }
-                HomeBottomBar(state.signedInPreview, state.content == HomeContent.Loading, onAction)
+                HomeBottomBar(state.signedInPreview, state.content == HomeContent.Loading, onAction, state.avatar)
             }
             when (val overlay = state.overlay) {
                 HomeOverlay.None -> Unit
-                HomeOverlay.Search -> SearchOverlay(state, onAction)
-                is HomeOverlay.Menu -> if (overlay.kind == FeedMenuKind.Mix) MixMenu(onAction) else VideoMenu(onAction, overlay.kind)
+                HomeOverlay.Search -> SearchOverlay(state, onAction, searchRows)
+                is HomeOverlay.Menu -> if (overlay.kind == FeedMenuKind.Mix) MixMenu(onAction, state.live) else VideoMenu(onAction, overlay.kind, state.live)
                 is HomeOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
                     draft = NewPlaylistDraft(overlay.title, overlay.description),
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
                     onDraftChange = { onAction(HomeAction.SaveDraftChanged(it.title, it.description)) },
                     onSubmit = { onAction(HomeAction.SubmitNewPlaylist) },
+                ) else if (overlay.live) SaveToPlaylistSheet(
+                    playlists = emptyList(),
+                    onDismiss = { onAction(HomeAction.CloseOverlay) },
+                    onSelect = {},
+                    onNewPlaylist = { onAction(HomeAction.OpenNewPlaylist) },
+                    live = SaveSheetLive(
+                        choices = overlay.choices,
+                        failed = overlay.choicesFailed,
+                        pending = overlay.pending,
+                        onToggle = { onAction(HomeAction.SaveChoiceToggled(it)) },
+                        onRetry = { onAction(HomeAction.SaveChoicesRetry) },
+                    ),
                 ) else SaveToPlaylistSheet(
                     playlists = homeSavePlaylists,
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
@@ -194,7 +208,7 @@ private fun HomeTopBar(onAction: (HomeAction) -> Unit) {
 }
 
 @Composable
-private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAction) -> Unit) {
+private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAction) -> Unit, avatar: String? = null) {
     Column(Modifier.fillMaxWidth().testTag("home-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(DesignTokens.BottomBarHeight)) {
@@ -207,11 +221,16 @@ private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAc
                         }.testTag("nav-${destination.name}"),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         if (signedIn && destination == HomeDestination.You) {
-                            Image(
-                                painterResource(R.drawable.sample_bunny),
-                                contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
+                            if (avatar.isNullOrBlank()) {
+                                Image(
+                                    painterResource(R.drawable.sample_bunny),
+                                    contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            } else {
+                                com.hhst.youtubelite.ui.design.Artwork(avatar,
+                                    modifier = Modifier.size(24.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                            }
                         } else AppIcon(when (destination) {
                             HomeDestination.Home -> AppIcon.Home; HomeDestination.Shorts -> AppIcon.Shorts
                             HomeDestination.Subscriptions -> AppIcon.Subscriptions; HomeDestination.You -> AppIcon.You

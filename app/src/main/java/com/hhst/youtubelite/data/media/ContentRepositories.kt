@@ -3,7 +3,7 @@ package com.hhst.youtubelite.data.media
 import android.content.Intent
 import com.hhst.youtubelite.BuildConfig
 
-class ContentRepositories(val client: MediaClient) {
+class ContentRepositories(val client: MediaClient, kv: com.tencent.mmkv.MMKV? = null) {
     val home by lazy { MediaHomeRepository(client) }
     val search by lazy { MediaSearchRepository(client) }
     val watch by lazy { MediaWatchRepository(client) }
@@ -12,10 +12,12 @@ class ContentRepositories(val client: MediaClient) {
     val channel by lazy { MediaChannelRepository(client, posts) }
     val votes by lazy { MediaVoteRepository(client) }
     val videoActions by lazy { MediaVideoActions(client) }
+    val saves by lazy { MediaSaveRepository(client) }
     val library by lazy { MediaLibraryRepository(client) }
     val subscriptions by lazy { MediaSubscriptionsRepository(client) }
     val notifications by lazy { MediaNotificationsRepository(client) }
     val explore by lazy { MediaExploreRepository(client) }
+    val suggestions by lazy { MediaSearchSuggestions(client, kv ?: com.tencent.mmkv.MMKV.defaultMMKV()) }
     fun shorts(startId: String?, channelId: String?) = MediaShortsRepository(client, startId, channelId)
     fun comments() = MediaCommentsRepository(client)
 

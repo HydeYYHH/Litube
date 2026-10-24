@@ -65,7 +65,7 @@ fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAct
                     is SubscriptionsContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "subscriptions-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(SubscriptionsAction.SignIn) } }
-                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, width, state.selectedChip, gridState, onAction)
+                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, width, state.selectedChip, state.chips, gridState, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, null, selected = MainTab.Subscriptions) { tab -> onAction(SubscriptionsAction.Destination(tab)) }
@@ -90,10 +90,10 @@ private fun SubscriptionsTopBar(width: Float, onAction: (SubscriptionsAction) ->
 }
 
 @Composable
-private fun SubscriptionsChipStrip(selected: SubscriptionsChip, onAction: (SubscriptionsAction) -> Unit) {
+private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<SubscriptionsChip>, onAction: (SubscriptionsAction) -> Unit) {
     LazyRow(Modifier.fillMaxWidth().height(48.dp).testTag("subscriptions-chips"), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-        listItems(SubscriptionsChip.entries) { chip ->
+        listItems(chips) { chip ->
             Box(Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
                 .background(if (chip == selected) DesignTokens.Ink else DesignTokens.Surface)
                 .clickable(role = Role.Tab) { onAction(SubscriptionsAction.SelectChip(chip)) }
@@ -136,7 +136,7 @@ private fun ChannelAvatarStrip(channels: List<SubscribedChannel>, onAction: (Sub
 }
 
 @Composable
-private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, selectedChip: SubscriptionsChip, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, onAction: (SubscriptionsAction) -> Unit) {
+private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, selectedChip: SubscriptionsChip, chips: List<SubscriptionsChip>, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, onAction: (SubscriptionsAction) -> Unit) {
     val compact = width < 600f
     val nearEnd by remember(content) { derivedStateOf {
         (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= content.page.items.size - 2
@@ -147,7 +147,7 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
         }
     }
     Column(Modifier.fillMaxSize()) {
-        if (compact) ChannelAvatarStrip(content.page.channels, onAction) else SubscriptionsChipStrip(selectedChip, onAction)
+        if (compact) ChannelAvatarStrip(content.page.channels, onAction) else SubscriptionsChipStrip(selectedChip, chips, onAction)
         LazyVerticalGrid(
             columns = GridCells.Fixed(if (compact) 1 else SubscriptionsLayout.columns(width)), state = gridState,
             modifier = Modifier.fillMaxSize().testTag("subscriptions-feed"),

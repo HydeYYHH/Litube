@@ -223,7 +223,10 @@ class ChannelCommunityHostAndroidTest {
         host.onActivity {
             assertEquals(ChannelNavigationRequest.LiveStream("blender", "live-now"), it.lastNavigationRequest)
         }
-        compose.onNodeWithTag("watch-screen").assertDoesNotExist()
+        // The host routes the typed live request to the same playback host.
+        awaitNode("watch-screen")
+        composerBack()
+        awaitNode("channel-live-list")
 
         compose.onNodeWithTag("channel-live-live-1").performClick()
         host.onActivity {

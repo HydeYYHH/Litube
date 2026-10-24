@@ -56,6 +56,8 @@ import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.ui.renderNotice
+
 class ShortsActivity : ComponentActivity() {
     lateinit var shortsViewModel: ShortsViewModel
         private set
@@ -77,15 +79,21 @@ class ShortsActivity : ComponentActivity() {
         val startItemId = intent.getStringExtra(EXTRA_START_ITEM)
         val scenario = if (BuildConfig.DEBUG) ShortsScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else ShortsScenario.Content
         commentsScenario = if (BuildConfig.DEBUG) CommentsScenario.parse(intent.getStringExtra(EXTRA_COMMENTS_SCENARIO)) else CommentsScenario.Content
-        val commentsVideoId = startItemId ?: "short-1"
+        if (startItemId != null || fixtures) commentsViewModel = commentsFor(startItemId ?: "short-1")
         shortsViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == ShortsViewModel::class.java)
-                return ShortsViewModel(if (fixtures) FixtureShortsRepository(scenario, intent.getStringExtra(EXTRA_CHANNEL_ID)) else sources.shorts(startItemId, intent.getStringExtra(EXTRA_CHANNEL_ID)), extras.createSavedStateHandle(), scenario, startItemId) as T
+                return ShortsViewModel(if (fixtures) FixtureShortsRepository(scenario, intent.getStringExtra(EXTRA_CHANNEL_ID)) else sources.shorts(startItemId, intent.getStringExtra(EXTRA_CHANNEL_ID)), extras.createSavedStateHandle(), scenario, startItemId, if (fixtures) null else sources.videoActions) as T
             }
         })[ShortsViewModel::class.java]
-        commentsViewModel = commentsFor(commentsVideoId)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                shortsViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 shortsViewModel.navigationRequests.collect { request ->
@@ -93,7 +101,11 @@ class ShortsActivity : ComponentActivity() {
                     when (request) {
                         is ShortsNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@ShortsActivity, request.channelId))
                         is ShortsNavigationRequest.Share -> shareGateway.share(request.itemId)
-                        else -> Unit
+                        // Fixture-only typed exits: the feedback-only menu hides in production
+                        // (state.live) and rate/subscribe writes run in-VM there. No `else`: a new
+                        // request type must fail to compile here.
+                        is ShortsNavigationRequest.Rate, is ShortsNavigationRequest.Subscribe,
+                        is ShortsNavigationRequest.MenuAction -> Unit
                     }
                 }
             }
@@ -116,11 +128,14 @@ class ShortsActivity : ComponentActivity() {
                 }
             }
             val state by shortsViewModel.uiState.collectAsStateWithLifecycle()
-            val commentItem = (state.overlay as? ShortsOverlay.Comments)?.itemId ?: state.currentItemId ?: commentsVideoId
-            val activeComments = remember(commentItem) { commentsFor(commentItem) }
-            commentsViewModel = activeComments
-            val commentsState by activeComments.uiState.collectAsStateWithLifecycle()
+            // Comments only exist for a real item; a seedless feed has none until the first page lands.
+            val commentItem = (state.overlay as? ShortsOverlay.Comments)?.itemId ?: state.currentItemId
+            val activeComments = remember(commentItem) { commentItem?.let { commentsFor(it) } }
+            if (activeComments != null) commentsViewModel = activeComments
+            val fallbackComments = remember { kotlinx.coroutines.flow.MutableStateFlow(com.hhst.youtubelite.comments.domain.CommentsUiState()) }
+            val commentsState by (activeComments?.uiState ?: fallbackComments).collectAsStateWithLifecycle()
             LaunchedEffect(activeComments) {
+                if (activeComments == null) return@LaunchedEffect
                 lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     activeComments.navigationRequests.collect { request ->
                         if (request is CommentNavigationRequest.OpenAuthor) {
@@ -129,11 +144,11 @@ class ShortsActivity : ComponentActivity() {
                     }
                 }
             }
-            val closeComments = { commentsViewModel.onAction(CommentAction.CloseMenu); shortsViewModel.onAction(ShortsAction.CloseComments) }
+            val closeComments = { activeComments?.onAction(CommentAction.CloseMenu); shortsViewModel.onAction(ShortsAction.CloseComments) }
             BackHandler(enabled = state.overlay != ShortsOverlay.None) {
                 when (state.overlay) {
                     is ShortsOverlay.Comments -> {
-                        if (commentsState.overlay != CommentsOverlay.None) activeComments.onAction(CommentAction.CloseMenu)
+                        if (commentsState.overlay != CommentsOverlay.None) activeComments?.onAction(CommentAction.CloseMenu)
                         else closeComments()
                     }
                     is ShortsOverlay.Menu -> shortsViewModel.onAction(ShortsAction.CloseMenu)
@@ -153,12 +168,12 @@ class ShortsActivity : ComponentActivity() {
                     com.hhst.youtubelite.watch.presentation.WatchPlayer(Modifier.fillMaxSize(), { finish() }, pip = true)
                 }
             })
-            if (state.overlay is ShortsOverlay.Comments) {
+            if (state.overlay is ShortsOverlay.Comments && activeComments != null) {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("comments-panel-host")) {
                     CommentsPanel(
                         state = commentsState,
                         commentCount = commentsState.total,
-                        onAction = commentsViewModel::onAction,
+                        onAction = activeComments::onAction,
                         onClose = closeComments,
                     )
                 }

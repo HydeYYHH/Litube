@@ -29,6 +29,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CommentsViewModelTest {
@@ -420,7 +421,7 @@ class CommentsViewModelTest {
         assertFalse(vm.uiState.value.actionPending)
         assertEquals("Do not discard", vm.uiState.value.draft)
         assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
-        assertTrue(vm.actionNotices.first() is com.hhst.youtubelite.comments.domain.CommentNotice.Message)
+        assertTrue(vm.actionNotices.first() is AppNotice.Message)
         val restored = CommentsViewModel(repository, saved, "bunny")
         assertEquals("Do not discard", restored.uiState.value.draft)
         assertTrue(restored.uiState.value.overlay is CommentsOverlay.Composer)
@@ -440,6 +441,20 @@ class CommentsViewModelTest {
         assertEquals("sintel", vm.uiState.value.videoId)
         assertEquals("", vm.uiState.value.draft)
         assertFalse(vm.uiState.value.actionPending)
+    }
+
+    @Test fun newestSortFallsBackToTopWithANoticeWhenTheLaneIsMissing() = runTest {
+        val vm = CommentsViewModel(repository { _, sort ->
+            val page = FixtureCommentsRepository().comments("bunny", CommentSort.Top, null)
+            if (sort == CommentSort.Newest) page.copy(sortFallback = true) else page
+        }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.SelectSort(CommentSort.Newest))
+        advanceUntilIdle()
+        assertEquals(CommentSort.Top, vm.uiState.value.sort)
+        assertTrue(vm.uiState.value.content is CommentsContent.Ready)
+        assertEquals(AppNotice.Message("Newest comments aren't offered here. Showing top comments."),
+            vm.actionNotices.first())
     }
 
 }

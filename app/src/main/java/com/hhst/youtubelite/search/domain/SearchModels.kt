@@ -76,6 +76,10 @@ data class SearchUiState(
     val draftQuery: String = query,
     val filters: SearchFilters = SearchFilters(),
     val filtersOpen: Boolean = false,
+    /** Production mode: account writes run in the ViewModel and the feedback-only menu rows hide. */
+    val live: Boolean = false,
+    /** Confirmed subscription state per channel, applied only after the server confirms. */
+    val subscriptions: Map<String, Boolean> = emptyMap(),
 ) {
     val searchOpen: Boolean get() = overlay == SearchOverlay.Search
 }

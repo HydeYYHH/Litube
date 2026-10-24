@@ -11,6 +11,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
@@ -57,6 +58,88 @@ class HomeViewModelTest {
 
     private fun repository(block: suspend (String, String?) -> HomePage) = object : HomeRepository {
         override suspend fun loadHome(filter: String, continuation: String?) = block(filter, continuation)
+    }
+
+    private class FakeSaveRepository(
+        var choicesResult: List<com.hhst.youtubelite.saves.domain.SaveChoice> = listOf(
+            com.hhst.youtubelite.saves.domain.SaveChoice("WL", "Watch later", false),
+        ),
+        var choicesError: Exception? = null,
+        var writeError: Exception? = null,
+    ) : com.hhst.youtubelite.saves.domain.SaveRepository {
+        val writes = ArrayList<Triple<String, String, Boolean>>()
+        var watchLaterCalls = 0
+        override suspend fun choices(videoId: String) = choicesError?.let { throw it } ?: choicesResult
+        override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {
+            writeError?.let { throw it }
+            writes.add(Triple(playlistId, videoId, contains))
+        }
+        override suspend fun saveWatchLater(videoId: String) {
+            writeError?.let { throw it }
+            watchLaterCalls++
+        }
+        override suspend fun create(title: String, description: String, videoId: String): com.hhst.youtubelite.saves.domain.SaveChoice {
+            writeError?.let { throw it }
+            return com.hhst.youtubelite.saves.domain.SaveChoice("PLnew", title, true)
+        }
+        override suspend fun savePlaylistToLibrary(playlistId: String) {
+            writeError?.let { throw it }
+        }
+    }
+
+    private fun liveSaveViewModel(saves: FakeSaveRepository): HomeViewModel =
+        HomeViewModel(repository { _, _ -> FixtureHomeRepository.samplePage() }, SavedStateHandle(), saveRepository = saves)
+
+    @Test fun liveSaveSheetLoadsChoicesAndTogglesThroughTheServer() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        val loaded = vm.uiState.value.overlay as HomeOverlay.Save
+        assertTrue(loaded.live)
+        assertEquals(listOf("WL"), loaded.choices!!.map { it.id })
+        vm.onAction(HomeAction.SaveChoiceToggled(loaded.choices!![0]))
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("WL", "bunny", true)), saves.writes)
+        assertTrue((vm.uiState.value.overlay as HomeOverlay.Save).choices!![0].contains)
+    }
+
+    @Test fun failedChoicesOfferRetryAndKeepTheSheetOpen() = runTest {
+        val saves = FakeSaveRepository(choicesError = java.io.IOException("offline"))
+        val vm = liveSaveViewModel(saves)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        val failed = vm.uiState.value.overlay as HomeOverlay.Save
+        assertTrue(failed.choicesFailed)
+        saves.choicesError = null
+        vm.onAction(HomeAction.SaveChoicesRetry)
+        advanceUntilIdle()
+        val retried = vm.uiState.value.overlay as HomeOverlay.Save
+        assertFalse(retried.choicesFailed)
+        assertEquals(listOf("WL"), retried.choices!!.map { it.id })
+    }
+
+    @Test fun guestSaveClosesTheSheetAndRequestsSignIn() = runTest {
+        val saves = FakeSaveRepository(choicesError = com.hhst.youtubelite.watch.domain.SignInRequiredException())
+        val vm = liveSaveViewModel(saves)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+        assertEquals(AppNotice.SignIn, withTimeoutOrNull(500) { vm.actionNotices.first() })
+    }
+
+    @Test fun watchLaterMenuRowWritesThroughTheRepositoryInLiveMode() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.WatchLater))
+        advanceUntilIdle()
+        assertEquals(1, saves.watchLaterCalls)
+        assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
     @Test fun firstVisitDoesNotLoadRecommendations() = runTest {

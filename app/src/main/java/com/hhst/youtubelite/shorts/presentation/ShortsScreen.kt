@@ -50,13 +50,14 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
-            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent)
+            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent, state)
         }
     }
 }
 
 @Composable
-private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?) {
+private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
+    state: ShortsUiState) {
     val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
     val currentAction by rememberUpdatedState(onAction)
     LaunchedEffect(pagerState, items) {
@@ -65,19 +66,24 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
         }
     }
     VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
-        ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null)
+        ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null,
+            rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
+            subscribed = state.subscriptions[items[page].channelId] == true,
+            menuVisible = !state.live)
     }
 }
 
 @Composable
-private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?) {
+private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
+    rating: com.hhst.youtubelite.watch.domain.VideoRating = com.hhst.youtubelite.watch.domain.VideoRating.None,
+    subscribed: Boolean = false, menuVisible: Boolean = true) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
         Image(item.artwork, Modifier.fillMaxSize(), "Play ${item.title}")
         videoContent?.invoke(item.id)
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         BoxWithConstraints(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        AppIconButton(AppIcon.More, "More actions for ${item.title}",
+        if (menuVisible) AppIconButton(AppIcon.More, "More actions for ${item.title}",
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp), diameter = 32.dp, color = Color.White) {
             onAction(ShortsAction.OpenMenu(item.id))
         }
@@ -85,7 +91,9 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
         Column(Modifier.align(Alignment.BottomEnd).width(railWidth)
             .padding(end = 8.dp, bottom = minOf(76.dp, maxHeight / 5))
             .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            RailAction(AppIcon.Like, "Like ${item.title}", item.likes, onClick = { onAction(ShortsAction.Like(item.id)) })
+            RailAction(AppIcon.Like, "Like ${item.title}", item.likes,
+                tinted = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like,
+                onClick = { onAction(ShortsAction.Like(item.id)) })
             Spacer(Modifier.height(12.dp))
             RailAction(AppIcon.Comment, "Comments for ${item.title}", item.comments, onClick = {
                 onAction(ShortsAction.OpenComments(item.id))
@@ -105,8 +113,8 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
                     }
                     AppText("@${item.author}", Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
                 }
-                AppText("Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
-                    .background(DesignTokens.Ink).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
+                AppText(if (subscribed) "Subscribed" else "Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
+                    .background(if (subscribed) Color.White.copy(alpha = 0.25f) else DesignTokens.Ink).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
                     .padding(horizontal = 16.dp).heightIn(min = 40.dp),
                     size = 14, line = 40, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
             }
@@ -125,9 +133,9 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
 }
 
 @Composable
-private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit) {
+private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit, tinted: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AppIconButton(icon, description, diameter = 32.dp, color = Color.White, onClick = onClick)
+        AppIconButton(icon, description, diameter = 32.dp, color = if (tinted) DesignTokens.Red else Color.White, onClick = onClick)
         if (label.isNotEmpty()) {
             AppText(label, Modifier.testTag("rail-label-$description"), size = 12, line = 16,
                 weight = FontWeight.Medium, color = Color.White, maxLines = 1)

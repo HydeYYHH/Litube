@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -54,6 +57,8 @@ import com.hhst.youtubelite.ui.design.SearchPanel
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.ui.renderNotice
+
 /** Hosts the library page. The Shorts tab is wired with its own screen. */
 class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var youViewModel: YouViewModel
@@ -63,6 +68,9 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     /** Test seam: records the typed request without opening the downloads manager. */
     var launchDownloads: Boolean = true
+
+    private var showSwitchSheet by mutableStateOf(false)
+    private var confirmSignOut by mutableStateOf(false)
 
     val shareGateway: com.hhst.youtubelite.share.ShareGateway by lazy { com.hhst.youtubelite.share.ShareGateway(this) }
 
@@ -77,7 +85,8 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == YouViewModel::class.java)
-                return YouViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, signedIn) as T
+                return YouViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, signedIn,
+                    if (fixtures) null else sources.saves) as T
             }
         })[YouViewModel::class.java]
         lifecycleScope.launch {
@@ -98,33 +107,73 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         LibraryNavigationRequest.OpenNotifications -> startActivity(NotificationsActivity.intent(this@YouActivity, signedIn))
                         LibraryNavigationRequest.OpenDownloads ->
                             if (launchDownloads) com.hhst.youtubelite.downloader.ui.DownloadUi.openManager(this@YouActivity)
+                        LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> SignInFlow.open(this@YouActivity)
+                        LibraryNavigationRequest.SwitchAccount -> showSwitchSheet = true
+                        LibraryNavigationRequest.SignOut -> confirmSignOut = true
                         LibraryNavigationRequest.Settings -> startActivity(SettingsActivity.intent(this@YouActivity))
                         LibraryNavigationRequest.About ->
                             startActivity(Intent(this@YouActivity, AboutActivity::class.java))
                         is LibraryNavigationRequest.Destination -> openTab(request.tab)
-                        else -> Unit
+                        // No `else`: a new request type must fail to compile here.
                     }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                youViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
                 }
             }
         }
         setContent {
             val state by youViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
-                if (state.overlay != LibraryOverlay.None) youViewModel.onAction(LibraryAction.CloseOverlay) else MainTabs.intent(this, MainTab.Home, state.signedIn)?.let(::startActivity)
+                if (youViewModel.saveSheet?.state?.value != null) youViewModel.saveSheet?.close()
+                else if (confirmSignOut) confirmSignOut = false
+                else if (showSwitchSheet) showSwitchSheet = false
+                else if (state.overlay != LibraryOverlay.None) youViewModel.onAction(LibraryAction.CloseOverlay)
+                else MainTabs.intent(this, MainTab.Home, state.signedIn)?.let(::startActivity)
             }
             BackHandler(onBack = back)
             YouScreen(state, youViewModel::onAction,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+            youViewModel.saveSheet?.let { sheet ->
+                val sheetState by sheet.state.collectAsStateWithLifecycle()
+                sheetState?.let { current ->
+                    if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
+                        draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
+                        onDismiss = sheet::close,
+                        onDraftChange = { sheet.draftChanged(it.title, it.description) },
+                        onSubmit = sheet::submitNewPlaylist,
+                    ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
+                        playlists = emptyList(),
+                        onDismiss = sheet::close,
+                        onSelect = {},
+                        onNewPlaylist = sheet::openNewPlaylist,
+                        live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
+                            choices = current.choices,
+                            failed = current.choicesFailed,
+                            pending = current.pending,
+                            onToggle = sheet::toggle,
+                            onRetry = sheet::retry,
+                        ),
+                    )
+                }
+            }
             if (state.overlay == LibraryOverlay.Search) {
                 val query = state.query.trim()
+                val rows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures) null else sources.suggestions, query)
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     SearchPanel(
                         query = state.query,
-                        suggestions = if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        suggestions = rows?.suggestions ?: if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        history = rows?.history.orEmpty(),
+                        onRemoveHistory = rows?.onRemove,
                         onQueryChanged = { youViewModel.onAction(LibraryAction.QueryChanged(it)) },
-                        onSubmit = { youViewModel.onAction(LibraryAction.SubmitSearch(it)) },
+                        onSubmit = { youViewModel.onAction(LibraryAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
                         onClose = back,
                         onVoiceSearch = { youViewModel.onAction(LibraryAction.VoiceSearch) },
                     )
@@ -170,6 +219,55 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     },
                     paneTitle = "History actions",
                 )
+            }
+            if (showSwitchSheet) {
+                // Fixtures keep a deterministic second account so the switcher is testable offline.
+                val items = if (fixtures) {
+                    val current = (state.content as? LibraryContent.Ready)?.page?.account
+                    listOfNotNull(current?.let { com.hhst.youtubelite.account.domain.AccountItem(it.channelId, it.name, it.handle, it.avatar, selected = true) }) +
+                        com.hhst.youtubelite.account.domain.AccountItem("litube-maker", "Litube Maker", "@litube-maker", "", selected = false)
+                } else {
+                    val selectedId = com.hhst.youtubelite.data.media.MediaSession.snapshot().accountId
+                    com.hhst.youtubelite.data.media.MediaSession.accounts().filterNot { it.disabled }.map {
+                        com.hhst.youtubelite.account.domain.AccountItem(it.id, it.name.orEmpty(), it.email.orEmpty(), it.photo.orEmpty(), it.id == selectedId)
+                    }
+                }
+                com.hhst.youtubelite.account.presentation.AccountSwitchSheet(items,
+                    onSelect = { id ->
+                        showSwitchSheet = false
+                        if (!fixtures && com.hhst.youtubelite.data.media.MediaSession.selectAccount(id)) {
+                            val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+                            youViewModel.updateSession(session.signedIn, session.generation)
+                        }
+                    },
+                    onAddAccount = {
+                        showSwitchSheet = false
+                        SignInFlow.open(this@YouActivity)
+                    },
+                    onDismiss = { showSwitchSheet = false })
+            }
+            if (confirmSignOut) {
+                com.hhst.youtubelite.ui.components.YoutubeAlertDialog(
+                    onDismissRequest = { confirmSignOut = false },
+                    title = { com.hhst.youtubelite.ui.design.AppText("Sign out?") },
+                    text = { com.hhst.youtubelite.ui.design.AppText("This removes the account from this device. Downloads and settings are kept.") },
+                    confirmButton = {
+                        com.hhst.youtubelite.ui.components.YoutubeTextButton(onClick = {
+                            confirmSignOut = false
+                            if (!fixtures) {
+                                com.hhst.youtubelite.data.media.MediaSession.signOut()
+                                val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+                                youViewModel.updateSession(session.signedIn, session.generation)
+                            }
+                        }, modifier = Modifier.testTag("account-signout-confirm")) {
+                            com.hhst.youtubelite.ui.design.AppText("Sign out", color = com.hhst.youtubelite.ui.theme.YoutubeStyle.Action)
+                        }
+                    },
+                    dismissButton = {
+                        com.hhst.youtubelite.ui.components.YoutubeTextButton(onClick = { confirmSignOut = false }) {
+                            com.hhst.youtubelite.ui.design.AppText("Cancel")
+                        }
+                    })
             }
         }
     }

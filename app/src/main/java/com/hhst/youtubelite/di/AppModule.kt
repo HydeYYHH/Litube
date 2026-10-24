@@ -92,8 +92,9 @@ import org.koin.dsl.module
 
 /** Application-scoped Koin module. */
 val appModule = module {
-    single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::snapshot) }
-    single { com.hhst.youtubelite.data.media.ContentRepositories(get()) }
+    // freshContext runs on the MediaClient pool: it may block on a token refresh.
+    single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::freshContext) }
+    single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get()) }
     single {
         DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)

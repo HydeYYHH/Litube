@@ -52,6 +52,7 @@ import com.hhst.youtubelite.feedback.presentation.FeedbackSheet
 import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
 import com.hhst.youtubelite.saves.domain.SavePlaylist
 import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
+import com.hhst.youtubelite.saves.presentation.SaveSheetLive
 import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.watch.domain.*
@@ -141,7 +142,7 @@ fun WatchScreen(
                         }
                     }
                 }
-                WatchTopBar(onAction, onBack)
+                WatchTopBar(onAction, onBack, state.live)
             }
             menuContent()
         }
@@ -152,11 +153,11 @@ fun WatchScreen(
 internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit) {
     when (val overlay = state.overlay) {
         is WatchOverlay.ItemMenu -> MenuBottomSheet(
-            items = WatchVideoMenuAction.entries.map {
+            items = watchVideoMenuActions(state.live).map {
                 MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
             },
             onDismiss = { onAction(WatchAction.CloseOverlay) },
-            onSelect = { index -> onAction(WatchAction.MenuAction(WatchVideoMenuAction.entries[index])) },
+            onSelect = { index -> onAction(WatchAction.MenuAction(watchVideoMenuActions(state.live)[index])) },
             tag = "watch-video-menu",
             paneTitle = "Video actions",
         )
@@ -165,6 +166,18 @@ internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit
             onDismiss = { onAction(WatchAction.CloseOverlay) },
             onDraftChange = { onAction(WatchAction.SaveDraftChanged(it.title, it.description)) },
             onSubmit = { onAction(WatchAction.SubmitNewPlaylist) },
+        ) else if (overlay.live) SaveToPlaylistSheet(
+            playlists = emptyList(),
+            onDismiss = { onAction(WatchAction.CloseOverlay) },
+            onSelect = {},
+            onNewPlaylist = { onAction(WatchAction.OpenNewPlaylist) },
+            live = SaveSheetLive(
+                choices = overlay.choices,
+                failed = overlay.choicesFailed,
+                pending = overlay.pending,
+                onToggle = { onAction(WatchAction.SaveChoiceToggled(it)) },
+                onRetry = { onAction(WatchAction.SaveChoicesRetry) },
+            ),
         ) else SaveToPlaylistSheet(
             playlists = savePlaylists,
             onDismiss = { onAction(WatchAction.CloseOverlay) },
@@ -197,7 +210,7 @@ private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
 }
 
 @Composable
-private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit) {
+private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit, live: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).background(Color.White).testTag("watch-topbar"),
         verticalAlignment = Alignment.CenterVertically,
@@ -205,7 +218,8 @@ private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit) {
         AppIconButton(AppIcon.Back, "Back", onClick = onBack)
         Spacer(Modifier.weight(1f))
         AppIconButton(AppIcon.Search, "Search", onClick = { onAction(WatchAction.OpenSearch) })
-        AppIconButton(AppIcon.More, "More options", onClick = { onAction(WatchAction.OpenPageMenu) })
+        // The page menu's only entries need feedback tokens the page never carries; it hides in production.
+        if (!live) AppIconButton(AppIcon.More, "More options", onClick = { onAction(WatchAction.OpenPageMenu) })
         Spacer(Modifier.width(8.dp))
     }
 }
@@ -366,7 +380,7 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
             }
             Spacer(Modifier.height(3.dp))
         }
-        WatchActionBar(video, state.actionPending, onAction)
+        WatchActionBar(video, state.actionPending, state.live, onAction)
     }
 }
 
@@ -416,7 +430,7 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
 }
 
 @Composable
-private fun WatchActionBar(video: WatchVideo, pending: Boolean, onAction: (WatchAction) -> Unit) {
+private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, onAction: (WatchAction) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -449,7 +463,8 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, onAction: (Watch
                 Triple(AppIcon.Share, "Share", WatchAction.Share),
                 Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
                 Triple(AppIcon.Report, "Report", WatchAction.Report),
-            ).forEachIndexed { index, (icon, description, action) ->
+            // Report's submission needs a feedback token the page never carries; it hides in production.
+            ).filter { !live || it.third != WatchAction.Report }.forEachIndexed { index, (icon, description, action) ->
                 WatchSlotButton(icon, description,
                     label = when (index) { 0 -> video.likeCount ?: video.likes.removeSuffix(" likes").takeIf { it.isNotBlank() }; 1 -> video.dislikeCount; else -> null },
                     selected = (index == 0 && video.rating == VideoRating.Like) || (index == 1 && video.rating == VideoRating.Dislike),
@@ -511,7 +526,8 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
         ) {
             Column {
                 Row(Modifier.heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppText("Comments", size = 14, line = 20, weight = FontWeight.Medium)
+                    // Live streams with a chat continuation open the live chat panel instead.
+                    AppText(if (video.live && video.chatKey != null) "Live chat" else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
                     Spacer(Modifier.width(4.dp))
                     AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
                 }
@@ -521,7 +537,7 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                         Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
                         Spacer(Modifier.width(12.dp))
                     }
-                    AppText(when (video.commentsStatus) {
+                    AppText(if (video.live && video.chatKey != null) "Join the live chat" else when (video.commentsStatus) {
                         WatchCommentsStatus.Loading -> "Loading comments…"
                         WatchCommentsStatus.Empty -> "No comments yet"
                         WatchCommentsStatus.Disabled -> "Comments are turned off"

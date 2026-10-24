@@ -25,7 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Account menu and settings entry points; sign-in must reuse the browser boundary. */
+/** Account menu and settings entry points; sign-in uses the native device-code flow. */
 class AccountSettingsAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var scenario: ActivityScenario<*>? = null
@@ -83,23 +83,54 @@ class AccountSettingsAndroidTest {
         ActivityTestSupport.waitForResumed(compose, ChannelActivity::class.java)
     }
 
-    @Test fun switchAccountUsesTheExistingBrowserSignInBoundary() {
+    @Test fun switchAccountOpensTheNativeSwitcherWithTheFixtureAccounts() {
         val host = launchYou()
         openAccountMenu(host)
         compose.onNodeWithTag("account-action-switch").performClick()
+        host.onActivity {
+            assertEquals(LibraryNavigationRequest.SwitchAccount, it.lastNavigationRequest)
+        }
+        compose.onNodeWithTag("account-switch").assertIsDisplayed()
+        compose.onNodeWithTag("account-switch-litube").assertIsDisplayed()
+        compose.onNodeWithTag("account-switch-litube-maker").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("account-switch").assertDoesNotExist()
+    }
+
+    @Test fun signOutAsksForConfirmationAndStaysLocalInFixtures() {
+        val host = launchYou()
+        openAccountMenu(host)
+        compose.onNodeWithTag("account-action-signout").performClick()
+        host.onActivity {
+            assertEquals(LibraryNavigationRequest.SignOut, it.lastNavigationRequest)
+        }
+        compose.onNodeWithText("Sign out?").assertIsDisplayed()
+        compose.onNodeWithTag("account-signout-confirm").performClick()
+        compose.waitForIdle()
+        // Fixture mode performs no session write; the page stays signed in.
+        compose.onNodeWithTag("you-library").assertIsDisplayed()
+    }
+
+    @Test fun signInOpensTheNativeDeviceCodeFlowInsideTheLoginBoundary() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val host = ActivityScenario.launch<YouActivity>(YouActivity.intent(context, false))
+        scenario = host
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("you-signed-out").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNode(hasText("Sign in") and hasAnyAncestor(hasTestTag("account-menu"))).performClick()
         ActivityTestSupport.waitForResumed(compose, SignInActivity::class.java)
         host.onActivity {
             assertEquals(LibraryNavigationRequest.SignIn, it.lastNavigationRequest)
         }
+        compose.onNodeWithTag("signin-ready").assertIsDisplayed()
+        compose.onNodeWithTag("signin-code").assertIsDisplayed()
         var url: String? = null
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             url = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
                 .filterIsInstance<SignInActivity>().single().currentUrl
         }
-        assertFalse("The credential window must request a URL", url.isNullOrBlank())
-        assertTrue("sign-in URL must stay inside the allowlisted login boundary", UrlPolicy.isLoginUrl(url))
-        // The account sheet never fabricates a second local session.
-        compose.onNodeWithTag("account-menu").assertDoesNotExist()
+        assertFalse("The device flow must request a verification URL", url.isNullOrBlank())
+        assertTrue("the verification URL must stay inside the allowlisted login boundary", UrlPolicy.isLoginUrl(url))
     }
 
     @Test fun settingsRowOpensTheNativeSettingsHost() {

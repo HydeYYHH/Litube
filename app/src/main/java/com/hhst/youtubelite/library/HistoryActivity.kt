@@ -44,6 +44,8 @@ import com.hhst.youtubelite.ui.design.SearchPanel
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.ui.renderNotice
+
 /** Hosts the watch history page. */
 class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var historyViewModel: HistoryViewModel
@@ -63,7 +65,8 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HistoryViewModel::class.java)
-                return HistoryViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
+                return HistoryViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(),
+                    if (fixtures) null else sources.saves) as T
             }
         })[HistoryViewModel::class.java]
         lifecycleScope.launch {
@@ -78,29 +81,72 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is LibraryNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@HistoryActivity, request.videoId))
                         is LibraryNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@HistoryActivity, request.channelId))
                         is LibraryNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@HistoryActivity, request.query))
+                        LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@HistoryActivity)
-                        else -> Unit
+                        // The shared library request type carries You-page entries (tabs, account,
+                        // settings, downloads, playlists) the history screen never emits. No
+                        // `else`: a new request type must fail to compile here.
+                        is LibraryNavigationRequest.Playlist, LibraryNavigationRequest.OpenHistory,
+                        LibraryNavigationRequest.OpenPlaylists, LibraryNavigationRequest.OpenNotifications,
+                        LibraryNavigationRequest.OpenDownloads, is LibraryNavigationRequest.Destination,
+                        LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
+                        LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit
                     }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                historyViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
                 }
             }
         }
         setContent {
             val state by historyViewModel.uiState.collectAsStateWithLifecycle()
-            val back = {
-                if (state.overlay != LibraryOverlay.None) historyViewModel.onAction(LibraryAction.CloseOverlay) else finish()
+            val back: () -> Unit = {
+                if (historyViewModel.saveSheet?.state?.value != null) historyViewModel.saveSheet?.close()
+                else if (state.overlay != LibraryOverlay.None) historyViewModel.onAction(LibraryAction.CloseOverlay)
+                else finish()
             }
             BackHandler(onBack = back)
             HistoryScreen(state, historyViewModel::onAction, onBack = back,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+            historyViewModel.saveSheet?.let { sheet ->
+                val sheetState by sheet.state.collectAsStateWithLifecycle()
+                sheetState?.let { current ->
+                    if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
+                        draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
+                        onDismiss = sheet::close,
+                        onDraftChange = { sheet.draftChanged(it.title, it.description) },
+                        onSubmit = sheet::submitNewPlaylist,
+                    ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
+                        playlists = emptyList(),
+                        onDismiss = sheet::close,
+                        onSelect = {},
+                        onNewPlaylist = sheet::openNewPlaylist,
+                        live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
+                            choices = current.choices,
+                            failed = current.choicesFailed,
+                            pending = current.pending,
+                            onToggle = sheet::toggle,
+                            onRetry = sheet::retry,
+                        ),
+                    )
+                }
+            }
             if (state.overlay == LibraryOverlay.Search) {
                 val query = state.query.trim()
+                val rows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures) null else sources.suggestions, query)
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     SearchPanel(
                         query = state.query,
-                        suggestions = if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        suggestions = rows?.suggestions ?: if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        history = rows?.history.orEmpty(),
+                        onRemoveHistory = rows?.onRemove,
                         onQueryChanged = { historyViewModel.onAction(LibraryAction.QueryChanged(it)) },
-                        onSubmit = { historyViewModel.onAction(LibraryAction.SubmitSearch(it)) },
+                        onSubmit = { historyViewModel.onAction(LibraryAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
                         onClose = back,
                         onVoiceSearch = { historyViewModel.onAction(LibraryAction.VoiceSearch) },
                     )
@@ -112,6 +158,42 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     onDismiss = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
                     onSelect = { index -> historyViewModel.onAction(LibraryAction.MenuSelected(HistoryMenuAction.entries[index])) },
                     paneTitle = "History actions",
+                )
+            }
+            if (state.overlay == LibraryOverlay.ManageHistory && !state.confirmClear) {
+                MenuBottomSheet(
+                    items = listOf(
+                        MenuSheetItem(AppIcon.Pause, "Pause watch history"),
+                        MenuSheetItem(AppIcon.Play, "Resume watch history"),
+                        MenuSheetItem(AppIcon.Delete, "Clear watch history"),
+                    ),
+                    onDismiss = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
+                    onSelect = { index ->
+                        when (index) {
+                            0 -> historyViewModel.onAction(LibraryAction.PauseHistory)
+                            1 -> historyViewModel.onAction(LibraryAction.ResumeHistory)
+                            else -> historyViewModel.onAction(LibraryAction.RequestClearHistory)
+                        }
+                    },
+                    tag = "history-manage-sheet",
+                    paneTitle = "History settings",
+                )
+            }
+            if (state.overlay == LibraryOverlay.ManageHistory && state.confirmClear) {
+                com.hhst.youtubelite.ui.components.YoutubeAlertDialog(
+                    onDismissRequest = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
+                    title = { androidx.compose.material3.Text("Clear watch history?") },
+                    text = { androidx.compose.material3.Text("Your watch history will be cleared on this account. This can't be undone.") },
+                    confirmButton = {
+                        com.hhst.youtubelite.ui.components.YoutubeTextButton(
+                            onClick = { historyViewModel.onAction(LibraryAction.ConfirmClearHistory) },
+                        ) { androidx.compose.material3.Text("Clear") }
+                    },
+                    dismissButton = {
+                        com.hhst.youtubelite.ui.components.YoutubeTextButton(
+                            onClick = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
+                        ) { androidx.compose.material3.Text("Cancel") }
+                    },
                 )
             }
         }

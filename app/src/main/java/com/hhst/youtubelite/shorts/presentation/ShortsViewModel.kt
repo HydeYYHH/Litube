@@ -17,13 +17,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.core.AppNotice
 
-/** Hosts the shorts pager. Like/dislike stay typed requests; counts are fixture display. */
+/** Hosts the shorts pager. Fixture builds keep like/subscribe as typed requests; production writes through here. */
 class ShortsViewModel(
     private val repository: ShortsRepository,
     private val savedState: SavedStateHandle,
     private val scenario: ShortsScenario,
     private val startItemId: String?,
+    private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ShortsUiState(
         startItemId = startItemId,
@@ -32,12 +34,16 @@ class ShortsViewModel(
             if (savedState.get<String>("overlay") == "comments") ShortsOverlay.Comments(id)
             else ShortsOverlay.Menu(id)
         } ?: ShortsOverlay.None,
+        live = videoActions != null,
     ))
     private var loadJob: Job? = null
+    private var actionJob: Job? = null
     private var generation = 0
     val uiState: StateFlow<ShortsUiState> = _uiState.asStateFlow()
     private val navigation = Channel<ShortsNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: Flow<ShortsNavigationRequest> = navigation.receiveAsFlow()
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices: Flow<AppNotice> = notices.receiveAsFlow()
 
     init {
         if (scenario == ShortsScenario.Loading) {
@@ -52,7 +58,22 @@ class ShortsViewModel(
                 savedState["currentItem"] = action.itemId
                 _uiState.update { it.copy(currentItemId = action.itemId) }
             }
-            is ShortsAction.Subscribe -> navigation.trySend(ShortsNavigationRequest.Subscribe(action.channelId))
+            is ShortsAction.Subscribe -> {
+                val actions = videoActions
+                if (actions == null) navigation.trySend(ShortsNavigationRequest.Subscribe(action.channelId))
+                else if (actionJob?.isActive != true) {
+                    val target = _uiState.value.subscriptions[action.channelId] != true
+                    actionJob = viewModelScope.launch {
+                        try {
+                            actions.subscribe(action.channelId, target)
+                            _uiState.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target)) }
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message(UNCONFIRMED)) }
+                        catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again.")) }
+                    }
+                }
+            }
             is ShortsAction.OpenChannel -> navigation.trySend(ShortsNavigationRequest.Channel(action.channelId))
             is ShortsAction.OpenComments -> overlay(ShortsOverlay.Comments(action.itemId))
             ShortsAction.CloseComments -> overlay(ShortsOverlay.None)
@@ -64,9 +85,33 @@ class ShortsViewModel(
                 if (itemId != null) navigation.trySend(ShortsNavigationRequest.MenuAction(itemId, action.action))
             }
             is ShortsAction.Share -> navigation.trySend(ShortsNavigationRequest.Share(action.itemId))
-            is ShortsAction.Like -> navigation.trySend(ShortsNavigationRequest.Rate(action.itemId, like = true))
-            is ShortsAction.Dislike -> navigation.trySend(ShortsNavigationRequest.Rate(action.itemId, like = false))
+            is ShortsAction.Like -> rate(action.itemId, com.hhst.youtubelite.watch.domain.VideoRating.Like)
+            is ShortsAction.Dislike -> rate(action.itemId, com.hhst.youtubelite.watch.domain.VideoRating.Dislike)
         }
+    }
+
+    private fun rate(itemId: String, selection: com.hhst.youtubelite.watch.domain.VideoRating) {
+        val actions = videoActions
+        if (actions == null) {
+            navigation.trySend(ShortsNavigationRequest.Rate(itemId, like = selection == com.hhst.youtubelite.watch.domain.VideoRating.Like))
+            return
+        }
+        if (actionJob?.isActive == true) return
+        val previous = _uiState.value.ratings[itemId] ?: com.hhst.youtubelite.watch.domain.VideoRating.None
+        val next = if (previous == selection) com.hhst.youtubelite.watch.domain.VideoRating.None else selection
+        actionJob = viewModelScope.launch {
+            try {
+                actions.rate(itemId, next, previous)
+                _uiState.update { it.copy(ratings = it.ratings + (itemId to next)) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message(UNCONFIRMED)) }
+            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this video. Try again.")) }
+        }
+    }
+
+    private companion object {
+        const val UNCONFIRMED = "The server did not confirm this change. Please refresh before trying again."
     }
 
     private fun overlay(next: ShortsOverlay) {

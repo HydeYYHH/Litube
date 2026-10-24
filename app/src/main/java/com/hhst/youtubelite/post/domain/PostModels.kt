@@ -60,6 +60,8 @@ data class PostDetailUiState(
     val selectedImage: Int = 0,
     val overlay: PostDetailOverlay = PostDetailOverlay.None,
     val commentsOpen: Boolean = false,
+    /** Production mode: anonymous post pages carry no menu renderer, so the actions entry hides. */
+    val live: Boolean = false,
 ) {
     val post: PostDetail? get() = (content as? PostDetailContent.Ready)?.post
 }

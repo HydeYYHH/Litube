@@ -5,6 +5,13 @@
     <!-- The optional sandbox is only loaded on API 26+; older systems use WebView. -->
     <uses-sdk tools:overrideLibrary="androidx.javascriptengine" />
     <uses-feature android:name="android.software.picture_in_picture" android:required="false" />
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />

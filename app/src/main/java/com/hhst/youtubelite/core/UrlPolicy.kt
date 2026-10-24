@@ -52,7 +52,7 @@ object UrlPolicy {
         return host in LOGIN_HOSTS || (isYoutubeHost(host) &&
             uri.path.orEmpty().lowercase(Locale.ROOT).let {
                 it == "/signin" || it.startsWith("/signin/") || it.startsWith("/accounts/") ||
-                    it == "/check_connection" || it == "/set_setting"
+                    it == "/activate" || it == "/check_connection" || it == "/set_setting"
             })
     }
 

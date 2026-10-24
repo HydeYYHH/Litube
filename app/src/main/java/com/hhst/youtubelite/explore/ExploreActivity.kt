@@ -119,7 +119,7 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     when (request) {
                         is ExploreNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@ExploreActivity, request.videoId))
                         is ExploreNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@ExploreActivity, request.channelId))
-                        else -> Unit
+                        // No `else`: a new request type must fail to compile here.
                     }
                 }
             }

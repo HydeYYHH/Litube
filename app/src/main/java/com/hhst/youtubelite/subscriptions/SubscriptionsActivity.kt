@@ -47,6 +47,8 @@ import com.hhst.youtubelite.ui.design.SearchPanel
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.ui.renderNotice
+
 /** Hosts the subscriptions page. The Shorts tab is wired with its own screen. */
 class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var subscriptionsViewModel: SubscriptionsViewModel
@@ -67,7 +69,8 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == SubscriptionsViewModel::class.java)
-                return SubscriptionsViewModel(if (fixtures) FixtureSubscriptionsRepository(scenario) else sources.subscriptions, extras.createSavedStateHandle(), scenario, signedIn) as T
+                return SubscriptionsViewModel(if (fixtures) FixtureSubscriptionsRepository(scenario) else sources.subscriptions, extras.createSavedStateHandle(), scenario, signedIn,
+                    if (fixtures) null else sources.saves) as T
             }
         })[SubscriptionsViewModel::class.java]
         lifecycleScope.launch {
@@ -82,11 +85,19 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is SubscriptionsNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@SubscriptionsActivity, request.videoId))
                         is SubscriptionsNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@SubscriptionsActivity, request.channelId))
                         is SubscriptionsNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@SubscriptionsActivity, request.query))
+                        SubscriptionsNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is SubscriptionsNavigationRequest.Destination -> openTab(request.tab)
                         SubscriptionsNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@SubscriptionsActivity)
                         SubscriptionsNavigationRequest.Manage -> subscriptionsViewModel.onAction(SubscriptionsAction.ShowChannels)
-                        else -> Unit
+                        // No `else`: a new request type must fail to compile here.
                     }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                subscriptionsViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
                 }
             }
         }
@@ -94,6 +105,10 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             val state by subscriptionsViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
                 when {
+                    subscriptionsViewModel.saveSheet?.state?.value != null -> {
+                        subscriptionsViewModel.saveSheet?.close()
+                        Unit
+                    }
                     state.overlay == SubscriptionsOverlay.Channels -> subscriptionsViewModel.onAction(SubscriptionsAction.CloseChannels)
                     state.overlay != SubscriptionsOverlay.None -> subscriptionsViewModel.onAction(SubscriptionsAction.CloseOverlay)
                     else -> finish()
@@ -103,27 +118,59 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             SubscriptionsScreen(state, subscriptionsViewModel::onAction,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+            subscriptionsViewModel.saveSheet?.let { sheet ->
+                val sheetState by sheet.state.collectAsStateWithLifecycle()
+                sheetState?.let { current ->
+                    if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
+                        draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
+                        onDismiss = sheet::close,
+                        onDraftChange = { sheet.draftChanged(it.title, it.description) },
+                        onSubmit = sheet::submitNewPlaylist,
+                    ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
+                        playlists = emptyList(),
+                        onDismiss = sheet::close,
+                        onSelect = {},
+                        onNewPlaylist = sheet::openNewPlaylist,
+                        live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
+                            choices = current.choices,
+                            failed = current.choicesFailed,
+                            pending = current.pending,
+                            onToggle = sheet::toggle,
+                            onRetry = sheet::retry,
+                        ),
+                    )
+                }
+            }
             if (state.overlay == SubscriptionsOverlay.Search) {
                 val query = state.query.trim()
+                val rows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures) null else sources.suggestions, query)
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     SearchPanel(
                         query = state.query,
-                        suggestions = if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        suggestions = rows?.suggestions ?: if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        history = rows?.history.orEmpty(),
+                        onRemoveHistory = rows?.onRemove,
                         onQueryChanged = { subscriptionsViewModel.onAction(SubscriptionsAction.QueryChanged(it)) },
-                        onSubmit = { subscriptionsViewModel.onAction(SubscriptionsAction.SubmitSearch(it)) },
+                        onSubmit = { subscriptionsViewModel.onAction(SubscriptionsAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
                         onClose = back,
                         onVoiceSearch = { subscriptionsViewModel.onAction(SubscriptionsAction.VoiceSearch) },
                     )
                 }
             }
             if (state.overlay is SubscriptionsOverlay.Menu) {
+                // Feedback rows need a signed-in feedbackToken the anonymous menus never carry.
+                val menuActions = if (state.live) com.hhst.youtubelite.home.domain.FeedMenuKind.Video.actions.filter {
+                    it == com.hhst.youtubelite.home.domain.FeedMenuAction.WatchLater ||
+                        it == com.hhst.youtubelite.home.domain.FeedMenuAction.SaveToPlaylist ||
+                        it == com.hhst.youtubelite.home.domain.FeedMenuAction.Share
+                } else com.hhst.youtubelite.home.domain.FeedMenuKind.Video.actions
                 MenuBottomSheet(
-                    items = com.hhst.youtubelite.home.domain.FeedMenuKind.Video.actions.map { action ->
+                    items = menuActions.map { action ->
                         MenuSheetItem(action.icon(), action.label)
                     },
                     onDismiss = { subscriptionsViewModel.onAction(SubscriptionsAction.CloseOverlay) },
                     onSelect = { index ->
-                        subscriptionsViewModel.onAction(SubscriptionsAction.MenuSelected(FeedMenuKind.Video.actions[index]))
+                        subscriptionsViewModel.onAction(SubscriptionsAction.MenuSelected(menuActions[index]))
                     },
                     paneTitle = "Video actions",
                 )

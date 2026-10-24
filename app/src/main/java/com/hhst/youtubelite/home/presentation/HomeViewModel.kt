@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.home.data.HomeScenario
 import com.hhst.youtubelite.home.domain.*
+import com.hhst.youtubelite.watch.domain.SignInRequiredException
+import com.hhst.youtubelite.watch.domain.UnconfirmedActionException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -14,25 +16,34 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.core.AppNotice
+
 class HomeViewModel(
     private val repository: HomeRepository,
     private val savedState: SavedStateHandle,
     scenario: HomeScenario = HomeScenario.Empty,
     loadOnStart: Boolean = false,
+    private val saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
         selectedChip = savedState.get<String>("chip")?.takeIf { it in repository.filters } ?: "All",
         signedInPreview = savedState.get<Boolean>("signedInPreview") ?: (scenario != HomeScenario.Empty),
-        overlay = restoreOverlay(), chips = repository.filters,
+        overlay = restoreOverlay(), chips = repository.filters, live = saveRepository != null,
     ))
     val uiState = _state.asStateFlow()
     private val navigation = Channel<HomeNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
     private var loadJob: Job? = null
+    private var saveJob: Job? = null
     private var generation = 0
 
-    init { if (loadOnStart) load(append = false) }
+    init {
+        if (loadOnStart) load(append = false)
+        if ((_state.value.overlay as? HomeOverlay.Save)?.live == true) loadSaveChoices()
+    }
 
     fun setHideShorts(hidden: Boolean) { _state.update { it.copy(hideShorts = hidden) } }
 
@@ -43,10 +54,11 @@ class HomeViewModel(
 
     private var sessionKey: Long? = null
 
-    fun updateSession(signedIn: Boolean, key: Long) {
+    fun updateSession(signedIn: Boolean, key: Long, avatar: String? = null) {
         val changed = sessionKey != null && sessionKey != key
         sessionKey = key
         setSignedInPreview(signedIn)
+        _state.update { it.copy(avatar = avatar) }
         if (changed) {
             overlay(HomeOverlay.None)
             load(append = false)
@@ -78,7 +90,15 @@ class HomeViewModel(
                 val menu = uiState.value.overlay as? HomeOverlay.Menu ?: return
                 if (action.action !in menu.kind.actions) return
                 if (menu.kind == FeedMenuKind.Video && action.action == FeedMenuAction.SaveToPlaylist) {
-                    overlay(HomeOverlay.Save(menu.itemId))
+                    if (saveRepository == null) overlay(HomeOverlay.Save(menu.itemId)) else {
+                        overlay(HomeOverlay.Save(menu.itemId, live = true))
+                        loadSaveChoices()
+                    }
+                    return
+                }
+                if (menu.kind == FeedMenuKind.Video && action.action == FeedMenuAction.WatchLater && saveRepository != null) {
+                    overlay(HomeOverlay.None)
+                    saveWatchLater(menu.itemId)
                     return
                 }
                 val feedback = when (action.action) {
@@ -118,9 +138,53 @@ class HomeViewModel(
             HomeAction.SubmitNewPlaylist -> {
                 val save = uiState.value.overlay as? HomeOverlay.Save ?: return
                 val title = save.title.trim()
-                if (title.isEmpty()) return
-                overlay(HomeOverlay.None)
-                navigation.trySend(HomeNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+                if (title.isEmpty() || save.pending) return
+                if (!save.live) {
+                    overlay(HomeOverlay.None)
+                    navigation.trySend(HomeNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+                    return
+                }
+                val repository = saveRepository ?: return
+                editSave(save.copy(pending = true))
+                saveJob = viewModelScope.launch {
+                    try {
+                        val created = repository.create(title, save.description.trim(), save.videoId)
+                        editSaveOverlay(save.videoId) { current ->
+                            current.copy(pending = false, newPlaylist = false, title = "", description = "",
+                                choices = (current.choices ?: emptyList()) + created)
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
+                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't create this playlist. Try again.") }
+                }
+            }
+            is HomeAction.SaveChoiceToggled -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                val repository = saveRepository ?: return
+                if (!save.live || save.pending) return
+                val target = !action.choice.contains
+                editSave(save.copy(pending = true))
+                saveJob = viewModelScope.launch {
+                    try {
+                        repository.setContaining(action.choice.id, save.videoId, target)
+                        editSaveOverlay(save.videoId) { current ->
+                            current.copy(pending = false, choices = current.choices?.map {
+                                if (it.id == action.choice.id) it.copy(contains = target) else it
+                            })
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
+                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't update this playlist. Try again.") }
+                }
+            }
+            HomeAction.SaveChoicesRetry -> {
+                val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+                if (save.live) {
+                    editSave(save.copy(choicesFailed = false, choices = null))
+                    loadSaveChoices()
+                }
             }
             is HomeAction.FeedbackReason -> {
                 val feedback = uiState.value.overlay as? HomeOverlay.Feedback ?: return
@@ -139,7 +203,7 @@ class HomeViewModel(
             FeedMenuKind.entries.firstOrNull { kind -> kind.name == savedState.get<String>("overlayKind") } ?: FeedMenuKind.Video) } ?: HomeOverlay.None
         "save" -> savedState.get<String>("overlayItem")?.let { HomeOverlay.Save(it,
             savedState.get<Boolean>("newPlaylist") == true, savedState.get<String>("saveTitle").orEmpty(),
-            savedState.get<String>("saveDescription").orEmpty()) } ?: HomeOverlay.None
+            savedState.get<String>("saveDescription").orEmpty(), live = saveRepository != null) } ?: HomeOverlay.None
         "feedback" -> {
             val id = savedState.get<String>("overlayItem")
             val kind = HomeFeedbackKind.entries.firstOrNull { it.name == savedState.get<String>("overlayKind") }
@@ -172,6 +236,53 @@ class HomeViewModel(
             }
         }
         _state.update { it.copy(overlay = overlay) }
+    }
+
+    private fun loadSaveChoices() {
+        val save = uiState.value.overlay as? HomeOverlay.Save ?: return
+        val repository = saveRepository ?: return
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch {
+            try {
+                val choices = repository.choices(save.videoId)
+                editSaveOverlay(save.videoId) { it.copy(choices = choices, choicesFailed = false, pending = false) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
+            catch (_: Exception) { editSaveOverlay(save.videoId) { it.copy(choices = null, choicesFailed = true, pending = false) } }
+        }
+    }
+
+    private fun saveWatchLater(videoId: String) {
+        val repository = saveRepository ?: return
+        if (saveJob?.isActive == true) return
+        saveJob = viewModelScope.launch {
+            try {
+                repository.saveWatchLater(videoId)
+                notices.trySend(AppNotice.Message("Saved to Watch later"))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (_: UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't save this video. Try again.")) }
+        }
+    }
+
+    private fun saveFailed(videoId: String, message: String) {
+        editSaveOverlay(videoId) { it.copy(pending = false) }
+        notices.trySend(AppNotice.Message(message))
+    }
+
+    private fun editSaveOverlay(videoId: String, edit: (HomeOverlay.Save) -> HomeOverlay.Save) {
+        _state.update { state ->
+            val save = state.overlay as? HomeOverlay.Save
+            if (save == null || save.videoId != videoId) state else state.copy(overlay = edit(save))
+        }
+    }
+
+    private fun editSave(save: HomeOverlay.Save) {
+        _state.update { if (it.overlay is HomeOverlay.Save) it.copy(overlay = save) else it }
+        savedState["newPlaylist"] = save.newPlaylist
+        savedState["saveTitle"] = save.title
+        savedState["saveDescription"] = save.description
     }
 
     private fun load(append: Boolean) {

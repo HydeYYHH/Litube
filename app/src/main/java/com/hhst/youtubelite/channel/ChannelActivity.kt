@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import com.hhst.youtubelite.navigation.openContentLink
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -39,6 +40,8 @@ import com.hhst.youtubelite.channel.presentation.ChannelScreen
 import com.hhst.youtubelite.channel.presentation.ChannelViewModel
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.ui.renderNotice
+import com.hhst.youtubelite.ui.observeAccountChanges
 
 /** Hosts the local channel page and observes its navigation requests. */
 class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
@@ -48,20 +51,40 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
+    /** Identity of the video whose overflow menu opened the shared actions dialog, if any. */
+    private val itemMenuState = androidx.compose.runtime.mutableStateOf<com.hhst.youtubelite.ui.components.MediaActionItem?>(null)
+    private var itemMenu: com.hhst.youtubelite.ui.components.MediaActionItem?
+        get() = itemMenuState.value
+        set(value) { itemMenuState.value = value }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
         val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: FixtureChannelRepository.profile().channelId
+        val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
+        if (channelId.isNullOrBlank() && !fixtures) {
+            // No identity and no fixture seam: rendering a default channel would fabricate content.
+            finish()
+            return
+        }
+        val resolvedChannelId = channelId ?: FixtureChannelRepository.profile().channelId
         val scenario = if (BuildConfig.DEBUG) ChannelScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else ChannelScenario.Content
         channelViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == ChannelViewModel::class.java)
-                return ChannelViewModel(if (fixtures) FixtureChannelRepository(scenario) else sources.channel, extras.createSavedStateHandle(), channelId, scenario) as T
+                return ChannelViewModel(if (fixtures) FixtureChannelRepository(scenario) else sources.channel, extras.createSavedStateHandle(), resolvedChannelId, scenario, if (fixtures) null else sources.videoActions) as T
             }
         })[ChannelViewModel::class.java]
+        if (!fixtures) observeAccountChanges { channelViewModel.refreshSession() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                channelViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 channelViewModel.navigationRequests.collect { request ->
@@ -80,7 +103,31 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         )
                         is ChannelNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
                             this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
-                        else -> Unit
+                        is ChannelNavigationRequest.LiveStream -> startActivity(WatchActivity.intent(this@ChannelActivity, request.videoId))
+                        is ChannelNavigationRequest.Share -> shareGateway.shareChannel(resolvedChannelId)
+                        is ChannelNavigationRequest.OpenLink -> openContentLink(request.url)
+                        is ChannelNavigationRequest.PostFeedback -> if (!fixtures) {
+                            com.hhst.youtubelite.post.openPostVoteRoute(this@ChannelActivity)
+                        }
+                        is ChannelNavigationRequest.ItemMenu -> if (!fixtures) {
+                            val ready = channelViewModel.uiState.value.content as? com.hhst.youtubelite.channel.domain.ChannelContent.Ready
+                            val video = ready?.page?.let { page ->
+                                (page.videos + page.homeShelves.flatMap { it.videos }).firstOrNull { it.id == request.videoId }
+                            }
+                            if (video != null) itemMenu = com.hhst.youtubelite.ui.components.MediaActionItem(
+                                video.id, video.title, ready.page.profile.name, video.artwork)
+                        }
+                        // Typed exits for fixture instrumentation; the ViewModel already applied
+                        // their local effects (tab switch, About overlay), the production
+                        // section/short/post menu entries are hidden (no server tokens), and
+                        // subscribe writes run in-VM — so the host intentionally does nothing.
+                        // No `else` branch: a new request type must fail to compile here.
+                        is ChannelNavigationRequest.ChannelSearch,
+                        is ChannelNavigationRequest.FullDescription,
+                        is ChannelNavigationRequest.SectionMenu,
+                        is ChannelNavigationRequest.ShortMenu,
+                        is ChannelNavigationRequest.PostMenu,
+                        is ChannelNavigationRequest.Subscribe -> Unit
                     }
                 }
             }
@@ -92,6 +139,9 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
             ChannelScreen(state, channelViewModel::onAction, onBack = back,
                 modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+            itemMenu?.let { item ->
+                com.hhst.youtubelite.ui.components.MediaActionsDialog(item) { itemMenu = null }
+            }
         }
     }
 

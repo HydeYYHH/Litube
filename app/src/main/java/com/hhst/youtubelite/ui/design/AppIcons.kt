@@ -58,4 +58,9 @@ enum class AppIcon(vararg val paths: String, val sourceUnit: Float = 24f, val so
     // End affordance of the subscriptions channel avatar strip. The 40x40 target box is
     // measured at x350 y54; the site renders its glyph via icon font so the path itself is unevidenced.
     ChannelGrid("M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"),
+    // Material check; membership state of the live save-sheet rows.
+    Check("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
+    Send("M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"),
+    Pause("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
+    Delete("M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"),
 }

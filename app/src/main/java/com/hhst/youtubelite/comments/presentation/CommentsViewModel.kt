@@ -4,7 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.comments.domain.CommentActions
-import com.hhst.youtubelite.comments.domain.CommentNotice
 import com.hhst.youtubelite.comments.domain.CommentTarget
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentMenuAction
@@ -23,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.core.AppNotice
 
 /**
  * Panel state for one video. Sorting and expanded threads survive recreation through
@@ -71,6 +71,7 @@ class CommentsViewModel(
             videoId = this.videoId, target = target, sort = sort, expanded = expanded,
             overlay = restoredOverlay,
             draft = draft.takeIf { restoredOverlay is CommentsOverlay.Composer }.orEmpty(),
+            supportedMenuActions = (repository as? CommentActions)?.supportedMenuActions ?: CommentMenuAction.entries.toSet(),
         ),
     )
     val uiState = _state.asStateFlow()
@@ -78,7 +79,7 @@ class CommentsViewModel(
     private val navigation = Channel<CommentNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
 
-    private val notices = Channel<CommentNotice>(Channel.BUFFERED)
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
     val actionNotices = notices.receiveAsFlow()
     private var actionJob: Job? = null
     private val actions = repository as? CommentActions
@@ -118,8 +119,15 @@ class CommentsViewModel(
         savedState[KEY_EXPANDED] = arrayListOf<String>()
         savedState[KEY_SORT] = CommentSort.Top.name
         savedState[KEY_DRAFT] = ""
-        _state.value = CommentsUiState(videoId = id, target = target)
+        _state.value = CommentsUiState(videoId = id, target = target,
+            supportedMenuActions = actions?.supportedMenuActions ?: CommentMenuAction.entries.toSet())
         persistOverlay(CommentsOverlay.None)
+        load()
+    }
+
+    fun refreshSession() {
+        actionJob?.cancel()
+        _state.update { it.copy(actionPending = false) }
         load()
     }
 
@@ -298,9 +306,9 @@ class CommentsViewModel(
                 if (closesEditor) closeComposer()
                 load()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.send(CommentNotice.SignIn) }
-            catch (_: UnsupportedOperationException) { notices.send(CommentNotice.Message("This action is not available.")) }
-            catch (_: Exception) { notices.send(CommentNotice.Message("Could not confirm the change. Please refresh and try again.")) }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.send(AppNotice.SignIn) }
+            catch (_: UnsupportedOperationException) { notices.send(AppNotice.Message("This action is not available.")) }
+            catch (_: Exception) { notices.send(AppNotice.Message("Could not confirm the change. Please refresh and try again.")) }
             finally { if (target == requestedTarget) _state.update { it.copy(actionPending = false) } }
         }
     }
@@ -428,6 +436,11 @@ class CommentsViewModel(
                 return@launch
             }
             if (requestGeneration != generation) return@launch
+            if (page.sortFallback && requestedSort == CommentSort.Newest) {
+                savedState[KEY_SORT] = CommentSort.Top.name
+                _state.update { it.copy(sort = CommentSort.Top) }
+                notices.send(AppNotice.Message("Newest comments aren't offered here. Showing top comments."))
+            }
             val content = when {
                 page.turnedOff -> CommentsContent.Disabled
                 threads.isEmpty() -> CommentsContent.Empty

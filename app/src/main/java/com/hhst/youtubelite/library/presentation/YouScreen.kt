@@ -126,7 +126,10 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
     BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("history-screen")) {
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
-        LibrarySubPageBar("History", onBack, onAction)
+        LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
+            AppIconButton(AppIcon.More, "History settings", diameter = 48.dp,
+                modifier = Modifier.testTag("history-manage")) { onAction(LibraryAction.OpenManageHistory) }
+        }))
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 HistoryContent.Loading -> LibrarySkeleton("history-skeleton")
@@ -213,11 +216,13 @@ fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubel
 }
 
 @Composable
-internal fun LibrarySubPageBar(title: String, onBack: () -> Unit, onAction: (LibraryAction) -> Unit) {
+internal fun LibrarySubPageBar(title: String, onBack: () -> Unit, onAction: (LibraryAction) -> Unit,
+    trailing: (@Composable () -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("library-subpage-bar"), verticalAlignment = Alignment.CenterVertically) {
         AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
         AppText(title, Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
 
         AppIconButton(AppIcon.Search, "Search YouTube") { onAction(LibraryAction.OpenSearch) }
+        trailing?.invoke()
     }
 }

@@ -67,8 +67,17 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     when (request) {
                         is LibraryNavigationRequest.Playlist -> startActivity(PlaylistActivity.intent(this@PlaylistsActivity, request.playlistId))
                         is LibraryNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@PlaylistsActivity, request.query))
+                        LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@PlaylistsActivity)
-                        else -> Unit
+                        // The shared library request type carries entries the collection screen
+                        // never emits (videos, menus, tabs, account, settings, history). No
+                        // `else`: a new request type must fail to compile here.
+                        is LibraryNavigationRequest.Watch, is LibraryNavigationRequest.Channel,
+                        LibraryNavigationRequest.OpenHistory, LibraryNavigationRequest.OpenPlaylists,
+                        LibraryNavigationRequest.OpenNotifications, LibraryNavigationRequest.OpenDownloads,
+                        is LibraryNavigationRequest.MenuAction, is LibraryNavigationRequest.Destination,
+                        LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
+                        LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit
                     }
                 }
             }
@@ -85,12 +94,15 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             if (state.overlay == LibraryOverlay.Search) {
                 val query = state.query.trim()
+                val rows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures) null else sources.suggestions, query)
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     SearchPanel(
                         query = state.query,
-                        suggestions = if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        suggestions = rows?.suggestions ?: if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live").distinct(),
+                        history = rows?.history.orEmpty(),
+                        onRemoveHistory = rows?.onRemove,
                         onQueryChanged = { collectionViewModel.onAction(LibraryAction.QueryChanged(it)) },
-                        onSubmit = { collectionViewModel.onAction(LibraryAction.SubmitSearch(it)) },
+                        onSubmit = { collectionViewModel.onAction(LibraryAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
                         onClose = back,
                         onVoiceSearch = { collectionViewModel.onAction(LibraryAction.VoiceSearch) },
                     )

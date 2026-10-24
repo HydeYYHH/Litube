@@ -70,9 +70,41 @@ class MediaReadAndroidTest {
                     assertFalse((it.application as com.hhst.youtubelite.App).mediaRuntimeStarted)
                 }
                 instrumentation.waitForIdleSync()
-                Thread.sleep(1_000)
+                var artwork: String? = null
+                search.onActivity {
+                    artwork = (it.searchViewModel.uiState.value.content as com.hhst.youtubelite.search.domain.SearchContent.Results)
+                        .page.results.first().artwork.let { url -> if (url.startsWith("//")) "https:$url" else url }
+                }
+                val imageDeadline = android.os.SystemClock.elapsedRealtime() + 20_000
+                while (com.hhst.youtubelite.core.YoutubeThumbnail.cached(artwork) == null &&
+                    android.os.SystemClock.elapsedRealtime() < imageDeadline) Thread.sleep(100)
+                assertNotNull("The rendered result thumbnail must finish loading", com.hhst.youtubelite.core.YoutubeThumbnail.cached(artwork))
+                instrumentation.waitForIdleSync()
                 com.hhst.youtubelite.core.DeviceEvidence.captureScene("native-search-service")
             }
+        }
+    }
+
+    @Test fun nativeDeviceSignInLoadsACodeWithoutAnAccountWrite() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("network") == "1")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        androidx.test.core.app.ActivityScenario.launch<com.hhst.youtubelite.account.SignInActivity>(
+            android.content.Intent(context, com.hhst.youtubelite.account.SignInActivity::class.java)).use { host ->
+            var state: com.hhst.youtubelite.account.domain.SignInUiState? = null
+            val deadline = android.os.SystemClock.elapsedRealtime() + 60_000
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                host.onActivity {
+                    val model = androidx.lifecycle.ViewModelProvider(it)[com.hhst.youtubelite.account.presentation.SignInViewModel::class.java]
+                    state = model.uiState.value
+                }
+                if (state is com.hhst.youtubelite.account.domain.SignInUiState.Ready ||
+                    state is com.hhst.youtubelite.account.domain.SignInUiState.Error) break
+                Thread.sleep(100)
+            }
+            assertTrue("Device sign-in state: $state", state is com.hhst.youtubelite.account.domain.SignInUiState.Ready)
+            val ready = state as com.hhst.youtubelite.account.domain.SignInUiState.Ready
+            assertTrue(ready.userCode.isNotBlank())
+            assertTrue(ready.verificationUrl.startsWith("https://"))
         }
     }
 

@@ -38,6 +38,9 @@ internal fun SearchPanel(
     onSubmit: (String) -> Unit,
     onClose: () -> Unit,
     onVoiceSearch: () -> Unit,
+    /** Live-mode local history rows (matching entries first); empty in fixture builds. */
+    history: List<String> = emptyList(),
+    onRemoveHistory: ((String) -> Unit)? = null,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -73,6 +76,20 @@ internal fun SearchPanel(
             }
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("search-suggestions")) {
+            history.forEachIndexed { index, entry ->
+                Row(Modifier.fillMaxWidth().heightIn(min = 37.dp).clickable(role = Role.Button) {
+                    keyboard?.hide(); onSubmit(entry)
+                }.testTag("history-$index"), verticalAlignment = Alignment.CenterVertically) {
+                    AppIcon(AppIcon.Clock, Modifier.padding(start = 8.dp).size(16.dp))
+                    BasicText(entry, Modifier.weight(1f).padding(horizontal = 8.dp), style = DesignTokens.text(14, 17), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (onRemoveHistory != null) Box(Modifier.size(37.dp).clickable(role = Role.Button) {
+                        onRemoveHistory(entry)
+                    }.semantics { contentDescription = "Remove $entry from search history" }, contentAlignment = Alignment.Center) {
+                        AppIcon(AppIcon.Close, Modifier.size(14.dp))
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.05f)))
+            }
             suggestions.forEachIndexed { index, suggestion ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 37.dp).clickable(role = Role.Button) {
                     keyboard?.hide(); onSubmit(suggestion)

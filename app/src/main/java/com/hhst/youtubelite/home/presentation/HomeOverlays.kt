@@ -19,23 +19,27 @@ import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.home.domain.*
 
 @Composable
-internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit) {
+internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit,
+    rows: com.hhst.youtubelite.ui.components.SearchRows? = null) {
     SearchPanel(
         query = state.query,
-        suggestions = state.suggestions,
+        suggestions = rows?.suggestions ?: state.suggestions,
+        history = rows?.history.orEmpty(),
+        onRemoveHistory = rows?.onRemove,
         onQueryChanged = { onAction(HomeAction.QueryChanged(it)) },
-        onSubmit = { onAction(HomeAction.SubmitSearch(it)) },
+        onSubmit = { onAction(HomeAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
         onClose = { onAction(HomeAction.CloseOverlay) },
         onVoiceSearch = { onAction(HomeAction.Navigate(HomeNavigationRequest.VoiceSearch)) },
     )
 }
 
 @Composable
-internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video) {
+internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video, live: Boolean = false) {
+    val rows = kind.visibleActions(live)
     MenuBottomSheet(
-        items = kind.actions.map { MenuSheetItem(it.icon(), it.label) },
+        items = rows.map { MenuSheetItem(it.icon(), it.label) },
         onDismiss = { onAction(HomeAction.CloseOverlay) },
-        onSelect = { index -> onAction(HomeAction.MenuSelected(kind.actions[index])) },
+        onSelect = { index -> onAction(HomeAction.MenuSelected(rows[index])) },
         tag = "video-menu",
         paneTitle = "Video actions",
     )
@@ -54,7 +58,7 @@ private fun FeedMenuAction.icon(): AppIcon = when (this) {
 }
 
 @Composable
-internal fun MixMenu(onAction: (HomeAction) -> Unit) {
+internal fun MixMenu(onAction: (HomeAction) -> Unit, live: Boolean = false) {
     Box(Modifier.fillMaxSize().background(DesignTokens.Scrim).clickable { onAction(HomeAction.CloseOverlay) }
         .semantics { contentDescription = "Close menu" })
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -64,7 +68,7 @@ internal fun MixMenu(onAction: (HomeAction) -> Unit) {
             .heightIn(max = (maxHeight - margin * 2).coerceAtLeast(0.dp)).clip(RoundedCornerShape(8.dp)).background(Color.White)
             .testTag("mix-menu").semantics { paneTitle = "Mix actions" }
             .verticalScroll(rememberScrollState()).padding(3.dp)) {
-            FeedMenuKind.Mix.actions.forEach { action ->
+            FeedMenuKind.Mix.visibleActions(live).forEach { action ->
                 Box(Modifier.padding(vertical = 3.dp).fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) {
                     onAction(HomeAction.MenuSelected(action))
                 }.padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.CenterStart) {

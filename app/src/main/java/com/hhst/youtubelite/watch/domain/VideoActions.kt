@@ -11,8 +11,3 @@ interface VideoActions {
 
 data class VoteCounts(val likes: Long?, val dislikes: Long?)
 fun interface VoteCountRepository { suspend fun counts(videoId: String): VoteCounts }
-
-sealed interface WatchNotice {
-    data object SignIn : WatchNotice
-    data class Message(val text: String) : WatchNotice
-}

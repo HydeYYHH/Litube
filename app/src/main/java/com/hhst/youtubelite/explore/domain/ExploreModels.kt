@@ -28,7 +28,6 @@ data class ExploreUiState(
 sealed interface ExploreNavigationRequest {
     data class Watch(val videoId: String) : ExploreNavigationRequest
     data class Channel(val channelId: String) : ExploreNavigationRequest
-    data class Search(val query: String) : ExploreNavigationRequest
 }
 
 sealed interface ExploreAction {

@@ -15,7 +15,9 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.*
 class MediaLibraryRepository(private val client: MediaClient) : LibraryRepository {
     override suspend fun you(): YouPage {
         val account = client.read { context, http ->
-            val profile = loadAccounts(context, http).requireValue().firstOrNull { it.selected && !it.disabled }
+            val accounts = loadAccounts(context, http).requireValue()
+            val profile = accounts.firstOrNull { it.id == context.accountId && !it.disabled }
+                ?: accounts.firstOrNull { it.selected && !it.disabled }
                 ?: throw MediaException(RequestError(RequestFailure.AUTH, "account_unavailable"))
             AccountProfile(profile.name.orEmpty(), profile.email.orEmpty(), profile.photo.orEmpty(), profile.pageId.orEmpty())
         }
@@ -24,7 +26,29 @@ class MediaLibraryRepository(private val client: MediaClient) : LibraryRepositor
     override suspend fun history(): HistoryPage = client.read { context, http ->
         val page = loadLibrary(LibrarySection.HISTORY, context, http = http).requireValue()
         HistoryPage(page.items.filter { it.kind == "video" }.map { HistoryEntry(it.id, it.id, it.title.orEmpty(),
-            it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), it.duration.orEmpty(), it.progressPercent?.div(100f), "History") })
+            it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), it.duration.orEmpty(), it.progressPercent?.div(100f), "History",
+            removeToken = it.actions.firstNotNullOfOrNull { action -> action.feedbackToken() }) })
+    }
+    override suspend fun removeFromHistory(feedbackToken: String) {
+        historyWrite { context, http -> removeWatchHistory(feedbackToken, context, http).requireValue() }
+    }
+    override suspend fun setHistoryPaused(paused: Boolean) {
+        historyWrite { context, http -> setWatchHistory(!paused, context, http).requireValue() }
+    }
+    override suspend fun clearHistory() {
+        historyWrite { context, http -> clearWatchHistory(context, http).requireValue() }
+    }
+    private suspend fun historyWrite(block: (RequestContext, HttpClient) -> ActionReply) {
+        try {
+            client.read { context, http ->
+                if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+                if (!block(context, http).confirmed)
+                    throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
+            }
+        } catch (error: MediaException) {
+            if (error.failure.kind == RequestFailure.AUTH) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            throw error
+        }
     }
     override suspend fun playlists() = client.read { context, http ->
         loadLibrary(LibrarySection.PLAYLISTS, context, http = http).requireValue().items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary)
@@ -32,6 +56,9 @@ class MediaLibraryRepository(private val client: MediaClient) : LibraryRepositor
 }
 
 class MediaSubscriptionsRepository(private val client: MediaClient) : SubscriptionsRepository {
+    // Today/Posts have no server-side lane: the subscriptions browse only filters by params we
+    // don't have for those two, so they are hidden rather than offered and failed.
+    override val supportedFilters = SubscriptionsFilter.entries.toSet() - SubscriptionsFilter.Today - SubscriptionsFilter.Posts
     override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage = client.read { context, http ->
         if (filter == SubscriptionsFilter.Today || filter == SubscriptionsFilter.Posts)
             throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "subscription_filter_unavailable"))

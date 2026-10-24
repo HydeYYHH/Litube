@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.core.AppNotice
 
 class SearchResultsViewModel(
     private val repository: SearchRepository,
@@ -20,6 +21,8 @@ class SearchResultsViewModel(
     query: String,
     scenario: SearchScenario = SearchScenario.Results,
     private var signedIn: Boolean? = null,
+    private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
+    saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val restoredQuery = savedState.get<String>("query") ?: query
     private val restoredFilters = SearchFilters(
@@ -43,15 +46,23 @@ class SearchResultsViewModel(
             filters = restoredFilters,
             signedInPreview = signedIn ?: (restoredFilters.type == SearchResultType.All),
             filtersOpen = savedState[KEY_FILTERS_OPEN] ?: (savedState.get<String>(KEY_OVERLAY) == "filters"),
+            live = videoActions != null,
         )
     )
     val uiState = _state.asStateFlow()
     private val navigation = Channel<SearchNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
+    /** Live save flow for the result menus; null in fixture builds, where typed exits stay the seam. */
+    val saveSheet = saveRepository?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
     private var loadJob: Job? = null
     private var generation = 0
     private var pageJob: Job? = null
     private var sessionKey: Long? = null
+    private var actionJob: Job? = null
 
     fun updateSession(signedIn: Boolean, key: Long) {
         val changed = sessionKey != null && sessionKey != key
@@ -92,7 +103,22 @@ class SearchResultsViewModel(
                 overlay(SearchOverlay.None)
                 navigation.trySend(SearchNavigationRequest.SharePlaylist(menu.playlistId))
             }
-            is SearchAction.Subscribe -> navigation.trySend(SearchNavigationRequest.Subscribe(action.channelId))
+            is SearchAction.Subscribe -> {
+                val actions = videoActions
+                if (actions == null) navigation.trySend(SearchNavigationRequest.Subscribe(action.channelId))
+                else if (actionJob?.isActive != true) {
+                    val target = _state.value.subscriptions[action.channelId] != true
+                    actionJob = viewModelScope.launch {
+                        try {
+                            actions.subscribe(action.channelId, target)
+                            _state.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target)) }
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+                        catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again.")) }
+                    }
+                }
+            }
             is SearchAction.OpenChannel -> navigation.trySend(SearchNavigationRequest.Channel(action.channelId))
             is SearchAction.SelectDestination -> navigation.trySend(SearchNavigationRequest.Destination(action.destination))
             is SearchAction.OpenItemMenu -> overlay(SearchOverlay.ItemMenu(action.videoId))
@@ -100,10 +126,14 @@ class SearchResultsViewModel(
             is SearchAction.MenuAction -> {
                 val menu = uiState.value.overlay as? SearchOverlay.ItemMenu ?: return
                 overlay(SearchOverlay.None)
-                if (action.action == SearchVideoMenuAction.Share) {
-                    navigation.trySend(SearchNavigationRequest.Share(menu.videoId))
-                } else {
-                    navigation.trySend(SearchNavigationRequest.MenuAction(menu.videoId, action.action))
+                when {
+                    action.action == SearchVideoMenuAction.Share ->
+                        navigation.trySend(SearchNavigationRequest.Share(menu.videoId))
+                    saveSheet == null ->
+                        navigation.trySend(SearchNavigationRequest.MenuAction(menu.videoId, action.action))
+                    action.action == SearchVideoMenuAction.WatchLater -> saveSheet.saveWatchLater(menu.videoId)
+                    action.action == SearchVideoMenuAction.SaveToPlaylist -> saveSheet.open(menu.videoId)
+                    else -> Unit
                 }
             }
             SearchAction.OpenFilters -> {

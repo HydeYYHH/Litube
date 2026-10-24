@@ -22,6 +22,10 @@ data class WatchVideo(
     val subscribed: Boolean = false,
     val avatar: String? = null,
     val commentsStatus: WatchCommentsStatus = WatchCommentsStatus.Ready,
+    /** Playback-tracking endpoints for watch-time reporting; fixtures leave it null. */
+    val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
+    /** Live-chat continuation for live streams; fixtures leave it null so goldens stay put. */
+    val chatKey: String? = null,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
@@ -61,6 +65,8 @@ data class WatchUiState(
     val draftQuery: String = "",
     val commentsOpen: Boolean = false,
     val actionPending: Boolean = false,
+    /** Production mode: report/recommendation rows without server tokens hide. Fixtures keep the recorded layouts. */
+    val live: Boolean = false,
 ) {
     val searchOpen: Boolean get() = overlay == WatchOverlay.Search
 }
@@ -75,6 +81,11 @@ sealed interface WatchOverlay {
         val newPlaylist: Boolean = false,
         val title: String = "",
         val description: String = "",
+        /** Live mode: the ViewModel owns server choices and writes; the fixture sheet stays request-only. */
+        val live: Boolean = false,
+        val choices: List<com.hhst.youtubelite.saves.domain.SaveChoice>? = null,
+        val choicesFailed: Boolean = false,
+        val pending: Boolean = false,
     ) : WatchOverlay
     data class Feedback(val videoId: String, val kind: WatchFeedbackKind) : WatchOverlay
 }
@@ -101,6 +112,15 @@ enum class WatchVideoMenuAction(val label: String) {
     DontRecommend("Don't recommend channel"),
 }
 
+/**
+ * The menu rows with a real production route. The recommendation rows open a reason sheet whose
+ * submission needs a signed-in feedbackToken the watch page never carries, so production menus
+ * only offer rows that actually run; fixtures keep the full recorded menu.
+ */
+fun watchVideoMenuActions(live: Boolean): List<WatchVideoMenuAction> =
+    if (!live) WatchVideoMenuAction.entries
+    else listOf(WatchVideoMenuAction.WatchLater, WatchVideoMenuAction.SaveToPlaylist, WatchVideoMenuAction.Share)
+
 /** Typed boundaries only: every entry is recorded by the host, never simulated as a success. */
 sealed interface WatchNavigationRequest {
     data class Search(val query: String) : WatchNavigationRequest
@@ -109,8 +129,6 @@ sealed interface WatchNavigationRequest {
     data class Channel(val channelId: String) : WatchNavigationRequest
     data class Comments(val videoId: String) : WatchNavigationRequest
     data class Watch(val videoId: String) : WatchNavigationRequest
-    data class ItemMenu(val videoId: String) : WatchNavigationRequest
-    data class MenuAction(val videoId: String, val action: WatchVideoMenuAction) : WatchNavigationRequest
     data class Like(val videoId: String) : WatchNavigationRequest
     data class Dislike(val videoId: String) : WatchNavigationRequest
     data class Subscribe(val channelId: String) : WatchNavigationRequest
@@ -142,6 +160,8 @@ sealed interface WatchAction {
     data object Share : WatchAction
     data object Save : WatchAction
     data class SaveDestinationSelected(val destination: com.hhst.youtubelite.saves.domain.SaveDestination) : WatchAction
+    data class SaveChoiceToggled(val choice: com.hhst.youtubelite.saves.domain.SaveChoice) : WatchAction
+    data object SaveChoicesRetry : WatchAction
     data object OpenNewPlaylist : WatchAction
     data class SaveDraftChanged(val title: String, val description: String) : WatchAction
     data object SubmitNewPlaylist : WatchAction

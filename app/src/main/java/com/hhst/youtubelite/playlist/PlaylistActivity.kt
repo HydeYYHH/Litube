@@ -29,6 +29,8 @@ import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.ui.renderNotice
+
 class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var playlistViewModel: PlaylistViewModel
         private set
@@ -57,15 +59,28 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
         val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.dark(0xFF2D4F72.toInt()), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val id = intent.getStringExtra(EXTRA_PLAYLIST_ID) ?: FixturePlaylistRepository.MOVIES
+        val playlistId = intent.getStringExtra(EXTRA_PLAYLIST_ID)
+        if (playlistId.isNullOrBlank() && !fixtures) {
+            // No identity and no fixture seam: rendering a default playlist would fabricate content.
+            finish()
+            return
+        }
+        val id = playlistId ?: FixturePlaylistRepository.MOVIES
         val scenario = if (BuildConfig.DEBUG) PlaylistScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else PlaylistScenario.Content
         playlistViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == PlaylistViewModel::class.java)
-                return PlaylistViewModel(if (fixtures) FixturePlaylistRepository(scenario) else sources.playlist, extras.createSavedStateHandle(), id, scenario) as T
+                return PlaylistViewModel(if (fixtures) FixturePlaylistRepository(scenario) else sources.playlist, extras.createSavedStateHandle(), id, scenario, if (fixtures) null else sources.saves) as T
             }
         })[PlaylistViewModel::class.java]
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                playlistViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
+                }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 playlistViewModel.navigationRequests.collect { request ->
@@ -95,7 +110,10 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is PlaylistNavigationRequest.Share -> shareGateway.sharePlaylist(request.playlistId)
                         is PlaylistNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
                             this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
-                        else -> Unit
+                        // Fixture-only typed exits: production runs saves and per-video actions
+                        // through the in-VM save sheet. No `else`: a new request type must fail
+                        // to compile here.
+                        is PlaylistNavigationRequest.Save, is PlaylistNavigationRequest.VideoAction -> Unit
                     }
                 }
             }
@@ -118,13 +136,40 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = pageColor == null
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
             }
-            val back = { if (state.overlay != PlaylistOverlay.None) playlistViewModel.onAction(PlaylistAction.CloseOverlay) else finish() }
+            val back: () -> Unit = {
+                if (playlistViewModel.saveSheet?.state?.value != null) playlistViewModel.saveSheet?.close()
+                else if (state.overlay != PlaylistOverlay.None) playlistViewModel.onAction(PlaylistAction.CloseOverlay)
+                else finish()
+            }
             BackHandler(onBack = back)
             Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)) {
                 Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.safeDrawing)
                     .background(pageColor?.let { androidx.compose.ui.graphics.Color(it) } ?: androidx.compose.ui.graphics.Color.White))
                 PlaylistScreen(state, playlistViewModel::onAction, back,
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+                playlistViewModel.saveSheet?.let { sheet ->
+                    val sheetState by sheet.state.collectAsStateWithLifecycle()
+                    sheetState?.let { current ->
+                        if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
+                            draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
+                            onDismiss = sheet::close,
+                            onDraftChange = { sheet.draftChanged(it.title, it.description) },
+                            onSubmit = sheet::submitNewPlaylist,
+                        ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
+                            playlists = emptyList(),
+                            onDismiss = sheet::close,
+                            onSelect = {},
+                            onNewPlaylist = sheet::openNewPlaylist,
+                            live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
+                                choices = current.choices,
+                                failed = current.choicesFailed,
+                                pending = current.pending,
+                                onToggle = sheet::toggle,
+                                onRetry = sheet::retry,
+                            ),
+                        )
+                    }
+                }
             }
         }
     }

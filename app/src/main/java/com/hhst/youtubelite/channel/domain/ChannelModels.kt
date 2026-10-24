@@ -20,6 +20,8 @@ data class ChannelProfile(
     val videoCount: String = "",
     val views: String = "",
     val canonicalUrl: String = "",
+    /** Server-reported membership; null means the page did not expose it (guests, modern header). */
+    val subscribed: Boolean? = null,
 )
 
 data class ChannelVideo(
@@ -38,7 +40,12 @@ data class ChannelPage(
     val videos: List<ChannelVideo>,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
     val homeShelves: List<ChannelHomeShelf> = emptyList(),
+    /** Continuation for the videos tab; null when the server has no further page. */
+    val videosNextKey: String? = null,
 )
+
+/** One server page of the videos tab. */
+data class ChannelVideosPage(val videos: List<ChannelVideo>, val nextKey: String?)
 
 data class ChannelHomeShelf(val title: String, val description: String = "", val videos: List<ChannelVideo>)
 
@@ -80,6 +87,13 @@ interface ChannelRepository {
     suspend fun live(channelId: String): ChannelLivePage
 
     suspend fun posts(channelId: String): List<PostSummary>
+
+    /** True when the repository searches the channel on the server instead of filtering the first page. */
+    val serverSearch: Boolean get() = false
+
+    suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> = emptyList()
+
+    suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage = ChannelVideosPage(emptyList(), null)
 }
 
 sealed interface ChannelSection<out T> {
@@ -134,6 +148,12 @@ data class ChannelUiState(
     val shortsSort: ChannelSortOption = ChannelSortOption.Latest,
     val liveSort: ChannelSortOption = ChannelSortOption.Latest,
     val expandedPosts: Set<String> = emptySet(),
+    val subscribePending: Boolean = false,
+    /** Server search results for the Search tab; null while the tab filters the first page locally. */
+    val searchResults: ChannelSection<List<ChannelVideo>>? = null,
+    val videosAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    /** Production mode: feedback-only menus (section/short/post) hide — their rows need tokens the server never sends. */
+    val production: Boolean = false,
 ) {
     val isLocalTab: Boolean
         get() = selectedTab in listOf(
@@ -155,7 +175,6 @@ sealed interface ChannelNavigationRequest {
     data class Watch(val videoId: String) : ChannelNavigationRequest
     data class Playlist(val playlistId: String) : ChannelNavigationRequest
     data class SharePlaylist(val playlistId: String) : ChannelNavigationRequest
-    data class OtherTab(val tab: ChannelTab) : ChannelNavigationRequest
     data class Subscribe(val channelId: String) : ChannelNavigationRequest
     data class OpenLink(val url: String) : ChannelNavigationRequest
     data object Share : ChannelNavigationRequest
@@ -216,6 +235,10 @@ sealed interface ChannelAction {
     data class SelectPostMenu(val action: PostMenuAction) : ChannelAction
     data class PostFeedback(val identity: PostIdentity, val liked: Boolean) : ChannelAction
     data class PostComments(val identity: PostIdentity) : ChannelAction
+    /** Loads the next server page of the videos tab. */
+    data object LoadVideosNext : ChannelAction
+    /** Re-runs a failed server channel search. */
+    data object RetrySearch : ChannelAction
 }
 
 

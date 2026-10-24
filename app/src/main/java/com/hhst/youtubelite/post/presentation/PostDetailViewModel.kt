@@ -19,10 +19,12 @@ class PostDetailViewModel(
     private val savedState: SavedStateHandle,
     identity: PostIdentity,
     scenario: PostScenario = PostScenario.Content,
+    live: Boolean = false,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         PostDetailUiState(
             identity = identity,
+            live = live,
             content = when (scenario) {
                 PostScenario.Error, PostScenario.Empty -> PostDetailContent.Failed
                 PostScenario.Content, PostScenario.Loading -> PostDetailContent.Loading

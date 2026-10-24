@@ -118,7 +118,9 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
                 addAction(ACTION_PIP_PREVIOUS)
                 addAction(ACTION_PIP_NEXT)
             }, ContextCompat.RECEIVER_NOT_EXPORTED)
-        if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) {
+        if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY) &&
+            !com.hhst.youtubelite.data.media.ContentSource.fixtures) {
+            // Offline fixture hosts never play, so they never post the notification.
             NotificationPermission.requestIfNeeded(this)
         }
         // syncPipParams otherwise only runs on the next player-state change:

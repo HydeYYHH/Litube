@@ -16,12 +16,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.core.AppNotice
 
 class ChannelViewModel(
     private val repository: ChannelRepository,
     private val savedState: SavedStateHandle,
     channelId: String,
     scenario: ChannelScenario = ChannelScenario.Content,
+    private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
 ) : ViewModel() {
     private val restoredId = savedState.get<String>("channelId") ?: channelId
     private val _state = MutableStateFlow(
@@ -47,19 +49,42 @@ class ChannelViewModel(
                 it.name == savedState.get<String>("liveSort")
             } ?: ChannelSortOption.Latest,
             expandedPosts = savedState.get<ArrayList<String>>("expandedPosts")?.toSet() ?: emptySet(),
+            production = videoActions != null,
         )
     )
     val uiState = _state.asStateFlow()
     private val navigation = Channel<ChannelNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
     private var loadJob: Job? = null
+    private var subscribeJob: Job? = null
+    private var searchJob: Job? = null
+    private var appendJob: Job? = null
     private var generation = 0
     private val sectionJobs = mutableMapOf<ChannelTab, Job>()
     private val sectionGenerations = mutableMapOf<ChannelTab, Int>()
 
+    fun refreshSession() {
+        subscribeJob?.cancel()
+        searchJob?.cancel()
+        appendJob?.cancel()
+        sectionJobs.values.forEach(Job::cancel)
+        sectionJobs.clear()
+        sectionGenerations.keys.toList().forEach { sectionGenerations[it] = sectionGenerations.getValue(it) + 1 }
+        _state.update { it.copy(subscribePending = false, shorts = ChannelSection.Loading,
+            live = ChannelSection.Loading, posts = ChannelSection.Loading,
+            videosAppend = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+        setOverlay(ChannelOverlay.None)
+        load()
+        if (uiState.value.submittedQuery.isNotBlank()) runSearch(uiState.value.submittedQuery)
+    }
+
     init {
         savedState["channelId"] = restoredId
         if (scenario.loadsContent() && _state.value.content is ChannelContent.Loading) load()
+        if (scenario.loadsContent() && repository.serverSearch && uiState.value.submittedQuery.isNotBlank())
+            runSearch(uiState.value.submittedQuery)
     }
 
     fun onAction(action: ChannelAction) {
@@ -81,7 +106,37 @@ class ChannelViewModel(
                 savedState["playlistSort"] = action.sort.name
                 _state.update { it.copy(playlistSort = action.sort) }
             }
-            ChannelAction.Subscribe -> navigation.trySend(ChannelNavigationRequest.Subscribe(uiState.value.channelId))
+            ChannelAction.Subscribe -> {
+                val actions = videoActions
+                if (actions == null) navigation.trySend(ChannelNavigationRequest.Subscribe(uiState.value.channelId))
+                else if (subscribeJob?.isActive != true) {
+                    val ready = uiState.value.content as? ChannelContent.Ready ?: return
+                    val target = ready.page.profile.subscribed != true
+                    _state.update { it.copy(subscribePending = true) }
+                    subscribeJob = viewModelScope.launch {
+                        try {
+                            actions.subscribe(uiState.value.channelId, target)
+                            _state.update { state ->
+                                val current = state.content as? ChannelContent.Ready ?: return@update state
+                                state.copy(content = current.copy(page = current.page.copy(
+                                    profile = current.page.profile.copy(subscribed = target))), subscribePending = false)
+                            }
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                            _state.update { it.copy(subscribePending = false) }
+                            notices.trySend(AppNotice.SignIn)
+                        }
+                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                            _state.update { it.copy(subscribePending = false) }
+                            notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again."))
+                        }
+                        catch (_: Exception) {
+                            _state.update { it.copy(subscribePending = false) }
+                            notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again."))
+                        }
+                    }
+                }
+            }
             ChannelAction.Share -> navigation.trySend(ChannelNavigationRequest.Share)
             ChannelAction.ChannelSearch -> {
                 selectTab(ChannelTab.Search)
@@ -95,7 +150,14 @@ class ChannelViewModel(
                 val query = uiState.value.searchQuery.trim()
                 savedState["submittedQuery"] = query
                 _state.update { it.copy(submittedQuery = query) }
+                if (repository.serverSearch && query.isNotEmpty()) runSearch(query)
+                else _state.update { it.copy(searchResults = null) }
             }
+            ChannelAction.RetrySearch -> {
+                val query = uiState.value.submittedQuery
+                if (repository.serverSearch && query.isNotEmpty()) runSearch(query)
+            }
+            ChannelAction.LoadVideosNext -> loadVideosNext()
             is ChannelAction.OpenLink -> navigation.trySend(ChannelNavigationRequest.OpenLink(action.url))
             ChannelAction.OpenFullDescription -> {
                 setOverlay(ChannelOverlay.About)
@@ -219,6 +281,49 @@ class ChannelViewModel(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun runSearch(query: String) {
+        searchJob?.cancel()
+        _state.update { it.copy(searchResults = ChannelSection.Loading) }
+        searchJob = viewModelScope.launch {
+            try {
+                val results = repository.searchVideos(uiState.value.channelId, query)
+                if (query != uiState.value.submittedQuery) return@launch
+                _state.update {
+                    it.copy(searchResults = if (results.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(results))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (query == uiState.value.submittedQuery) _state.update { it.copy(searchResults = ChannelSection.Failed) }
+            }
+        }
+    }
+
+    private fun loadVideosNext() {
+        val ready = uiState.value.content as? ChannelContent.Ready ?: return
+        val next = ready.page.videosNextKey ?: return
+        if (appendJob?.isActive == true) return
+        _state.update { it.copy(videosAppend = com.hhst.youtubelite.home.domain.AppendState.Loading) }
+        appendJob = viewModelScope.launch {
+            try {
+                val page = repository.videos(uiState.value.channelId, next)
+                _state.update { state ->
+                    val current = state.content as? ChannelContent.Ready ?: return@update state
+                    if (current.page.videosNextKey != next) return@update state
+                    state.copy(
+                        content = current.copy(page = current.page.copy(
+                            videos = (current.page.videos + page.videos).distinctBy { it.id },
+                            videosNextKey = page.nextKey,
+                        )),
+                        videosAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
+                    )
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                _state.update { it.copy(videosAppend = com.hhst.youtubelite.home.domain.AppendState.Failed) }
             }
         }
     }

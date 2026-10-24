@@ -33,11 +33,16 @@ import com.hhst.youtubelite.ui.design.*
 
 @Composable
 internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, listState: LazyListState,
-    query: String, submitted: String, onAction: (ChannelAction) -> Unit) {
+    query: String, submitted: String, onAction: (ChannelAction) -> Unit,
+    results: ChannelSection<List<ChannelVideo>>? = null) {
     val keyboard = LocalSoftwareKeyboardController.current
     val submit = { keyboard?.hide(); onAction(ChannelAction.SubmitSearch) }
-    val videos = remember(page.videos, submitted) {
-        page.videos.filter { submitted.isBlank() || it.title.contains(submitted, ignoreCase = true) }
+    val videos = remember(page.videos, submitted, results) {
+        when (results) {
+            is ChannelSection.Ready -> results.value
+            null -> page.videos.filter { submitted.isBlank() || it.title.contains(submitted, ignoreCase = true) }
+            else -> emptyList()
+        }
     }
     var appliedQuery by remember { mutableStateOf(submitted) }
     LaunchedEffect(submitted) {
@@ -76,10 +81,23 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
                 { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
                 if (width >= 931 || width >= 550 && width <= height) 40f else 48f)
         }
-        if (videos.isEmpty() && playlists.isEmpty()) item {
-            AppText("No results found", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
+        when (results) {
+            is ChannelSection.Loading -> item {
+                AppText("Searching…", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-loading"), color = DesignTokens.Secondary)
+            }
+            is ChannelSection.Failed -> item {
+                AppText("Search failed. Tap to retry.",
+                    Modifier.fillMaxWidth().padding(24.dp).clip(RoundedCornerShape(8.dp))
+                        .clickable { onAction(ChannelAction.RetrySearch) }.padding(4.dp).testTag("channel-search-failed"),
+                    color = DesignTokens.Secondary)
+            }
+            else -> {
+                if (videos.isEmpty() && playlists.isEmpty()) item {
+                    AppText("No results found", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
+                }
+                items(videos, key = { it.id }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
+            }
         }
-        items(videos, key = { it.id }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
     }
 }
 

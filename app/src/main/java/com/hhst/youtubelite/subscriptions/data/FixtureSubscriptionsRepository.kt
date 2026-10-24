@@ -41,6 +41,8 @@ class FixtureSubscriptionsRepository(private val scenario: SubscriptionsScenario
 }
 
 interface SubscriptionsRepository {
+    /** Filters the backend can actually serve; fixture builds serve everything. */
+    val supportedFilters: Set<SubscriptionsFilter> get() = SubscriptionsFilter.entries.toSet()
     suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String? = null): SubscriptionsPage
 }
 

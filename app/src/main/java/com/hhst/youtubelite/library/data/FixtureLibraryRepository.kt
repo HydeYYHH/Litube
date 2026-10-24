@@ -63,6 +63,13 @@ interface LibraryRepository {
     suspend fun you(): YouPage
     suspend fun history(): HistoryPage
     suspend fun playlists(): List<PlaylistSummary>
+
+    /** Live-only removal write; fixtures never reach it because the menu stays a typed exit there. */
+    suspend fun removeFromHistory(feedbackToken: String): Unit = throw UnsupportedOperationException("remove_from_history_unsupported")
+
+    /** Live-only history management writes; the manage sheet only exists in production. */
+    suspend fun setHistoryPaused(paused: Boolean): Unit = throw UnsupportedOperationException("history_pause_unsupported")
+    suspend fun clearHistory(): Unit = throw UnsupportedOperationException("history_clear_unsupported")
 }
 
 enum class LibraryScenario(val argument: String) {

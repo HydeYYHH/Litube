@@ -19,6 +19,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchViewModelTest {
@@ -27,6 +28,22 @@ class WatchViewModelTest {
 
     private fun repository(block: suspend (String) -> WatchPage) = object : WatchRepository {
         override suspend fun watch(videoId: String) = block(videoId)
+    }
+
+    @Test fun accountChangesReloadSubscriptionStateAndCloseOldSaveChoices() = runTest {
+        var subscribed = false
+        val vm = WatchViewModel(repository {
+            val page = FixtureWatchRepository.samplePage(it)
+            page.copy(video = page.video.copy(subscribed = subscribed))
+        }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        assertTrue(vm.uiState.value.overlay is WatchOverlay.Save)
+        subscribed = true
+        vm.refreshSession()
+        advanceUntilIdle()
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+        assertTrue((vm.uiState.value.content as WatchContent.Ready).page.video.subscribed)
     }
 
     @Test fun confirmingARatingKeepsTheLatestCommentPreview() = runTest {
@@ -84,7 +101,7 @@ class WatchViewModelTest {
         vm.onAction(WatchAction.Dislike)
         advanceUntilIdle()
         assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
-        assertEquals(WatchNotice.SignIn, vm.actionNotices.first())
+        assertEquals(AppNotice.SignIn, vm.actionNotices.first())
     }
 
     @Test fun switchingVideosCancelsAnUnfinishedRating() = runTest {
@@ -415,5 +432,107 @@ class WatchViewModelTest {
         // The page never lists itself as a related video.
         assertTrue(FixtureWatchRepository.samplePage("harbour").related.any { it.id == "bunny" })
         assertTrue(FixtureWatchRepository.samplePage("harbour").related.none { it.id == "harbour" })
+    }
+
+    private class FakeSaveRepository(
+        var choicesResult: List<com.hhst.youtubelite.saves.domain.SaveChoice> = listOf(
+            com.hhst.youtubelite.saves.domain.SaveChoice("WL", "Watch later", false),
+            com.hhst.youtubelite.saves.domain.SaveChoice("PL1", "Music", true),
+        ),
+        var choicesError: Exception? = null,
+        var writeError: Exception? = null,
+    ) : com.hhst.youtubelite.saves.domain.SaveRepository {
+        val writes = ArrayList<Triple<String, String, Boolean>>()
+        var watchLaterCalls = 0
+        override suspend fun choices(videoId: String) = choicesError?.let { throw it } ?: choicesResult
+        override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {
+            writeError?.let { throw it }
+            writes.add(Triple(playlistId, videoId, contains))
+        }
+        override suspend fun saveWatchLater(videoId: String) {
+            writeError?.let { throw it }
+            watchLaterCalls++
+        }
+        override suspend fun create(title: String, description: String, videoId: String): com.hhst.youtubelite.saves.domain.SaveChoice {
+            writeError?.let { throw it }
+            return com.hhst.youtubelite.saves.domain.SaveChoice("PLnew", title, true)
+        }
+        override suspend fun savePlaylistToLibrary(playlistId: String) {
+            writeError?.let { throw it }
+        }
+    }
+
+    private fun liveSaveViewModel(saves: FakeSaveRepository): WatchViewModel =
+        WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", saveRepository = saves)
+
+    @Test fun liveSaveSheetLoadsServerChoicesAndTogglesAfterConfirmation() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        advanceUntilIdle()
+        val loaded = vm.uiState.value.overlay as WatchOverlay.Save
+        assertTrue(loaded.live)
+        assertEquals(listOf("WL", "PL1"), loaded.choices!!.map { it.id })
+        assertTrue(loaded.choices!![1].contains)
+        vm.onAction(WatchAction.SaveChoiceToggled(loaded.choices!![0]))
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("WL", "bunny", true)), saves.writes)
+        val after = vm.uiState.value.overlay as WatchOverlay.Save
+        assertTrue(after.choices!![0].contains)
+        assertFalse(after.pending)
+    }
+
+    @Test fun unconfirmedSaveToggleKeepsTheServerStateAndNotifies() = runTest {
+        val saves = FakeSaveRepository(writeError = UnconfirmedActionException())
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        advanceUntilIdle()
+        val loaded = vm.uiState.value.overlay as WatchOverlay.Save
+        vm.onAction(WatchAction.SaveChoiceToggled(loaded.choices!![1]))
+        advanceUntilIdle()
+        val after = vm.uiState.value.overlay as WatchOverlay.Save
+        assertTrue(after.choices!![1].contains)
+        assertFalse(after.pending)
+        val notice = withTimeoutOrNull(500) { vm.actionNotices.first() }
+        assertTrue(notice is AppNotice.Message)
+    }
+
+    @Test fun guestSaveClosesTheSheetAndRequestsSignIn() = runTest {
+        val saves = FakeSaveRepository(choicesError = SignInRequiredException())
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        advanceUntilIdle()
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+        assertEquals(AppNotice.SignIn, withTimeoutOrNull(500) { vm.actionNotices.first() })
+    }
+
+    @Test fun createdPlaylistAppearsCheckedInTheOpenSheet() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Save)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenNewPlaylist)
+        vm.onAction(WatchAction.SaveDraftChanged("Night walks", "city footage"))
+        vm.onAction(WatchAction.SubmitNewPlaylist)
+        advanceUntilIdle()
+        val after = vm.uiState.value.overlay as WatchOverlay.Save
+        assertFalse(after.newPlaylist)
+        assertEquals(listOf("WL", "PL1", "PLnew"), after.choices!!.map { it.id })
+        assertTrue(after.choices!!.last().contains)
+    }
+
+    @Test fun watchLaterMenuRowWritesThroughTheRepository() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu("bunny"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.WatchLater))
+        advanceUntilIdle()
+        assertEquals(1, saves.watchLaterCalls)
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
     }
 }

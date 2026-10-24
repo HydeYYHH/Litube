@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
 
 class SubscriptionsHostAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -28,6 +29,12 @@ class SubscriptionsHostAndroidTest {
             scenario = it
             compose.waitUntil(15_000) { runCatching { compose.onAllNodesWithTag("subscriptions-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty() }
         }
+    }
+
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
     }
 
     @After fun close() {

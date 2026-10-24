@@ -38,6 +38,10 @@ data class SubscriptionsUiState(
     val overlay: SubscriptionsOverlay = SubscriptionsOverlay.None,
     val query: String = "",
     val selectedChip: SubscriptionsChip = SubscriptionsChip.All,
+    /** Chips the backend can serve; production hides the lanes the server rejects. */
+    val chips: List<SubscriptionsChip> = SubscriptionsChip.entries,
+    /** Production mode: the item menu writes through the save sheet and feedback rows hide. */
+    val live: Boolean = false,
 )
 
 enum class SubscriptionsChip(val label: String) {

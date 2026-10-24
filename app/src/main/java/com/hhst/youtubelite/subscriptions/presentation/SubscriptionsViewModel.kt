@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import com.hhst.youtubelite.core.AppNotice
 
 /** Hosts the subscriptions feed and its channel list. */
 class SubscriptionsViewModel(
@@ -29,6 +30,7 @@ class SubscriptionsViewModel(
     private val savedState: SavedStateHandle,
     private val scenario: SubscriptionsScenario,
     private var signedIn: Boolean,
+    saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         SubscriptionsUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "",
@@ -38,13 +40,22 @@ class SubscriptionsViewModel(
                 "menu" -> savedState.get<String>("menuItem")?.let { SubscriptionsOverlay.Menu(it) } ?: SubscriptionsOverlay.None
                 else -> SubscriptionsOverlay.None
             },
-            selectedChip = SubscriptionsChip.entries.firstOrNull { it.name == savedState.get<String>("chip") } ?: SubscriptionsChip.All,
+            selectedChip = (SubscriptionsChip.entries.firstOrNull { it.name == savedState.get<String>("chip") } ?: SubscriptionsChip.All)
+                .takeIf { SubscriptionsFilter.from(it) in repository.supportedFilters } ?: SubscriptionsChip.All,
+            chips = repository.supportedFilters.map { it.chip },
+            live = saveRepository != null,
             content = if (scenario == SubscriptionsScenario.Content) SubscriptionsContent.Loading
             else scenario.initialContent(subscriptionsSignedOutPrompt()))
     )
     val uiState: StateFlow<SubscriptionsUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<SubscriptionsNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<SubscriptionsNavigationRequest> = navigation.receiveAsFlow()
+    private val notices = kotlinx.coroutines.channels.Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices: kotlinx.coroutines.flow.Flow<AppNotice> = notices.receiveAsFlow()
+    /** Live save flow for the item menu; null in fixture builds, where typed exits stay the seam. */
+    val saveSheet = saveRepository?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
 
     private var loadJob: Job? = null
     private var pageJob: Job? = null
@@ -89,6 +100,7 @@ class SubscriptionsViewModel(
                 navigation.trySend(SubscriptionsNavigationRequest.Search(action.query))
             }
             is SubscriptionsAction.SelectChip -> {
+                if (SubscriptionsFilter.from(action.chip) !in repository.supportedFilters) return
                 savedState["chip"] = action.chip.name
                 _uiState.update { it.copy(selectedChip = action.chip) }
                 refresh(SubscriptionsFilter.from(action.chip))
@@ -101,7 +113,15 @@ class SubscriptionsViewModel(
             is SubscriptionsAction.MenuSelected -> {
                 val videoId = (_uiState.value.overlay as? SubscriptionsOverlay.Menu)?.videoId
                 showOverlay(SubscriptionsOverlay.None)
-                if (videoId != null) navigation.trySend(SubscriptionsNavigationRequest.MenuAction(videoId, action.action))
+                if (videoId != null) when {
+                    action.action == FeedMenuAction.Share ->
+                        navigation.trySend(SubscriptionsNavigationRequest.MenuAction(videoId, action.action))
+                    saveSheet == null ->
+                        navigation.trySend(SubscriptionsNavigationRequest.MenuAction(videoId, action.action))
+                    action.action == FeedMenuAction.WatchLater -> saveSheet.saveWatchLater(videoId)
+                    action.action == FeedMenuAction.SaveToPlaylist -> saveSheet.open(videoId)
+                    else -> Unit
+                }
             }
             is SubscriptionsAction.Destination -> {
                 if (action.tab == com.hhst.youtubelite.ui.components.MainTab.Subscriptions) return

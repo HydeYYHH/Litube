@@ -26,16 +26,26 @@ class MediaClient(
     private val http = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     suspend fun <T> read(block: (RequestContext, HttpClient) -> T): T = suspendCancellableCoroutine { continuation ->
-        val session = context()
         val cancelled = AtomicBoolean(false)
         val calls = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Call, Boolean>())
         val future = workers.submit {
             try {
+                // Resolved on the worker: the session lambda may block on an OAuth token
+                // refresh, which must never run on the calling (possibly main) thread.
+                val session = context()
                 val transport = object : HttpClient {
                     override fun execute(request: HttpRequest): HttpReply {
                         if (cancelled.get()) throw InterruptedException()
+                        val current = context()
+                        if (session.generation != current.generation)
+                            throw MediaException(RequestError(RequestFailure.AUTH, "session_changed"))
                         val builder = Request.Builder().url(request.url)
-                        request.headers.forEach { (name, value) -> builder.header(name, value) }
+                        request.headers.forEach { (name, value) ->
+                            val header = if (name.equals("Authorization", true) &&
+                                value == "Bearer ${session.accessToken}" && current.accessToken != null)
+                                "Bearer ${current.accessToken}" else value
+                            builder.header(name, header)
+                        }
                         val body = if (request.method == "POST") request.body.toRequestBody(
                             (request.headers.entries.firstOrNull { it.key.equals("Content-Type", true) }?.value
                                 ?: "application/json").toMediaType()) else null

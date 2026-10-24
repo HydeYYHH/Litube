@@ -34,6 +34,7 @@ import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.ui.renderNotice
 
 /** Hosts the home screen and observes its navigation requests. */
 class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
@@ -53,15 +54,23 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HomeViewModel::class.java)
-                return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures) as T
+                return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures, if (fixtures) null else sources.saves) as T
             }
         })[HomeViewModel::class.java]
         if (fixtures && intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                homeViewModel.actionNotices.collect { notice ->
+                    renderNotice(notice)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 homeViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
                     if (request is HomeNavigationRequest.OpenLink) openContentLink(request.url)
+                    if (request is HomeNavigationRequest.VoiceSearch && !fixtures) openVoiceSearch()
                     if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
                     if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
                     if (request is HomeNavigationRequest.Shorts) startActivity(
@@ -72,6 +81,9 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     )
                     if (request is HomeNavigationRequest.MenuAction && request.action == FeedMenuAction.Share) {
                         shareGateway.share(request.itemId)
+                    }
+                    if (request is HomeNavigationRequest.PostFeedback && !fixtures) {
+                        com.hhst.youtubelite.post.openPostVoteRoute(this@HomeActivity)
                     }
                     if (request is HomeNavigationRequest.Explore) startActivity(
                         com.hhst.youtubelite.explore.ExploreActivity.intent(this@HomeActivity))
@@ -90,7 +102,10 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 else moveTaskToBack(true)
             }
             HomeScreen(state, homeViewModel::onAction, Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
-                .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
+                .windowInsetsPadding(WindowInsets.safeDrawing).imePadding(),
+                searchRows = com.hhst.youtubelite.ui.components.rememberSearchRows(
+                    if (fixtures || state.overlay != com.hhst.youtubelite.home.domain.HomeOverlay.Search) null else sources.suggestions,
+                    state.query.trim()))
         }
         if (savedInstanceState == null) receiveLink(intent)
     }
@@ -99,7 +114,8 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
         super.onResume()
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
-            homeViewModel.updateSession(session.signedIn, session.generation)
+            homeViewModel.updateSession(session.signedIn, session.generation,
+                com.hhst.youtubelite.data.media.MediaSession.selectedAccount()?.photo)
         }
         val preferences = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         homeViewModel.setHideShorts(preferences.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_HIDE_SHORTS))

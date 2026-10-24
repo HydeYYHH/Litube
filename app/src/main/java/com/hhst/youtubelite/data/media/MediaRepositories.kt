@@ -29,7 +29,8 @@ internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?): 
         }.orEmpty(), published.orEmpty(), commentCount.orEmpty(), WatchComment("", "", ""),
         description.present() ?: details?.description.orEmpty(), details?.liveContent == true,
         rating = when (rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
-        subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading),
+        subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading,
+        tracking = details?.tracking, chatKey = chatKey),
         related.filter { it.kind == "video" }.map { WatchRelated(it.id, it.title.orEmpty(), it.author.orEmpty(),
             it.channelId.orEmpty(), it.viewCount.orEmpty(), it.published.orEmpty(), it.duration.orEmpty(), it.thumbnail.orEmpty(),
             if (it.live) "LIVE" else null, it.progressPercent?.div(100f), it.authorThumbnail.orEmpty()) })
@@ -65,7 +66,8 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
         val videosTab = page.page.tabs.firstOrNull { it.title.equals("Videos", true) }
         val videosPage = if (videosTab != null && !videosTab.selected) loadChannel(resolved, context, videosTab.params, http = http).requireValue() else page
         AppChannelPage(ChannelProfile(resolved, page.title.orEmpty(), page.handle.orEmpty(), page.thumbnail.orEmpty(), page.banner,
-            page.subscriberCount.orEmpty(), page.description.orEmpty(), videoCount = page.videoCount.orEmpty(), canonicalUrl = "https://www.youtube.com/channel/$resolved"),
+            page.subscriberCount.orEmpty(), page.description.orEmpty(), videoCount = page.videoCount.orEmpty(),
+            canonicalUrl = "https://www.youtube.com/channel/$resolved", subscribed = page.subscribed),
             videosPage.page.items.filter { it.kind == "video" }.map { it.channelVideo() }, playlists.map(MediaItem::playlistSummary),
             page.page.groups.mapNotNull { group ->
                 val videos = group.items.filter { it.kind == "video" }.map { it.channelVideo() }
@@ -73,7 +75,27 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
             }.ifEmpty {
                 page.page.items.filter { it.kind == "video" }.map { it.channelVideo() }.takeIf { it.isNotEmpty() }
                     ?.let { listOf(ChannelHomeShelf("", videos = it)) }.orEmpty()
-            })
+            },
+            videosNextKey = videosPage.page.nextKey)
+    }
+
+    override val serverSearch: Boolean get() = true
+
+    override suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> = client.read { context, http ->
+        val resolved = resolveChannel(channelId, context, http)
+        loadChannel(resolved, context, search = query.trim(), http = http).requireValue()
+            .page.items.filter { it.kind == "video" }.map { it.channelVideo() }
+    }
+
+    override suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage = client.read { context, http ->
+        val resolved = resolveChannel(channelId, context, http)
+        val page = if (continuation != null) loadChannel(resolved, context, continuation = continuation, http = http).requireValue()
+        else {
+            val first = loadChannel(resolved, context, http = http).requireValue()
+            val tab = first.page.tabs.firstOrNull { it.title.equals("Videos", true) }
+            if (tab == null || tab.selected) first else loadChannel(resolved, context, tab.params, http = http).requireValue()
+        }
+        ChannelVideosPage(page.page.items.filter { it.kind == "video" }.map { it.channelVideo() }, page.page.nextKey)
     }
 
     private suspend fun tab(channelId: String, label: String): List<MediaItem> = client.read { context, http ->

@@ -47,6 +47,7 @@ fun ChannelShortsTab(
     width: Float,
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
+    production: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
     LazyColumn(
@@ -81,7 +82,7 @@ fun ChannelShortsTab(
                         horizontalArrangement = Arrangement.spacedBy(ChannelLayout.ShortsGap.dp),
                     ) {
                         row.forEach { short ->
-                            ShortCard(short, cardWidth, cardHeight, onAction)
+                            ShortCard(short, cardWidth, cardHeight, onAction, production)
                         }
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
@@ -97,6 +98,7 @@ private fun ShortCard(
     cardWidth: androidx.compose.ui.unit.Dp,
     cardHeight: androidx.compose.ui.unit.Dp,
     onAction: (ChannelAction) -> Unit,
+    production: Boolean = false,
 ) {
     Box(
         Modifier.width(cardWidth).height(cardHeight)
@@ -110,7 +112,7 @@ private fun ShortCard(
                 Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f)),
             ),
         )
-        AppIconButton(
+        if (!production) AppIconButton(
             AppIcon.More,
             "More actions for ${short.title}",
             modifier = Modifier.align(Alignment.TopEnd).testTag("channel-short-menu-${short.id}"),
@@ -253,6 +255,7 @@ fun ChannelPostsTab(
     state: LazyListState,
     expandedPosts: Set<String>,
     onAction: (ChannelAction) -> Unit,
+    production: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
     LazyColumn(
@@ -272,6 +275,7 @@ fun ChannelPostsTab(
                     post = post,
                     expanded = post.identity.postId in expandedPosts,
                     onAction = onAction,
+                    production = production,
                 )
             }
         }
@@ -283,6 +287,7 @@ private fun PostCard(
     post: PostSummary,
     expanded: Boolean,
     onAction: (ChannelAction) -> Unit,
+    production: Boolean = false,
 ) {
     val open = { onAction(ChannelAction.OpenPost(post.identity)) }
     Column(Modifier.fillMaxWidth().testTag("channel-post-${post.identity.postId}")) {
@@ -302,7 +307,7 @@ private fun PostCard(
                 AppText(post.age, size = 14, line = 20, color = DesignTokens.Secondary)
             }
             Box(Modifier.size(width = 44.dp, height = 43.dp)) {
-                AppIconButton(
+                if (!production) AppIconButton(
                     AppIcon.More, "Post actions",
                     modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)
                         .testTag("channel-post-menu-${post.identity.postId}"),

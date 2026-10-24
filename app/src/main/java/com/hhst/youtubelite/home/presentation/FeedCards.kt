@@ -29,13 +29,13 @@ import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.home.domain.*
 
 @Composable
-internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, onAction: (HomeAction) -> Unit) {
+internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live: Boolean = false, onAction: (HomeAction) -> Unit) {
     when (item) {
         is FeedItem.Video -> VideoCard(item, compact, onAction)
-        is FeedItem.Mix -> MixCard(item, compact, onAction)
-        is FeedItem.Shorts -> ShortsShelf(item, windowWidth, onAction)
+        is FeedItem.Mix -> MixCard(item, compact, live, onAction)
+        is FeedItem.Shorts -> ShortsShelf(item, windowWidth, live, onAction)
         is FeedItem.Post -> BoxWithConstraints {
-            Box(Modifier.requiredWidth(maxWidth + if (compact) 0.dp else 32.dp)) { PostCard(item, onAction) }
+            Box(Modifier.requiredWidth(maxWidth + if (compact) 0.dp else 32.dp)) { PostCard(item, live, onAction) }
         }
     }
 }
@@ -90,7 +90,7 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
 }
 
 @Composable
-private fun MixCard(item: FeedItem.Mix, compact: Boolean, onAction: (HomeAction) -> Unit) {
+private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onAction: (HomeAction) -> Unit) {
     Column(Modifier.testTag("feed-item-${item.id}")) {
         Box(Modifier.padding(horizontal = if (compact) 12.dp else 0.dp).padding(top = if (compact) 10.dp else 0.dp).fillMaxWidth().offset(y = if (compact) 0.dp else (-2).dp)) {
             if (compact) Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-8).dp).background(Color(item.palette.stackColor).copy(alpha = 0.5f), RoundedCornerShape(12.dp)))
@@ -120,7 +120,7 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, onAction: (HomeAction)
 }
 
 @Composable
-private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (HomeAction) -> Unit) {
+private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean, onAction: (HomeAction) -> Unit) {
     val columns = HomeLayout.shortsColumns(windowWidth)
     val gap = if (windowWidth < 600f) 8.dp else 16.dp
     val videos = item.videos.take(if (windowWidth < 600f) 4 else columns)
@@ -129,7 +129,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (Ho
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             ShortsLogo(Modifier.offset(y = (-1.667).dp))
             AppText("Shorts", Modifier.padding(start = 12.dp).weight(1f), size = 18, line = 26, weight = FontWeight.Bold)
-            AppIconButton(AppIcon.More, "Shorts options", diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Shorts)) }
+            if (!live) AppIconButton(AppIcon.More, "Shorts options", diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Shorts)) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             videos.chunked(columns).forEach { row ->
@@ -143,7 +143,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (Ho
                             Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
                             if (video.isNew) AppText("New", Modifier.padding(5.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
                                 size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
-                            AppIconButton(AppIcon.More, "More actions for ${video.title}", modifier = Modifier.align(Alignment.TopEnd), diameter = 40.dp, color = Color.White) { onAction(HomeAction.OpenMenu(video.id, FeedMenuKind.Short)) }
+                            if (!live) AppIconButton(AppIcon.More, "More actions for ${video.title}", modifier = Modifier.align(Alignment.TopEnd), diameter = 40.dp, color = Color.White) { onAction(HomeAction.OpenMenu(video.id, FeedMenuKind.Short)) }
                             AppText(video.title, Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
                                 size = 14, line = 20, color = Color.White, maxLines = 2)
                         }
@@ -156,7 +156,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, onAction: (Ho
 }
 
 @Composable
-private fun PostCard(item: FeedItem.Post, onAction: (HomeAction) -> Unit) {
+private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("community-post")) {
         Row(Modifier.padding(start = 12.dp, top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Box(Modifier.size(48.dp)) { Avatar(item.artwork, item.author, item.channelId, onAction, size = 40.dp) }
@@ -165,7 +165,7 @@ private fun PostCard(item: FeedItem.Post, onAction: (HomeAction) -> Unit) {
                 AppText(item.age, size = 14, line = 20, color = DesignTokens.Secondary)
             }
             Box(Modifier.size(width = 44.dp, height = 48.dp)) {
-                AppIconButton(AppIcon.More, "Post actions", modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Post)) }
+                if (!live) AppIconButton(AppIcon.More, "Post actions", modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Post)) }
             }
         }
         AppText(item.text, Modifier.padding(12.dp).clickable(role = Role.Button) {

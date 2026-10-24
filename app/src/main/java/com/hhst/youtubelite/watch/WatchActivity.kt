@@ -44,7 +44,6 @@ import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.surface.PlayerUi
 import com.hhst.youtubelite.watch.data.FixtureWatchRepository
 import com.hhst.youtubelite.watch.data.WatchScenario
-import com.hhst.youtubelite.watch.domain.WatchNotice
 import com.hhst.youtubelite.watch.domain.WatchAction
 import com.hhst.youtubelite.watch.domain.WatchContent
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
@@ -75,11 +74,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
+import com.hhst.youtubelite.ui.renderNotice
+import com.hhst.youtubelite.ui.observeAccountChanges
 
 class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
     lateinit var watchViewModel: WatchViewModel
         private set
     lateinit var commentsViewModel: CommentsViewModel
+        private set
+    lateinit var chatViewModel: com.hhst.youtubelite.watch.chat.LiveChatViewModel
         private set
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
     var lastNavigationRequest: WatchNavigationRequest? = null
@@ -106,16 +109,13 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == WatchViewModel::class.java)
-                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions) as T
+                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves) as T
             }
         })[WatchViewModel::class.java]
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 watchViewModel.actionNotices.collect { notice ->
-                    when (notice) {
-                        WatchNotice.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@WatchActivity)
-                        is WatchNotice.Message -> android.widget.Toast.makeText(this@WatchActivity, notice.text, android.widget.Toast.LENGTH_LONG).show()
-                    }
+                    renderNotice(notice)
                 }
             }
         }
@@ -128,6 +128,40 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             }
         })[CommentsViewModel::class.java]
         bindCommentNotices(commentsViewModel)
+        if (!fixtures) observeAccountChanges {
+            watchViewModel.refreshSession()
+            commentsViewModel.refreshSession()
+        }
+        chatViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+                require(modelClass == com.hhst.youtubelite.watch.chat.LiveChatViewModel::class.java)
+                return com.hhst.youtubelite.watch.chat.LiveChatViewModel(
+                    if (fixtures) null else com.hhst.youtubelite.watch.chat.MediaLiveChatGateway(sources.client),
+                    signedIn = fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
+            }
+        })[com.hhst.youtubelite.watch.chat.LiveChatViewModel::class.java]
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chatViewModel.actionNotices.collect { notice -> renderNotice(notice) }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    kotlinx.coroutines.flow.combine(watchViewModel.uiState, playerViewModel.uiState,
+                        com.hhst.youtubelite.data.media.MediaSession.changes, inPip) { watch, player, _, pip ->
+                        val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+                        chatViewModel.updateSession(fixtures || session.signedIn, session.generation)
+                        (watch.content as? WatchContent.Ready)?.page?.video?.takeIf {
+                            watch.commentsOpen && !watch.searchOpen && !player.fullscreen && !pip && it.live
+                        }?.chatKey
+                    }.distinctUntilChanged().collect { key ->
+                        if (key == null) chatViewModel.close() else chatViewModel.open(key)
+                    }
+                } finally { chatViewModel.close() }
+            }
+        }
         if (savedInstanceState == null && BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
             watchViewModel.onAction(WatchAction.OpenComments(videoId))
         }
@@ -137,7 +171,14 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     lastCommentRequest = request
                     when (request) {
                         is CommentNavigationRequest.OpenAuthor -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
-                        else -> Unit
+                        // Comment writes and menus are handled in the CommentsViewModel (with server
+                        // confirmation in production); the host only hands author opens off to the
+                        // channel page. No `else`: a new request type must fail to compile here.
+                        is CommentNavigationRequest.SubmitComment, is CommentNavigationRequest.SubmitReply,
+                        is CommentNavigationRequest.EditComment, is CommentNavigationRequest.DeleteComment,
+                        is CommentNavigationRequest.LikeComment, is CommentNavigationRequest.DislikeComment,
+                        is CommentNavigationRequest.ReportComment, is CommentNavigationRequest.OpenCommentMenu,
+                        is CommentNavigationRequest.OpenReplyMenu -> Unit
                     }
                 }
             }
@@ -180,7 +221,15 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                             ).show()
                         }
                         is WatchNavigationRequest.OpenWith -> shareGateway.openWith(request.videoId)
-                        else -> Unit
+                        // Typed exits for fixture instrumentation and writes the WatchViewModel runs
+                        // itself with server confirmation in production (votes, subscribe, saves);
+                        // PageMenu/Comments mirror VM overlay state. No `else`: a new request type
+                        // must fail to compile here.
+                        WatchNavigationRequest.PageMenu, is WatchNavigationRequest.Comments,
+                        is WatchNavigationRequest.Like, is WatchNavigationRequest.Dislike,
+                        is WatchNavigationRequest.Subscribe, is WatchNavigationRequest.SaveToWatchLater,
+                        is WatchNavigationRequest.SaveToPlaylist, is WatchNavigationRequest.CreatePlaylist,
+                        is WatchNavigationRequest.Feedback -> Unit
                     }
                 }
             }
@@ -189,6 +238,26 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             (application as com.hhst.youtubelite.App).startMediaRuntime()
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
                 intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { savedInstanceState == null && it > 0 })
+            val watchTimeReporter = com.hhst.youtubelite.data.media.WatchTimeReporter(sources.client, lifecycleScope)
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video }
+                        .distinctUntilChanged { a, b -> a?.id == b?.id }
+                        .collect { video ->
+                            if (video != null) watchTimeReporter.watch(video.id, video.tracking) else watchTimeReporter.stop()
+                        }
+                }
+            }
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (true) {
+                        kotlinx.coroutines.delay(5_000)
+                        watchTimeReporter.tick(playerViewModel.positionState.value,
+                            playerViewModel.uiState.value.durationMs, playerViewModel.uiState.value.isPlaying,
+                            playerViewModel.uiState.value.videoId)
+                    }
+                }
+            }
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     playerViewModel.uiState.collect { playback ->
@@ -298,31 +367,49 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 }
                 if (state.searchOpen) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     val query = state.draftQuery.trim()
+                    val rows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures) null else sources.suggestions, query)
                     SearchPanel(
                         query = state.draftQuery,
-                        suggestions = if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live"),
+                        suggestions = rows?.suggestions ?: if (query.isBlank()) emptyList() else listOf(query, "$query documentary", "$query music", "$query live"),
+                        history = rows?.history.orEmpty(),
+                        onRemoveHistory = rows?.onRemove,
                         onQueryChanged = { watchViewModel.onAction(WatchAction.QueryChanged(it)) },
-                        onSubmit = { watchViewModel.onAction(WatchAction.SubmitSearch(it)) },
+                        onSubmit = { watchViewModel.onAction(WatchAction.SubmitSearch(it)); rows?.onSubmit?.invoke(it) },
                         onClose = { watchViewModel.onAction(WatchAction.CloseSearch) },
                         onVoiceSearch = { watchViewModel.onAction(WatchAction.VoiceSearch) },
                     )
                 }
                 if (state.commentsOpen && !fullscreen && !state.searchOpen) {
-                    val commentCount = when (commentsState.content) {
-                        CommentsContent.Empty -> "0"
-                        CommentsContent.Disabled -> ""
-                        else -> commentsState.total.ifBlank { (state.content as? WatchContent.Ready)?.page?.video?.commentCount.orEmpty() }
-                    }
-                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
-                        .then(if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier)
-                        .testTag("comments-panel-host")) {
-                        CommentsPanel(
-                            state = commentsState,
-                            commentCount = commentCount,
-                            onAction = commentsViewModel::onAction,
-                            onClose = closeComments,
-                            listState = commentsListState,
-                        )
+                    val chatVideo = (state.content as? WatchContent.Ready)?.page?.video
+                        ?.takeIf { it.live && it.chatKey != null }
+                    if (chatVideo != null) {
+                        val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
+                        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                            .imePadding()
+                            .testTag("live-chat-panel-host")) {
+                            com.hhst.youtubelite.watch.chat.LiveChatPanel(
+                                state = chatState,
+                                onAction = chatViewModel::onAction,
+                                onClose = closeComments,
+                            )
+                        }
+                    } else {
+                        val commentCount = when (commentsState.content) {
+                            CommentsContent.Empty -> "0"
+                            CommentsContent.Disabled -> ""
+                            else -> commentsState.total.ifBlank { (state.content as? WatchContent.Ready)?.page?.video?.commentCount.orEmpty() }
+                        }
+                        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                            .then(if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier)
+                            .testTag("comments-panel-host")) {
+                            CommentsPanel(
+                                state = commentsState,
+                                commentCount = commentCount,
+                                onAction = commentsViewModel::onAction,
+                                onClose = closeComments,
+                                listState = commentsListState,
+                            )
+                        }
                     }
                 }
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {

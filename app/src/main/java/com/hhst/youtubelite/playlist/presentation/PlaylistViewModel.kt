@@ -13,12 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.hhst.youtubelite.core.AppNotice
 
 class PlaylistViewModel(
     private val repository: PlaylistRepository,
     private val savedState: SavedStateHandle,
     playlistId: String,
     scenario: PlaylistScenario = PlaylistScenario.Content,
+    saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val id = savedState.get<String>("playlistId") ?: playlistId
     private val state = MutableStateFlow(PlaylistUiState(id,
@@ -38,6 +40,12 @@ class PlaylistViewModel(
     val uiState = state.asStateFlow()
     private val navigation = Channel<PlaylistNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices = notices.receiveAsFlow()
+    /** Live save flow; null in fixture builds, where typed exits stay the seam. */
+    val saveSheet = saveRepository?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
     private var loadJob: Job? = null
     private var generation = 0
 
@@ -74,7 +82,10 @@ class PlaylistViewModel(
                         overlay(PlaylistOverlay.None)
                         send(PlaylistNavigationRequest.Download(id))
                     }
-                    PlaylistAction.Save -> send(PlaylistNavigationRequest.Save(id))
+                    PlaylistAction.Save -> if (saveSheet == null) send(PlaylistNavigationRequest.Save(id)) else {
+                        overlay(PlaylistOverlay.None)
+                        saveSheet.savePlaylistToLibrary(id)
+                    }
                     PlaylistAction.Share -> send(PlaylistNavigationRequest.Share(id))
                     PlaylistAction.OpenOwner -> send(PlaylistNavigationRequest.Channel(page.summary.channelId))
                     PlaylistAction.ToggleDescription -> {
@@ -88,7 +99,11 @@ class PlaylistViewModel(
                         val entryId = (state.value.overlay as? PlaylistOverlay.VideoMenu)?.entryId ?: return
                         val entry = page.entries.find { it.id == entryId } ?: return
                         overlay(PlaylistOverlay.None)
-                        send(PlaylistNavigationRequest.VideoAction(id, entryId, entry.videoId, action.action))
+                        when {
+                            saveSheet == null -> send(PlaylistNavigationRequest.VideoAction(id, entryId, entry.videoId, action.action))
+                            action.action == PlaylistVideoAction.WatchLater -> saveSheet.saveWatchLater(entry.videoId)
+                            action.action == PlaylistVideoAction.Save -> saveSheet.open(entry.videoId)
+                        }
                     }
                     else -> Unit
                 }

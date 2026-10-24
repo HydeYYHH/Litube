@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.hhst.youtubelite.core.AppNotice
+
 class WatchViewModel(
     private val repository: WatchRepository,
     private val savedState: SavedStateHandle,
@@ -21,6 +23,7 @@ class WatchViewModel(
     scenario: WatchScenario = WatchScenario.Content,
     private val voteRepository: VoteCountRepository? = null,
     private val videoActions: VideoActions? = null,
+    private val saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val restoredId = savedState.get<String>("videoId") ?: videoId
     private val restoredOverlay = when (savedState.get<String>("overlay")) {
@@ -32,6 +35,7 @@ class WatchViewModel(
                 savedState.get<Boolean>("saveNewPlaylist") == true,
                 savedState.get<String>("saveTitle").orEmpty(),
                 savedState.get<String>("saveDescription").orEmpty(),
+                live = saveRepository != null,
             )
         }
         "feedback" -> {
@@ -49,19 +53,29 @@ class WatchViewModel(
             overlay = restoredOverlay,
             draftQuery = savedState["draftQuery"] ?: "",
             commentsOpen = savedState["commentsOpen"] ?: false,
+            live = saveRepository != null,
         )
     )
     val uiState = _state.asStateFlow()
     private val navigation = Channel<WatchNavigationRequest>(Channel.BUFFERED)
     val navigationRequests = navigation.receiveAsFlow()
-    private val notices = Channel<WatchNotice>(Channel.BUFFERED)
+    private val notices = Channel<AppNotice>(Channel.BUFFERED)
     val actionNotices = notices.receiveAsFlow()
     private var actionJob: Job? = null
     private var loadJob: Job? = null
+    private var saveJob: Job? = null
     private var generation = 0
     private var voteJob: Job? = null
     private var voteFlags: Pair<Boolean, Boolean>? = null
     private var counts: VoteCounts? = null
+
+    fun refreshSession() {
+        actionJob?.cancel()
+        saveJob?.cancel()
+        _state.update { it.copy(actionPending = false) }
+        overlay(WatchOverlay.None)
+        load()
+    }
 
     fun updateCommentsPreview(videoId: String, status: WatchCommentsStatus, total: String, comment: WatchComment) {
         if (videoId != _state.value.videoId) return
@@ -123,6 +137,7 @@ class WatchViewModel(
         savedState["videoId"] = _state.value.videoId
         persistOverlay(restoredOverlay)
         if (scenario.loadsContent() && _state.value.content is WatchContent.Loading) load()
+        if ((_state.value.overlay as? WatchOverlay.Save)?.live == true) loadSaveChoices()
     }
 
     fun onAction(action: WatchAction) {
@@ -148,7 +163,37 @@ class WatchViewModel(
             WatchAction.Queue -> navigation.trySend(WatchNavigationRequest.Queue(videoId))
             WatchAction.OpenWith -> navigation.trySend(WatchNavigationRequest.OpenWith(videoId))
             WatchAction.Share -> navigation.trySend(WatchNavigationRequest.Share(videoId))
-            WatchAction.Save -> overlay(WatchOverlay.Save(videoId))
+            WatchAction.Save -> if (saveRepository == null) overlay(WatchOverlay.Save(videoId)) else {
+                overlay(WatchOverlay.Save(videoId, live = true))
+                loadSaveChoices()
+            }
+            is WatchAction.SaveChoiceToggled -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                val repository = saveRepository ?: return
+                if (!save.live || save.pending) return
+                val target = !action.choice.contains
+                editSave(save.copy(pending = true))
+                saveJob = viewModelScope.launch {
+                    try {
+                        repository.setContaining(action.choice.id, save.videoId, target)
+                        editSaveOverlay(save.videoId) { current ->
+                            current.copy(pending = false, choices = current.choices?.map {
+                                if (it.id == action.choice.id) it.copy(contains = target) else it
+                            })
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: SignInRequiredException) { overlay(WatchOverlay.None); notices.trySend(AppNotice.SignIn) }
+                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't update this playlist. Try again.") }
+                }
+            }
+            WatchAction.SaveChoicesRetry -> {
+                val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+                if (save.live) {
+                    editSave(save.copy(choicesFailed = false, choices = null))
+                    loadSaveChoices()
+                }
+            }
             is WatchAction.SaveDestinationSelected -> {
                 val save = uiState.value.overlay as? WatchOverlay.Save ?: return
                 overlay(WatchOverlay.None)
@@ -172,9 +217,26 @@ class WatchViewModel(
             WatchAction.SubmitNewPlaylist -> {
                 val save = uiState.value.overlay as? WatchOverlay.Save ?: return
                 val title = save.title.trim()
-                if (title.isEmpty()) return
-                overlay(WatchOverlay.None)
-                navigation.trySend(WatchNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+                if (title.isEmpty() || save.pending) return
+                if (!save.live) {
+                    overlay(WatchOverlay.None)
+                    navigation.trySend(WatchNavigationRequest.CreatePlaylist(save.videoId, title, save.description.trim()))
+                    return
+                }
+                val repository = saveRepository ?: return
+                editSave(save.copy(pending = true))
+                saveJob = viewModelScope.launch {
+                    try {
+                        val created = repository.create(title, save.description.trim(), save.videoId)
+                        editSaveOverlay(save.videoId) { current ->
+                            current.copy(pending = false, newPlaylist = false, title = "", description = "",
+                                choices = (current.choices ?: emptyList()) + created)
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: SignInRequiredException) { overlay(WatchOverlay.None); notices.trySend(AppNotice.SignIn) }
+                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't create this playlist. Try again.") }
+                }
             }
             WatchAction.Report -> overlay(WatchOverlay.Feedback(videoId, WatchFeedbackKind.Report))
             is WatchAction.FeedbackReason -> {
@@ -206,7 +268,8 @@ class WatchViewModel(
                 when (action.action) {
                     WatchVideoMenuAction.WatchLater -> {
                         overlay(WatchOverlay.None)
-                        navigation.trySend(WatchNavigationRequest.SaveToWatchLater(menu.videoId))
+                        if (saveRepository == null) navigation.trySend(WatchNavigationRequest.SaveToWatchLater(menu.videoId))
+                        else saveWatchLater(menu.videoId)
                     }
                     WatchVideoMenuAction.SaveToPlaylist -> overlay(WatchOverlay.Save(menu.videoId))
                     WatchVideoMenuAction.Share -> {
@@ -226,6 +289,54 @@ class WatchViewModel(
         video.copy(rating = next)
     }
 
+    private fun loadSaveChoices() {
+        val save = uiState.value.overlay as? WatchOverlay.Save ?: return
+        val repository = saveRepository ?: return
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch {
+            try {
+                val choices = repository.choices(save.videoId)
+                editSaveOverlay(save.videoId) { it.copy(choices = choices, choicesFailed = false, pending = false) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { overlay(WatchOverlay.None); notices.trySend(AppNotice.SignIn) }
+            catch (_: Exception) { editSaveOverlay(save.videoId) { it.copy(choices = null, choicesFailed = true, pending = false) } }
+        }
+    }
+
+    private fun saveWatchLater(videoId: String) {
+        val repository = saveRepository ?: return
+        if (saveJob?.isActive == true) return
+        saveJob = viewModelScope.launch {
+            try {
+                repository.saveWatchLater(videoId)
+                notices.trySend(AppNotice.Message("Saved to Watch later"))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (_: UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't save this video. Try again.")) }
+        }
+    }
+
+    private fun saveFailed(videoId: String, message: String) {
+        editSaveOverlay(videoId) { it.copy(pending = false) }
+        notices.trySend(AppNotice.Message(message))
+    }
+
+    /** Edits the live Save overlay only while it still belongs to [videoId]; dismissals and
+     *  video switches make in-flight writes no-ops instead of resurrecting a stale sheet. */
+    private fun editSaveOverlay(videoId: String, edit: (WatchOverlay.Save) -> WatchOverlay.Save) {
+        _state.update { state ->
+            val save = state.overlay as? WatchOverlay.Save
+            if (save == null || save.videoId != videoId) state else state.copy(overlay = edit(save))
+        }
+        (uiState.value.overlay as? WatchOverlay.Save)?.let { persistOverlay(it) }
+    }
+
+    private fun editSave(save: WatchOverlay.Save) {
+        _state.update { if (it.overlay is WatchOverlay.Save) it.copy(overlay = save) else it }
+        persistOverlay(save)
+    }
+
     private fun performVideoAction(action: suspend (WatchVideo) -> WatchVideo) {
         if (actionJob?.isActive == true) return
         val ready = _state.value.content as? WatchContent.Ready ?: return
@@ -240,9 +351,9 @@ class WatchViewModel(
                         rating = video.rating, subscribed = video.subscribed))))
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: SignInRequiredException) { notices.trySend(WatchNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { notices.trySend(WatchNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
-            catch (_: Exception) { notices.trySend(WatchNotice.Message("Couldn't update this video. Try again.")) }
+            catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (_: UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this video. Try again.")) }
             finally { if (_state.value.videoId == id) _state.update { it.copy(actionPending = false) } }
         }
     }

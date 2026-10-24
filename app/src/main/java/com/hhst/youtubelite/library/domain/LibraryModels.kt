@@ -17,6 +17,8 @@ data class HistoryEntry(
     val progress: Float? = null,
     val section: String,
     val views: String = "",
+    /** Server token that removes this entry from watch history; null when the menu carried none. */
+    val removeToken: String? = null,
 )
 
 /** The signed-in library page: account header plus reusable sections. */
@@ -63,6 +65,8 @@ sealed interface LibraryOverlay {
     data object Account : LibraryOverlay
     data object Search : LibraryOverlay
     data class Menu(val videoId: String) : LibraryOverlay
+    /** Live-only history management (pause/resume/clear); fixtures never open it. */
+    data object ManageHistory : LibraryOverlay
 }
 
 data class LibraryUiState(
@@ -76,6 +80,10 @@ data class HistoryUiState(
     val content: HistoryContent = HistoryContent.Loading,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    /** Production mode: manage-history entry and live menu writes enabled. */
+    val live: Boolean = false,
+    /** Two-step confirmation for the destructive clear action. */
+    val confirmClear: Boolean = false,
 )
 
 data class CollectionUiState(
@@ -98,12 +106,14 @@ sealed interface LibraryNavigationRequest {
     data object OpenPlaylists : LibraryNavigationRequest
     data object OpenNotifications : LibraryNavigationRequest
     data object OpenDownloads : LibraryNavigationRequest
-    data class ItemMenu(val videoId: String) : LibraryNavigationRequest
     data class MenuAction(val videoId: String, val action: HistoryMenuAction) : LibraryNavigationRequest
     data class Destination(val tab: com.hhst.youtubelite.ui.components.MainTab) : LibraryNavigationRequest
     data object Settings : LibraryNavigationRequest
     data object About : LibraryNavigationRequest
     data object SignIn : LibraryNavigationRequest
+    /** Account switcher and sign-out are host concerns: the session store is process-wide. */
+    data object SwitchAccount : LibraryNavigationRequest
+    data object SignOut : LibraryNavigationRequest
     data object VoiceSearch : LibraryNavigationRequest
 }
 
@@ -127,6 +137,12 @@ sealed interface LibraryAction {
     data class OpenPlaylist(val playlistId: String) : LibraryAction
     data class OpenMenu(val videoId: String) : LibraryAction
     data class MenuSelected(val action: HistoryMenuAction) : LibraryAction
+    data object OpenManageHistory : LibraryAction
+    data object PauseHistory : LibraryAction
+    data object ResumeHistory : LibraryAction
+    /** First tap arms the confirmation; the confirm dialog's action sends ConfirmClearHistory. */
+    data object RequestClearHistory : LibraryAction
+    data object ConfirmClearHistory : LibraryAction
     data class Destination(val tab: com.hhst.youtubelite.ui.components.MainTab) : LibraryAction
     data object VoiceSearch : LibraryAction
 }

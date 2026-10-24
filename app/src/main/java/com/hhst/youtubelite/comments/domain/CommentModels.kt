@@ -32,6 +32,8 @@ data class CommentsPage(
     val threads: List<CommentThread>,
     val nextCursor: String?,
     val turnedOff: Boolean = false,
+    /** True when Newest was requested but the server offered no such lane, so Top is served instead. */
+    val sortFallback: Boolean = false,
 )
 
 sealed interface CommentTarget {
@@ -72,6 +74,7 @@ data class CommentsUiState(
     val draft: String = "",
     val actionPending: Boolean = false,
     val target: CommentTarget = CommentTarget.Video(videoId),
+    val supportedMenuActions: Set<CommentMenuAction> = CommentMenuAction.entries.toSet(),
 )
 
 /**

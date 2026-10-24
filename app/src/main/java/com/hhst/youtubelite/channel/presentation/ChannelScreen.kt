@@ -19,6 +19,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.semantics.selected
@@ -98,15 +99,15 @@ fun ChannelScreen(
                         ChannelContent.Loading -> ChannelSkeleton(width)
                         ChannelContent.Failed -> ChannelFailed(onAction)
                         is ChannelContent.Ready -> when (state.selectedTab) {
-                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction)
+                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction, state.searchResults)
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
                             ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
-                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction)
+                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction, production = state.production)
                             ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction)
                             ChannelTab.Posts -> postState.SaveableStateProvider(state.channelId) {
-                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction)
+                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction, production = state.production)
                             }
-                            else -> ChannelVideosTab(content.page, width, videosState, onAction)
+                            else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend)
                         }
                     }
                 }
@@ -170,7 +171,8 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
         AppIconButton(AppIcon.Search, "Search within this channel", diameter = 48.dp) {
             onAction(ChannelAction.ChannelSearch)
         }
-        AppIconButton(AppIcon.More, "More channel options", diameter = 48.dp) {
+        // The anonymous channel page offers no section menu; production hides the dead entry.
+        if (!state.production) AppIconButton(AppIcon.More, "More channel options", diameter = 48.dp) {
             onAction(ChannelAction.OpenSectionMenu)
         }
     }
@@ -258,8 +260,20 @@ private fun ChannelVideosTab(
     width: Float,
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
 ) {
     val viewport = rememberUpdatedState(width)
+    val canPage = page.videosNextKey != null
+    val nearEnd by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val info = state.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            info.totalItemsCount > 0 && last >= info.totalItemsCount - 4
+        }
+    }
+    LaunchedEffect(nearEnd, canPage, append) {
+        if (nearEnd && canPage && append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadVideosNext)
+    }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-videos-list"),
@@ -288,6 +302,19 @@ private fun ChannelVideosTab(
                             ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction, ChannelLayout.cardWidth(viewport.value))
                         }
                         repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item {
+                Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-videos-append"), contentAlignment = Alignment.Center) {
+                    when (append) {
+                        com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                            AppText("Loading…", color = DesignTokens.Secondary)
+                        com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                            AppText("Couldn't load more videos. Tap to retry.",
+                                Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadVideosNext) }.padding(8.dp),
+                                color = DesignTokens.Secondary)
+                        else -> Unit
                     }
                 }
             }
@@ -394,7 +421,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
                     if (wide) {
                         ChannelDetails(profile, width, onAction)
                         Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                        ChannelSubscribe(true, onAction)
+                        ChannelSubscribe(true, onAction, profile.subscribed == true)
                     } else ChannelDescription(profile.description, width, onAction)
                 }
             }
@@ -404,7 +431,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
             Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
                 ChannelDetails(profile, width, onAction)
                 Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                ChannelSubscribe(false, onAction)
+                ChannelSubscribe(false, onAction, profile.subscribed == true)
             }
         } else if (!wide) {
             Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
@@ -413,7 +440,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
                     ChannelLinks(profile, width, onAction)
                 }
                 Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                ChannelSubscribe(false, onAction)
+                ChannelSubscribe(false, onAction, profile.subscribed == true)
             }
         }
         Spacer(Modifier.height(ChannelLayout.subscribeTabBarGap(width).dp))
@@ -535,17 +562,18 @@ private fun ChannelLinks(profile: ChannelProfile, width: Float, onAction: (Chann
 }
 
 @Composable
-private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit) {
+private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, subscribed: Boolean = false) {
     Box(Modifier
         .then(if (wide) Modifier.wrapContentSize(align = Alignment.TopStart, unbounded = false) else Modifier.fillMaxWidth(1f))
         .height(ChannelLayout.SubscribeHeight.dp)
         .clip(RoundedCornerShape(ChannelLayout.SubscribeRadius.dp))
-        .background(DesignTokens.Ink)
+        .background(if (subscribed) SubscribeForeground else DesignTokens.Ink)
         .clickable(role = Role.Button) { onAction(ChannelAction.Subscribe) }
         .testTag("channel-subscribe"),
         contentAlignment = Alignment.Center) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppText("Subscribe", size = 14, line = 18, weight = FontWeight.Medium, color = SubscribeForeground)
+            AppText(if (subscribed) "Subscribed" else "Subscribe", size = 14, line = 18, weight = FontWeight.Medium,
+                color = if (subscribed) DesignTokens.Ink else SubscribeForeground)
         }
     }
 }

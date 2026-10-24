@@ -19,17 +19,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 
+import com.hhst.youtubelite.core.AppNotice
+
 /** Hosts the You page. Library screens keep one VM per page, mirroring the search host. */
 class YouViewModel(
     private val repository: LibraryRepository,
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
     private var signedIn: Boolean,
+    saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
+    private val notices = kotlinx.coroutines.channels.Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices: kotlinx.coroutines.flow.Flow<AppNotice> = notices.receiveAsFlow()
+    /** Live save flow for the history-shelf menu; null in fixture builds, where typed exits stay the seam. */
+    val saveSheet = saveRepository?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
+    private var actionJob: Job? = null
 
     private var loadJob: Job? = null
     private var generation = 0
@@ -52,6 +62,9 @@ class YouViewModel(
         signedIn = value
         ++generation
         loadJob?.cancel()
+        actionJob?.cancel()
+        saveSheet?.close()
+        showOverlay(LibraryOverlay.None)
         _uiState.update { it.copy(signedIn = value, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
         if (value) refresh()
     }
@@ -80,7 +93,10 @@ class YouViewModel(
                     com.hhst.youtubelite.account.domain.AccountMenuAction.ViewChannel ->
                         account?.let { navigation.trySend(LibraryNavigationRequest.Channel(it.channelId)) }
                     com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount ->
-                        navigation.trySend(LibraryNavigationRequest.SignIn)
+                        // The signed-out menu relabels this row "Sign in"; the intent differs.
+                        navigation.trySend(if (signedIn) LibraryNavigationRequest.SwitchAccount else LibraryNavigationRequest.SignIn)
+                    com.hhst.youtubelite.account.domain.AccountMenuAction.SignOut ->
+                        navigation.trySend(LibraryNavigationRequest.SignOut)
                     com.hhst.youtubelite.account.domain.AccountMenuAction.Settings ->
                         navigation.trySend(LibraryNavigationRequest.Settings)
                     com.hhst.youtubelite.account.domain.AccountMenuAction.About ->
@@ -100,13 +116,53 @@ class YouViewModel(
             is LibraryAction.MenuSelected -> {
                 val videoId = (_uiState.value.overlay as? LibraryOverlay.Menu)?.videoId
                 showOverlay(LibraryOverlay.None)
-                if (videoId != null) navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                if (videoId != null) when {
+                    action.action == HistoryMenuAction.Share ->
+                        navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                    saveSheet == null ->
+                        navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                    action.action == HistoryMenuAction.WatchLater -> saveSheet.saveWatchLater(videoId)
+                    action.action == HistoryMenuAction.SaveToPlaylist -> saveSheet.open(videoId)
+                    action.action == HistoryMenuAction.RemoveFromHistory -> removeFromHistory(videoId)
+                    else -> Unit
+                }
             }
             is LibraryAction.Destination -> {
                 if (action.tab == com.hhst.youtubelite.ui.components.MainTab.You) return
                 navigation.trySend(LibraryNavigationRequest.Destination(action.tab))
             }
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            // History-page management actions are unreachable from the You page.
+            LibraryAction.OpenManageHistory, LibraryAction.PauseHistory, LibraryAction.ResumeHistory,
+            LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory -> Unit
+        }
+    }
+
+    private fun removeFromHistory(videoId: String) {
+        val entry = (_uiState.value.content as? LibraryContent.Ready)?.page?.history
+            ?.firstOrNull { it.videoId == videoId } ?: return
+        val token = entry.removeToken
+        if (token.isNullOrBlank()) {
+            notices.trySend(AppNotice.Message("The server offered no removal for this entry."))
+            return
+        }
+        if (actionJob?.isActive == true) return
+        actionJob = viewModelScope.launch {
+            try {
+                repository.removeFromHistory(token)
+                _uiState.update { state ->
+                    val ready = state.content as? LibraryContent.Ready ?: return@update state
+                    state.copy(content = ready.copy(page = ready.page.copy(
+                        history = ready.page.history.filterNot { it.videoId == videoId })))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                notices.trySend(AppNotice.SignIn)
+            } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+            } catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+            }
         }
     }
 
@@ -116,6 +172,7 @@ class YouViewModel(
             LibraryOverlay.Search -> "search"
             LibraryOverlay.Account -> "account"
             is LibraryOverlay.Menu -> "menu"
+            LibraryOverlay.ManageHistory -> "manage"
         }
         savedState["menuItem"] = (next as? LibraryOverlay.Menu)?.videoId
         _uiState.update { it.copy(overlay = next) }
@@ -145,11 +202,20 @@ class HistoryViewModel(
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
     private var signedIn: Boolean = true,
+    saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(HistoryUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
+    private val _uiState = MutableStateFlow(HistoryUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
+        live = saveRepository != null, confirmClear = savedState.get<Boolean>("confirmClear") == true))
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
+    private val notices = kotlinx.coroutines.channels.Channel<AppNotice>(Channel.BUFFERED)
+    val actionNotices: kotlinx.coroutines.flow.Flow<AppNotice> = notices.receiveAsFlow()
+    /** Live save flow for the entry menu; null in fixture builds, where typed exits stay the seam. */
+    val saveSheet = saveRepository?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
+    private var actionJob: Job? = null
 
     private var loadJob: Job? = null
     private var generation = 0
@@ -171,6 +237,11 @@ class HistoryViewModel(
         signedIn = value
         ++generation
         loadJob?.cancel()
+        actionJob?.cancel()
+        saveSheet?.close()
+        savedState["confirmClear"] = false
+        showOverlay(LibraryOverlay.None)
+        _uiState.update { it.copy(confirmClear = false) }
         _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
         if (value) refresh()
     }
@@ -179,7 +250,19 @@ class HistoryViewModel(
         when (action) {
             LibraryAction.Retry -> refresh()
             LibraryAction.OpenSearch -> showOverlay(LibraryOverlay.Search)
-            LibraryAction.CloseOverlay -> showOverlay(LibraryOverlay.None)
+            LibraryAction.CloseOverlay -> {
+                savedState["confirmClear"] = false
+                _uiState.update { it.copy(confirmClear = false) }
+                showOverlay(LibraryOverlay.None)
+            }
+            LibraryAction.OpenManageHistory -> showOverlay(LibraryOverlay.ManageHistory)
+            LibraryAction.PauseHistory -> setHistoryPaused(true)
+            LibraryAction.ResumeHistory -> setHistoryPaused(false)
+            LibraryAction.RequestClearHistory -> {
+                savedState["confirmClear"] = true
+                _uiState.update { it.copy(confirmClear = true) }
+            }
+            LibraryAction.ConfirmClearHistory -> clearHistory()
             is LibraryAction.QueryChanged -> {
                 savedState[QUERY_KEY] = action.query
                 _uiState.update { it.copy(query = action.query) }
@@ -197,9 +280,92 @@ class HistoryViewModel(
             is LibraryAction.MenuSelected -> {
                 val videoId = (_uiState.value.overlay as? LibraryOverlay.Menu)?.videoId
                 showOverlay(LibraryOverlay.None)
-                if (videoId != null) navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                if (videoId != null) when {
+                    action.action == HistoryMenuAction.Share ->
+                        navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                    saveSheet == null ->
+                        navigation.trySend(LibraryNavigationRequest.MenuAction(videoId, action.action))
+                    action.action == HistoryMenuAction.WatchLater -> saveSheet.saveWatchLater(videoId)
+                    action.action == HistoryMenuAction.SaveToPlaylist -> saveSheet.open(videoId)
+                    action.action == HistoryMenuAction.RemoveFromHistory -> removeFromHistory(videoId)
+                    else -> Unit
+                }
             }
-            else -> Unit
+            LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            // Unreachable from the history screen: it has no account menu, tab row or playlist
+            // rows. No `else`: a new action must fail to compile here.
+            LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
+            LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
+            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads,
+            is LibraryAction.OpenPlaylist, is LibraryAction.Destination -> Unit
+        }
+    }
+
+    private fun setHistoryPaused(paused: Boolean) {
+        showOverlay(LibraryOverlay.None)
+        if (actionJob?.isActive == true) return
+        actionJob = viewModelScope.launch {
+            try {
+                repository.setHistoryPaused(paused)
+                notices.trySend(AppNotice.Message(
+                    if (paused) "Watch history paused." else "Watch history resumed."))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                notices.trySend(AppNotice.SignIn)
+            } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again."))
+            } catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't update watch history. Try again."))
+            }
+        }
+    }
+
+    private fun clearHistory() {
+        savedState["confirmClear"] = false
+        _uiState.update { it.copy(confirmClear = false) }
+        showOverlay(LibraryOverlay.None)
+        if (actionJob?.isActive == true) return
+        actionJob = viewModelScope.launch {
+            try {
+                repository.clearHistory()
+                notices.trySend(AppNotice.Message("Watch history cleared."))
+                refresh()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                notices.trySend(AppNotice.SignIn)
+            } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+            } catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't clear watch history. Try again."))
+            }
+        }
+    }
+
+    private fun removeFromHistory(videoId: String) {
+        val entry = (_uiState.value.content as? HistoryContent.Ready)?.page?.entries
+            ?.firstOrNull { it.videoId == videoId } ?: return
+        val token = entry.removeToken
+        if (token.isNullOrBlank()) {
+            notices.trySend(AppNotice.Message("The server offered no removal for this entry."))
+            return
+        }
+        if (actionJob?.isActive == true) return
+        actionJob = viewModelScope.launch {
+            try {
+                repository.removeFromHistory(token)
+                _uiState.update { state ->
+                    val ready = state.content as? HistoryContent.Ready ?: return@update state
+                    state.copy(content = ready.copy(page = ready.page.copy(
+                        entries = ready.page.entries.filterNot { it.videoId == videoId })))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                notices.trySend(AppNotice.SignIn)
+            } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+            } catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+            }
         }
     }
 
@@ -209,6 +375,7 @@ class HistoryViewModel(
             LibraryOverlay.Search -> "search"
             LibraryOverlay.Account -> "account"
             is LibraryOverlay.Menu -> "menu"
+            LibraryOverlay.ManageHistory -> "manage"
         }
         savedState["menuItem"] = (next as? LibraryOverlay.Menu)?.videoId
         _uiState.update { it.copy(overlay = next) }
@@ -293,7 +460,16 @@ class CollectionViewModel(
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
             is LibraryAction.OpenPlaylist -> navigation.trySend(LibraryNavigationRequest.Playlist(action.playlistId))
-            else -> Unit
+            LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            // Unreachable from the collection screen: it has no account menu, tab row, video
+            // rows or history management. No `else`: a new action must fail to compile here.
+            LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
+            LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
+            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads,
+            is LibraryAction.OpenVideo, is LibraryAction.OpenChannel, is LibraryAction.OpenMenu,
+            is LibraryAction.MenuSelected, LibraryAction.OpenManageHistory, LibraryAction.PauseHistory,
+            LibraryAction.ResumeHistory, LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,
+            is LibraryAction.Destination -> Unit
         }
     }
 
@@ -303,6 +479,7 @@ class CollectionViewModel(
             LibraryOverlay.Search -> "search"
             LibraryOverlay.Account -> "account"
             is LibraryOverlay.Menu -> "menu"
+            LibraryOverlay.ManageHistory -> "manage"
         }
         savedState["menuItem"] = (next as? LibraryOverlay.Menu)?.videoId
         _uiState.update { it.copy(overlay = next) }
@@ -335,5 +512,6 @@ private fun SavedStateHandle.libraryOverlay(): LibraryOverlay = when (get<String
     "search" -> LibraryOverlay.Search
     "account" -> LibraryOverlay.Account
     "menu" -> get<String>("menuItem")?.let { LibraryOverlay.Menu(it) } ?: LibraryOverlay.None
+    "manage" -> LibraryOverlay.ManageHistory
     else -> LibraryOverlay.None
 }

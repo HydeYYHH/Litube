@@ -27,7 +27,8 @@ import org.junit.Test
 
 class ChannelDiscoveryScreenAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val page = ChannelPage(FixtureChannelRepository.profile(), FixtureChannelRepository.sampleVideos())
+    private val page = ChannelPage(FixtureChannelRepository.profile(), FixtureChannelRepository.sampleVideos(),
+        homeShelves = FixtureChannelRepository.samplePage().homeShelves)
     private fun channel(about: Boolean = false, query: String = "") = ChannelUiState(content = ChannelContent.Ready(page),
         selectedTab = if (about) ChannelTab.Home else ChannelTab.Search, overlay = if (about) ChannelOverlay.About else ChannelOverlay.None,
         searchQuery = query, submittedQuery = query)

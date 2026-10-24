@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.post
 
 import com.hhst.youtubelite.comments.presentation.bindCommentNotices
+import com.hhst.youtubelite.ui.observeAccountChanges
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -63,9 +64,14 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
         val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.light(Color.WHITE, Color.WHITE))
-        val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: "studio"
-        val postId = intent.getStringExtra(EXTRA_POST_ID) ?: FixturePostRepository.HOME_POST_ID
-        val identity = PostIdentity(channelId, postId)
+        val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
+        val postId = intent.getStringExtra(EXTRA_POST_ID)
+        if ((channelId.isNullOrBlank() || postId.isNullOrBlank()) && !fixtures) {
+            // No identity and no fixture seam: rendering a default post would fabricate content.
+            finish()
+            return
+        }
+        val identity = PostIdentity(channelId ?: "studio", postId ?: FixturePostRepository.HOME_POST_ID)
         val scenario = if (BuildConfig.DEBUG) PostScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else PostScenario.Content
         postDetailViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -76,6 +82,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     extras.createSavedStateHandle(),
                     identity,
                     scenario,
+                    live = !fixtures,
                 ) as T
             }
         })[PostDetailViewModel::class.java]
@@ -91,6 +98,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
         })[CommentsViewModel::class.java]
         bindCommentNotices(postCommentsViewModel)
+        if (!fixtures) observeAccountChanges { postCommentsViewModel.refreshSession() }
         if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
             postDetailViewModel.onAction(PostDetailAction.Comments)
         }
@@ -114,7 +122,13 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         )
                         is PostDetailNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
                             this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { startActivity(it); finish() }
-                        else -> Unit
+                        is PostDetailNavigationRequest.Feedback -> if (!fixtures) {
+                            com.hhst.youtubelite.post.openPostVoteRoute(this@PostDetailActivity)
+                        }
+                        // The comments panel is VM overlay state and the Report menu hides in
+                        // production, so both are fixture-only typed exits here. No `else`: a new
+                        // request type must fail to compile here.
+                        is PostDetailNavigationRequest.Comments, is PostDetailNavigationRequest.MenuAction -> Unit
                     }
                 }
             }
@@ -133,11 +147,18 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
             PostDetailScreen(
                 state,
                 { action ->
-                    if (!fixtures && action is PostDetailAction.OpenImage) {
-                        state.post?.images?.takeIf { it.isNotEmpty() }?.let {
-                            com.hhst.youtubelite.gallery.GalleryActivity.open(this@PostDetailActivity, it, action.index)
+                    when {
+                        !fixtures && action is PostDetailAction.OpenImage -> {
+                            state.post?.images?.takeIf { it.isNotEmpty() }?.let {
+                                com.hhst.youtubelite.gallery.GalleryActivity.open(this@PostDetailActivity, it, action.index)
+                            }
                         }
-                    } else postDetailViewModel.onAction(action)
+                        // Anonymous posts expose no vote endpoints at all — the web itself routes these
+                        // buttons to sign-in (B9 probe). Signed-in votes stay an honest limitation.
+                        !fixtures && (action is PostDetailAction.Like || action is PostDetailAction.Dislike) ->
+                            openPostVoteRoute(this@PostDetailActivity)
+                        else -> postDetailViewModel.onAction(action)
+                    }
                 },
                 back,
                 Modifier.statusBarsPadding().navigationBarsPadding(),

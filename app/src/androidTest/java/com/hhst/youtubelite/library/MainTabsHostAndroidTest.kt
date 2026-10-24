@@ -15,9 +15,17 @@ import com.hhst.youtubelite.home.data.HomeScenario
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 
 class MainTabsHostAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
+
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
+    }
 
     @Test fun homeRoundTripRetainsTheLibraryInstanceAndScrollPosition() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

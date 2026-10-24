@@ -44,4 +44,22 @@ class MediaClientTest {
             assertEquals("response_too_large", result.exceptionOrNull()?.message)
         }
     }
+
+    @Test fun anAccountChangePreventsTheNextRequestInAMultiRequestOperation() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("first"))
+            server.start()
+            val generation = AtomicLong(1)
+            val client = MediaClient(OkHttpClient()) { RequestContext(generation = generation.get()) }
+            val error = runCatching {
+                client.read { _, http ->
+                    http.execute(HttpRequest("GET", server.url("/first").toString()))
+                    generation.incrementAndGet()
+                    http.execute(HttpRequest("GET", server.url("/second").toString()))
+                }
+            }.exceptionOrNull()
+            assertEquals("session_changed", error?.message)
+            assertEquals(1, server.requestCount)
+        }
+    }
 }

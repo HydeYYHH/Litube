@@ -31,6 +31,11 @@ class PostDetailHostAndroidTest {
 
     private fun awaitNode(tag: String) = compose.waitUntil(15_000) { nodeCount(tag) > 0 }
 
+    /** The square carousel is taller than short viewports; the feedback row needs a scroll there. */
+    private fun scrollToFeedback() {
+        compose.onNodeWithTag("post-detail-list").performScrollToNode(hasTestTag("post-detail-feedback"))
+    }
+
     private fun launch() = ActivityScenario.launch<PostDetailActivity>(
         PostDetailActivity.intent(ApplicationProvider.getApplicationContext(), "studio", "post")
     ).also {
@@ -50,6 +55,7 @@ class PostDetailHostAndroidTest {
         assertEquals("Image 1 of 3", counter())
         assertTrue(compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty())
 
+        scrollToFeedback()
         compose.onNodeWithTag("post-detail-like").performClick()
         host.onActivity {
             assertEquals(PostDetailNavigationRequest.Feedback(PostIdentity("studio", "post"), true), it.lastNavigationRequest)
@@ -90,12 +96,15 @@ class PostDetailHostAndroidTest {
 
         host.recreate()
         awaitNode("post-detail-page")
-        awaitNode("post-detail-body")
+        // The list may restore the scrolled-to-images position; await the element the
+        // assertion reads instead of the body, which can be above the composed window.
+        awaitNode("post-image-counter")
         assertEquals("The selected image must survive recreation", swiped, counter())
     }
 
     @Test fun postCommentsUseTheMeasuredPanelAndKeepPostIdentity() {
         val host = launch()
+        scrollToFeedback()
         compose.onNodeWithTag("post-detail-comments").performClick()
         compose.waitUntil(15_000) { nodeCount("comments-list") > 0 }
         compose.onNodeWithTag("comment-p1").assertExists()
@@ -122,6 +131,7 @@ class PostDetailHostAndroidTest {
 
     @Test fun backClosesComposerBeforePostComments() {
         val host = launch()
+        scrollToFeedback()
         compose.onNodeWithTag("post-detail-comments").performClick()
         awaitNode("comments-list")
         host.onActivity { it.postCommentsViewModel.onAction(com.hhst.youtubelite.comments.domain.CommentAction.Compose) }

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.comments.domain.CommentsLayout
 import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
+import com.hhst.youtubelite.saves.domain.SaveChoice
 import com.hhst.youtubelite.saves.domain.SaveDestination
 import com.hhst.youtubelite.saves.domain.SavePlaylist
 import com.hhst.youtubelite.ui.design.AppIcon
@@ -51,13 +52,60 @@ import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
 import com.hhst.youtubelite.ui.design.MenuSheetLayout
 
+/** Server-driven state for the live save sheet; null [choices] means the list is still loading. */
+class SaveSheetLive(
+    val choices: List<SaveChoice>?,
+    val failed: Boolean,
+    val pending: Boolean,
+    val onToggle: (SaveChoice) -> Unit,
+    val onRetry: () -> Unit,
+)
+
 @Composable
 fun SaveToPlaylistSheet(
     playlists: List<SavePlaylist>,
     onDismiss: () -> Unit,
     onSelect: (SaveDestination) -> Unit,
     onNewPlaylist: () -> Unit,
+    live: SaveSheetLive? = null,
 ) {
+    if (live != null) {
+        val items = ArrayList<MenuSheetItem>()
+        val choices = live.choices
+        when {
+            live.failed -> items.add(MenuSheetItem(AppIcon.Refresh, "Couldn't load playlists. Tap to retry", "save-menu-retry"))
+            choices == null -> items.add(MenuSheetItem(AppIcon.Refresh, "Loading…", "save-menu-loading"))
+            else -> {
+                choices.forEach {
+                    items.add(MenuSheetItem(if (it.contains) AppIcon.Check else AppIcon.Playlist, it.title, "save-menu-playlist-${it.id}"))
+                }
+                items.add(MenuSheetItem(AppIcon.Add, "New playlist", "save-menu-new-playlist"))
+            }
+        }
+        MenuBottomSheet(
+            items = items,
+            onDismiss = onDismiss,
+            onSelect = { index ->
+                when {
+                    live.failed -> live.onRetry()
+                    choices == null -> Unit
+                    index < choices.size -> if (!live.pending) live.onToggle(choices[index])
+                    else -> onNewPlaylist()
+                }
+            },
+            tag = "save-to-playlist",
+            paneTitle = "Save to playlist",
+            header = {
+                AppText(
+                    "Save video to...",
+                    Modifier.fillMaxWidth()
+                        .padding(start = MenuSheetLayout.RowStart.dp, end = MenuSheetLayout.RowStart.dp, bottom = 4.dp),
+                    size = 16, line = 22, weight = FontWeight.Medium,
+                )
+            },
+        )
+        return
+    }
     val destinations = buildList {
         add(SaveDestination.WatchLater)
         playlists.forEach { add(SaveDestination.Playlist(it.id, it.title)) }

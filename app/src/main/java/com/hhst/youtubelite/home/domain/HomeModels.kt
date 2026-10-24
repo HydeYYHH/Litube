@@ -56,6 +56,11 @@ sealed interface HomeOverlay {
         val newPlaylist: Boolean = false,
         val title: String = "",
         val description: String = "",
+        /** Live mode: the ViewModel owns server choices and writes; the fixture sheet stays request-only. */
+        val live: Boolean = false,
+        val choices: List<com.hhst.youtubelite.saves.domain.SaveChoice>? = null,
+        val choicesFailed: Boolean = false,
+        val pending: Boolean = false,
     ) : HomeOverlay
     data class Feedback(val itemId: String, val kind: HomeFeedbackKind) : HomeOverlay
 }
@@ -84,6 +89,10 @@ data class HomeUiState(
     val signedInPreview: Boolean = false,
     val hideShorts: Boolean = false,
     val chips: List<String> = HomeLayout.chips,
+    /** Production account photo for the You tab; fixtures keep the bundled sample avatar. */
+    val avatar: String? = null,
+    /** Production mode: feedback menu rows without server tokens hide. Fixtures keep the recorded menus. */
+    val live: Boolean = false,
 ) {
     val suggestions: List<String> get() = if (query.isBlank()) emptyList() else listOf(
         query.trim(), "${query.trim()} documentary", "${query.trim()} music", "${query.trim()} live",
@@ -104,6 +113,19 @@ enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
     Post(listOf(FeedMenuAction.Report)),
     Mix(listOf(FeedMenuAction.SaveToLibrary, FeedMenuAction.Share, FeedMenuAction.NotInterested)),
 }
+
+/**
+ * The rows with a real production route. The feedback rows need a signed-in feedbackToken the
+ * rendered feeds never carry, and SaveToLibrary has no server route, so production menus only
+ * offer rows that actually run; fixtures keep the full recorded menus.
+ */
+fun FeedMenuKind.productionActions(): List<FeedMenuAction> = when (this) {
+    FeedMenuKind.Video -> listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share)
+    FeedMenuKind.Mix -> listOf(FeedMenuAction.Share)
+    FeedMenuKind.Short, FeedMenuKind.Shorts, FeedMenuKind.Post -> emptyList()
+}
+
+fun FeedMenuKind.visibleActions(live: Boolean): List<FeedMenuAction> = if (live) productionActions() else actions
 
 /** Navigation and operation requests handled by the host. */
 sealed interface HomeNavigationRequest {
@@ -134,6 +156,8 @@ sealed interface HomeAction {
     data class OpenMenu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeAction
     data class MenuSelected(val action: FeedMenuAction) : HomeAction
     data class SaveDestinationSelected(val destination: com.hhst.youtubelite.saves.domain.SaveDestination) : HomeAction
+    data class SaveChoiceToggled(val choice: com.hhst.youtubelite.saves.domain.SaveChoice) : HomeAction
+    data object SaveChoicesRetry : HomeAction
     data object OpenNewPlaylist : HomeAction
     data class SaveDraftChanged(val title: String, val description: String) : HomeAction
     data object SubmitNewPlaylist : HomeAction

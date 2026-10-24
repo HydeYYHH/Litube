@@ -244,14 +244,14 @@ private fun CommentsSurface(
  */
 private fun menuActions(state: CommentsUiState): List<CommentMenuAction> {
     val ready = state.content as? CommentsContent.Ready
-    return when (val overlay = state.overlay) {
+    return (when (val overlay = state.overlay) {
         is CommentsOverlay.ThreadMenu -> ready?.threads?.firstOrNull { it.id == overlay.threadId }
             ?.let { CommentMenuAction.forComment(it.ownedByViewer) }
         is CommentsOverlay.ReplyMenu -> ready?.threads?.firstOrNull { it.id == overlay.threadId }
             ?.replies?.firstOrNull { it.id == overlay.replyId }
             ?.let { CommentMenuAction.forComment(it.ownedByViewer) }
         else -> null
-    } ?: CommentMenuAction.forComment(ownedByViewer = false)
+    } ?: CommentMenuAction.forComment(ownedByViewer = false)).filter { it in state.supportedMenuActions }
 }
 
 @Composable

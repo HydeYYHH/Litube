@@ -12,6 +12,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChannelViewModelTest {
@@ -23,6 +24,24 @@ class ChannelViewModelTest {
         override suspend fun shorts(channelId: String) = emptyList<ChannelShort>()
         override suspend fun live(channelId: String) = ChannelLivePage()
         override suspend fun posts(channelId: String) = emptyList<PostSummary>()
+    }
+
+    @Test fun restoredServerSearchLoadsTheSubmittedQueryAndKeepsTheDraft() = runTest {
+        val base = FixtureChannelRepository()
+        var searched: String? = null
+        val repository = object : ChannelRepository by base {
+            override val serverSearch = true
+            override suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> {
+                searched = query
+                return base.channel(channelId).videos.take(1)
+            }
+        }
+        val vm = ChannelViewModel(repository, SavedStateHandle(mapOf(
+            "tab" to "Search", "submittedQuery" to "night walk", "channelQuery" to "new draft")), "blender")
+        advanceUntilIdle()
+        assertEquals("night walk", searched)
+        assertEquals("new draft", vm.uiState.value.searchQuery)
+        assertTrue(vm.uiState.value.searchResults is ChannelSection.Ready)
     }
 
     @Test fun loadsPageForTheRequestedChannelAndKeepsItsIdentity() = runTest {
@@ -166,5 +185,87 @@ class ChannelViewModelTest {
         val content = vm.uiState.value.content
         assertTrue(content is ChannelContent.Ready)
         assertTrue((content as ChannelContent.Ready).page.videos.isEmpty())
+    }
+
+    private class ServerChannelRepository : ChannelRepository {
+        val searches = ArrayList<String>()
+        val videoRequests = ArrayList<String?>()
+        var failSubscribe = false
+        override val serverSearch: Boolean get() = true
+        override suspend fun channel(channelId: String) = ChannelPage(
+            ChannelProfile(channelId = channelId, name = "Blender", handle = "@blender", avatar = "",
+                banner = null, subscribers = "30M subscribers", description = "Studio.", subscribed = false),
+            listOf(ChannelVideo("v1", "First", "1K views", "1 day", "1:00", "")),
+            videosNextKey = "page-2")
+        override suspend fun shorts(channelId: String) = emptyList<ChannelShort>()
+        override suspend fun live(channelId: String) = ChannelLivePage()
+        override suspend fun posts(channelId: String) = emptyList<PostSummary>()
+        override suspend fun searchVideos(channelId: String, query: String): List<ChannelVideo> {
+            searches += query
+            return listOf(ChannelVideo("sv1", "Server hit", "2K views", "2 days", "2:00", ""))
+        }
+        override suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage {
+            videoRequests += continuation
+            return ChannelVideosPage(listOf(ChannelVideo("v2", "Second", "3K views", "3 days", "3:00", "")), null)
+        }
+    }
+
+    private class RecordingVideoActions : com.hhst.youtubelite.watch.domain.VideoActions {
+        val subscriptions = ArrayList<Pair<String, Boolean>>()
+        var error: Exception? = null
+        override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating, previous: com.hhst.youtubelite.watch.domain.VideoRating) = Unit
+        override suspend fun subscribe(channelId: String, subscribed: Boolean) {
+            error?.let { throw it }
+            subscriptions += channelId to subscribed
+        }
+    }
+
+    @Test fun subscribeWritesThroughTheServerAndUpdatesTheButton() = runTest {
+        val actions = RecordingVideoActions()
+        val vm = ChannelViewModel(ServerChannelRepository(), SavedStateHandle(), "blender", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.Subscribe)
+        advanceUntilIdle()
+        assertEquals(listOf("blender" to true), actions.subscriptions)
+        val page = (vm.uiState.value.content as ChannelContent.Ready).page
+        assertEquals(true, page.profile.subscribed)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    @Test fun failedSubscribeKeepsMembershipAndNotifies() = runTest {
+        val actions = RecordingVideoActions().apply { error = com.hhst.youtubelite.watch.domain.SignInRequiredException() }
+        val vm = ChannelViewModel(ServerChannelRepository(), SavedStateHandle(), "blender", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.Subscribe)
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as ChannelContent.Ready).page
+        assertEquals(false, page.profile.subscribed)
+        assertEquals(AppNotice.SignIn, withTimeoutOrNull(500) { vm.actionNotices.first() })
+    }
+
+    @Test fun submitSearchHitsTheServerAndRendersResults() = runTest {
+        val repository = ServerChannelRepository()
+        val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.QueryChanged("open movie"))
+        vm.onAction(ChannelAction.SubmitSearch)
+        advanceUntilIdle()
+        assertEquals(listOf("open movie"), repository.searches)
+        val results = vm.uiState.value.searchResults
+        assertTrue(results is ChannelSection.Ready)
+        assertEquals(listOf("sv1"), (results as ChannelSection.Ready).value.map { it.id })
+    }
+
+    @Test fun videosNextPageAppendsAndClearsTheContinuation() = runTest {
+        val repository = ServerChannelRepository()
+        val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.LoadVideosNext)
+        advanceUntilIdle()
+        assertEquals(listOf("page-2"), repository.videoRequests)
+        val page = (vm.uiState.value.content as ChannelContent.Ready).page
+        assertEquals(listOf("v1", "v2"), page.videos.map { it.id })
+        assertNull(page.videosNextKey)
+        assertEquals(com.hhst.youtubelite.home.domain.AppendState.Idle, vm.uiState.value.videosAppend)
     }
 }
