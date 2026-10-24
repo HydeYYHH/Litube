@@ -34,6 +34,20 @@ abstract class NativeActivity : ComponentActivity() {
         navigationPip = null
     }
 
+    @Suppress("DEPRECATION")
+    override fun onPostResume() {
+        super.onPostResume()
+        val dark = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark ?: (
+            resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = if (dark) 0xFF0F0F0F.toInt() else android.graphics.Color.WHITE
+    }
+
     override fun onDestroy() {
         navigationPip?.restore()
         navigationPip = null

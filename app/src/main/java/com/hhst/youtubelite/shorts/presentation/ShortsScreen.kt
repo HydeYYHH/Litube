@@ -45,8 +45,8 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier, videoContent: (@Composable (String) -> Unit)? = null) {
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
-            ShortsContent.Loading -> Box(Modifier.fillMaxSize().background(Color.White)) { LibrarySkeleton("shorts-skeleton") }
-            ShortsContent.Failed -> Box(Modifier.fillMaxSize().background(Color.White)) { LibraryError("shorts-error") { onAction(ShortsAction.Retry) } }
+            ShortsContent.Loading -> Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { LibrarySkeleton("shorts-skeleton") }
+            ShortsContent.Failed -> Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { LibraryError("shorts-error") { onAction(ShortsAction.Retry) } }
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
@@ -114,7 +114,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
                     AppText("@${item.author}", Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
                 }
                 AppText(if (subscribed) "Subscribed" else "Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
-                    .background(if (subscribed) Color.White.copy(alpha = 0.25f) else DesignTokens.Ink).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
+                    .background(if (subscribed) Color.White.copy(alpha = 0.25f) else Color(0xFF0F0F0F)).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
                     .padding(horizontal = 16.dp).heightIn(min = 40.dp),
                     size = 14, line = 40, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
             }

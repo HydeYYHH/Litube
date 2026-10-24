@@ -83,7 +83,7 @@ fun PostImageCarousel(
                             minWidth = PostLayout.CounterWidth.dp,
                             minHeight = PostLayout.CounterHeight.dp,
                         )
-                        .background(DesignTokens.Ink, RoundedCornerShape(12.dp))
+                        .background(androidx.compose.ui.graphics.Color(0xFF0F0F0F), RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .testTag("post-image-counter")
                         .semantics {

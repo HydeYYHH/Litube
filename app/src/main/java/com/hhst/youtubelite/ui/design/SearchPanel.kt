@@ -52,11 +52,12 @@ internal fun SearchPanel(
     DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
     Box(Modifier.fillMaxSize().padding(top = toolbarHeight).background(DesignTokens.Scrim)
         .clickable(onClick = close).semantics { contentDescription = "Close search" })
-    Column(Modifier.fillMaxWidth().background(Color.White).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
-        Row(Modifier.fillMaxWidth().height(toolbarHeight).background(Color(0xFFF1F1F1)), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
+        Row(Modifier.fillMaxWidth().height(toolbarHeight).background(
+            if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Surface), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.Back, "Back", onClick = close)
             Row(Modifier.weight(1f).height(fieldHeight).clip(RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp))
-                .background(Color(0xFFE5E5E5)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                .background(DesignTokens.Ghost).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 BasicTextField(query, { onQueryChanged(it) },
                     Modifier.weight(1f).focusRequester(focus).testTag("search-input").semantics { contentDescription = "Search YouTube" },
                     textStyle = DesignTokens.text(15, 22), singleLine = true, cursorBrush = SolidColor(DesignTokens.Ink),
@@ -67,11 +68,11 @@ internal fun SearchPanel(
                     onQueryChanged(""); focus.requestFocus(); keyboard?.show()
                 }.semantics { contentDescription = "Clear search" }.padding(start = 8.dp, end = 26.dp)) { AppIcon(AppIcon.Close, Modifier.size(16.dp)) }
             }
-            Box(Modifier.size(36.dp, fieldHeight).clip(RoundedCornerShape(topEnd = 32.dp, bottomEnd = 32.dp)).background(Color(0xFFE5E5E5))
+            Box(Modifier.size(36.dp, fieldHeight).clip(RoundedCornerShape(topEnd = 32.dp, bottomEnd = 32.dp)).background(DesignTokens.Ghost)
                 .clickable(role = Role.Button) { keyboard?.hide(); onSubmit(query) }
                 .semantics { contentDescription = "Search" }, contentAlignment = Alignment.CenterStart) { AppIcon(AppIcon.Search) }
             Spacer(Modifier.width(8.dp))
-            if (query.isEmpty()) Box(Modifier.padding(start = 4.dp, end = 12.dp).size(32.dp).background(Color(0xFFE5E5E5), CircleShape), contentAlignment = Alignment.Center) {
+            if (query.isEmpty()) Box(Modifier.padding(start = 4.dp, end = 12.dp).size(32.dp).background(DesignTokens.Ghost, CircleShape), contentAlignment = Alignment.Center) {
                 AppIconButton(AppIcon.Voice, "Search with your voice", modifier = Modifier.wrapContentSize(unbounded = true), diameter = 40.dp) { onVoiceSearch() }
             }
         }
@@ -88,7 +89,7 @@ internal fun SearchPanel(
                         AppIcon(AppIcon.Close, Modifier.size(14.dp))
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.05f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Border.copy(alpha = 0.05f)))
             }
             suggestions.forEachIndexed { index, suggestion ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 37.dp).clickable(role = Role.Button) {
@@ -101,13 +102,13 @@ internal fun SearchPanel(
                         withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(suggestion.drop(prefix)) }
                     }
                     BasicText(text, Modifier.weight(1f).padding(horizontal = 8.dp), style = DesignTokens.text(14, 17), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Box(Modifier.size(37.dp).background(Color.Black.copy(alpha = 0.05f)).clickable(role = Role.Button) {
+                    Box(Modifier.size(37.dp).background(DesignTokens.Border.copy(alpha = 0.05f)).clickable(role = Role.Button) {
                         onQueryChanged(suggestion); focus.requestFocus(); keyboard?.show()
                     }.semantics { contentDescription = "Use suggestion $suggestion" }.padding(end = 4.dp), contentAlignment = Alignment.CenterEnd) {
                         AppIcon(AppIcon.ArrowUpLeft, Modifier.offset(y = 2.dp))
                     }
                 }
-                if (index < suggestions.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.05f)))
+                if (index < suggestions.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Border.copy(alpha = 0.05f)))
             }
         }
     }

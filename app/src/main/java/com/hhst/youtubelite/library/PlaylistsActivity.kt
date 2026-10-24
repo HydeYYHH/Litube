@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -82,7 +82,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by collectionViewModel.uiState.collectAsStateWithLifecycle()
             val back = {
                 if (state.overlay != LibraryOverlay.None) collectionViewModel.onAction(LibraryAction.CloseOverlay) else finish()
@@ -90,7 +90,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             BackHandler(onBack = back)
             val playlists = (state.content as? CollectionContent.Ready)?.playlists.orEmpty()
             CollectionScreen(state, playlists, collectionViewModel::onAction, onBack = back,
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             if (state.overlay == LibraryOverlay.Search) {
                 val query = state.query.trim()

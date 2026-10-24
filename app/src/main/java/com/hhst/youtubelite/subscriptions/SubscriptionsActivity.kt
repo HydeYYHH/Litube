@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -101,7 +101,7 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by subscriptionsViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
                 when {
@@ -116,7 +116,7 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
             BackHandler(onBack = back)
             SubscriptionsScreen(state, subscriptionsViewModel::onAction,
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             subscriptionsViewModel.saveSheet?.let { sheet ->
                 val sheetState by sheet.state.collectAsStateWithLifecycle()

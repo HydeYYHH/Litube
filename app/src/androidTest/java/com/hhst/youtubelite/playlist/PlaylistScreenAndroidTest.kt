@@ -100,6 +100,8 @@ class PlaylistScreenAndroidTest {
         compose.onNodeWithTag("playlist-video-action-WatchLater").performClick()
         assertEquals(PlaylistAction.VideoMenuAction(PlaylistVideoAction.WatchLater), actions.last())
         compose.onNodeWithContentDescription("Close menu").performClick()
+        // The sheet plays its exit motion before the overlay callback lands.
+        compose.waitUntil(5_000) { actions.lastOrNull() == PlaylistAction.CloseOverlay }
         assertEquals(PlaylistAction.CloseOverlay, actions.last())
     }
 

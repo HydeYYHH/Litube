@@ -65,7 +65,7 @@ internal fun MixMenu(onAction: (HomeAction) -> Unit, live: Boolean = false) {
         val margin = if (maxWidth >= 330.dp) 40.dp else 0.dp
         val widthLimit = minOf(362.dp, (maxWidth - margin * 2).coerceAtLeast(0.dp))
         Column(Modifier.widthIn(min = if (maxWidth >= 330.dp) minOf(256.dp, widthLimit) else 0.dp, max = widthLimit).width(IntrinsicSize.Max)
-            .heightIn(max = (maxHeight - margin * 2).coerceAtLeast(0.dp)).clip(RoundedCornerShape(8.dp)).background(Color.White)
+            .heightIn(max = (maxHeight - margin * 2).coerceAtLeast(0.dp)).clip(RoundedCornerShape(8.dp)).background(DesignTokens.Background)
             .testTag("mix-menu").semantics { paneTitle = "Mix actions" }
             .verticalScroll(rememberScrollState()).padding(3.dp)) {
             FeedMenuKind.Mix.visibleActions(live).forEach { action ->

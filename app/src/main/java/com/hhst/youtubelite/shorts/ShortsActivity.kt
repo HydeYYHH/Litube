@@ -8,7 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -110,7 +110,7 @@ class ShortsActivity : ComponentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val playerViewModel: PlayerViewModel = org.koin.compose.koinInject()
             DisposableEffect(playerViewModel, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->

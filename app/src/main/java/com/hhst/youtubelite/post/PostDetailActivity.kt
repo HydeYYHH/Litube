@@ -9,7 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -133,7 +133,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by postDetailViewModel.uiState.collectAsStateWithLifecycle()
             val commentsState by postCommentsViewModel.uiState.collectAsStateWithLifecycle()
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true

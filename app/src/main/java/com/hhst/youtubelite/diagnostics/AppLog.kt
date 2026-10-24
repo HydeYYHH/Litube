@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Ordinary events only enqueue sanitized records; disk IO belongs to the writer. */
 object AppLog {
+    private const val EXPORT_SNAPSHOT_BYTES = 2L * 1024 * 1024
     enum class Category { APP, CRASH, NETWORK, BROWSER, EXTRACTOR, DOWNLOADER, PLAYER, CAST, EXTENSION, GALLERY, STORAGE }
     private val session = UUID.randomUUID().toString().take(8)
     @Volatile private var app: Context? = null
@@ -29,6 +30,8 @@ object AppLog {
     @Volatile private var recorder: DiagnosticRecorder? = null
     private val queue = DiagnosticQueue()
     private val enqueueLock = Any()
+    /** Event wake for the writer thread; a permit may arrive with no data and costs one idle spin. */
+    private val wake = java.util.concurrent.ArrayBlockingQueue<Unit>(1)
     private val dropped = AtomicLong()
     private val writeFailures = AtomicLong()
     private val flushes = mutableListOf<CountDownLatch>()
@@ -53,11 +56,16 @@ object AppLog {
                 event(Category.CRASH, "uncaught", mapOf("thread" to thread.name), failure, true, level = DiagnosticLevel.FATAL)
                 storage?.append(recorder?.recent().orEmpty(), true) { SystemClock.elapsedRealtime() >= deadline }
         })
+        val tickGate = AtomicLong()
         scheduler.scheduleAtFixedRate({
             runCatching {
+                // A frozen process unfreezing can owe several fixed-rate fires at once;
+                // coalesce them into one sample instead of a catch-up burst.
+                val now = SystemClock.elapsedRealtime()
+                if (now - tickGate.getAndSet(now) < 500) return@scheduleAtFixedRate
                 recorder?.tick()
                 DiagnosticNetwork.sample()
-                if (SystemClock.elapsedRealtime() / 1000 % 30 == 0L) event(Category.APP, "logger_health", statistics())
+                if (now / 1000 % 30 == 0L) event(Category.APP, "logger_health", statistics())
             }
         }, 1, 1, TimeUnit.SECONDS)
         scheduler.execute {
@@ -106,7 +114,10 @@ object AppLog {
         mapOf("dropped" to dropped.get() + queue.dropped, "write_failures" to writeFailures.get(), "queued_bytes" to queue.bytes,
             "snapshot_truncated_bytes" to (storage?.snapshotTruncatedBytes ?: 0))
     private fun enqueue(records: List<DiagnosticEvent>, priority: Boolean) {
-        synchronized(enqueueLock) { records.chunked(64).forEach { queue.offer(it, priority) } }
+        synchronized(enqueueLock) {
+            records.chunked(64).forEach { queue.offer(it, priority) }
+            runCatching { wake.offer(Unit) }
+        }
     }
     private fun writeLoop() {
         while (true) {
@@ -120,14 +131,21 @@ object AppLog {
                 catch (_: Throwable) { writeFailures.incrementAndGet(); dropped.addAndGet(batch.records.size.toLong()) }
             }
             barriers.forEach(CountDownLatch::countDown)
-            if (batches.isEmpty()) try { Thread.sleep(25) } catch (_: InterruptedException) { return }
+            if (batches.isEmpty() && barriers.isEmpty()) {
+                // Sleep until the next signal instead of spinning; the minute-long cap
+                // is only a liveness net, ordinary traffic wakes the thread immediately.
+                try { wake.poll(60, TimeUnit.SECONDS) } catch (_: InterruptedException) { return }
+            }
         }
     }
     fun flush(timeoutMs: Long = 2_000): Boolean {
         recorder?.flushAggregates()
         event(Category.APP, "logger_health", statistics())
         val latch = CountDownLatch(1)
-        synchronized(enqueueLock) { flushes += latch }
+        synchronized(enqueueLock) {
+            flushes += latch
+            runCatching { wake.offer(Unit) }
+        }
         return runCatching { latch.await(timeoutMs.coerceAtLeast(0), TimeUnit.MILLISECONDS) }.getOrDefault(false)
     }
     /** Called on IO; unresponsive auxiliary processes yield an explicitly partial archive. */
@@ -138,7 +156,8 @@ object AppLog {
         remoteFlushes.forEach { (name, remote) ->
             coverage[name] = runCatching { remote(minOf(2_000, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))) }.getOrDefault(false)
         }
-        val sources = storage?.snapshot { SystemClock.elapsedRealtime() >= deadline } ?: (emptyMap<String, String>() to 0)
+        val sources = storage?.snapshot(maxBytes = EXPORT_SNAPSHOT_BYTES) { SystemClock.elapsedRealtime() >= deadline }
+            ?: (emptyMap<String, String>() to 0)
         val environment = mapOf("app_version" to context.packageManager.getPackageInfo(context.packageName, 0).versionName,
             "build_id" to BuildConfig.DIAGNOSTIC_BUILD_ID, "build_type" to BuildConfig.BUILD_TYPE,
             "android_sdk" to Build.VERSION.SDK_INT, "android_release" to Build.VERSION.RELEASE,

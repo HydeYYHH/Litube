@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.ui.design
 
+import androidx.activity.compose.setContent
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,15 +40,20 @@ import com.hhst.youtubelite.R
 import kotlin.math.ceil
 
 object DesignTokens {
-    val Ink = Color(0xFF0F0F0F)
-    val Secondary = Color(0xFF606060)
-    val Surface = Color(0xFFF2F2F2)
-    val Ghost = Color(0xFFE5E5E5)
-    val Border = Color.Black.copy(alpha = 0.1f)
-    val NavigationDivider = Color.Black.copy(alpha = 0.2f)
-    val Scrim = Color.Black.copy(alpha = 0.3f)
-    val MenuScrim = Color.Black.copy(alpha = 0.6f)
-    val Red = Color(0xFFFF0033)
+    // Colors resolve through the shared palette so every screen follows one
+    // theme entry; the getters stay call-site compatible with the old constants.
+    val Background: Color @Composable get() = LocalAppColors.current.background
+    val Ink: Color @Composable get() = LocalAppColors.current.ink
+    val Secondary: Color @Composable get() = LocalAppColors.current.secondary
+    val Surface: Color @Composable get() = LocalAppColors.current.surface
+    val Ghost: Color @Composable get() = LocalAppColors.current.ghost
+    val Border: Color @Composable get() = LocalAppColors.current.border
+    val NavigationDivider: Color @Composable get() = LocalAppColors.current.navigationDivider
+    val Scrim: Color @Composable get() = LocalAppColors.current.scrim
+    val MenuScrim: Color @Composable get() = LocalAppColors.current.menuScrim
+    val StateLayer: Color @Composable get() = LocalAppColors.current.stateLayer
+    val Red: Color @Composable get() = LocalAppColors.current.red
+    val Link: Color @Composable get() = LocalAppColors.current.link
     val Font = FontFamily(
         Font(R.font.roboto_regular, FontWeight.Normal), Font(R.font.roboto_medium, FontWeight.Medium),
         Font(R.font.roboto_bold, FontWeight.Bold),
@@ -55,6 +62,7 @@ object DesignTokens {
     val TopBarHeight = 48.dp
     val BottomBarHeight = 56.dp
     val GridGap = 16.dp
+    @Composable
     fun text(size: Int = 14, line: Int = 20, weight: FontWeight = FontWeight.Normal, color: Color = Ink) = TextStyle(
         color = color, fontFamily = Font, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -62,10 +70,20 @@ object DesignTokens {
     )
 }
 
+/** The one theme entry: follows the appearance setting and shares the color palette. */
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = false) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { content() }
+    val darkTheme = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark ?: androidx.compose.foundation.isSystemInDarkTheme()
+    CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppPalette else LightAppPalette) {
+        com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = darkTheme) { content() }
+    }
+}
+
+fun androidx.activity.ComponentActivity.setAppContent(content: @Composable () -> Unit) {
+    setContent {
+        AppTheme {
+            Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { content() }
+        }
     }
 }
 
@@ -152,15 +170,18 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
 @Composable
 fun AppIconButton(
     icon: AppIcon, description: String, modifier: Modifier = Modifier,
-    diameter: Dp = 48.dp, background: Color = Color.Transparent, color: Color = DesignTokens.Ink, onClick: () -> Unit,
+    diameter: Dp = 48.dp, background: Color = Color.Transparent, color: Color = DesignTokens.Ink,
+    enabled: Boolean = true, onClick: () -> Unit,
 ) {
-    val interactions = remember { MutableInteractionSource() }
-    val hovered by interactions.collectIsHoveredAsState()
+    val interactions = rememberAppInteractions()
     Box(modifier.size(diameter).clip(CircleShape)
-        .background(if (hovered) DesignTokens.Border else background)
-        .hoverable(interactions)
-        .clickable(interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
-        .semantics { contentDescription = description }, contentAlignment = Alignment.Center) { AppIcon(icon, color = color) }
+        .then(if (background != Color.Transparent) Modifier.background(background) else Modifier)
+        .appStateLayer(interactions, diameter / 2)
+        .hoverable(interactions, enabled = enabled)
+        .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+        .semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
+        AppIcon(icon, color = if (enabled) color else color.copy(alpha = 0.4f))
+    }
 }
 
 @Composable

@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
@@ -79,11 +79,11 @@ class NotificationsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by notificationsViewModel.uiState.collectAsStateWithLifecycle()
             BackHandler { finish() }
             NotificationsScreen(state, notificationsViewModel::onAction, onBack = { finish() },
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing))
         }
     }

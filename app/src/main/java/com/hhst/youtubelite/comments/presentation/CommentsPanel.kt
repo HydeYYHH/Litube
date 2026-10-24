@@ -152,7 +152,7 @@ private fun CommentsSurface(
         state.overlay is CommentsOverlay.Composer || state.overlay is CommentsOverlay.DeleteConfirm
     BoxWithConstraints(modifier) {
         Column(
-            Modifier.fillMaxSize().background(Color.White, shape)
+            Modifier.fillMaxSize().background(DesignTokens.Background, shape)
                 .focusRequester(focus).focusable()
                 .semantics { paneTitle = "Comments" }
                 .testTag("comments-panel"),
@@ -288,7 +288,7 @@ private fun CommentComposerSheet(
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
                 .verticalScroll(rememberScrollState())
-                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(Color.White)
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Background)
                 .testTag("comment-composer").semantics { paneTitle = "Comment editor" },
         ) {
             AppText(
@@ -306,7 +306,7 @@ private fun CommentComposerSheet(
                     draft, onDraft,
                     Modifier.weight(1f).heightIn(min = CommentsLayout.InputHeight.dp)
                         .clip(RoundedCornerShape(CommentsLayout.InputRadius.dp))
-                        .border(1.dp, Color.Black.copy(alpha = CommentsLayout.DividerAlpha),
+                        .border(1.dp, DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha),
                             RoundedCornerShape(CommentsLayout.InputRadius.dp))
                         .padding(horizontal = CommentsLayout.InputTextInset.dp, vertical = 8.dp)
                         .focusRequester(focus)
@@ -357,7 +357,7 @@ private fun DeleteCommentSheet(ownComment: Boolean, onCancel: () -> Unit, onDele
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
                 .verticalScroll(rememberScrollState())
-                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(Color.White)
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Background)
                 .testTag("comment-delete-sheet").semantics { paneTitle = "Delete confirmation" },
         ) {
             AppText(
@@ -455,7 +455,7 @@ private fun CommentsHeader(
                 SortControl(label, onSort)
             }
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp)
-                .background(Color.Black.copy(alpha = CommentsLayout.DividerAlpha)))
+                .background(DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha)))
         }
     }
 }
@@ -510,7 +510,7 @@ private fun TitleBlock(count: String, panelWidth: Float, docked: Boolean, modifi
 @Composable
 private fun SortMenu(selected: CommentSort, onSelect: (CommentSort) -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier.width(200.dp).messageCardShadow().background(Color.White, RoundedCornerShape(12.dp))
+        modifier.width(200.dp).messageCardShadow().background(DesignTokens.Background, RoundedCornerShape(12.dp))
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp).testTag("comments-sort-menu")
             .semantics { paneTitle = "Sort comments" },
@@ -596,7 +596,7 @@ private fun Simplebox(onAction: (CommentAction) -> Unit) {
             Box(
                 Modifier.weight(1f).heightIn(min = CommentsLayout.InputHeight.dp)
                     .clip(RoundedCornerShape(CommentsLayout.InputRadius.dp))
-                    .border(1.dp, Color.Black.copy(alpha = CommentsLayout.DividerAlpha), RoundedCornerShape(CommentsLayout.InputRadius.dp))
+                    .border(1.dp, DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha), RoundedCornerShape(CommentsLayout.InputRadius.dp))
                     .clickable(role = Role.Button) { onAction(CommentAction.Compose) }
                     .testTag("comments-input")
                     .semantics { contentDescription = "Add a comment" }
@@ -862,7 +862,7 @@ private fun RepliesToggle(label: String, tag: String, onClick: () -> Unit) {
 
 @Composable
 private fun Divider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = CommentsLayout.DividerAlpha)))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha)))
 }
 
 @Composable

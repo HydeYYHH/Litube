@@ -1,5 +1,12 @@
 package com.hhst.youtubelite.ui.design
 
+import androidx.compose.animation.core.Animatable
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -12,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,14 +27,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -40,6 +49,8 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 /** One action in a bottom sheet. */
 data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null)
@@ -64,6 +75,7 @@ object MenuSheetLayout {
         else (width - WidthInset).coerceAtLeast(0f)
 }
 
+/** Action sheet with a fading scrim and a draggable handle. */
 @Composable
 fun MenuBottomSheet(
     items: List<MenuSheetItem>,
@@ -78,32 +90,69 @@ fun MenuBottomSheet(
     iconGap: Dp = MenuSheetLayout.IconGap.dp,
     header: (@Composable () -> Unit)? = null,
 ) {
-    var drag by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
+    val scope = rememberCoroutineScope()
+    val progress = remember { Animatable(0f) }
+    var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var settleJob by remember { mutableStateOf<Job?>(null) }
+    var closing by remember { mutableStateOf(false) }
+    val haptics = org.koin.compose.koinInject<com.hhst.youtubelite.core.HapticsController>()
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, tween(MenuMotion.enterMs, easing = FastOutSlowInEasing))
+    }
+    fun finish() {
+        if (closing) return
+        closing = true
+        settleJob?.cancel()
+        scope.launch {
+            progress.animateTo(0f, tween(MenuMotion.exitMs, easing = FastOutSlowInEasing))
+            onDismiss()
+        }
+    }
+    fun settle() {
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            animate(drag, 0f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
+        }
+    }
+    BackHandler { finish() }
     Box(
-        modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onDismiss() }
+        modifier.fillMaxSize().graphicsLayer { alpha = progress.value }
+            .background(DesignTokens.MenuScrim).clickable { finish() }
             .semantics { contentDescription = "Close menu" },
     )
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Column(
             Modifier.padding(bottom = bottomPadding)
                 .width(sheetWidth ?: MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
-                .offset(y = (drag / density).dp).clip(RoundedCornerShape(MenuSheetLayout.Corner.dp))
-                .background(Color.White)
+                .graphicsLayer {
+                    translationY = (1f - progress.value) * (size.height + bottomPadding.toPx()) + drag
+                }.clip(RoundedCornerShape(MenuSheetLayout.Corner.dp))
+                .background(DesignTokens.Background)
                 .testTag(tag).semantics {
                     this.paneTitle = paneTitle
-                    customActions = listOf(CustomAccessibilityAction("Close menu") { onDismiss(); true })
+                    customActions = listOf(CustomAccessibilityAction("Close menu") { finish(); true })
                 },
         ) {
             Box(
                 Modifier.fillMaxWidth().height(MenuSheetLayout.HandleStrip.dp).testTag("menu-handle")
-                    .pointerInput(Unit) {
+                    .pointerInput(closing) {
                         detectVerticalDragGestures(
+                            onDragStart = { settleJob?.cancel() },
                             onVerticalDrag = { change, amount ->
-                                change.consume(); drag = (drag + amount).coerceAtLeast(0f)
+                                change.consume()
+                                if (!closing) drag = (drag + amount).coerceAtLeast(0f)
                             },
-                            onDragCancel = { drag = 0f },
-                            onDragEnd = { if (drag > 48 * density) onDismiss(); drag = 0f },
+                            onDragCancel = {
+                                if (!closing) settle()
+                            },
+                            onDragEnd = {
+                                if (drag > MenuMotion.dismissDragPx * density) {
+                                    haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.SELECTION)
+                                    finish()
+                                } else if (!closing) settle()
+                            },
                         )
                     },
                 contentAlignment = Alignment.BottomCenter,
@@ -119,7 +168,7 @@ fun MenuBottomSheet(
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
                             .then(if (item.tag != null) Modifier.testTag(item.tag) else Modifier)
-                            .clickable(role = Role.Button) { onSelect(index) }
+                            .clickable(enabled = !closing, role = Role.Button) { onSelect(index) }
                             .padding(horizontal = item.contentStart ?: rowStart, vertical = MenuSheetLayout.RowVertical.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -133,4 +182,11 @@ fun MenuBottomSheet(
             }
         }
     }
+}
+
+/** Sheet transition durations and drag threshold. */
+object MenuMotion {
+    const val enterMs = 200
+    const val exitMs = 160
+    const val dismissDragPx = 48f
 }

@@ -54,7 +54,7 @@ fun SearchResultsScreen(
     searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null,
 ) {
     AppTheme {
-        BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("search-results")) {
+        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("search-results")) {
             val width = maxWidth.value
             val height = maxHeight.value
             val listState = rememberLazyListState()
@@ -184,7 +184,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                 }
                 Box(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp)
-                        .background(Color.Black.copy(alpha = SearchResultsLayout.FilterDividerAlpha))
+                        .background(DesignTokens.Border.copy(alpha = SearchResultsLayout.FilterDividerAlpha))
                         .testTag("search-filter-divider"),
                 )
             }
@@ -196,7 +196,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
 private fun SearchTopBar(query: String, onAction: (SearchAction) -> Unit, onBack: () -> Unit) {
     val fieldHeight = maxOf(32.dp, with(LocalDensity.current) { 22.sp.toDp() })
     val barHeight = maxOf(SearchResultsLayout.TopBarHeight.dp, fieldHeight)
-    Row(Modifier.fillMaxWidth().height(barHeight).background(Color.White)
+    Row(Modifier.fillMaxWidth().height(barHeight).background(DesignTokens.Background)
         .testTag("search-topbar"), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(53.dp), contentAlignment = Alignment.CenterStart) {
             AppIconButton(AppIcon.Back, "Back", onClick = onBack)

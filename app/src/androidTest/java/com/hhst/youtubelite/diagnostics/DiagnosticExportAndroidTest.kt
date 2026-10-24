@@ -107,11 +107,10 @@ class DiagnosticExportAndroidTest {
     }
 
     @Test fun http200WithNoBodyProgressRetainsHeadersAndCancelsWithoutRecovery() {
-        MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody("payload").setBodyDelay(40, TimeUnit.SECONDS))
+        StalledBodyServer().use { server ->
             val context = DiagnosticContext(videoId = "wDIrpvH8MzE", taskId = "stall-transfer", generation = 8)
             val client = DiagnosticNetwork.install(OkHttpClient.Builder()).readTimeout(45, TimeUnit.SECONDS).build()
-            val call = client.newCall(DiagnosticNetwork.tag(Request.Builder().url(server.url("/videoplayback?itag=95&sig=private-signature")).build(), context))
+            val call = client.newCall(DiagnosticNetwork.tag(Request.Builder().url(server.url).build(), context))
             val response = call.execute()
             assertEquals(200, response.code)
             val executor = Executors.newSingleThreadExecutor()
@@ -131,6 +130,31 @@ class DiagnosticExportAndroidTest {
                     assertFalse(timeline.joinToString().contains("private-signature"))
                 }
             } finally { call.cancel(); response.close(); executor.shutdownNow() }
+        }
+    }
+
+    private class StalledBodyServer : java.io.Closeable {
+        private val socket = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+        private val release = java.util.concurrent.CountDownLatch(1)
+        private val executor = Executors.newSingleThreadExecutor()
+        private val serving = executor.submit {
+            socket.accept().use { connection ->
+                connection.soTimeout = 5_000
+                val reader = connection.getInputStream().bufferedReader()
+                while (!reader.readLine().isNullOrEmpty()) Unit
+                connection.getOutputStream().apply {
+                    write("HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
+                    flush()
+                }
+                release.await(45, TimeUnit.SECONDS)
+            }
+        }
+        val url = "http://127.0.0.1:${socket.localPort}/videoplayback?itag=95&sig=private-signature"
+
+        override fun close() {
+            release.countDown()
+            socket.close()
+            try { serving.get(5, TimeUnit.SECONDS) } finally { executor.shutdownNow() }
         }
     }
 

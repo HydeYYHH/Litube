@@ -184,6 +184,8 @@ class WatchViewModelTest {
             WatchAction.OpenChannel("studio") to WatchNavigationRequest.Channel("studio"),
             WatchAction.OpenComments("harbour") to WatchNavigationRequest.Comments("harbour"),
             WatchAction.OpenRelated("meadow") to WatchNavigationRequest.Watch("meadow"),
+            WatchAction.SeekToTimestamp(42) to WatchNavigationRequest.SeekTo(42),
+            WatchAction.OpenDescriptionLink("https://www.blender.org") to WatchNavigationRequest.OpenLink("https://www.blender.org"),
         )
         for ((action, expected) in expectations) {
             vm.onAction(action)
@@ -534,5 +536,72 @@ class WatchViewModelTest {
         advanceUntilIdle()
         assertEquals(1, saves.watchLaterCalls)
         assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun descriptionTimestampSeeksThroughTheHostBoundary() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "harbour")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.SeekToTimestamp(42))
+        assertEquals(WatchNavigationRequest.SeekTo(42), vm.navigationRequests.first())
+    }
+
+    @Test fun liveVideoTimestampExplainsInsteadOfSeeking() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "live")
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value.content as WatchContent.Ready).page.video.live)
+        vm.onAction(WatchAction.SeekToTimestamp(42))
+        assertNull(withTimeoutOrNull(500) { vm.navigationRequests.first() })
+        assertTrue(withTimeoutOrNull(500) { vm.actionNotices.first() } is AppNotice.Message)
+    }
+
+    @Test fun trafficChallengeReportsVerificationAndRetriesOnceOnCompletion() = runTest {
+        var challenged = false
+        val challenge = com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+            com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION,
+            "traffic_challenge", 302, detail = "https://www.google.com/sorry/index?q=x")
+        val vm = WatchViewModel(repository {
+            if (challenged) FixtureWatchRepository.samplePage(it)
+            else {
+                challenged = true
+                throw com.hhst.youtubelite.data.media.MediaException(challenge)
+            }
+        }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        assertEquals(WatchContent.Failed, vm.uiState.value.content)
+        assertEquals("https://www.google.com/sorry/index?q=x", vm.uiState.value.verification?.challengeUrl)
+        vm.verificationCompleted()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is WatchContent.Ready)
+        assertNull(vm.uiState.value.verification)
+    }
+
+    @Test fun authFailureNeverReportsVerification() = runTest {
+        val vm = WatchViewModel(repository {
+            throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.AUTH, "http_403", 403))
+        }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        assertEquals(WatchContent.Failed, vm.uiState.value.content)
+        assertNull(vm.uiState.value.verification)
+    }
+
+    @Test fun aManualReloadClearsVerificationAndIgnoresItsLateResult() = runTest {
+        var calls = 0
+        val url = "https://www.google.com/sorry/index?q=old-read"
+        val vm = WatchViewModel(repository {
+            if (++calls == 1) throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION, "traffic_challenge", detail = url))
+            FixtureWatchRepository.samplePage(it)
+        }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.verification)
+        vm.onAction(WatchAction.Retry)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.verification)
+        vm.verificationCompleted(url)
+        advanceUntilIdle()
+        assertEquals(2, calls)
     }
 }

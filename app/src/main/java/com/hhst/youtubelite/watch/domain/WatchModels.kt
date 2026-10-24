@@ -67,6 +67,8 @@ data class WatchUiState(
     val actionPending: Boolean = false,
     /** Production mode: report/recommendation rows without server tokens hide. Fixtures keep the recorded layouts. */
     val live: Boolean = false,
+    /** Set when the page read came back as a `/sorry` traffic challenge. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
     val searchOpen: Boolean get() = overlay == WatchOverlay.Search
 }
@@ -128,7 +130,10 @@ sealed interface WatchNavigationRequest {
     data object PageMenu : WatchNavigationRequest
     data class Channel(val channelId: String) : WatchNavigationRequest
     data class Comments(val videoId: String) : WatchNavigationRequest
-    data class Watch(val videoId: String) : WatchNavigationRequest
+    data class Watch(val videoId: String, val startSeconds: Long? = null) : WatchNavigationRequest
+    data class SeekTo(val seconds: Long) : WatchNavigationRequest
+    data class OpenLink(val url: String) : WatchNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : WatchNavigationRequest
     data class Like(val videoId: String) : WatchNavigationRequest
     data class Dislike(val videoId: String) : WatchNavigationRequest
     data class Subscribe(val channelId: String) : WatchNavigationRequest
@@ -149,6 +154,8 @@ sealed interface WatchAction {
     data class SubmitSearch(val query: String) : WatchAction
     data object Retry : WatchAction
     data object ToggleDescription : WatchAction
+    data class SeekToTimestamp(val seconds: Long) : WatchAction
+    data class OpenDescriptionLink(val url: String) : WatchAction
     data object OpenSearch : WatchAction
     data object OpenPageMenu : WatchAction
     data object Like : WatchAction
@@ -173,6 +180,8 @@ sealed interface WatchAction {
     data class OpenRelated(val videoId: String) : WatchAction
     data class OpenItemMenu(val videoId: String) : WatchAction
     data object CloseOverlay : WatchAction
+    data object DismissVerification : WatchAction
+    data object OpenVerification : WatchAction
     data class MenuAction(val action: WatchVideoMenuAction) : WatchAction
 }
 

@@ -871,6 +871,9 @@ class PlayerViewModel(
         queue.add(item)
     }
 
+    /** True when [videoId] is already in the manual queue (dedupe feedback for menus). */
+    fun queueContains(videoId: String): Boolean = queue.state.value.items.any { it.videoId == videoId }
+
     override fun onCastStop() {
         // Guard against a stop tap after the session already ended: the
         // detached castPlayer keeps its last position, and seeking the local

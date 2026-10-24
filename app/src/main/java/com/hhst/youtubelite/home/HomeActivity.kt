@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,6 +44,14 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
     var lastNavigationRequest: HomeNavigationRequest? = null
         private set
 
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the banner; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) homeViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
@@ -69,39 +77,50 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 homeViewModel.navigationRequests.collect { request ->
                     lastNavigationRequest = request
-                    if (request is HomeNavigationRequest.OpenLink) openContentLink(request.url)
-                    if (request is HomeNavigationRequest.VoiceSearch && !fixtures) openVoiceSearch()
-                    if (request is HomeNavigationRequest.Search) startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
-                    if (request is HomeNavigationRequest.Watch) startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
-                    if (request is HomeNavigationRequest.Shorts) startActivity(
-                        com.hhst.youtubelite.shorts.ShortsActivity.intent(this@HomeActivity, request.itemId))
-                    if (request is HomeNavigationRequest.Channel) startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
-                    if (request is HomeNavigationRequest.OpenPost) startActivity(
-                        PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
-                    )
-                    if (request is HomeNavigationRequest.MenuAction && request.action == FeedMenuAction.Share) {
-                        shareGateway.share(request.itemId)
-                    }
-                    if (request is HomeNavigationRequest.PostFeedback && !fixtures) {
-                        com.hhst.youtubelite.post.openPostVoteRoute(this@HomeActivity)
-                    }
-                    if (request is HomeNavigationRequest.Explore) startActivity(
-                        com.hhst.youtubelite.explore.ExploreActivity.intent(this@HomeActivity))
-                    if (request is HomeNavigationRequest.Destination && request.destination != HomeDestination.Home) {
-                        com.hhst.youtubelite.ui.components.MainTabs.intent(this@HomeActivity,
-                            com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name),
-                            homeViewModel.uiState.value.signedInPreview)?.let(::startActivity)
+                    when (request) {
+                        is HomeNavigationRequest.OpenLink -> openContentLink(request.url)
+                        HomeNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
+                        is HomeNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@HomeActivity, request.query))
+                        is HomeNavigationRequest.Watch -> startActivity(WatchActivity.intent(this@HomeActivity, request.videoId))
+                        is HomeNavigationRequest.Shorts -> startActivity(
+                            com.hhst.youtubelite.shorts.ShortsActivity.intent(this@HomeActivity, request.itemId))
+                        is HomeNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@HomeActivity, request.channelId))
+                        is HomeNavigationRequest.OpenPost -> startActivity(
+                            PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
+                        )
+                        is HomeNavigationRequest.MenuAction -> if (request.action == FeedMenuAction.Share) {
+                            shareGateway.share(request.itemId)
+                        }
+                        is HomeNavigationRequest.PostFeedback -> if (!fixtures) {
+                            com.hhst.youtubelite.post.openPostVoteRoute(this@HomeActivity)
+                        }
+                        is HomeNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            android.content.Intent(this@HomeActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
+                        is HomeNavigationRequest.Explore -> startActivity(
+                            com.hhst.youtubelite.explore.ExploreActivity.intent(this@HomeActivity))
+                        is HomeNavigationRequest.Destination -> if (request.destination != HomeDestination.Home) {
+                            com.hhst.youtubelite.ui.components.MainTabs.intent(this@HomeActivity,
+                                com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name),
+                                homeViewModel.uiState.value.signedInPreview)?.let(::startActivity)
+                        }
+                        // Save-sheet writes run inside the ViewModel with server confirmation in
+                        // production; feedback/comments exits are recorded for fixtures. No `else`:
+                        // a new request type must fail to compile here.
+                        is HomeNavigationRequest.SaveToWatchLater, is HomeNavigationRequest.SaveToPlaylist,
+                        is HomeNavigationRequest.CreatePlaylist, is HomeNavigationRequest.Feedback,
+                        is HomeNavigationRequest.PostComments -> Unit
                     }
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by homeViewModel.uiState.collectAsStateWithLifecycle()
             BackHandler {
                 if (state.overlay != HomeOverlay.None) homeViewModel.onAction(HomeAction.CloseOverlay)
                 else moveTaskToBack(true)
             }
-            HomeScreen(state, homeViewModel::onAction, Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+            HomeScreen(state, homeViewModel::onAction, Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                 .windowInsetsPadding(WindowInsets.safeDrawing).imePadding(),
                 searchRows = com.hhst.youtubelite.ui.components.rememberSearchRows(
                     if (fixtures || state.overlay != com.hhst.youtubelite.home.domain.HomeOverlay.Search) null else sources.suggestions,

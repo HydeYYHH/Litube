@@ -144,14 +144,18 @@ class HomeScreenAndroidTest {
     @Test fun menuScrimAndHandleDismissWithoutSendingAnOperation() {
         val host = launch(HomeScenario.Feed)
         fun open() = compose.onNodeWithContentDescription("More actions for Big Buck Bunny | A short film by the Blender Foundation").performClick()
+        // A menu leaving the screen plays its short exit first; wait for the removal.
+        fun awaitClosed() = compose.waitUntil(5_000) {
+            runCatching { compose.onAllNodesWithTag("video-menu").fetchSemanticsNodes().isEmpty() }.getOrDefault(false)
+        }
         open()
         compose.onNodeWithTag("home-screen").performTouchInput { click(androidx.compose.ui.geometry.Offset(10f, 10f)) }
-        compose.onNodeWithTag("video-menu").assertDoesNotExist()
+        awaitClosed()
         open()
         compose.onNodeWithTag("menu-handle").performTouchInput { swipe(center, center.copy(y = center.y + 20.dp.toPx()), 300) }
         compose.onNodeWithTag("video-menu").assertIsDisplayed()
         compose.onNodeWithTag("menu-handle").performTouchInput { swipe(center, center.copy(y = center.y + 200.dp.toPx()), 300) }
-        compose.onNodeWithTag("video-menu").assertDoesNotExist()
+        awaitClosed()
         host.onActivity { assertNull(it.lastNavigationRequest) }
     }
 

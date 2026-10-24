@@ -73,7 +73,7 @@ fun WatchScreen(
     val compactRelatedScroll = rememberLazyListState()
     val wideRelatedScroll = rememberLazyListState()
     AppTheme {
-        Box(modifier.fillMaxSize().background(Color.White).testTag("watch-screen")) {
+        Box(modifier.fillMaxSize().background(DesignTokens.Background).testTag("watch-screen")) {
             BoxWithConstraints(
                 Modifier.fillMaxSize().then(
                     if (state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
@@ -212,7 +212,7 @@ private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
 @Composable
 private fun WatchTopBar(onAction: (WatchAction) -> Unit, onBack: () -> Unit, live: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).background(Color.White).testTag("watch-topbar"),
+        Modifier.fillMaxWidth().height(WatchLayout.TopBarHeight.dp).background(DesignTokens.Background).testTag("watch-topbar"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconButton(AppIcon.Back, "Back", onClick = onBack)
@@ -257,7 +257,12 @@ private fun WatchMainBody(
         }
         when (val content = state.content) {
             WatchContent.Loading -> WatchSkeleton(includeRelated)
-            WatchContent.Failed -> WatchError(onAction)
+            WatchContent.Failed -> if (state.verification != null) VerificationCard(
+                state.verification,
+                onVerify = { onAction(WatchAction.OpenVerification) },
+                onDismiss = { onAction(WatchAction.DismissVerification) },
+                modifier = Modifier.testTag("watch-verification"),
+            ) else WatchError(onAction)
             is WatchContent.Ready -> {
                 WatchMetadata(content.page.video, state, onAction)
                 WatchComments(content.page.video, onAction)
@@ -369,12 +374,11 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
                 WatchMetaRow(video, state, onAction)
                 if (state.descriptionExpanded) {
                     Spacer(Modifier.height(12.dp))
-                    AppText(
+                    WatchDescription(
                         video.description,
-                        Modifier.fillMaxWidth().testTag("watch-description"),
-                        size = 14,
-                        line = 20,
-                        color = DesignTokens.Secondary,
+                        onTimestamp = { onAction(WatchAction.SeekToTimestamp(it)) },
+                        onLink = { onAction(WatchAction.OpenDescriptionLink(it)) },
+                        modifier = Modifier.fillMaxWidth().testTag("watch-description"),
                     )
                 }
             }
@@ -448,7 +452,7 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                 Box(Modifier.clip(RoundedCornerShape(18.dp)).background(DesignTokens.Ink)
                     .padding(horizontal = 12.dp, vertical = 8.dp)) {
                     AppText(if (video.subscribed) "Subscribed" else "Subscribe", size = 12, line = 20,
-                        weight = FontWeight.Medium, color = Color.White)
+                        weight = FontWeight.Medium, color = DesignTokens.Background)
                 }
             }
         }

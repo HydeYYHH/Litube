@@ -45,14 +45,16 @@ fun <T> SelectField(
     }
     var expanded by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val palette = LocalAppColors.current
+    val dark = palette != LightAppPalette
     val select by rememberUpdatedState(onSelect)
     Box {
         Row(
             Modifier.width(width.dp).height(chipHeight).testTag(tag)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFFF1F1F1))
+                .background(if (dark) DesignTokens.Surface else Color(0xFFF1F1F1))
                 .border(
-                    1.dp, Color.Black.copy(alpha = 0.2f),
+                    1.dp, DesignTokens.Border.copy(alpha = 0.2f),
                     RoundedCornerShape(8.dp),
                 )
                 .clickable(role = Role.Button) { expanded = true }
@@ -66,8 +68,9 @@ fun <T> SelectField(
             )
             AppIcon(AppIcon.ChevronDown, Modifier.size(24.dp).testTag("$tag-icon"))
         }
-        if (expanded) DisposableEffect(context, options, selected) {
-            val pickerContext = ContextThemeWrapper(context, android.R.style.Theme_Material_Light_Dialog_Alert)
+        if (expanded) DisposableEffect(context, options, selected, palette) {
+            val pickerContext = ContextThemeWrapper(context,
+                if (dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)
             val scale = pickerContext.resources.displayMetrics.density
             val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, options.map(labelOf)) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =

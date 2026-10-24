@@ -320,5 +320,58 @@ class HomeViewModelTest {
         assertTrue(vm.uiState.value.signedInPreview)
     }
 
+    @Test fun trafficChallengeKeepsTheFeedAndReportsVerification() = runTest {
+        var challenged = false
+        val vm = HomeViewModel(repository { _, _ ->
+            if (challenged) FixtureHomeRepository.samplePage()
+            else {
+                challenged = true
+                throw com.hhst.youtubelite.data.media.MediaException(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                        com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION,
+                        "traffic_challenge", 302, detail = "https://www.google.com/sorry/index?q=x"))
+            }
+        }, SavedStateHandle(), loadOnStart = true)
+        advanceUntilIdle()
+        // First load is challenged before any feed exists: the card state wins, no fake feed.
+        assertEquals(HomeContent.Failed, vm.uiState.value.content)
+        assertEquals("https://www.google.com/sorry/index?q=x", vm.uiState.value.verification?.challengeUrl)
+        // Completing verification grants exactly one retry, which now succeeds.
+        vm.verificationCompleted()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is HomeContent.Feed)
+        assertNull(vm.uiState.value.verification)
+    }
+
+    @Test fun ordinaryFailuresNeverReportVerification() = runTest {
+        val vm = HomeViewModel(repository { _, _ ->
+            throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.HTTP, "http_429", 429))
+        }, SavedStateHandle(), loadOnStart = true)
+        advanceUntilIdle()
+        assertEquals(HomeContent.Failed, vm.uiState.value.content)
+        assertNull(vm.uiState.value.verification)
+    }
+
+    @Test fun aNewAccountInvalidatesVerificationAndItsLateResult() = runTest {
+        var calls = 0
+        val url = "https://www.google.com/sorry/index?q=old-account"
+        val vm = HomeViewModel(repository { _, _ ->
+            if (++calls == 1) throw com.hhst.youtubelite.data.media.MediaException(
+                com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                    com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION, "traffic_challenge", detail = url))
+            FixtureHomeRepository.samplePage()
+        }, SavedStateHandle(), loadOnStart = true)
+        vm.updateSession(true, 1)
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.verification)
+        vm.updateSession(true, 2)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.verification)
+        vm.verificationCompleted(url)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+    }
 
 }

@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -129,7 +129,7 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by playlistViewModel.uiState.collectAsStateWithLifecycle()
             val pageColor = (state.content as? PlaylistContent.Ready)?.page?.summary?.accent
             SideEffect {
@@ -142,9 +142,9 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 else finish()
             }
             BackHandler(onBack = back)
-            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)) {
+            Box(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)) {
                 Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.safeDrawing)
-                    .background(pageColor?.let { androidx.compose.ui.graphics.Color(it) } ?: androidx.compose.ui.graphics.Color.White))
+                    .background(pageColor?.let { androidx.compose.ui.graphics.Color(it) } ?: com.hhst.youtubelite.ui.design.DesignTokens.Background))
                 PlaylistScreen(state, playlistViewModel::onAction, back,
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
                 playlistViewModel.saveSheet?.let { sheet ->

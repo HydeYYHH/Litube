@@ -41,14 +41,14 @@ import com.hhst.youtubelite.ui.design.*
 @Composable
 fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     AppTheme {
-        BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("playlist-page")) {
+        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlist-page")) {
             val width = maxWidth.value
             val viewport = rememberUpdatedState(width)
             val listState = rememberLazyListState()
             val headerScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
             val page = (state.content as? PlaylistContent.Ready)?.page
             Column(Modifier.fillMaxSize().then(if (state.overlay != PlaylistOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-                Row(Modifier.fillMaxWidth().height(48.dp).background(page?.summary?.accent?.let(::Color) ?: Color.White)
+                Row(Modifier.fillMaxWidth().height(48.dp).background(page?.summary?.accent?.let(::Color) ?: DesignTokens.Background)
                     .testTag("playlist-toolbar"), verticalAlignment = Alignment.CenterVertically) {
                     val color = if (page != null) Color.White else DesignTokens.Ink
                     AppIconButton(AppIcon.Back, "Back", color = color, onClick = onBack)
@@ -199,7 +199,7 @@ private fun PlaylistButtons(onAction: (PlaylistAction) -> Unit, stretch: Boolean
         Row(Modifier.fillMaxWidth().then(if (scroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.then(if (stretch && !scroll) Modifier.weight(1f) else Modifier).heightIn(min = 40.dp)
-                .clip(CircleShape).background(Color.White).clickable(role = Role.Button) { onAction(PlaylistAction.PlayAll) }
+                .clip(CircleShape).background(DesignTokens.Background).clickable(role = Role.Button) { onAction(PlaylistAction.PlayAll) }
                 .padding(horizontal = 16.dp, vertical = 8.dp).testTag("playlist-play-all"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 AppIcon(AppIcon.Play, color = Color.Black)
@@ -246,7 +246,7 @@ private fun PlaylistVideoRow(entry: PlaylistEntry, onAction: (PlaylistAction) ->
 
 @Composable
 private fun PlaylistNavigation(onAction: (PlaylistAction) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Color.White)) {
+    Column(Modifier.fillMaxWidth().background(DesignTokens.Background)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(56.dp)) {
             listOf(PlaylistDestination.Home to AppIcon.HomeOutline, PlaylistDestination.Shorts to AppIcon.Shorts, PlaylistDestination.You to AppIcon.You).forEach { (destination, icon) ->

@@ -51,7 +51,7 @@ fun PostDetailScreen(
 ) {
     val commentsListState = rememberLazyListState()
     AppTheme {
-        Box(modifier.fillMaxSize().background(Color.White).testTag("post-detail-page")) {
+        Box(modifier.fillMaxSize().background(DesignTokens.Background).testTag("post-detail-page")) {
             Column(Modifier.fillMaxSize().then(
                 if (state.overlay != PostDetailOverlay.None || state.commentsOpen) Modifier.clearAndSetSemantics {} else Modifier,
             )) {
@@ -115,7 +115,7 @@ private fun PostDetailTopBar(
 ) {
     val title = state.post?.text?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "Post"
     Row(
-        Modifier.fillMaxWidth().heightIn(min = PostLayout.DetailToolbar.dp).background(Color.White)
+        Modifier.fillMaxWidth().heightIn(min = PostLayout.DetailToolbar.dp).background(DesignTokens.Background)
             .testTag("post-detail-topbar"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -246,7 +246,7 @@ private fun PostDetailFailed(onAction: (PostDetailAction) -> Unit) {
                 .padding(horizontal = 20.dp).testTag("post-detail-retry"),
             contentAlignment = Alignment.Center,
         ) {
-            AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = Color.White)
+            AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
         }
     }
 }

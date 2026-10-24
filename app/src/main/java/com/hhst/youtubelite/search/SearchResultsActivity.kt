@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
@@ -95,7 +95,7 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by searchViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
                 if (searchViewModel.saveSheet?.state?.value != null) searchViewModel.saveSheet?.close()
@@ -108,7 +108,7 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                 SearchResultsScreen(
                     state, searchViewModel::onAction, onBack = back,
-                    modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                    modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                         .windowInsetsPadding(WindowInsets.safeDrawing).imePadding(),
                     searchRows = com.hhst.youtubelite.ui.components.rememberSearchRows(if (fixtures || !state.searchOpen) null else sources.suggestions, state.draftQuery.trim()),
                 )

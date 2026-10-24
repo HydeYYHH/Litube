@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -102,7 +102,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by historyViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
                 if (historyViewModel.saveSheet?.state?.value != null) historyViewModel.saveSheet?.close()
@@ -111,7 +111,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
             BackHandler(onBack = back)
             HistoryScreen(state, historyViewModel::onAction, onBack = back,
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             historyViewModel.saveSheet?.let { sheet ->
                 val sheetState by sheet.state.collectAsStateWithLifecycle()

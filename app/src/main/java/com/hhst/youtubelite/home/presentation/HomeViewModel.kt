@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.isTrafficChallenge
 
 class HomeViewModel(
     private val repository: HomeRepository,
@@ -194,7 +195,20 @@ class HomeViewModel(
             is HomeAction.Navigate -> navigation.trySend(action.request)
             HomeAction.Refresh -> load(append = false)
             HomeAction.LoadNext -> load(append = true)
+            HomeAction.DismissVerification -> _state.update { it.copy(verification = null) }
         }
+    }
+
+    /**
+     * The host reports the verification screen finished with RESULT_OK. The read
+     * retries once with the current identity — never automatically on another
+     * failure, so no request loop can form.
+     */
+    fun verificationCompleted(challengeUrl: String? = uiState.value.verification?.challengeUrl) {
+        if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+        _state.update { it.copy(verification = null) }
+        notices.trySend(AppNotice.Message("Verification finished. Retrying…"))
+        load(append = false)
     }
 
     private fun restoreOverlay(): HomeOverlay = when (savedState.get<String>("homeOverlay")) {
@@ -292,7 +306,7 @@ class HomeViewModel(
         loadJob?.cancel()
         val requestGeneration = ++generation
         val filter = uiState.value.selectedChip
-        _state.update { state -> state.copy(content = when {
+        _state.update { state -> state.copy(verification = null, content = when {
             append && feed != null -> feed.copy(append = AppendState.Loading)
             feed != null -> feed.copy(refreshing = true, append = AppendState.Idle, refreshFailed = false)
             else -> HomeContent.Loading
@@ -307,6 +321,21 @@ class HomeViewModel(
                 ) else HomeContent.Feed(combined)) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: com.hhst.youtubelite.data.media.MediaException) {
+                if (requestGeneration != generation) return@launch
+                if (error.failure.isTrafficChallenge()) {
+                    // Keep a working feed browsable and surface the challenge as a banner;
+                    // a first-load challenge becomes the state the card renders over.
+                    _state.update { state -> state.copy(
+                        content = if (feed != null) feed.copy(refreshing = false,
+                            append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = false)
+                        else HomeContent.Failed,
+                        verification = com.hhst.youtubelite.core.VerificationRequired(error.failure.detail!!),
+                    ) }
+                } else {
+                    _state.update { it.copy(content = if (feed != null) feed.copy(refreshing = false,
+                        append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = !append) else HomeContent.Failed) }
+                }
             } catch (_: Exception) {
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = if (feed != null) feed.copy(refreshing = false,

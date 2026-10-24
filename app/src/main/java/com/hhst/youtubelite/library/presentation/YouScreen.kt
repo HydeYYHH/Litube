@@ -30,7 +30,7 @@ import com.hhst.youtubelite.ui.design.*
 
 @Composable
 fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("you-screen")) {
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("you-screen")) {
         val width = maxWidth.value
         val listState = rememberLibraryListState()
         Column(Modifier.fillMaxSize().then(if (state.overlay != LibraryOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
@@ -123,7 +123,7 @@ private fun ShelfHeader(label: String, onSeeAll: () -> Unit) {
 @Composable
 fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-    BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("history-screen")) {
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("history-screen")) {
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
         LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
@@ -174,7 +174,7 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
 fun CollectionScreen(state: CollectionUiState, playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>,
                      onAction: (LibraryAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-    Column(modifier.fillMaxSize().background(Color.White).testTag("playlists-screen")) {
+    Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen")) {
         LibrarySubPageBar("Playlists", onBack, onAction)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {

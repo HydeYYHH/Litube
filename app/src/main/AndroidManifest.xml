@@ -39,6 +39,7 @@
         android:name=".App"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
@@ -93,6 +94,7 @@
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".settings.PlaybackSettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".account.SignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".core.TrafficVerificationActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".notifications.NotificationsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
 

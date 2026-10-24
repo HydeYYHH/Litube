@@ -52,7 +52,7 @@ import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier,
     searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null) {
     AppTheme {
-        BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("home-screen")) {
+        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("home-screen")) {
             val width = maxWidth.value
             val currentWidth by rememberUpdatedState(width)
             val chipExtraHeight = with(LocalDensity.current) { (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) }
@@ -101,7 +101,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
             val searchOpen = state.overlay == HomeOverlay.Search
             Column(Modifier.fillMaxSize().then(if (state.overlay != HomeOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
                 if (state.content == HomeContent.Loading) {
-                    Box(Modifier.zIndex(1f).fillMaxWidth().height(DesignTokens.TopBarHeight).headerShadow().background(Color.White))
+                    Box(Modifier.zIndex(1f).fillMaxWidth().height(DesignTokens.TopBarHeight).headerShadow().background(DesignTokens.Background))
                 } else if (feed == null) {
                     HomeTopBar(onAction)
                 }
@@ -110,7 +110,12 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
                     when (val content = state.content) {
                         is HomeContent.Empty -> EmptyHome(content, showTools = !searchOpen, wide = width >= 528, onAction)
-                        HomeContent.Failed -> ErrorHome(onAction)
+                        HomeContent.Failed -> if (state.verification != null) VerificationCard(
+                            state.verification,
+                            onVerify = { onAction(HomeAction.Navigate(HomeNavigationRequest.OpenVerification(state.verification!!.challengeUrl))) },
+                            onDismiss = { onAction(HomeAction.DismissVerification) },
+                            modifier = Modifier.testTag("home-verification"),
+                        ) else ErrorHome(onAction)
                         HomeContent.Loading -> HomeSkeleton(width)
                         is HomeContent.Feed -> Box(Modifier.fillMaxSize()) {
                             Column(Modifier.fillMaxSize()) {
@@ -141,8 +146,8 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 }
                             }
                             }
-                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(Color.White)) { ChipStrip(state.selectedChip, state.chips, onAction) }
-                            Box(Modifier.graphicsLayer { translationY = -48f * chromeOffset * density }.background(Color.White)) { HomeTopBar(onAction) }
+                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(DesignTokens.Background)) { ChipStrip(state.selectedChip, state.chips, onAction) }
+                            Box(Modifier.graphicsLayer { translationY = -48f * chromeOffset * density }.background(DesignTokens.Background)) { HomeTopBar(onAction) }
                         }
                     }
                     }
@@ -183,6 +188,16 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     },
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
                     onSelect = { onAction(HomeAction.FeedbackReason(it.label)) },
+                )
+            }
+            if (feed != null) state.verification?.let { verification ->
+                VerificationBanner(
+                    verification,
+                    onVerify = { onAction(HomeAction.Navigate(HomeNavigationRequest.OpenVerification(verification.challengeUrl))) },
+                    onDismiss = { onAction(HomeAction.DismissVerification) },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(start = 16.dp, end = 16.dp, bottom = DesignTokens.BottomBarHeight + 16.dp)
+                        .testTag("home-verification-banner"),
                 )
             }
         }
@@ -260,7 +275,7 @@ private fun ChipStrip(selected: String, chips: List<String>, onAction: (HomeActi
             Box(Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).background(if (chip == selected) DesignTokens.Ink else DesignTokens.Surface)
                 .selectable(chip == selected, role = Role.Tab) { onAction(HomeAction.SelectChip(chip)) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center) {
-                AppText(chip, size = 14, line = 20, weight = FontWeight.Medium, color = if (chip == selected) Color.White else DesignTokens.Ink)
+                AppText(chip, size = 14, line = 20, weight = FontWeight.Medium, color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
     }
@@ -287,7 +302,7 @@ private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Bool
         } else Spacer(Modifier.height(12.dp))
         Column(Modifier.padding(horizontal = 16.dp).widthIn(max = 392.dp).fillMaxWidth().testTag("empty-message")
             .messageCardShadow()
-            .background(Color.White, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
+            .background(DesignTokens.Background, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
             AppText(content.title, size = 24, line = 32, weight = FontWeight.Black, align = TextAlign.Center)
             Spacer(Modifier.height(12.dp))

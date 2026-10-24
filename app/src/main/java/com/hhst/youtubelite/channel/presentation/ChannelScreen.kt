@@ -79,7 +79,7 @@ fun ChannelScreen(
     modifier: Modifier = Modifier,
 ) {
     AppTheme {
-        BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("channel-page")) {
+        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("channel-page")) {
             val width = maxWidth.value
             val height = maxHeight.value
             // Each tab owns a list state that survives tab switches and activity recreation.
@@ -161,7 +161,7 @@ private fun ChannelNavigationBar(onAction: (ChannelAction) -> Unit) {
 @Composable
 private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (ChannelAction) -> Unit) {
     val title = (state.content as? ChannelContent.Ready)?.page?.profile?.name ?: ""
-    Row(Modifier.fillMaxWidth().height(ChannelLayout.ToolbarHeight.dp).background(Color.White)
+    Row(Modifier.fillMaxWidth().height(ChannelLayout.ToolbarHeight.dp).background(DesignTokens.Background)
         .testTag("channel-topbar"), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(53.dp), contentAlignment = Alignment.CenterStart) {
             AppIconButton(AppIcon.Back, "Close the channel page", diameter = 48.dp) { onBack() }
@@ -180,7 +180,7 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
 
 @Composable
 internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Color.White).testTag("channel-tabbar")) {
+    Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("channel-tabbar")) {
         Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
             .horizontalScroll(rememberScrollState()).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
@@ -352,14 +352,14 @@ private fun ChannelVideoRow(
             Spacer(Modifier.height(2.dp))
             if (video.age.isNotBlank() && video.views.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AppText(video.views, size = 12, line = 16, maxLines = 1, color = VideoMeta)
+                    AppText(video.views, size = 12, line = 16, maxLines = 1, color = DesignTokens.Secondary)
                     Spacer(Modifier.width(4.dp))
-                    AppText("•", size = 12, line = 16, maxLines = 1, color = VideoMeta)
+                    AppText("•", size = 12, line = 16, maxLines = 1, color = DesignTokens.Secondary)
                     Spacer(Modifier.width(4.dp))
-                    AppText(video.age, size = 12, line = 16, maxLines = 1, color = VideoMeta)
+                    AppText(video.age, size = 12, line = 16, maxLines = 1, color = DesignTokens.Secondary)
                 }
             } else {
-                AppText(listOf(video.views, video.age).filter { it.isNotBlank() }.joinToString(" • "), size = 12, line = 16, maxLines = 1, color = VideoMeta)
+                AppText(listOf(video.views, video.age).filter { it.isNotBlank() }.joinToString(" • "), size = 12, line = 16, maxLines = 1, color = DesignTokens.Secondary)
             }
         }
         AppIconButton(AppIcon.More, "More actions for ${video.title}", diameter = menuDiameter) {
@@ -368,7 +368,7 @@ private fun ChannelVideoRow(
     }
 }
 
-private val VideoMeta = DesignTokens.Secondary
+
 
 @Composable
 private fun ChannelBanner(asset: String?, width: Float) {
@@ -523,11 +523,12 @@ private fun ChannelDescription(description: String, width: Float, onAction: (Cha
     BoxWithConstraints(Modifier.fillMaxWidth().testTag("channel-description")
         .clickable(role = Role.Button) { onAction(ChannelAction.OpenFullDescription) }) {
         val limit = ChannelLayout.descriptionLines(width)
-        val text = remember(description, constraints.maxWidth, style, density.fontScale) {
+        val ink = DesignTokens.Ink
+        val text = remember(description, constraints.maxWidth, style, density.fontScale, ink) {
             fun summary(end: Int) = buildAnnotatedString {
                 append(description.take(end).trimEnd())
                 if (end > 0) append(" ")
-                withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = DesignTokens.Ink)) { append("...more") }
+                withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = ink)) { append("...more") }
             }
             var low = 0
             var high = description.length
@@ -563,17 +564,19 @@ private fun ChannelLinks(profile: ChannelProfile, width: Float, onAction: (Chann
 
 @Composable
 private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, subscribed: Boolean = false) {
+    val foreground = if (DesignTokens.Background == Color.White) SubscribeForeground else DesignTokens.Background
+    val subscribedBackground = if (DesignTokens.Background == Color.White) SubscribeForeground else DesignTokens.Surface
     Box(Modifier
         .then(if (wide) Modifier.wrapContentSize(align = Alignment.TopStart, unbounded = false) else Modifier.fillMaxWidth(1f))
         .height(ChannelLayout.SubscribeHeight.dp)
         .clip(RoundedCornerShape(ChannelLayout.SubscribeRadius.dp))
-        .background(if (subscribed) SubscribeForeground else DesignTokens.Ink)
+        .background(if (subscribed) subscribedBackground else DesignTokens.Ink)
         .clickable(role = Role.Button) { onAction(ChannelAction.Subscribe) }
         .testTag("channel-subscribe"),
         contentAlignment = Alignment.Center) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             AppText(if (subscribed) "Subscribed" else "Subscribe", size = 14, line = 18, weight = FontWeight.Medium,
-                color = if (subscribed) DesignTokens.Ink else SubscribeForeground)
+                color = if (subscribed) DesignTokens.Ink else foreground)
         }
     }
 }

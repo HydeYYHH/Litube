@@ -53,7 +53,7 @@ import com.hhst.youtubelite.ui.design.*
 /** The subscriptions page: chip strip, feed grid and the channels overlay. */
 @Composable
 fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAction) -> Unit, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("subscriptions-screen")) {
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("subscriptions-screen")) {
         val width = maxWidth.value
         val gridState = rememberLazyGridState()
         Column(Modifier.fillMaxSize().then(if (state.overlay != SubscriptionsOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
@@ -99,7 +99,7 @@ private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<Subs
                 .clickable(role = Role.Tab) { onAction(SubscriptionsAction.SelectChip(chip)) }
                 .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                 AppText(chip.label, size = 14, line = 20, weight = FontWeight.Medium,
-                    color = if (chip == selected) Color.White else DesignTokens.Ink)
+                    color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
         item {
@@ -263,7 +263,7 @@ internal fun SubscriptionsError(onRetry: () -> Unit) {
 
 @Composable
 private fun ChannelsOverlay(onAction: (SubscriptionsAction) -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color.White).testTag("channels-overlay")) {
+    Box(Modifier.fillMaxSize().background(DesignTokens.Background).testTag("channels-overlay")) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight), verticalAlignment = Alignment.CenterVertically) {
                 AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onAction(SubscriptionsAction.CloseChannels) }

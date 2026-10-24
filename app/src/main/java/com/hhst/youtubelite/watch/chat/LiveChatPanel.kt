@@ -103,7 +103,7 @@ private fun LiveChatSurface(
     val shape = if (compact) RoundedCornerShape(topStart = CommentsLayout.SheetRadius.dp,
         topEnd = CommentsLayout.SheetRadius.dp) else RectangleShape
     Column(
-        modifier.fillMaxSize().background(Color.White, shape)
+        modifier.fillMaxSize().background(DesignTokens.Background, shape)
             .semantics { paneTitle = "Live chat" }
             .testTag("live-chat"),
     ) {

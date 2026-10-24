@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.isTrafficChallenge
 
 class WatchViewModel(
     private val repository: WatchRepository,
@@ -146,6 +147,13 @@ class WatchViewModel(
             WatchAction.Retry -> load()
             WatchAction.VoiceSearch -> navigation.trySend(WatchNavigationRequest.VoiceSearch)
             WatchAction.ToggleDescription -> toggleDescription()
+            is WatchAction.SeekToTimestamp -> {
+                val video = (uiState.value.content as? WatchContent.Ready)?.page?.video ?: return
+                // A live stream has no fixed timeline: explain instead of seeking.
+                if (video.live) notices.trySend(AppNotice.Message("Live streams can't be seeked to a timestamp."))
+                else navigation.trySend(WatchNavigationRequest.SeekTo(action.seconds))
+            }
+            is WatchAction.OpenDescriptionLink -> navigation.trySend(WatchNavigationRequest.OpenLink(action.url))
             WatchAction.OpenSearch -> editSearch(true, uiState.value.draftQuery)
             WatchAction.CloseSearch -> editSearch(false, uiState.value.draftQuery)
             is WatchAction.QueryChanged -> editSearch(true, action.query)
@@ -263,6 +271,10 @@ class WatchViewModel(
             is WatchAction.OpenRelated -> navigation.trySend(WatchNavigationRequest.Watch(action.videoId))
             is WatchAction.OpenItemMenu -> overlay(WatchOverlay.ItemMenu(action.videoId))
             WatchAction.CloseOverlay -> overlay(WatchOverlay.None)
+            WatchAction.DismissVerification -> _state.update { it.copy(verification = null) }
+            WatchAction.OpenVerification -> uiState.value.verification?.let {
+                navigation.trySend(WatchNavigationRequest.OpenVerification(it.challengeUrl))
+            }
             is WatchAction.MenuAction -> {
                 val menu = uiState.value.overlay as? WatchOverlay.ItemMenu ?: return
                 when (action.action) {
@@ -416,7 +428,7 @@ class WatchViewModel(
         val videoId = uiState.value.videoId
         loadJob?.cancel()
         val requestGeneration = ++generation
-        _state.update { it.copy(content = WatchContent.Loading) }
+        _state.update { it.copy(content = WatchContent.Loading, verification = null) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.watch(videoId)
@@ -425,11 +437,31 @@ class WatchViewModel(
                 updateCounts()
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: com.hhst.youtubelite.data.media.MediaException) {
+                if (requestGeneration != generation) return@launch
+                if (error.failure.isTrafficChallenge()) {
+                    _state.update { it.copy(content = WatchContent.Failed,
+                        verification = com.hhst.youtubelite.core.VerificationRequired(error.failure.detail!!)) }
+                } else {
+                    _state.update { it.copy(content = WatchContent.Failed) }
+                }
             } catch (_: Exception) {
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = WatchContent.Failed) }
             }
         }
+    }
+
+    /**
+     * The host reports the verification screen finished with RESULT_OK. The read
+     * retries once with the current identity — never automatically on another
+     * failure, so no request loop can form.
+     */
+    fun verificationCompleted(challengeUrl: String? = uiState.value.verification?.challengeUrl) {
+        if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
+        _state.update { it.copy(verification = null) }
+        notices.trySend(AppNotice.Message("Verification finished. Retrying…"))
+        load()
     }
 
     override fun onCleared() { navigation.close() }

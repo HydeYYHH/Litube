@@ -7,7 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -127,7 +127,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by youViewModel.uiState.collectAsStateWithLifecycle()
             val back: () -> Unit = {
                 if (youViewModel.saveSheet?.state?.value != null) youViewModel.saveSheet?.close()
@@ -138,7 +138,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
             BackHandler(onBack = back)
             YouScreen(state, youViewModel::onAction,
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             youViewModel.saveSheet?.let { sheet ->
                 val sheetState by sheet.state.collectAsStateWithLifecycle()

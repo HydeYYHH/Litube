@@ -10,7 +10,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,14 +35,14 @@ import com.hhst.youtubelite.ui.about.AboutActivity
 import org.koin.android.ext.android.inject
 
 /** Native settings host; preferences are written to the existing MMKV preference store. */
-class SettingsActivity : ComponentActivity() {
+class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private val extensionManager: ExtensionManager by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val initial = SettingsPage.parse(intent.getStringExtra(EXTRA_PAGE))
-        setContent {
+        setAppContent {
             var page by rememberSaveable { mutableStateOf(initial.argument) }
             var preferences by remember { mutableStateOf(extensionManager.allPreferences()) }
             val context = LocalContext.current

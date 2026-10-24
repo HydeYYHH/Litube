@@ -181,7 +181,7 @@ private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) 
                         }.testTag("post-image-${item.id}-$index")) {
                         Artwork(item.images[index], Modifier.fillMaxSize())
                         if (item.images.size > 1) Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(36.dp, 24.dp)
-                            .background(DesignTokens.Ink, CircleShape), contentAlignment = Alignment.Center) {
+                            .background(Color(0xFF0F0F0F), CircleShape), contentAlignment = Alignment.Center) {
                             AppText("${index + 1}/${item.images.size}", size = 14, line = 20, color = Color.White)
                         }
                     }

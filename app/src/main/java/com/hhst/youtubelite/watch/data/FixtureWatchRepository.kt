@@ -13,7 +13,11 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
     override suspend fun watch(videoId: String): WatchPage {
         delay(140)
         if (scenario == WatchScenario.Error) throw java.io.IOException("Local error scenario")
-        return samplePage(videoId)
+        val page = samplePage(videoId)
+        if (scenario == WatchScenario.Description) {
+            return page.copy(video = page.video.copy(description = linkedSampleDescription))
+        }
+        return page
     }
 
     companion object {
@@ -116,17 +120,30 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
             video = sampleVideo(videoId),
             related = sampleRelated().filterNot { it.id == videoId },
         )
+
+        /**
+         * Description used by [WatchScenario.Description] for interaction tests:
+         * chapter timestamps (including an invalid one), a same-video link with a
+         * start time, another video, and one external page.
+         */
+        val linkedSampleDescription = """
+            Chapters: 0:42 setup, 12:34 the middle act, 1:02:03 credits.
+            Cut 99:99 is not a real timestamp. Sources and a full write-up at
+            https://www.blender.org/about/ and on https://youtu.be/aqz-KE-bpKQ?t=90.
+        """.trimIndent().replace('\n', ' ')
     }
 }
 
 /** Debug intent names are stable so previews and instrumentation use the same fixtures. */
 enum class WatchScenario(val argument: String) {
-    Content("content"), Loading("loading"), Error("error");
+    Content("content"), Loading("loading"), Error("error"),
+    /** Test seam: the sample video carries a description with timestamps and links. */
+    Description("description");
 
     fun initialContent(): WatchContent = if (this == Error) WatchContent.Failed else WatchContent.Loading
 
-    /** Only the ordinary content entry loads the local fixture; other states are pinned previews. */
-    fun loadsContent(): Boolean = this == Content
+    /** Only content scenarios load the local fixture; other states are pinned previews. */
+    fun loadsContent(): Boolean = this == Content || this == Description
 
     companion object {
         fun parse(value: String?) = entries.firstOrNull { it.argument == value } ?: Content

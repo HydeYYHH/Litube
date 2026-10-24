@@ -2,7 +2,7 @@ package com.hhst.youtubelite.settings
 
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -19,7 +19,7 @@ class PlaybackSettingsActivity : NativeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
+        setAppContent {
             var data by rememberSaveable { mutableStateOf(false) }
             BackHandler { if (data) data = false else finish() }
             AppTheme {

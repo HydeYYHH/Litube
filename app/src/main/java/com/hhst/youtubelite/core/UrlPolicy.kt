@@ -56,6 +56,11 @@ object UrlPolicy {
             })
     }
 
+    fun isVerificationReturn(url: String?): Boolean = isAllowedUrl(url) && !isTrafficChallenge(url) &&
+        !isLoginUrl(url) && hostOf(url!!)?.lowercase(Locale.ROOT)?.let {
+            isYoutubeHost(it) && it !in setOf("accounts.youtube.com", "consent.youtube.com")
+        } == true
+
     fun shouldInject(url: String?): Boolean = isAllowedUrl(url) && !isLoginUrl(url) && !isTrafficChallenge(url) &&
         hostOf(url!!)?.lowercase(Locale.ROOT)?.let { isYoutubeHost(it) || it == "youtu.be" } == true
 

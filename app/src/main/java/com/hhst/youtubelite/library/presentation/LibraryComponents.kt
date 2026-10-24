@@ -46,7 +46,7 @@ internal fun LibraryMessageCard(title: String, message: String, tag: String, act
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag(tag).padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Column(Modifier.widthIn(max = 392.dp).fillMaxWidth().messageCardShadow()
-            .background(Color.White, RoundedCornerShape(12.dp))
+            .background(DesignTokens.Background, RoundedCornerShape(12.dp))
             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
             AppText(title, size = 24, line = 32, weight = FontWeight.Black, align = androidx.compose.ui.text.style.TextAlign.Center)

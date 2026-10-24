@@ -7,7 +7,7 @@ import android.os.Bundle
 import com.hhst.youtubelite.navigation.openContentLink
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.compose.BackHandler
 import com.hhst.youtubelite.channel.domain.ChannelAction
 import com.hhst.youtubelite.channel.domain.ChannelOverlay
@@ -132,12 +132,12 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val state by channelViewModel.uiState.collectAsStateWithLifecycle()
             val back = { if (state.overlay != ChannelOverlay.None) channelViewModel.onAction(ChannelAction.CloseOverlay) else finish() }
             BackHandler(onBack = back)
             ChannelScreen(state, channelViewModel::onAction, onBack = back,
-                modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+                modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             itemMenu?.let { item ->
                 com.hhst.youtubelite.ui.components.MediaActionsDialog(item) { itemMenu = null }

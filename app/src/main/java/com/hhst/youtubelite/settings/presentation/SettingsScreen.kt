@@ -44,7 +44,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onAdvanced: (() -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White).testTag("settings-screen")) {
+    com.hhst.youtubelite.ui.design.AppTheme {
+    Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("settings-screen")) {
         SettingsTopBar(page.title, onBack)
         Box(Modifier.fillMaxWidth().weight(1f)) {
             Column(Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()
@@ -58,6 +59,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
     }
 }
 

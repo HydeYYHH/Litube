@@ -2,9 +2,8 @@ package com.hhst.youtubelite.account
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -55,7 +54,7 @@ import com.hhst.youtubelite.ui.theme.YoutubeStyle
  * Displays a device code while the account is confirmed in a browser.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-class SignInActivity : ComponentActivity() {
+class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
 
     /** The page the user must open; exposed for instrumentation. */
     var currentUrl: String? = null
@@ -82,14 +81,14 @@ class SignInActivity : ComponentActivity() {
                     return SignInViewModel(service) as T
                 }
             })[SignInViewModel::class.java]
-        setContent {
+        setAppContent {
             val state by model.uiState.collectAsStateWithLifecycle()
             androidx.compose.runtime.SideEffect {
                 currentUrl = (state as? SignInUiState.Ready)?.verificationUrl
             }
             LaunchedEffect(state) { if (state == SignInUiState.Success) finish() }
             BackHandler { finish() }
-            Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)
+            Column(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                 .windowInsetsPadding(WindowInsets.safeDrawing).testTag("signin-screen")) {
                 YoutubeTopAppBar(title = { AppText("Sign in", size = 18, line = 24, weight = FontWeight.Medium) })
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), contentAlignment = Alignment.TopCenter) {

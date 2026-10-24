@@ -93,6 +93,8 @@ data class HomeUiState(
     val avatar: String? = null,
     /** Production mode: feedback menu rows without server tokens hide. Fixtures keep the recorded menus. */
     val live: Boolean = false,
+    /** Set when the feed read came back as a `/sorry` traffic challenge; existing content stays visible. */
+    val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
     val suggestions: List<String> get() = if (query.isBlank()) emptyList() else listOf(
         query.trim(), "${query.trim()} documentary", "${query.trim()} music", "${query.trim()} live",
@@ -143,6 +145,7 @@ sealed interface HomeNavigationRequest {
     data class PostComments(val postId: String, val channelId: String = "studio") : HomeNavigationRequest
     data class OpenPost(val channelId: String, val postId: String) : HomeNavigationRequest
     data class OpenLink(val url: String) : HomeNavigationRequest
+    data class OpenVerification(val challengeUrl: String) : HomeNavigationRequest
     data object VoiceSearch : HomeNavigationRequest
     data object Explore : HomeNavigationRequest
 }
@@ -165,6 +168,7 @@ sealed interface HomeAction {
     data class Navigate(val request: HomeNavigationRequest) : HomeAction
     data object Refresh : HomeAction
     data object LoadNext : HomeAction
+    data object DismissVerification : HomeAction
 }
 
 /** Layout dimensions use the available window bounds in dp. */

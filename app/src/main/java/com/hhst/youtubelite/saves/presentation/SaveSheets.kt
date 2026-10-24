@@ -166,7 +166,7 @@ fun NewPlaylistSheet(
             Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
-                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(Color.White)
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Background)
                 .verticalScroll(rememberScrollState())
                 .testTag("new-playlist-sheet").semantics { paneTitle = "New playlist" },
         ) {
@@ -228,7 +228,7 @@ private fun SheetField(
         value, onValue,
         modifier.heightIn(min = CommentsLayout.InputHeight.dp).fillMaxWidth()
             .clip(RoundedCornerShape(CommentsLayout.InputRadius.dp))
-            .border(1.dp, Color.Black.copy(alpha = CommentsLayout.DividerAlpha),
+            .border(1.dp, DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha),
                 RoundedCornerShape(CommentsLayout.InputRadius.dp))
             .padding(horizontal = CommentsLayout.InputTextInset.dp, vertical = 8.dp)
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)

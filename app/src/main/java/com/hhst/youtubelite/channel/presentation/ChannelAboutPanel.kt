@@ -51,7 +51,7 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
     Column(Modifier.offset(x = if (docked) (width - ChannelAboutLayout.panelWidth(width, height)).dp else 0.dp, y = top.dp)
         .height((height - top).dp).width(ChannelAboutLayout.panelWidth(width, height).dp)
         .clip(RoundedCornerShape(topStart = if (square) 0.dp else 12.dp, topEnd = if (square) 0.dp else 12.dp))
-        .background(Color.White).pointerInput(Unit) { detectTapGestures {} }
+        .background(DesignTokens.Background).pointerInput(Unit) { detectTapGestures {} }
         .semantics { paneTitle = "About ${profile.name}" }.testTag("channel-about-panel")) {
         Box(Modifier.fillMaxWidth().height(12.dp).padding(top = 8.dp), contentAlignment = Alignment.TopCenter) {
             if (!square) Box(Modifier.size(40.dp, 4.dp).background(DesignTokens.Ink.copy(alpha = .15f), RoundedCornerShape(4.dp)))

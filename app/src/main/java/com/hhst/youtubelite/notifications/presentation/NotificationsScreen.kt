@@ -32,7 +32,7 @@ import com.hhst.youtubelite.ui.design.*
 /** The notifications page: anonymous prompt, empty, loading, error and ready states. */
 @Composable
 fun NotificationsScreen(state: NotificationsUiState, onAction: (NotificationsAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().background(Color.White).testTag("notifications-screen")) {
+    Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("notifications-screen")) {
         Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("notifications-bar"), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
             AppText("Notifications", Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)

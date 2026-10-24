@@ -84,7 +84,7 @@ fun AccountSwitchSheet(
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp - 16.dp).coerceAtLeast(0.dp))
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp))
-                .background(Color.White)
+                .background(DesignTokens.Background)
                 .verticalScroll(rememberScrollState())
                 .testTag("account-switch")
                 .semantics { paneTitle = "Switch account" },

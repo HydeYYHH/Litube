@@ -7,7 +7,12 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -347,6 +352,53 @@ class WatchScreenAndroidTest {
         watch?.onActivity {
             assertEquals("bunny", it.watchViewModel.uiState.value.videoId)
             assertNull(it.lastNavigationRequest)
+        }
+    }
+
+    /**
+     * performClick re-resolves text in the merged tree and misses the per-link virtual
+     * nodes, so scroll the description into view and tap the link's own layout bounds.
+     */
+    private fun clickDescriptionLink(label: String) {
+        compose.onNodeWithTag("watch-scroll").performScrollToNode(hasTestTag("watch-description"))
+        val page = compose.onNodeWithTag("watch-scroll").fetchSemanticsNode()
+        val container = compose.onNodeWithTag("watch-description", useUnmergedTree = true).fetchSemanticsNode()
+        val found = findLayoutNode(container)
+            ?: throw AssertionError("description text exposes no layout result")
+        val (node, layout) = found
+        val index = layout.layoutInput.text.indexOf(label)
+        check(index >= 0) { "'$label' is not part of the description text" }
+        val box = layout.getBoundingBox(index + label.length / 2)
+        val x = node.positionInRoot.x + box.left + box.width / 2f - page.positionInRoot.x
+        val y = node.positionInRoot.y + box.top + box.height / 2f - page.positionInRoot.y
+        compose.onNodeWithTag("watch-scroll").performTouchInput { click(Offset(x, y)) }
+    }
+
+    private fun findLayoutNode(node: SemanticsNode): Pair<SemanticsNode, TextLayoutResult>? {
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+        layouts.firstOrNull()?.let { return node to it }
+        node.children.forEach { findLayoutNode(it)?.let { found -> return found } }
+        return null
+    }
+
+    @Test fun descriptionTimestampSeeksTheCurrentVideoThroughTheHost() {
+        launchWatch("harbour", WatchScenario.Description)
+        awaitReady()
+        compose.onNodeWithContentDescription("Show more").performClick()
+        awaitNode("watch-description")
+        clickDescriptionLink("0:42")
+        watch?.onActivity { assertEquals(WatchNavigationRequest.SeekTo(42), it.lastNavigationRequest) }
+    }
+
+    @Test fun descriptionLinkReachesTheRoutingBoundaryWithoutLeavingThePageItself() {
+        launchWatch("harbour", WatchScenario.Description)
+        awaitReady()
+        compose.onNodeWithContentDescription("Show more").performClick()
+        awaitNode("watch-description")
+        clickDescriptionLink("https://youtu.be/aqz-KE-bpKQ?t=90")
+        watch?.onActivity {
+            assertEquals(WatchNavigationRequest.OpenLink("https://youtu.be/aqz-KE-bpKQ?t=90"), it.lastNavigationRequest)
         }
     }
 

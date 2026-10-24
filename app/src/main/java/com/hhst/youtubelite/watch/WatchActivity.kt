@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.watch
 
 import com.hhst.youtubelite.comments.presentation.bindCommentNotices
+import com.hhst.youtubelite.navigation.openContentLink
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -8,7 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
+import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -89,6 +90,14 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         private set
     var lastCommentRequest: CommentNavigationRequest? = null
         private set
+
+    private val verificationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        // Cancelled verification keeps the card; a completed one grants one retry.
+        if (result.resultCode == RESULT_OK) watchViewModel.verificationCompleted(
+            result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
+    }
 
     /** Test seams: recorded payloads plus launch suppression for instrumentation runs. */
     var lastDownloadSpec: DownloadSingleSpec? = null
@@ -190,7 +199,13 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     when (request) {
                         is WatchNavigationRequest.Channel -> startActivity(ChannelActivity.intent(this@WatchActivity, request.channelId))
                         is WatchNavigationRequest.Search -> startActivity(SearchResultsActivity.intent(this@WatchActivity, request.query))
-                        is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId))
+                        is WatchNavigationRequest.Watch -> startActivity(intent(this@WatchActivity, request.videoId)
+                            .putExtra(EXTRA_START_SECONDS, request.startSeconds ?: 0L))
+                        is WatchNavigationRequest.SeekTo -> playerViewModel.onSeek(request.seconds * 1000)
+                        is WatchNavigationRequest.OpenLink -> openDescriptionLink(request.url)
+                        is WatchNavigationRequest.OpenVerification -> verificationLauncher.launch(
+                            Intent(this@WatchActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
+                                .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         WatchNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is WatchNavigationRequest.Share -> shareGateway.share(request.videoId)
                         is WatchNavigationRequest.Download -> {
@@ -289,7 +304,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 }
             }
         }
-        setContent {
+        setAppContent {
             val pip by inPip.collectAsStateWithLifecycle()
             val playerViewModel: PlayerViewModel = koinInject()
             val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
@@ -343,7 +358,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 }
             }
             BackHandler(onBack = back)
-            Box(Modifier.fillMaxSize().background(ComposeColor.White)) {
+            Box(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)) {
                 BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
                         state.overlay is WatchOverlay.Save || state.overlay is WatchOverlay.Feedback ||
@@ -435,6 +450,34 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         val prefs = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         watchViewModel.refreshVoteCounts(prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_SHOW_LIKES),
             prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_DISPLAY_DISLIKES))
+    }
+
+    /**
+     * Routes a description link: same-video links (with or without a timestamp)
+     * seek the existing player instead of rebuilding the page, YouTube links go
+     * through the app's content-link boundary, and anything else gets an explicit
+     * external browser open. [com.hhst.youtubelite.navigation.ContentLink.parse]
+     * already rejected lookalike hosts, credentials, and non-https schemes.
+     */
+    private fun openDescriptionLink(url: String) {
+        val link = com.hhst.youtubelite.navigation.ContentLink.parse(url)
+        val currentId = playerViewModel.uiState.value.videoId
+        if (link is com.hhst.youtubelite.navigation.ContentLink.Video && link.id == currentId) {
+            if (playerViewModel.uiState.value.isLive != true) playerViewModel.onSeek((link.seconds ?: 0L) * 1000)
+            return
+        }
+        if (link != null && openContentLink(url)) return
+        if (link == null && android.net.Uri.parse(url).scheme?.lowercase() in setOf("http", "https")) {
+            runCatching {
+                val probe = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com"))
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                val browser = packageManager.queryIntentActivities(probe, 0).firstOrNull {
+                    it.activityInfo.packageName != packageName
+                }?.activityInfo?.packageName ?: error("No browser available")
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addCategory(Intent.CATEGORY_BROWSABLE).setPackage(browser))
+            }.onFailure { renderNotice(com.hhst.youtubelite.core.AppNotice.Message("Couldn't open this link.")) }
+        }
     }
 
     companion object {

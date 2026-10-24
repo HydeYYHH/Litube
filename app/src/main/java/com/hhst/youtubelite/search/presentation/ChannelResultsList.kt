@@ -72,6 +72,7 @@ private fun ChannelSubscribe(channelId: String, onAction: (SearchAction) -> Unit
         .clickable(role = Role.Button) { onAction(SearchAction.Subscribe(channelId)) }
         .testTag("search-channel-subscribe-$channelId").padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center) {
-        AppText("Subscribe", size = 14, line = 20, weight = FontWeight.Medium, color = Color(0xFFF1F1F1), maxLines = 1)
+        AppText("Subscribe", size = 14, line = 20, weight = FontWeight.Medium,
+            color = if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Background, maxLines = 1)
     }
 }

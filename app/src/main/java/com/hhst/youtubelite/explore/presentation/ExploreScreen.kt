@@ -41,7 +41,7 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 
 @Composable
 fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().background(Color.White).testTag("explore-screen")) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("explore-screen")) {
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("explore-topbar"), verticalAlignment = Alignment.CenterVertically) {
@@ -72,7 +72,7 @@ private fun CategoryChips(selected: ExploreCategory, onAction: (ExploreAction) -
                 .testTag("explore-chip-${category.name}")
                 .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                 AppText(category.label, size = 14, line = 20, weight = FontWeight.Medium,
-                    color = if (category == selected) Color.White else DesignTokens.Ink)
+                    color = if (category == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
     }

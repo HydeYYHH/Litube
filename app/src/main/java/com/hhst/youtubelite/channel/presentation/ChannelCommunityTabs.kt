@@ -329,7 +329,7 @@ private fun PostCard(
             )
             if (!expanded && overflow) {
                 Row(
-                    Modifier.align(Alignment.BottomEnd).background(Color.White)
+                    Modifier.align(Alignment.BottomEnd).background(DesignTokens.Background)
                         .clickable(role = Role.Button) {
                             onAction(ChannelAction.TogglePostExpanded(post.identity))
                         }.testTag("channel-post-read-more-${post.identity.postId}"),
@@ -420,7 +420,7 @@ private fun ChannelSortChips(
             ) {
                 AppText(
                     option.label, size = 14, line = 20, weight = FontWeight.Medium,
-                    color = if (option == selected) Color.White else DesignTokens.Ink,
+                    color = if (option == selected) DesignTokens.Background else DesignTokens.Ink,
                 )
             }
         }
@@ -473,7 +473,7 @@ private fun SectionStatus(
                         .padding(horizontal = 20.dp).testTag("channel-$key-retry"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = Color.White)
+                    AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
                 }
             }
             is ChannelSection.Ready -> Unit

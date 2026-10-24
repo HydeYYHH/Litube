@@ -61,7 +61,17 @@
     <string name="queue">Queue</string>
     <string name="queue_empty">Queue is empty</string>
     <string name="queue_item_added">Added to queue</string>
+    <string name="queue_item_already">Already in queue</string>
     <string name="queue_item_unavailable">Could not add to queue</string>
+    <string name="title_copied">Title copied</string>
+
+    <string name="verification_title">Verification required</string>
+    <string name="verification_close">Close</string>
+    <string name="verification_banner_text">YouTube asked for verification before more content can load. Existing content stays available.</string>
+    <string name="verification_banner_action">Verify</string>
+    <string name="verification_banner_dismiss">Dismiss</string>
+    <string name="verification_completed">Verification finished. Retrying…</string>
+    <string name="verification_still_blocked">Still blocked after verification. Please try again later.</string>
 
     <string name="queue_remove">Remove from queue</string>
     <string name="application_not_found">Application not found</string>

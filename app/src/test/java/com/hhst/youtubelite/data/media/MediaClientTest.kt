@@ -12,6 +12,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaClientTest {
+    @Test fun redirectsReachTheCoreWithoutFollowingTheChallenge() = runBlocking {
+        MockWebServer().use { server ->
+            val challenge = "https://www.google.com/sorry/index?q=x"
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", challenge))
+            val result = MediaClient(OkHttpClient()).read { _, http -> http.execute(HttpRequest("GET", server.url("/").toString())) }
+            assertEquals(302, result.status)
+            assertEquals(challenge, result.header("Location"))
+            assertEquals(1, server.requestCount)
+        }
+    }
     @Test fun cancellationAbortsTheActiveHttpCall() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
