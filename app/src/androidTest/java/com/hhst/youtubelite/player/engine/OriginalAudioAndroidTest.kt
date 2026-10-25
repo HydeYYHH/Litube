@@ -92,7 +92,7 @@ class OriginalAudioAndroidTest {
             keys.forEach { prefs.setEnabled(it, false) }
             instrumentation.runOnMainSync {
                 val http = OkHttpClient()
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), cache, scope),
+                engine = PlaybackEngine(app, Extractor(cache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), GlobalContext.get().get<JsonCache>(), prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer

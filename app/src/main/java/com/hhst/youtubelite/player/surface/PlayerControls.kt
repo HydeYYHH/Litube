@@ -124,7 +124,7 @@ fun PlayerIconButton(
     }
 }
 
-/** Top: back + title/author + queue / segments / loop / cast / CC / settings. */
+/** Playback title and primary controls. */
 @Composable
 fun TopBar(
     state: PlayerUiState,

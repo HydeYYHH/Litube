@@ -65,6 +65,8 @@ fun MediaActionsDialog(item: MediaActionItem, onDismiss: () -> Unit) {
     val url = VideoShare.urlFor(item.id)
     val executor = (context as? MediaActionHost)?.mediaActionExecutor
     val visibleActions = remember(url) {
+        // Copy title stays off the menu (review decision); the host executor
+        // still offers it for surfaces without a playable web link.
         MediaActionKind.entries.filter { url != null && it != MediaActionKind.CopyTitle }
     }
     Dialog(onDismissRequest = onDismiss) {

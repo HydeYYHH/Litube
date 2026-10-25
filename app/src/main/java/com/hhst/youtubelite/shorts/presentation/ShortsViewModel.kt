@@ -37,8 +37,21 @@ class ShortsViewModel(
         live = videoActions != null,
     ))
     private var loadJob: Job? = null
+    private var appendJob: Job? = null
+    private val consumedCursors = mutableSetOf<String>()
     private var actionJob: Job? = null
     private var generation = 0
+    private var sessionGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
+
+    /** Identity-scoped content (the feed and subscription states) re-reads after an account switch. */
+    fun updateSession(generation: Long) {
+        if (generation == sessionGeneration) return
+        sessionGeneration = generation
+        overlay(ShortsOverlay.None)
+        savedState["currentItem"] = startItemId
+        _uiState.update { it.copy(currentItemId = startItemId) }
+        refresh()
+    }
     val uiState: StateFlow<ShortsUiState> = _uiState.asStateFlow()
     private val navigation = Channel<ShortsNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: Flow<ShortsNavigationRequest> = navigation.receiveAsFlow()
@@ -54,6 +67,8 @@ class ShortsViewModel(
     fun onAction(action: ShortsAction) {
         when (action) {
             ShortsAction.Retry -> refresh()
+            ShortsAction.LoadMore -> loadMore()
+            ShortsAction.RetryMore -> loadMore(retry = true)
             is ShortsAction.SelectItem -> {
                 savedState["currentItem"] = action.itemId
                 _uiState.update { it.copy(currentItemId = action.itemId) }
@@ -124,10 +139,42 @@ class ShortsViewModel(
         _uiState.update { it.copy(overlay = next) }
     }
 
+    private fun loadMore(retry: Boolean = false) {
+        val current = (_uiState.value.content as? ShortsContent.Ready)?.page ?: return
+        val cursor = current.nextKey ?: return
+        if (appendJob?.isActive == true || (uiState.value.appendFailed && !retry)) return
+        if (cursor in consumedCursors) return
+        val request = generation
+        _uiState.update { it.copy(appendLoading = true, appendFailed = false) }
+        appendJob = viewModelScope.launch {
+            try {
+                val page = repository.shortsNext(cursor)
+                if (request != generation) return@launch
+                consumedCursors += cursor
+                _uiState.update { state ->
+                    val readyPage = (state.content as? ShortsContent.Ready)?.page ?: return@update state
+                    val seen = readyPage.items.map { it.id }.toSet()
+                    state.copy(appendLoading = false, appendFailed = false,
+                        content = ShortsContent.Ready(readyPage.copy(
+                            items = (readyPage.items + page.items.filter { it.id !in seen }).distinctBy { it.id },
+                            nextKey = page.nextKey?.takeUnless { it in consumedCursors || page.items.isEmpty() })))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (request == generation) _uiState.update { it.copy(appendLoading = false, appendFailed = true) }
+            }
+        }
+    }
+
     private fun refresh() {
         loadJob?.cancel()
+        appendJob?.cancel()
+        actionJob?.cancel()
+        consumedCursors.clear()
         val request = ++generation
-        _uiState.update { it.copy(content = ShortsContent.Loading) }
+        _uiState.update { it.copy(content = ShortsContent.Loading, appendLoading = false, appendFailed = false,
+            ratings = emptyMap(), subscriptions = emptyMap()) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.shorts()

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Peruutettu</string>
     <string name="about_save_failed">Sovelluslokeja ei voitu tallentaa. Valitse toinen tallennuspaikka ja yritä uudelleen.</string>
     <string name="player_live_unavailable">Suora lähetys ei ole saatavilla. Yritä myöhemmin uudelleen.</string>
+    <string name="autoplay">Automaattinen toisto</string>
+    <string name="queue_item_already">On jo jonossa</string>
+    <string name="title_copied">Otsikko kopioitu</string>
+    <string name="verification_title">Vahvistus vaaditaan</string>
+    <string name="verification_banner_text">YouTube pyysi vahvistusta, ennen kuin lisää sisältöä voidaan ladata. Olemassa oleva sisältö pysyy käytettävissä.</string>
+    <string name="verification_banner_action">Vahvista</string>
+    <string name="verification_banner_dismiss">Hylkää</string>
+    <string name="verification_close">Sulje</string>
+    <string name="verification_completed">Vahvistus valmis. Yritetään uudelleen…</string>
+    <string name="verification_still_blocked">Yhä estetty vahvistuksen jälkeen. Yritä myöhemmin uudelleen.</string>
 </resources>

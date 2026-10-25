@@ -17,7 +17,6 @@ import com.google.gson.Gson
 import com.hhst.youtubelite.core.AndroidWebViewMainGate
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.Future

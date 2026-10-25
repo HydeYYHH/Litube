@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Cancelado</string>
     <string name="about_save_failed">Non se puideron gardar os rexistros da aplicación. Escolle outra localización para gardar e téntao de novo.</string>
     <string name="player_live_unavailable">Emisión en directo non dispoñible. Téntao de novo máis tarde.</string>
+    <string name="autoplay">Reprodución automática</string>
+    <string name="queue_item_already">Xa está na cola</string>
+    <string name="title_copied">Titulo copiado</string>
+    <string name="verification_title">Requírese verificación</string>
+    <string name="verification_banner_text">YouTube pediu verificación antes de cargar máis contido. O contido existente segue dispoñible.</string>
+    <string name="verification_banner_action">Verificar</string>
+    <string name="verification_banner_dismiss">Descartar</string>
+    <string name="verification_close">Pechar</string>
+    <string name="verification_completed">Verificación completada. Tentando de novo…</string>
+    <string name="verification_still_blocked">Aínda bloqueado despois da verificación. Téntao de novo máis tarde.</string>
 </resources>

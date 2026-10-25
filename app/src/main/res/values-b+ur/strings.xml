@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">منسوخ</string>
     <string name="about_save_failed">ایپ لاگز کو محفوظ نہیں کیا جا سکا۔ ایک اور محفوظ مقام کا انتخاب کریں اور دوبارہ کوشش کریں۔</string>
     <string name="player_live_unavailable">براہ راست نشریات دستیاب نہیں ہیں۔ بعد میں دوبارہ کوشش کریں۔</string>
+    <string name="autoplay">آٹو پلے</string>
+    <string name="queue_item_already">پہلے سے قطار میں ہے</string>
+    <string name="title_copied">عنوان کاپی ہو گیا</string>
+    <string name="verification_title">تصدیق درکار ہے</string>
+    <string name="verification_banner_text">مزید مواد لوڈ ہونے سے پہلے YouTube نے تصدیق کی درخواست کی ہے۔ موجودہ مواد دستیاب رہتا ہے۔</string>
+    <string name="verification_banner_action">تصدیق کریں</string>
+    <string name="verification_banner_dismiss">مسترد کریں</string>
+    <string name="verification_close">بند کریں</string>
+    <string name="verification_completed">تصدیق مکمل ہو گئی۔ دوبارہ کوشش جاری ہے…</string>
+    <string name="verification_still_blocked">تصدیق کے بعد بھی بلاک ہے۔ براہ کرم بعد میں دوبارہ کوشش کریں۔</string>
 </resources>

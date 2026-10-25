@@ -151,7 +151,7 @@ class NamedAudioAndroidTest {
             instrumentation.runOnMainSync {
                 val prefs = GlobalContext.get().get<ExtensionManager>()
                 val http = OkHttpClient()
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), fixtureCache, scope),
+                engine = PlaybackEngine(app, Extractor(fixtureCache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), GlobalContext.get().get<JsonCache>(), prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer

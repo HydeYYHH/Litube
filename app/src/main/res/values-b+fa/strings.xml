@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">لغو شد</string>
     <string name="about_save_failed">گزارش‌های برنامه ذخیره نشد. مکان ذخیره دیگری را انتخاب کنید و دوباره امتحان کنید.</string>
     <string name="player_live_unavailable">پخش زنده در دسترس نیست. بعداً دوباره تلاش کنید.</string>
+    <string name="autoplay">پخش خودکار</string>
+    <string name="queue_item_already">از قبل در صف است</string>
+    <string name="title_copied">عنوان کپی شد</string>
+    <string name="verification_title">تأیید لازم است</string>
+    <string name="verification_banner_text">یوتیوب پیش از بارگیری محتوای بیشتر، درخواست تأیید کرد. محتوای موجود در دسترس می‌ماند.</string>
+    <string name="verification_banner_action">تأیید کنید</string>
+    <string name="verification_banner_dismiss">رد کردن</string>
+    <string name="verification_close">بستن</string>
+    <string name="verification_completed">تأیید انجام شد. تلاش دوباره…</string>
+    <string name="verification_still_blocked">پس از تأیید همچنان مسدود است. بعداً دوباره تلاش کنید.</string>
 </resources>

@@ -23,8 +23,9 @@ import okhttp3.Request
 import okhttp3.Response
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Media3 and cast consume the extractor's session, client, method and bounded range plan. */
 @UnstableApi
@@ -34,8 +35,8 @@ class YoutubeHttpDataSource private constructor(
     private val rnParameterEnabled: Boolean,
     private val userAgent: String,
     private val mediaRequests: YoutubeMediaRequests?,
-    private val inheritedPlan: RequestPlan?,
-    private val planResolver: ((String) -> RequestPlan?)?,
+    private val inheritedPlan: MediaRequestPlan?,
+    private val planResolver: ((String) -> MediaRequestPlan?)?,
 ) : BaseDataSource(true), HttpDataSource {
 
     private val requestProperties = HttpDataSource.RequestProperties()
@@ -46,12 +47,12 @@ class YoutubeHttpDataSource private constructor(
     private var responseCode = 0
     private var bytesToRead = 0L
     private var bytesRead = 0L
-    private var activePlan: RequestPlan? = null
+    private var activePlan: MediaRequestPlan? = null
     private var windowRead = 0L
     private var windowLimit = 0L
     private var expectedWindow = -1L
     @Volatile private var activeCall: Call? = null
-    private var effectiveRange = RequestPlan.Range.NONE
+    private var effectiveRange = MediaRange.NONE
     /** True when this [open] put `&range=` on the request that produced [response]. */
     private var rangeQueryApplied = false
 
@@ -144,7 +145,7 @@ class YoutubeHttpDataSource private constructor(
         activePlan?.let { plan ->
             val window = requireNotNull(mediaRequests).window(resp, plan)
             expectedWindow = window.expectedBytes
-            windowLimit = if (effectiveRange == RequestPlan.Range.NONE) Long.MAX_VALUE
+            windowLimit = if (effectiveRange == MediaRange.NONE) Long.MAX_VALUE
                 else window.expectedBytes.takeIf { it >= 0 } ?: plan.chunkLimit
         }
 
@@ -188,7 +189,7 @@ class YoutubeHttpDataSource private constructor(
                 HttpDataSource.HttpDataSourceException.TYPE_OPEN,
             )
         }
-        if (activePlan != null && effectiveRange != RequestPlan.Range.NONE && dataSpec.length == LENGTH_UNSET) {
+        if (activePlan != null && effectiveRange != MediaRange.NONE && dataSpec.length == LENGTH_UNSET) {
             val total = activePlan?.resourceLength?.takeIf { it > 0 }
                 ?: mediaRequests?.window(resp, requireNotNull(activePlan))?.total
             if (total != null) bytesToRead = total - dataSpec.position
@@ -303,13 +304,13 @@ class YoutubeHttpDataSource private constructor(
             if (plan != null) {
                 activePlan = plan
                 val range = when {
-                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
-                    plan.range != RequestPlan.Range.NONE -> plan.range
-                    position > 0 || length >= 0 -> RequestPlan.Range.HEADER
+                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> MediaRange.QUERY
+                    plan.range != MediaRange.NONE -> plan.range
+                    position > 0 || length >= 0 -> MediaRange.HEADER
                     else -> plan.range
                 }
                 effectiveRange = range
-                rangeQueryApplied = range == RequestPlan.Range.QUERY
+                rangeQueryApplied = range == MediaRange.QUERY
                 return executeCall(mediaRequests.build(url, plan, position, length, requestParameters, range))
             }
             val builder = Request.Builder().url(url).header("User-Agent", userAgent)
@@ -357,7 +358,7 @@ class YoutubeHttpDataSource private constructor(
         if (length == 0) return 0
         if (bytesToRead != LENGTH_UNSET && bytesRead >= bytesToRead) return C.RESULT_END_OF_INPUT
         val plan = activePlan
-        if (plan != null && effectiveRange != RequestPlan.Range.NONE && windowRead >= windowLimit) {
+        if (plan != null && effectiveRange != MediaRange.NONE && windowRead >= windowLimit) {
             // A short window with no proven total is the final query-cropped view.
             if (bytesToRead == LENGTH_UNSET && windowLimit < plan.chunkLimit) return C.RESULT_END_OF_INPUT
             inputStream?.close(); response?.close()
@@ -378,7 +379,7 @@ class YoutubeHttpDataSource private constructor(
         }
         val stream = inputStream ?: return C.RESULT_END_OF_INPUT
         var count = if (bytesToRead == LENGTH_UNSET) length else minOf(length.toLong(), bytesToRead - bytesRead).toInt()
-        if (plan != null && effectiveRange != RequestPlan.Range.NONE) count = minOf(count.toLong(), windowLimit - windowRead).toInt()
+        if (plan != null && effectiveRange != MediaRange.NONE) count = minOf(count.toLong(), windowLimit - windowRead).toInt()
         if (count <= 0) return C.RESULT_END_OF_INPUT
         val read = stream.read(buffer, offset, count)
         if (read == -1) {
@@ -422,10 +423,10 @@ class YoutubeHttpDataSource private constructor(
         fun setRangeParameterEnabled(value: Boolean) = apply { rangeParameterEnabled = value }
         fun setRnParameterEnabled(value: Boolean) = apply { rnParameterEnabled = value }
         private var mediaRequests: YoutubeMediaRequests? = null
-        private var inheritedPlan: RequestPlan? = null
-        private var planResolver: ((String) -> RequestPlan?)? = null
-        fun setPlanResolver(value: (String) -> RequestPlan?) = apply { planResolver = value }
-        fun setMediaRequests(value: YoutubeMediaRequests?, plan: RequestPlan? = null) = apply {
+        private var inheritedPlan: MediaRequestPlan? = null
+        private var planResolver: ((String) -> MediaRequestPlan?)? = null
+        fun setPlanResolver(value: (String) -> MediaRequestPlan?) = apply { planResolver = value }
+        fun setMediaRequests(value: YoutubeMediaRequests?, plan: MediaRequestPlan? = null) = apply {
             mediaRequests = value; inheritedPlan = plan; timedCallFactory = null
         }
 

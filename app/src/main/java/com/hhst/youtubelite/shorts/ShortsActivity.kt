@@ -77,6 +77,14 @@ class ShortsActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // The shorts feed and subscription states are identity-scoped server-side.
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            shortsViewModel.updateSession(com.hhst.youtubelite.data.media.MediaSession.snapshot().generation)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()

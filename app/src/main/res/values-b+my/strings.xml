@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ပယ်ဖျက်ထားသည်။</string>
     <string name="about_save_failed">အက်ပ်မှတ်တမ်းများကို မသိမ်းဆည်းနိုင်ပါ။ အခြားသိမ်းဆည်းမည့်နေရာကို ရွေးပြီး ထပ်စမ်းကြည့်ပါ။</string>
     <string name="player_live_unavailable">တိုက်ရိုက်ထုတ်လွှင့်မှု မရနိုင်ပါ။ နောက်မှ ထပ်မံကြိုးစားပါ။</string>
+    <string name="autoplay">အလိုအလျောက် ဖွင့်ခြင်း</string>
+    <string name="queue_item_already">တန်းစီစဉ်ထဲတွင် ရှိပြီးသားဖြစ်သည်</string>
+    <string name="title_copied">ခေါင်းစဉ် ကူးယူပြီးပါပြီ</string>
+    <string name="verification_title">စိစစ်အတည်ပြုခြင်း လိုအပ်သည်</string>
+    <string name="verification_banner_text">အချက်အလက်များ ထပ်မံတင်ခြင်းမပြုမီ YouTube က စိစစ်အတည်ပြုရန် တောင်းဆိုထားသည်။ ရှိပြီးသား အချက်အလက်များ ဆက်လက်အသုံးပြုနိုင်သည်။</string>
+    <string name="verification_banner_action">အတည်ပြုသည်</string>
+    <string name="verification_banner_dismiss">ပယ်ဖျက်သည်</string>
+    <string name="verification_close">ပိတ်သည်</string>
+    <string name="verification_completed">စိစစ်အတည်ပြုခြင်း ပြီးစီးသည်။ ထပ်မံကြိုးစားနေသည်…</string>
+    <string name="verification_still_blocked">အတည်ပြုပြီးနောက်လည်း ပိတ်ဆို့နေဆဲဖြစ်သည်။ နောက်မှ ထပ်မံကြိုးစားပါ။</string>
 </resources>

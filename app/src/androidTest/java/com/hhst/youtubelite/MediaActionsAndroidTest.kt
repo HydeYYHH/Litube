@@ -40,9 +40,11 @@ class MediaActionsAndroidTest {
         compose.onNodeWithContentDescription(bunnyDescription, useUnmergedTree = true).performTouchInput { longClick() }
         compose.onNodeWithTag("media-actions").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close video actions").assertIsDisplayed()
-        for (kind in com.hhst.youtubelite.ui.components.MediaActionKind.entries) compose.onNodeWithTag("media-action-${kind.name}").performScrollTo().assertIsDisplayed()
+        for (kind in menuActions()) compose.onNodeWithTag("media-action-${kind.name}").performScrollTo().assertIsDisplayed()
+        // Copy title is deliberately absent from the menu; the executor keeps it for link-less items.
+        compose.onNodeWithTag("media-action-CopyTitle").assertDoesNotExist()
         val bitmap = compose.onNodeWithTag("media-actions").captureToImage().asAndroidBitmap()
-        val action = compose.onNodeWithTag("media-action-${com.hhst.youtubelite.ui.components.MediaActionKind.CopyTitle.name}").captureToImage().asAndroidBitmap()
+        val action = compose.onNodeWithTag("media-action-${com.hhst.youtubelite.ui.components.MediaActionKind.CopyLink.name}").captureToImage().asAndroidBitmap()
         val pixels = IntArray(action.width * action.height)
         action.getPixels(pixels, 0, action.width, 0, 0, action.width, action.height)
         assertEquals("The action panel must not inherit the default purple accent", 0, pixels.count {
@@ -56,14 +58,14 @@ class MediaActionsAndroidTest {
         home.close()
     }
 
-    @Test fun copyTitleExecutesThroughTheHostBoundaryAndReachesTheClipboard() {
+    @Test fun copyLinkExecutesThroughTheHostBoundaryAndReachesTheClipboard() {
         val home = launchHome()
         compose.onNodeWithContentDescription(bunnyDescription, useUnmergedTree = true).performTouchInput { longClick() }
         compose.onNodeWithTag("media-actions").assertIsDisplayed()
-        compose.onNodeWithTag("media-action-CopyTitle", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("media-action-CopyLink", useUnmergedTree = true).performScrollTo().performClick()
         val clipboard = InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(ClipboardManager::class.java)
-        compose.waitUntil(5_000) { clipboard.primaryClip?.getItemAt(0)?.text?.toString() == bunnyTitle }
-        assertEquals(bunnyTitle, clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+        compose.waitUntil(5_000) { clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "https://youtu.be/aqz-KE-bpKQ" }
+        assertEquals("https://youtu.be/aqz-KE-bpKQ", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
         compose.onNodeWithTag("media-actions").assertDoesNotExist()
         home.close()
     }
@@ -73,7 +75,7 @@ class MediaActionsAndroidTest {
         runShell("settings put system font_scale 2.0")
         val home = launchHome()
         compose.onNodeWithContentDescription(bunnyDescription, useUnmergedTree = true).performTouchInput { longClick() }
-        for (kind in com.hhst.youtubelite.ui.components.MediaActionKind.entries) compose.onNodeWithTag("media-action-${kind.name}").performScrollTo().assertIsDisplayed()
+        for (kind in menuActions()) compose.onNodeWithTag("media-action-${kind.name}").performScrollTo().assertIsDisplayed()
         val bitmap = compose.onNodeWithTag("media-actions").captureToImage().asAndroidBitmap()
         assertTrue("Dark surface", android.graphics.Color.red(bitmap.getPixel(12, bitmap.height / 2)) < 80)
         compose.onNodeWithContentDescription("Close video actions").performClick()
@@ -92,6 +94,10 @@ class MediaActionsAndroidTest {
         }
         home.close()
     }
+
+    /** The menu lists every action except Copy title (review decision; the executor keeps it). */
+    private fun menuActions() = com.hhst.youtubelite.ui.components.MediaActionKind.entries
+        .filter { it != com.hhst.youtubelite.ui.components.MediaActionKind.CopyTitle }
 
     private fun launchHome(): ActivityScenario<HomeActivity> =
         ActivityScenario.launch<HomeActivity>(

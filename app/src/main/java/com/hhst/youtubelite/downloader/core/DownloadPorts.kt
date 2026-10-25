@@ -1,8 +1,8 @@
 package com.hhst.youtubelite.downloader.core
 
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import java.io.File
 import java.util.UUID
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Metadata, selection, and PoToken-aware resolve. */
 interface DownloadResolver {
@@ -35,7 +35,7 @@ data class DownloadComponentSource(
     val cookiePolicyName: String? = null,
     val client: String? = null,
     val headers: Map<String, String> = emptyMap(),
-    @Transient val requestPlan: RequestPlan? = null,
+    @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
 /**

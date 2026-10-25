@@ -17,11 +17,14 @@ import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
+import com.hhst.youtubelite.extractor.MediaProtocol
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
+import com.hhst.youtubelite.extractor.StreamClient
+import com.hhst.youtubelite.extractor.WebAccount
+import com.hhst.youtubelite.extractor.YoutubeWebSession
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.grack.nanojson.JsonObject
-import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -133,12 +136,12 @@ class PlaybackLoadErrorAndroidTest {
         server.start()
         var player: ExoPlayer? = null
         try {
-            val session = YoutubeSession("child-fixture", YoutubeSession.Account.ANONYMOUS, 0, null,
+            val session = YoutubeWebSession("child-fixture", WebAccount.ANONYMOUS, 0, null,
                 "", "", "visitor", "fixture-UA", 1, null, "fixture", JsonObject(), { "" })
-            val plan = RequestPlan(session, ClientProfile.VISIONOS, RequestPlan.Protocol.HLS, RequestPlan.Range.NONE, false)
+            val plan = MediaRequestPlan(session, StreamClient.VISIONOS, MediaProtocol.HLS, MediaRange.NONE, false)
             val plans = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
             val child = server.url("/child.ts").toString()
-            val prefetched = RequestPlan(session, ClientProfile.WEB_SAFARI, RequestPlan.Protocol.HLS, RequestPlan.Range.NONE, false)
+            val prefetched = MediaRequestPlan(session, StreamClient.WEB_SAFARI, MediaProtocol.HLS, MediaRange.NONE, false)
             plans.register(child, prefetched)
             val stream = Stream().apply { hlsUrl = server.url("/master.m3u8").toString(); hlsRequestPlan = plan }
             val metadata = Metadata().apply { id = "hlsChild001"; duration = 20 }

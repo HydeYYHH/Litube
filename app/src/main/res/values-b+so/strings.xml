@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Waa la joojiyay</string>
     <string name="about_save_failed">Ma kaydin karo diiwaanka abka Dooro meel kale oo kaydin oo isku day mar kale.</string>
     <string name="player_live_unavailable">Baahinta tooska ah lama heli karo. Isku day mar kale hadhow.</string>
+    <string name="autoplay">Ciyaar otomaatig ah</string>
+    <string name="queue_item_already">Horey u sugan</string>
+    <string name="title_copied">Cinwaanka waa la koobiyeeyay</string>
+    <string name="verification_title">Xaqiijin ayaa loo baahan yahay</string>
+    <string name="verification_banner_text">YouTube wuxuu codsaday xaqiijin ka hor inta aan la soo dejin wax muuqaal dheeraad ah. Waxa jira weli waa la heli karaa.</string>
+    <string name="verification_banner_action">Xaqiiji</string>
+    <string name="verification_banner_dismiss">Iska daa</string>
+    <string name="verification_close">Xir</string>
+    <string name="verification_completed">Xaqiijintii waa la dhameeyay. Dib ayaa loo isku dayayaa…</string>
+    <string name="verification_still_blocked">Weli waa la xannibay xaqiijintii kadib. Mar kale isku day wakhti dambe.</string>
 </resources>

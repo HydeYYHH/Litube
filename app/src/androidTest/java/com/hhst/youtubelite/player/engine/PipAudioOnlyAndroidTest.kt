@@ -113,7 +113,7 @@ class PipAudioOnlyAndroidTest {
             queue.clear()
             queue.setEnabled(true)
             queue.add(QueueItem("audioPip001", VideoId.watchUrl("audioPip001"), "First"))
-            extractorField.set(engine, Extractor(GlobalContext.get().get<HttpDownloader>(), fixtureCache, scope))
+            extractorField.set(engine, Extractor(fixtureCache, scope))
             scenario = ActivityScenario.launch(WatchActivity.intent(app, "audioPip001"))
             scenario!!.onActivity { host = it }
             instrumentation.runOnMainSync { model.openVideo("audioPip001") }

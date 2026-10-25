@@ -11,8 +11,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
-import org.schabi.newpipe.extractor.services.youtube.streams.ChallengeSolver
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -23,7 +21,7 @@ class AndroidChallengeSolver(
     context: Context,
     private val timers: WebViewTimerOccupancy,
     private val heavy: HeavyJsGate,
-) : ChallengeSolver {
+) : SignatureSolver {
     private val app = context.applicationContext
     private val gson = Gson()
     private val lock = HeavyJsGate()
@@ -53,7 +51,7 @@ class AndroidChallengeSolver(
             .also { source.timestamp = it }
     }
 
-    override fun solve(playerUrl: String, signatures: Set<String>, throttles: Set<String>, context: ExtractionContext): ChallengeSolver.Solutions = lock.run(context) {
+    override fun solve(playerUrl: String, signatures: Set<String>, throttles: Set<String>, context: ExtractionContext): SignatureSolver.Solutions = lock.run(context) {
         context.check()
         val source = source(playerUrl, context)
         val key = key(playerUrl, source, context)
@@ -79,7 +77,7 @@ class AndroidChallengeSolver(
             context.check()
             lastUsed = System.currentTimeMillis()
             context.diagnostics.event("js", "EJS", "${runtime?.version ?: "result-cache"}:${if (cold) "cold" else "cached"}", (System.nanoTime() - start) / 1_000_000, 0)
-            ChallengeSolver.Solutions(signatures.associateWith { values.getValue("$key:s:$it") }, throttles.associateWith { values.getValue("$key:n:$it") })
+            SignatureSolver.Solutions(signatures.associateWith { values.getValue("$key:s:$it") }, throttles.associateWith { values.getValue("$key:n:$it") })
         } catch (failure: Throwable) {
             release()
             throw if (failure is IOException) failure else IOException("EJS_FAILURE", failure)
@@ -90,7 +88,7 @@ class AndroidChallengeSolver(
      * Compiles [playerUrl] ahead of the first solve. Sandbox only: the WebView fallback is too heavy
      * to start speculatively, so an unsupported sandbox leaves the first solve to do it on demand.
      */
-    fun initialize(playerUrl: String, context: ExtractionContext): Boolean = lock.run(context) {
+    override fun initialize(playerUrl: String, context: ExtractionContext): Boolean = lock.run(context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || lowRam || runtime is RemoteEjsRuntime || !JavaScriptSandbox.isSupported()) return@run false
         val start = System.nanoTime()
         try {
@@ -160,6 +158,11 @@ class AndroidChallengeSolver(
         active = key
     }
 
+    /** The cached player script text, fetched through the task transport when missing. */
+    override fun playerScript(playerUrl: String, context: ExtractionContext): String = lock.run(context) {
+        source(playerUrl, context).file.bufferedReader().use { it.readText() }
+    }
+
     private fun source(url: String, context: ExtractionContext): PlayerSource {
         context.check()
         // Only player scripts from the media host are eligible to enter the JavaScript runtime.
@@ -173,10 +176,10 @@ class AndroidChallengeSolver(
         }
         if (!file.isFile) {
             val response = context.get(url, mapOf("User-Agent" to listOf(context.session.userAgent)))
-            if (response.responseCode() != 200 || response.responseBody().length > 8 * 1024 * 1024) throw IOException("PLAYER_SOURCE_HTTP")
+            if (response.responseCode != 200 || response.responseBody.length > 8 * 1024 * 1024) throw IOException("PLAYER_SOURCE_HTTP")
             val temporary = File(directory, file.name + ".tmp")
             try {
-                temporary.writeText(response.responseBody())
+                temporary.writeText(response.responseBody)
                 context.check()
                 if (!temporary.renameTo(file)) throw IOException("PLAYER_SOURCE_STORAGE")
             } finally { temporary.delete() }

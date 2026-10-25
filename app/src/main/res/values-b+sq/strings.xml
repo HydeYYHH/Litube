@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Anuluar</string>
     <string name="about_save_failed">Regjistrat e aplikacioneve nuk mund të ruheshin. Zgjidh një vend tjetër ruajtjeje dhe provo sërish.</string>
     <string name="player_live_unavailable">Transmetimi i drejtpërdrejtë nuk ofrohet. Provo sërish më vonë.</string>
+    <string name="autoplay">Luajtje automatike</string>
+    <string name="queue_item_already">Tashmë në radhë</string>
+    <string name="title_copied">Titulli u kopjua</string>
+    <string name="verification_title">Kërkohet verifikim</string>
+    <string name="verification_banner_text">YouTube kërkoi verifikim përpara ngarkimit të më shumë përmbajtjes. Përmbajtja ekzistuese mbetet e disponueshme.</string>
+    <string name="verification_banner_action">Verifiko</string>
+    <string name="verification_banner_dismiss">Hiq</string>
+    <string name="verification_close">Mbyll</string>
+    <string name="verification_completed">Verifikimi përfundoi. Po provohet përsëri…</string>
+    <string name="verification_still_blocked">Ende e bllokuar pas verifikimit. Provoni përsëri më vonë.</string>
 </resources>

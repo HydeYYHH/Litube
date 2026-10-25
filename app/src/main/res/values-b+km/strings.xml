@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">បានលុបចោល</string>
     <string name="about_save_failed">មិនអាចរក្សាទុកកំណត់ហេតុកម្មវិធីបានទេ។ ជ្រើសរើសទីតាំងរក្សាទុកផ្សេងទៀត ហើយព្យាយាមម្តងទៀត។</string>
     <string name="player_live_unavailable">ការផ្សាយបន្តផ្ទាល់មិនអាចប្រើបានទេ។ សូមព្យាយាមម្តងទៀតនៅពេលក្រោយ។</string>
+    <string name="autoplay">លេងស្វ័យប្រវត្តិ</string>
+    <string name="queue_item_already">មាននៅក្នុងជួររួចហើយ</string>
+    <string name="title_copied">បានចម្លងចំណងជើង</string>
+    <string name="verification_title">តម្រូវឱ្យផ្ទៀងផ្ទាត់</string>
+    <string name="verification_banner_text">YouTube បានសុំការផ្ទៀងផ្ទាត់មុនពេលផ្ទុកមាតិកាបន្ថែម។ មាតិកាដែលមានស្រាប់នៅតែអាចប្រើបាន។</string>
+    <string name="verification_banner_action">ផ្ទៀងផ្ទាត់</string>
+    <string name="verification_banner_dismiss">បដិសេធ</string>
+    <string name="verification_close">បិទ</string>
+    <string name="verification_completed">ការផ្ទៀងផ្ទាត់បានបញ្ចប់។ កំពុងព្យាយាមម្តងទៀត…</string>
+    <string name="verification_still_blocked">នៅតែត្រូវបានចាក់ខ្ទប់បន្ទាប់ពីផ្ទៀងផ្ទាត់។ សូមព្យាយាមម្តងទៀតនៅពេលក្រោយ។</string>
 </resources>

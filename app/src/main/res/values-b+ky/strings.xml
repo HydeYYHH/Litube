@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Жокко чыгарылды</string>
     <string name="about_save_failed">Колдонмонун таржымалдары сакталган жок. Башка сактоо жерин тандап, кайра аракет кылыңыз.</string>
     <string name="player_live_unavailable">Түз эфир жеткиликсиз. Кийинчерээк кайра аракет кылыңыз.</string>
+    <string name="autoplay">Автооюнатуу</string>
+    <string name="queue_item_already">Тизмекте турат</string>
+    <string name="title_copied">Наам көчүрүлдү</string>
+    <string name="verification_title">Тастыктоо талап кылынат</string>
+    <string name="verification_banner_text">YouTube кошумча мазмун жүктөлөөрүңдө тастыктоо сурады. Бар мазмун жеткиликтүү бойдон калат.</string>
+    <string name="verification_banner_action">Тастыкта</string>
+    <string name="verification_banner_dismiss">Өткөрүп жиберүү</string>
+    <string name="verification_close">Жабуу</string>
+    <string name="verification_completed">Тастыктоо аяктады. Кайра аракет кылынууда…</string>
+    <string name="verification_still_blocked">Тастыктоодон кийин да бөгөлгөн бойдон. Кийинчерээк кайра аракет кылыңыз.</string>
 </resources>

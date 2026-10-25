@@ -14,7 +14,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Explicitly invoked real-network first-read acceptance; follows the device's WebView account. */
 class YoutubeStreamReadAndroidTest {
@@ -37,7 +36,7 @@ class YoutubeStreamReadAndroidTest {
             File(instrumentation.targetContext.filesDir, "youtube-read-thread-stacks.txt").writeText(stacks)
             File(instrumentation.targetContext.filesDir, "youtube-stream-diagnostics.txt").writeText(extractor.extractionDiagnostics())
         }, 30, 30, TimeUnit.SECONDS)
-        fun read(id: String, url: String, plan: RequestPlan, manifest: Boolean) {
+        fun read(id: String, url: String, plan: MediaRequestPlan, manifest: Boolean) {
             val started = System.nanoTime()
             val length = if (manifest) -1L else 16L * 1024
             client.newCall(policy.build(url, plan, 0, length)).execute().use { response ->
@@ -47,7 +46,7 @@ class YoutubeStreamReadAndroidTest {
                 val bytes = source.readByteArray(minOf(if (manifest) 1024 else 16L * 1024,
                     body.contentLength().takeIf { it > 0 } ?: 1024))
                 assertTrue("No first bytes", bytes.isNotEmpty())
-                val record = mapOf("videoId" to id, "profile" to plan.profile.name,
+                val record = mapOf("videoId" to id, "profile" to plan.client.name,
                     "protocol" to plan.protocol.name, "httpStatus" to response.code,
                     "firstReadBytes" to bytes.size, "firstReadMs" to (System.nanoTime() - started) / 1_000_000)
                 records += record
@@ -61,7 +60,7 @@ class YoutubeStreamReadAndroidTest {
                     stream.formats.firstOrNull { !it.audioOnly && it.height <= 720 } ?: stream.formats.firstOrNull { !it.audioOnly })
                 assertTrue("No supported media or manifest", selected.isNotEmpty() || stream.manifests.isNotEmpty())
                 for (format in selected) read(id, format.url, requireNotNull(format.requestPlan), false)
-                for (manifest in stream.manifests.distinctBy { it.protocol }) read(id, manifest.url, manifest.requestPlan, true)
+                for (manifest in stream.manifests.distinctBy { it.protocol }) read(id, manifest.url, requireNotNull(manifest.requestPlan), true)
             }
         } finally {
             File(instrumentation.targetContext.filesDir, "youtube-stream-read.json").writeText(Gson().toJson(records))

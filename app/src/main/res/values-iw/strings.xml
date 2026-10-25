@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">בוטלה</string>
     <string name="about_save_failed">לא ניתן לשמור את יומני האפליקציה. בחר מיקום שמירה אחר ונסה שוב.</string>
     <string name="player_live_unavailable">השידור החי אינו זמין. נסו שוב מאוחר יותר.</string>
+    <string name="autoplay">הפעלה אוטומטית</string>
+    <string name="queue_item_already">כבר בתור</string>
+    <string name="title_copied">הכותרת הועתקה</string>
+    <string name="verification_title">נדרש אימות</string>
+    <string name="verification_banner_text">YouTube ביקש אימות לפני טעינת תוכן נוסף. התוכן הקיים נשאר זמין.</string>
+    <string name="verification_banner_action">אמת</string>
+    <string name="verification_banner_dismiss">הסתר</string>
+    <string name="verification_close">סגור</string>
+    <string name="verification_completed">האימות הושלם. מנסה שוב…</string>
+    <string name="verification_still_blocked">עדיין חסום לאחר האימות. נסה שוב מאוחר יותר.</string>
 </resources>

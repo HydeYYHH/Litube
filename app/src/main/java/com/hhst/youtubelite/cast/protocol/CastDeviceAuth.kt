@@ -120,7 +120,8 @@ object CastDeviceAuth {
     private fun signature(algorithm: String, key: PublicKey, data: ByteArray, signed: ByteArray) =
         Signature.getInstance(algorithm).run { initVerify(key); update(data); verify(signed) }
 
-    private fun verifiedCrl(bundle: ByteArray, trusted: X509Certificate, now: Date, fallback: Boolean): Map<Int, List<Any>> {
+    /** Internal so the production-trust Android test exercises this exact path. */
+    internal fun verifiedCrl(bundle: ByteArray, trusted: X509Certificate, now: Date, fallback: Boolean): Map<Int, List<Any>> {
         for (raw in Proto.parse(bundle)[1].orEmpty()) {
             val candidate = runCatching {
                 val entry = Proto.parse(raw as ByteArray)

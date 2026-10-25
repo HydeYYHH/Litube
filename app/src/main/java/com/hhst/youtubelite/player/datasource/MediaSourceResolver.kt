@@ -3,7 +3,6 @@ package com.hhst.youtubelite.player.datasource
 import android.net.Uri
 import android.os.Bundle
 import com.google.gson.Gson
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -24,6 +23,7 @@ import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleExtractor
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.extractor.Format
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Subtitle
@@ -96,7 +96,7 @@ class MediaSourceResolver(
         val subtitles = SubtitleSelection.select(stream.subtitles, subtitleKey)
         val durationMs = metadata.duration * 1000
         if (stream.formats.any { it.requestPlan != null } && !forceMuxed) {
-            val requested = stream.formats.filter { excludeClient == null || it.requestPlan?.profile?.clientName != excludeClient }
+            val requested = stream.formats.filter { excludeClient == null || it.requestPlan?.client?.clientName != excludeClient }
             adaptive(requested, subtitles, durationMs, preferredQuality, audioTrackKey,
                 requirePoToken = false, meta = meta)?.let { return it }
         }
@@ -370,7 +370,7 @@ class MediaSourceResolver(
         ).setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy()).createMediaSource(item)
     }
 
-    private fun dashSource(url: String, meta: MediaMetadata, plan: RequestPlan?): MediaSource =
+    private fun dashSource(url: String, meta: MediaMetadata, plan: MediaRequestPlan?): MediaSource =
         DashMediaSource.Factory(
             DefaultDashChunkSource.Factory(dataSources.manifest(plan)),
             dataSources.manifest(plan),

@@ -305,4 +305,14 @@
     <string name="about_save_cancelled">已取消儲存</string>
     <string name="about_save_failed">無法儲存診斷記錄，請選擇其他位置後再試。</string>
     <string name="player_live_unavailable">直播暫時無法使用，請稍後再試。</string>
+    <string name="autoplay">自動播放</string>
+    <string name="queue_item_already">已在佇列中</string>
+    <string name="title_copied">已複製標題</string>
+    <string name="verification_title">需要驗證</string>
+    <string name="verification_banner_text">YouTube 要求先完成驗證，才能載入更多內容。現有內容仍可使用。</string>
+    <string name="verification_banner_action">驗證</string>
+    <string name="verification_banner_dismiss">忽略</string>
+    <string name="verification_close">關閉</string>
+    <string name="verification_completed">驗證已完成。正在重試…</string>
+    <string name="verification_still_blocked">驗證後仍被封鎖。請稍後再試。</string>
 </resources>

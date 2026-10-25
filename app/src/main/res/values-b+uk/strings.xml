@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Скасовано</string>
     <string name="about_save_failed">Не вдалося зберегти журнали програми. Виберіть інше місце збереження та повторіть спробу.</string>
     <string name="player_live_unavailable">Пряма трансляція недоступна. Спробуйте пізніше.</string>
+    <string name="autoplay">Автовідтворення</string>
+    <string name="queue_item_already">Вже в черзі</string>
+    <string name="title_copied">Назву скопійовано</string>
+    <string name="verification_title">Потрібне підтвердження</string>
+    <string name="verification_banner_text">YouTube запитав підтвердження перед завантаженням додаткового вмісту. Наявний вміст залишається доступним.</string>
+    <string name="verification_banner_action">Підтвердити</string>
+    <string name="verification_banner_dismiss">Відхилити</string>
+    <string name="verification_close">Закрити</string>
+    <string name="verification_completed">Підтвердження завершено. Повторна спроба…</string>
+    <string name="verification_still_blocked">Після підтвердження все ще заблоковано. Спробуйте ще раз пізніше.</string>
 </resources>

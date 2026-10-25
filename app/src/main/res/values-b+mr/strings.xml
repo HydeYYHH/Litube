@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">रद्द</string>
     <string name="about_save_failed">अॅपचे लॉग जतन करता आले नाहीत. जतन करण्यासाठी दुसरे स्थान निवडा आणि पुन्हा प्रयत्न करा.</string>
     <string name="player_live_unavailable">थेट प्रसारण उपलब्ध नाही. नंतर पुन्हा प्रयत्न करा.</string>
+    <string name="autoplay">ऑटोप्ले</string>
+    <string name="queue_item_already">आधीपासूनच क्यूमध्ये आहे</string>
+    <string name="title_copied">शीर्षक कॉपी झाले</string>
+    <string name="verification_title">सत्यापन आवश्यक आहे</string>
+    <string name="verification_banner_text">अधिक सामग्री लोड होण्यापूर्वी YouTube ने सत्यापन मागितले आहे. अस्तित्वातील सामग्री उपलब्ध राहते.</string>
+    <string name="verification_banner_action">सत्यापित करा</string>
+    <string name="verification_banner_dismiss">फेटाळा</string>
+    <string name="verification_close">बंद करा</string>
+    <string name="verification_completed">सत्यापन पूर्ण झाले. पुन्हा प्रयत्न सुरू आहे…</string>
+    <string name="verification_still_blocked">सत्यापनानंतरही अवरोधित. कृपया नंतर पुन्हा प्रयत्न करा.</string>
 </resources>

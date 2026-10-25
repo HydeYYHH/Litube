@@ -15,10 +15,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -92,6 +97,28 @@ fun ChannelScreen(
             val liveState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val postsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val postState = rememberSaveableStateHolder()
+            fun listFor(tab: ChannelTab) = when (tab) {
+                ChannelTab.Search -> searchState
+                ChannelTab.Home -> homeState
+                ChannelTab.Playlists -> playlistsState
+                ChannelTab.Shorts -> shortsState
+                ChannelTab.Live -> liveState
+                ChannelTab.Posts -> postsState
+                else -> videosState
+            }
+            var previousTab by rememberSaveable { mutableStateOf(state.selectedTab) }
+            LaunchedEffect(state.selectedTab, state.content is ChannelContent.Ready) {
+                if (state.content !is ChannelContent.Ready || state.selectedTab == previousTab) return@LaunchedEffect
+                val source = listFor(previousTab)
+                val target = listFor(state.selectedTab)
+                previousTab = state.selectedTab
+                if (target.firstVisibleItemIndex == 0) {
+                    if (source.firstVisibleItemIndex > 0) target.scrollToItem(1)
+                    else if (target.firstVisibleItemScrollOffset == 0) {
+                        target.scrollToItem(0, source.firstVisibleItemScrollOffset)
+                    }
+                }
+            }
             Column(Modifier.fillMaxSize().then(if (state.overlay != ChannelOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
                 ChannelTopBar(state, onBack, onAction)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -199,17 +226,30 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
 
 @Composable
 internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
+    val scroll = rememberScrollState()
+    var viewport by remember { mutableIntStateOf(0) }
+    val bounds = remember { mutableStateMapOf<ChannelTab, Pair<Int, Int>>() }
+    LaunchedEffect(selected, bounds[selected], viewport) {
+        val (left, right) = bounds[selected] ?: return@LaunchedEffect
+        if (viewport == 0) return@LaunchedEffect
+        when {
+            left < scroll.value -> scroll.scrollTo(left)
+            right > scroll.value + viewport -> scroll.scrollTo(right - viewport)
+        }
+    }
     Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("channel-tabbar")) {
         Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
-            .horizontalScroll(rememberScrollState()).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
+            .onSizeChanged { viewport = it.width }
+            .horizontalScroll(scroll).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
             ChannelTab.entries.forEach { tab ->
                 val isSelected = tab == selected
-                val bringIntoView = remember { BringIntoViewRequester() }
-                LaunchedEffect(isSelected) { if (isSelected) bringIntoView.bringIntoView() }
                 Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
                     .widthIn(min = ChannelLayout.TabMinWidth.dp)
-                    .bringIntoViewRequester(bringIntoView).testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
+                    .onGloballyPositioned {
+                        val left = it.positionInParent().x.toInt()
+                        bounds[tab] = left to left + it.size.width
+                    }.testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
                     .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
                     contentAlignment = Alignment.Center) {
                     AppText(tab.label, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">تم إلغاء الحفظ</string>
     <string name="about_save_failed">تعذر حفظ سجلات التشخيص. اختر موقع حفظ آخر وحاول مجددًا.</string>
     <string name="player_live_unavailable">البث المباشر غير متاح. حاول مجددًا لاحقًا.</string>
+    <string name="autoplay">التشغيل التلقائي</string>
+    <string name="queue_item_already">موجود بالفعل في قائمة الانتظار</string>
+    <string name="title_copied">تم نسخ العنوان</string>
+    <string name="verification_title">مطلوب إثبات التحقق</string>
+    <string name="verification_banner_text">طلب YouTube إثبات التحقق قبل تحميل المزيد من المحتوى. يظل المحتوى الحالي متاحًا.</string>
+    <string name="verification_banner_action">تحقق</string>
+    <string name="verification_banner_dismiss">تجاهل</string>
+    <string name="verification_close">إغلاق</string>
+    <string name="verification_completed">اكتمل التحقق. جارٍ إعادة المحاولة…</string>
+    <string name="verification_still_blocked">لا يزال محظورًا بعد التحقق. حاول مرة أخرى لاحقًا.</string>
 </resources>

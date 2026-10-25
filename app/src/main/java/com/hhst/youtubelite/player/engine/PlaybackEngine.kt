@@ -46,6 +46,8 @@ import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Metadata
+import com.hhst.youtubelite.extractor.PlaybackDemand
+import com.hhst.youtubelite.extractor.StreamClient
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
@@ -83,8 +85,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
 /** Playback modes with stable persisted values. */
 enum class LoopMode(val persistedValue: Int, val repeatMode: Int) {
@@ -1464,7 +1464,7 @@ class PlaybackEngine(
 
     override fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? {
         if (currentMetadata?.id != videoId) return null
-        val profile = ClientProfile.values().firstOrNull { it.name == failedProfile } ?: return null
+        val profile = failedProfile?.let(StreamClient::byName) ?: return null
         val stream = currentStream ?: return null
         return pickPublishedUrl(stream.excluding(profile), token, itag)
     }
@@ -1599,7 +1599,7 @@ class PlaybackEngine(
             // can belong to different clients, especially after a fresh extraction or prefetch.
             val profile = forbiddenProfile ?: stream.formats.firstOrNull {
                 it.url == failedUri?.toString()
-            }?.requestPlan?.profile
+            }?.requestPlan?.client
             val backup = profile?.let(stream::excluding)
             if (backup != null && runCatching { resolveSource(backup, metadata) }.isSuccess) {
                 currentStream = backup
@@ -1885,7 +1885,7 @@ class PlaybackEngine(
             cache.get(KEY_QUALITY, String::class.java)
         } else null
 
-    private fun playbackDemand(videoId: String? = _snapshot.value.videoId) = StreamDemand(
+    private fun playbackDemand(videoId: String? = _snapshot.value.videoId) = PlaybackDemand(
         rememberedQuality()?.let(StreamSelection::parseHeight) ?: 0,
         audioPreference?.takeIf { videoId == _snapshot.value.videoId && it.startsWith("id:") }?.removePrefix("id:"), false,
         setOf("avc", "vp9", "vp09", "hvc", "hev") +

@@ -16,10 +16,6 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.*
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.*
@@ -32,13 +28,13 @@ class JavascriptLifecycleAndroidTest {
     private val app = instrumentation.targetContext
 
     private fun context(current: AtomicBoolean = AtomicBoolean(true)): ExtractionContext = ExtractionContext(
-        YoutubeSession("lifecycle", YoutubeSession.Account.ANONYMOUS, 0, null, null, null,
+        YoutubeWebSession("lifecycle", WebAccount.ANONYMOUS, 0, null, null, null,
             null, "fixture", 0, null, "offline", JsonObject(), { "" }),
-        object : Downloader() {
-            override fun execute(request: Request): Response = throw IOException("LIFECYCLE_HAS_NO_NETWORK")
-        }, ChallengeSolver { _, _, _, _ -> ChallengeSolver.Solutions(emptyMap(), emptyMap()) },
-        null, false, false, System.nanoTime() + TimeUnit.SECONDS.toNanos(20), { current.get() },
-        { _, _, _, _, _ -> })
+        object : ExtractionTransport {
+            override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>) = throw IOException("LIFECYCLE_HAS_NO_NETWORK")
+            override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray) = throw IOException("LIFECYCLE_HAS_NO_NETWORK")
+        }, false, false, true, "", System.nanoTime() + TimeUnit.SECONDS.toNanos(20), { current.get() },
+        object : EngineDiagnostics { override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) {} })
 
     private fun hostPid(): Int = app.getSystemService(ActivityManager::class.java).runningAppProcesses
         .first { it.processName == app.packageName + ":youtube_ejs" }.pid

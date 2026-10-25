@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Kansellert</string>
     <string name="about_save_failed">Kunne ikke lagre applogger. Velg et annet lagringssted og prøv på nytt.</string>
     <string name="player_live_unavailable">Direktesendingen er ikke tilgjengelig. Prøv igjen senere.</string>
+    <string name="autoplay">Autoplay</string>
+    <string name="queue_item_already">Allerede i kø</string>
+    <string name="title_copied">Tittel kopiert</string>
+    <string name="verification_title">Bekreftelse kreves</string>
+    <string name="verification_banner_text">YouTube ba om bekreftelse før mer innhold kan lastes inn. Eksisterende innhold forblir tilgjengelig.</string>
+    <string name="verification_banner_action">Bekreft</string>
+    <string name="verification_banner_dismiss">Avvis</string>
+    <string name="verification_close">Lukk</string>
+    <string name="verification_completed">Bekreftelse fullført. Prøver på nytt…</string>
+    <string name="verification_still_blocked">Fremdeles blokkert etter bekreftelse. Prøv igjen senere.</string>
 </resources>

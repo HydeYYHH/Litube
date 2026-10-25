@@ -14,8 +14,8 @@ import com.hhst.youtubelite.downloader.core.ResolvedComponentUpdate
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.net.DownloadRangeMode
 import com.hhst.youtubelite.downloader.net.DownloadResourceIdentity
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import com.hhst.youtubelite.downloader.net.RecoveredSource
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.downloader.net.YoutubeDownloadRequestAdapter
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.ConcurrentHashMap
@@ -126,10 +126,10 @@ class DownloadResolverImpl(
     /** Uses only the existing catalog; there is no session recapture or token mint in this step. */
     suspend fun backupSource(taskId: String, identity: String?): RecoveredSource? {
         val previous = sourcesOf(taskId).firstOrNull { it.resourceIdentity == identity } ?: return null
-        val profile = previous.requestPlan?.profile ?: return null
+        val profile = previous.requestPlan?.client ?: return null
         val cached = synchronized(fallbackCatalogs) { fallbackCatalogs[taskId] }
             ?.takeIf { it.scope == catalogs.scope() && it.expires > System.currentTimeMillis() } ?: return null
-        val catalog = cached.catalog.copy(formats = cached.catalog.formats.filter { it.requestPlan?.profile != profile })
+        val catalog = cached.catalog.copy(formats = cached.catalog.formats.filter { it.requestPlan?.client != profile })
         val task = repository.transact { getTask(taskId) } ?: return null
         val selection = DownloadSelector.select(catalog, task.config) as? DownloadSelection.Ready ?: return null
         if (ready(task, task.executionGeneration, catalog, selection.plan) !is DownloadResolveOutcome.Ready) return null
@@ -318,7 +318,7 @@ class DownloadResolverImpl(
         kind: AssetKind,
         url: String,
         mime: String,
-        requestPlan: RequestPlan? = null,
+        requestPlan: MediaRequestPlan? = null,
     ): DownloadComponentSource {
         val plan = YoutubeDownloadRequestAdapter.adaptUrl(videoId, url)
         return DownloadComponentSource(

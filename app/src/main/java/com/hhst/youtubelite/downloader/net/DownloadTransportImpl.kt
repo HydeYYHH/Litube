@@ -16,9 +16,9 @@ import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
 import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
+import com.hhst.youtubelite.extractor.MediaRequestPlan
+import com.hhst.youtubelite.extractor.PageResponse
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import okhttp3.Request
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -431,7 +431,7 @@ class DownloadTransportImpl(
                         while (true) {
                             coroutineContext.ensureActive()
                             if (call.isCanceled()) {
-                                if (request.tag(RequestPlan::class.java)?.let { mediaRequests?.isCurrent(it) == false } == true) return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
+                                if (request.tag(MediaRequestPlan::class.java)?.let { mediaRequests?.isCurrent(it) == false } == true) return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
                                 return WriteOutcome.Cancelled
                             }
                             val n = input.read(buf)
@@ -522,7 +522,7 @@ class DownloadTransportImpl(
     private fun retryAfterMillis(response: Response): Long? {
         val raw = response.header("Retry-After")?.trim().orEmpty()
         if (raw.isEmpty()) return null
-        return StreamHttpException.parseRetryAfter(raw, System.currentTimeMillis())
+        return PageResponse.headerText(raw, System.currentTimeMillis()).takeIf { it > 0 }
     }
 
     private fun isCancelled(taskId: String, error: IOException): Boolean {

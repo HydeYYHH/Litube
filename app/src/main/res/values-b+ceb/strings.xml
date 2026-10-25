@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Gikansela</string>
     <string name="about_save_failed">Dili ma-save ang mga log sa app. Pagpili og laing lokasyon sa pagtipig ug pagsulay pag-usab.</string>
     <string name="player_live_unavailable">Dili magamit ang live stream. Sulayi pag-usab unya.</string>
+    <string name="autoplay">Awto-play</string>
+    <string name="queue_item_already">Anaa na sa linya</string>
+    <string name="title_copied">Nakopya ang titulo</string>
+    <string name="verification_title">Kinahanglan ug beripikasyon</string>
+    <string name="verification_banner_text">Nangayo ug beripikasyon ang YouTube sa dili pa makakarga ang daghang sulod. Ang anaa nga sulod magpabilin nga maabtan.</string>
+    <string name="verification_banner_action">Beripikahi</string>
+    <string name="verification_banner_dismiss">Pagbiya</string>
+    <string name="verification_close">Pagsira</string>
+    <string name="verification_completed">Nahuman ang beripikasyon. Nagsulay pag-usab…</string>
+    <string name="verification_still_blocked">Gihapon babagan human sa beripikasyon. Sulayi pag-usab unya.</string>
 </resources>

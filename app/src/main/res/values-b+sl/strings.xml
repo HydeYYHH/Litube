@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Preklicano</string>
     <string name="about_save_failed">Dnevnikov aplikacije ni bilo mogoče shraniti. Izberite drugo lokacijo za shranjevanje in poskusite znova.</string>
     <string name="player_live_unavailable">Prenos v živo ni na voljo. Poskusite znova pozneje.</string>
+    <string name="autoplay">Samodejno predvajanje</string>
+    <string name="queue_item_already">Že v čakalni vrsti</string>
+    <string name="title_copied">Naslov je kopiran</string>
+    <string name="verification_title">Zahtevana je preveritev</string>
+    <string name="verification_banner_text">YouTube je pred nalaganjem dodatne vsebine zahteval preveritev. Obstoječa vsebina ostane dostopna.</string>
+    <string name="verification_banner_action">Preveri</string>
+    <string name="verification_banner_dismiss">Opusti</string>
+    <string name="verification_close">Zapri</string>
+    <string name="verification_completed">Preveritev je končana. Poskušam znova…</string>
+    <string name="verification_still_blocked">Po preveritvi je še vedno blokirano. Poskusite znova pozneje.</string>
 </resources>

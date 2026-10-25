@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ</string>
     <string name="about_save_failed">ಅಪ್ಲಿಕೇಶನ್ ಲಾಗ್‌ಗಳನ್ನು ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೊಂದು ಉಳಿಸುವ ಸ್ಥಳವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</string>
     <string name="player_live_unavailable">ಲೈವ್ ಸ್ಟ್ರೀಮ್ ಲಭ್ಯವಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</string>
+    <string name="autoplay">ಸ್ವಯಂಚಾಲಿತ ಪ್ಲೇ</string>
+    <string name="queue_item_already">ಈಗಾಗಲೇ ಸರತಿಯಲ್ಲಿದೆ</string>
+    <string name="title_copied">ಶೀರ್ಷಿಕೆಯನ್ನು ಕಾಪಿ ಮಾಡಲಾಗಿದೆ</string>
+    <string name="verification_title">ಪರಿಶೀಲನೆ ಅಗತ್ಯವಿದೆ</string>
+    <string name="verification_banner_text">ಹೆಚ್ಚಿನ ವಿಷಯವನ್ನು ಲೋಡ್ ಮಾಡುವ ಮೊದಲು YouTube ಪರಿಶೀಲನೆಯನ್ನು ಕೋರಿದೆ. ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ ವಿಷಯ ಲಭ್ಯವಿರುತ್ತದೆ.</string>
+    <string name="verification_banner_action">ಪರಿಶೀಲಿಸಿ</string>
+    <string name="verification_banner_dismiss">ವಜಾಗೊಳಿಸಿ</string>
+    <string name="verification_close">ಮುಚ್ಚಿ</string>
+    <string name="verification_completed">ಪರಿಶೀಲನೆ ಪೂರ್ಣಗೊಂಡಿದೆ. ಮರುಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ…</string>
+    <string name="verification_still_blocked">ಪರಿಶೀಲನೆಯ ನಂತರವೂ ನಿರ್ಬಂಧಿತವಾಗಿದೆ. ನಂತರ ಮರುಪ್ರಯತ್ನಿಸಿ.</string>
 </resources>

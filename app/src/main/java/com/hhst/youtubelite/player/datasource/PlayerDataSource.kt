@@ -3,7 +3,6 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.content.Context
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSpec
 import android.os.SystemClock
@@ -11,6 +10,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.extractor.Format
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.cache.CacheDataSink
@@ -40,9 +40,9 @@ class PlayerDataSource private constructor(
     val ytLiveProgressive: DataSource.Factory,
     /** Planned HTTP factory for live manifests/chunks; never cached. */
     val live: DataSource.Factory,
-    private val manifestFactory: ((RequestPlan) -> DataSource.Factory)? = null,
+    private val manifestFactory: ((MediaRequestPlan?) -> DataSource.Factory)? = null,
     private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
-    private val hlsFactory: ((RequestPlan) -> HlsDataSourceFactory)? = null,
+    private val hlsFactory: ((MediaRequestPlan) -> HlsDataSourceFactory)? = null,
 ) {
     fun withDiagnostics(context: DiagnosticContext): PlayerDataSource {
         fun scoped(factory: DataSource.Factory) = DataSource.Factory { DiagnosticDataSource(factory.createDataSource(), context) }
@@ -53,11 +53,11 @@ class PlayerDataSource private constructor(
                 DiagnosticDataSource(original.createDataSource(type), context, type)
             } })
     }
-    fun manifest(plan: RequestPlan?): DataSource.Factory =
+    fun manifest(plan: MediaRequestPlan?): DataSource.Factory =
         if (plan != null) manifestFactory?.invoke(plan) ?: live else live
     fun formats(formats: List<Format>, dash: Boolean = true, cached: Boolean = true): DataSource.Factory =
         formatFactory?.invoke(formats, dash, cached) ?: if (dash) ytDash else if (cached) ytProgressive else ytLiveProgressive
-    fun vodHls(plan: RequestPlan?): HlsDataSourceFactory =
+    fun vodHls(plan: MediaRequestPlan?): HlsDataSourceFactory =
         if (plan != null) hlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
         else DefaultHlsDataSourceFactory(live)
     companion object {
@@ -190,7 +190,7 @@ class PlayerDataSource private constructor(
 /** Cached bytes still obey the session fence, including during an open read. */
 private class SessionCheckedDataSource(
     private val inner: DataSource,
-    private val plan: RequestPlan,
+    private val plan: MediaRequestPlan,
     private val current: () -> Boolean,
     private val invalidationReason: () -> String,
 ) : DataSource by inner {
@@ -216,7 +216,7 @@ private class SessionCheckedDataSource(
                 if (!reported) {
                     reported = true
                     AppLog.event(AppLog.Category.PLAYER,
-                        "media_session_invalidated", mapOf("reason" to invalidationReason(), "phase" to "cached_media_read", "client" to plan.profile.name),
+                        "media_session_invalidated", mapOf("reason" to invalidationReason(), "phase" to "cached_media_read", "client" to plan.client.name),
                         critical = true, context = context)
                 }
                 throw IOException("MEDIA_SESSION_CHANGED")

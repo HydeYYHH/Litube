@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">રદ</string>
     <string name="about_save_failed">એપ્લિકેશન લૉગ્સ સાચવી શક્યાં નથી. બીજું સાચવવાનું સ્થાન પસંદ કરો અને ફરી પ્રયાસ કરો.</string>
     <string name="player_live_unavailable">લાઇવ સ્ટ્રીમ ઉપલબ્ધ નથી. પછીથી ફરી પ્રયાસ કરો.</string>
+    <string name="autoplay">ઓટોપ્લે</string>
+    <string name="queue_item_already">પહેલેથી જ કતારમાં છે</string>
+    <string name="title_copied">શીર્ષક કૉપિ થયું</string>
+    <string name="verification_title">ચકાસણી જરૂરી છે</string>
+    <string name="verification_banner_text">વધુ સામગ્રી લોડ થાય તે પહેલાં YouTube એ ચકાસણી માંગી છે. હાલની સામગ્રી ઉપલબ્ધ રહે છે.</string>
+    <string name="verification_banner_action">ચકાસો</string>
+    <string name="verification_banner_dismiss">છોડી દો</string>
+    <string name="verification_close">બંધ કરો</string>
+    <string name="verification_completed">ચકાસણી પૂર્ણ થઈ. ફરી પ્રયાસ કરી રહ્યાં છીએ…</string>
+    <string name="verification_still_blocked">ચકાસણી પછી પણ અવરોધિત. કૃપા કરીને પછી ફરી પ્રયાસ કરો.</string>
 </resources>

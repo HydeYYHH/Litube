@@ -98,7 +98,7 @@ class PinnedVideoRecoveryAndroidTest {
         try {
             previous.keys.forEach { prefs.setEnabled(it, it == PreferenceKeys.REMEMBER_QUALITY) }
             instrumentation.runOnMainSync {
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), cache, scope),
+                engine = PlaybackEngine(app, Extractor(cache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), state, prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer

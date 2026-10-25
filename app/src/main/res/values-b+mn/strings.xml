@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Цуцлагдсан</string>
     <string name="about_save_failed">Програмын бүртгэлийг хадгалж чадсангүй. Өөр хадгалах байршлыг сонгоод дахин оролдоно уу.</string>
     <string name="player_live_unavailable">Шууд дамжуулалт боломжгүй байна. Дараа дахин оролдоно уу.</string>
+    <string name="autoplay">Автомат тоглуулалт</string>
+    <string name="queue_item_already">Дараалалд байна</string>
+    <string name="title_copied">Гарчиг хуулагдлаа</string>
+    <string name="verification_title">Баталгаажуулалт шаардлагатай</string>
+    <string name="verification_banner_text">YouTube нэмэлт агуулга ачаалахын өмнө баталгаажуулалт хүссэн. Байгаа агуулга ашиглах боломжтой хэвээр үлдэнэ.</string>
+    <string name="verification_banner_action">Баталгаажуулах</string>
+    <string name="verification_banner_dismiss">Үл хэрэгсэх</string>
+    <string name="verification_close">Хаах</string>
+    <string name="verification_completed">Баталгаажуулалт дууслаа. Дахин оролдож байна…</string>
+    <string name="verification_still_blocked">Баталгаажуулсны дараа ч хаалттай хэвээр. Дараа дахин оролдоно уу.</string>
 </resources>

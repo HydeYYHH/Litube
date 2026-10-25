@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ยกเลิกแล้ว</string>
     <string name="about_save_failed">ไม่สามารถบันทึกบันทึกแอปได้ เลือกตำแหน่งบันทึกอื่นแล้วลองอีกครั้ง</string>
     <string name="player_live_unavailable">สตรีมสดไม่พร้อมใช้งาน โปรดลองอีกครั้งในภายหลัง</string>
+    <string name="autoplay">เล่นอัตโนมัติ</string>
+    <string name="queue_item_already">อยู่ในคิวอยู่แล้ว</string>
+    <string name="title_copied">คัดลอกชื่อเรื่องแล้ว</string>
+    <string name="verification_title">ต้องการการยืนยัน</string>
+    <string name="verification_banner_text">YouTube ขอให้ยืนยันก่อนที่จะโหลดเนื้อหาเพิ่มเติม เนื้อหาที่มีอยู่ยังคงใช้งานได้</string>
+    <string name="verification_banner_action">ยืนยัน</string>
+    <string name="verification_banner_dismiss">ปิดข้อความแจ้งเตือน</string>
+    <string name="verification_close">ปิด</string>
+    <string name="verification_completed">ยืนยันเสร็จสิ้น กำลังลองใหม่…</string>
+    <string name="verification_still_blocked">ยังถูกบล็อกอยู่หลังจากยืนยันแล้ว โปรดลองอีกครั้งภายหลัง</string>
 </resources>

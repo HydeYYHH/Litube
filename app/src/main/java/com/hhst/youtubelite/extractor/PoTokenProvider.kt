@@ -4,9 +4,6 @@ import android.content.Context
 import com.grack.nanojson.JsonWriter
 import com.grack.nanojson.JsonObject as NanoJsonObject
 import com.google.gson.JsonObject
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
 import java.net.URI
@@ -15,10 +12,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
-import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
-import org.schabi.newpipe.extractor.services.youtube.streams.InnertubeAuth
-import org.schabi.newpipe.extractor.services.youtube.streams.PoTokenProvider as CorePoTokenProvider
 import java.io.IOException
 
 /** BgUtils adapter. Transport uses the immutable extraction context. */
@@ -26,7 +19,7 @@ class PoTokenProvider(
     context: Context,
     private val timers: WebViewTimerOccupancy = WebViewTimerOccupancy.NOOP,
     private val heavy: HeavyJsGate = HeavyJsGate(),
-) : CorePoTokenProvider {
+) : PoTokenMinter {
     private val app = context.applicationContext
     private val lock = Any()
     private val gson = Gson()
@@ -40,7 +33,7 @@ class PoTokenProvider(
     private val reaper = Executors.newSingleThreadScheduledExecutor {
         Thread(it, "youtube-po-idle").apply { isDaemon = true }
     }
-    private val tokens = LinkedHashMap<String, CorePoTokenProvider.Token>(128, .75f, true)
+    private val tokens = LinkedHashMap<String, PoTokenMinter.Token>(128, .75f, true)
 
     init { reaper.scheduleWithFixedDelay({ synchronized(lock) {
         // The minter is bound to the integrity token's own lifetime (refreshAt), so keeping it for a
@@ -48,11 +41,11 @@ class PoTokenProvider(
         if (runtime != null && System.currentTimeMillis() - lastUsed >= MINTER_IDLE_MS) releaseMinter()
     } }, 60, 60, TimeUnit.SECONDS) }
 
-    override fun get(request: CorePoTokenProvider.TokenRequest, context: ExtractionContext): CorePoTokenProvider.Token = synchronized(lock) {
-        if (!request.profile.webTokens() || request.scope != context.session.scope() || request.identifier.isBlank()) throw IOException("PO_UNSUPPORTED_CONTEXT")
+    override fun mint(request: PoTokenMinter.TokenRequest, context: ExtractionContext): PoTokenMinter.Token = synchronized(lock) {
+        if (!request.client.webTokens || request.scope != context.session.scope() || request.identifier.isBlank()) throw IOException("PO_UNSUPPORTED_CONTEXT")
         context.check()
         tokens[request.cacheKey()]?.takeIf { System.currentTimeMillis() + 30_000 < it.expiresAtMillis }?.let {
-            context.diagnostics.event("token-cache", request.profile.name, "HIT:${request.purpose}:${request.binding}", 0, 0)
+            context.diagnostics.event("token-cache", request.client.name, "HIT:${request.purpose}:${request.binding}", 0, 0)
             return it
         }
         try {
@@ -62,10 +55,10 @@ class PoTokenProvider(
             val result = runtime!!.evaluate("WebPo.mint(${gson.toJson(request.identifier)})", 1_000, context)
             if (result.isBlank()) throw IOException("PO_EMPTY_TOKEN")
             context.check()
-            CorePoTokenProvider.Token(result, expires).also {
+            PoTokenMinter.Token(result, expires).also {
                 tokens[request.cacheKey()] = it
                 while (tokens.size > 256) tokens.remove(tokens.keys.first())
-                context.diagnostics.event("token", request.profile.name, "${request.purpose}:${request.binding}:${request.protocol}", 0, 0)
+                context.diagnostics.event("token", request.client.name, "${request.purpose}:${request.binding}:${request.protocol}", 0, 0)
                 lastUsed = System.currentTimeMillis()
             }
         } catch (failure: Throwable) {
@@ -75,8 +68,8 @@ class PoTokenProvider(
                 "JS_EVALUATION_SyntaxError", "JS_RUNTIME_FAILURE")
             val code = generateSequence(failure) { it.cause }.mapNotNull { it.message?.takeIf(known::contains) }.firstOrNull()
                 ?: failure.javaClass.simpleName
-            val status = (failure as? StreamHttpException)?.status ?: 0
-            context.diagnostics.event("token-init", request.profile.name, "$initializationStage:$code", 0, status)
+            val status = (failure as? PageHttpException)?.status ?: 0
+            context.diagnostics.event("token-init", request.client.name, "$initializationStage:$code", 0, status)
             clear()
             throw if (failure is IOException) failure else IOException("PO_INITIALIZATION", failure)
         }
@@ -112,10 +105,10 @@ class PoTokenProvider(
             val page = context.get(YoutubeSessionProvider.ORIGIN + "/?app=desktop&authuser=" + context.session.accountIndex, mapOf(
                 "User-Agent" to listOf(context.session.userAgent),
                 "Cookie" to listOf(context.session.cookies(YoutubeSessionProvider.ORIGIN))))
-            if (page.responseCode() == 429 || page.responseCode() == 402) requireResponse(page, "PO_PAGE")
-            if (page.responseCode() == 200) {
-                val paired = YoutubeSessionProvider.parseConfig(page.responseBody())
-                if (context.session.account != YoutubeSession.Account.ANONYMOUS
+            if (page.responseCode == 429 || page.responseCode == 402) requireResponse(page, "PO_PAGE")
+            if (page.responseCode == 200) {
+                val paired = YoutubeSessionProvider.parseConfig(page.responseBody)
+                if (context.session.account != WebAccount.ANONYMOUS
                     && (!paired.getBoolean("LOGGED_IN", false) || YoutubeSessionProvider.accountIndex(paired) != context.session.accountIndex
                         || context.session.dataSyncId?.let { it != paired.getString("DATASYNC_ID") } == true)) throw IOException("PO_ACCOUNT_PAGE_MISMATCH")
                 pairedChallenge(paired)?.let {
@@ -126,12 +119,12 @@ class PoTokenProvider(
             }
         }
         if (challenge == null) {
-            val headers = InnertubeAuth.headers(context.session, ClientProfile.WEB, YoutubeSessionProvider.ORIGIN, System.currentTimeMillis() / 1000)
+            val headers = InnertubeAuth.headers(context.session, StreamClient.WEB, YoutubeSessionProvider.ORIGIN, System.currentTimeMillis() / 1000)
             val inner = config.getObject("INNERTUBE_CONTEXT")
             val body = "{\"context\":${JsonWriter.string(inner)},\"engagementType\":\"ENGAGEMENT_TYPE_UNBOUND\"}"
             val response = context.post("${YoutubeSessionProvider.ORIGIN}/youtubei/v1/att/get?prettyPrint=false", headers, body.toByteArray())
             requireResponse(response, "PO_ATTESTATION")
-            challenge = JsonParser.parseString(response.responseBody()).asJsonObject.getAsJsonObject("bgChallenge")
+            challenge = JsonParser.parseString(response.responseBody).asJsonObject.getAsJsonObject("bgChallenge")
             challengeSource = "ATTESTATION_FALLBACK"
         }
         context.diagnostics.event("token-challenge", "WEB", challengeSource, 0, 200)
@@ -144,7 +137,7 @@ class PoTokenProvider(
         val source = context.get(url, mapOf("User-Agent" to listOf(context.session.userAgent)))
         requireResponse(source, "PO_INTERPRETER")
         initializationStage = "RUNTIME_LOAD"
-        loadedRuntime().evaluate("globalThis.yt={config_:${JsonWriter.string(config)}};\n" + source.responseBody() + "\n'loaded'", remaining(), context)
+        loadedRuntime().evaluate("globalThis.yt={config_:${JsonWriter.string(config)}};\n" + source.responseBody + "\n'loaded'", remaining(), context)
         initializationStage = "SNAPSHOT"
         val snapshot = runtime!!.evaluate("WebPo.snapshot(${gson.toJson(challenge)})", remaining(), context)
         val headers = mapOf("User-Agent" to listOf(context.session.userAgent), "Content-Type" to listOf("application/json+protobuf"),
@@ -152,7 +145,7 @@ class PoTokenProvider(
         initializationStage = "INTEGRITY"
         val response = context.post("${YoutubeSessionProvider.ORIGIN}/api/jnn/v1/GenerateIT", headers, gson.toJson(listOf("O43z0dpjhgX20SCx4KAo", snapshot)).toByteArray())
         requireResponse(response, "PO_INTEGRITY")
-        val integrity = parsePoIntegrity(response.responseBody())
+        val integrity = parsePoIntegrity(response.responseBody)
         initializationStage = "MINTER"
         runtime!!.evaluate("WebPo.initialize(${gson.toJson(integrity)})", remaining(), context)
         scope = newScope
@@ -161,11 +154,10 @@ class PoTokenProvider(
         context.diagnostics.event("token-init", "WEB", "bgutils-4.0.3:initialized", (System.nanoTime() - start) / 1_000_000, 200)
     }
 
-    private fun requireResponse(response: Response, stage: String) {
-        if (response.responseCode() != 200) {
-            val retry = response.responseHeaders().entries.firstOrNull { it.key.equals("Retry-After", true) }
-                ?.value?.firstOrNull()?.let { StreamHttpException.parseRetryAfter(it, System.currentTimeMillis()) } ?: 0
-            throw StreamHttpException(stage, response.responseCode(), retry)
+    private fun requireResponse(response: PageResponse, stage: String) {
+        if (response.responseCode != 200) {
+            val retry = PageResponse.headerText(response.header("Retry-After"), System.currentTimeMillis())
+            throw PageHttpException(stage, response.responseCode, retry)
         }
     }
 
@@ -173,7 +165,7 @@ class PoTokenProvider(
     override fun finished(context: ExtractionContext) = synchronized(lock) {
         if (lowRam && scope == context.session.scope()) releaseMinter()
     }
-    fun invalidateAll() = synchronized(lock) { clear() }
+    override fun invalidateAll() = synchronized(lock) { clear() }
     private fun releaseMinter() { runtime?.close(); runtime = null; scope = ""; expires = 0; refreshAt = 0 }
     private fun clear() { tokens.clear(); releaseMinter() }
 

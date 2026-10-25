@@ -56,7 +56,7 @@ class YoutubeTransferAndroidTest {
         val directory = File(app.cacheDir, "youtube-transfer-acceptance").apply { mkdirs() }
         val dest = File(directory, "media.part")
         val chunks = mutableListOf<DownloadChunk>()
-        val record = linkedMapOf<String, Any>("videoId" to id, "profile" to plan.profile.name, "expectedBytes" to length)
+        val record = linkedMapOf<String, Any>("videoId" to id, "profile" to plan.client.name, "expectedBytes" to length)
         val proxy = LocalStreamProxy(app, client, advertisedHost = "127.0.0.1", mediaRequests = policy)
         try {
             val paused = transport.downloadComponent("device-transfer", component, source, dest, emptyList()) {

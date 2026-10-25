@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Болдырылды</string>
     <string name="about_save_failed">Қолданба журналдарын сақтау мүмкін болмады. Басқа сақтау орнын таңдап, әрекетті қайталаңыз.</string>
     <string name="player_live_unavailable">Тікелей эфир қолжетімсіз. Кейінірек қайталап көріңіз.</string>
+    <string name="autoplay">Автоойнату</string>
+    <string name="queue_item_already">Кезекте тұр</string>
+    <string name="title_copied">Тақырып көшірілді</string>
+    <string name="verification_title">Растау қажет</string>
+    <string name="verification_banner_text">YouTube қосымша мазмұн жүктелгенше растауды сұрады. Бар мазмұн қолжетімді болып қала береді.</string>
+    <string name="verification_banner_action">Растау</string>
+    <string name="verification_banner_dismiss">Өткізіп жіберу</string>
+    <string name="verification_close">Жабу</string>
+    <string name="verification_completed">Растау аяқталды. Қайта талаптанып жатыр…</string>
+    <string name="verification_still_blocked">Растаудан кейін де блокталған. Кейінірек қайта байқап көріңіз.</string>
 </resources>

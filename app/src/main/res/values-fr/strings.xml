@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Enregistrement annulé</string>
     <string name="about_save_failed">Impossible d\'enregistrer les journaux de diagnostic. Choisissez un autre emplacement et réessayez.</string>
     <string name="player_live_unavailable">Diffusion en direct indisponible. Réessayez plus tard.</string>
+    <string name="autoplay">Lecture automatique</string>
+    <string name="queue_item_already">Déjà dans la file d\'attente</string>
+    <string name="title_copied">Titre copié</string>
+    <string name="verification_title">Vérification requise</string>
+    <string name="verification_banner_text">YouTube a demandé une vérification avant de charger davantage de contenu. Le contenu existant reste disponible.</string>
+    <string name="verification_banner_action">Vérifier</string>
+    <string name="verification_banner_dismiss">Ignorer</string>
+    <string name="verification_close">Fermer</string>
+    <string name="verification_completed">Vérification terminée. Nouvelle tentative…</string>
+    <string name="verification_still_blocked">Toujours bloqué après la vérification. Veuillez réessayer plus tard.</string>
 </resources>

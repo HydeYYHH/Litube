@@ -92,7 +92,7 @@ class ChannelCommunityScreenshotAndroidTest {
         val state = mutableStateOf(state(ChannelTab.Shorts, 390))
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
-                key(width.intValue) {
+                key(width.intValue, state.value.selectedTab) {
                     Box(Modifier.requiredSize(width.intValue.dp, height.intValue.dp)) {
                         ChannelScreen(state.value, {}, {})
                     }

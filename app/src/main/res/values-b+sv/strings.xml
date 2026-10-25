@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Avbruten</string>
     <string name="about_save_failed">Det gick inte att spara apploggar. Välj en annan plats för att spara och försök igen.</string>
     <string name="player_live_unavailable">Livesändningen är inte tillgänglig. Försök igen senare.</string>
+    <string name="autoplay">Automatisk uppspelning</string>
+    <string name="queue_item_already">Redan i kön</string>
+    <string name="title_copied">Rubrik kopierad</string>
+    <string name="verification_title">Verifiering krävs</string>
+    <string name="verification_banner_text">YouTube begärde verifiering innan mer innehåll kan laddas. Befintligt innehåll förblir tillgängligt.</string>
+    <string name="verification_banner_action">Verifiera</string>
+    <string name="verification_banner_dismiss">Avfärda</string>
+    <string name="verification_close">Stäng</string>
+    <string name="verification_completed">Verifiering slutförd. Försöker igen…</string>
+    <string name="verification_still_blocked">Fortfarande blockerad efter verifieringen. Försök igen senare.</string>
 </resources>

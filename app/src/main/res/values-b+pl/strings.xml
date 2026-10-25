@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Anulowano</string>
     <string name="about_save_failed">Nie udało się zapisać dzienników aplikacji. Wybierz inną lokalizację zapisu i spróbuj ponownie.</string>
     <string name="player_live_unavailable">Transmisja na żywo jest niedostępna. Spróbuj ponownie później.</string>
+    <string name="autoplay">Autoodtwarzanie</string>
+    <string name="queue_item_already">Już w kolejce</string>
+    <string name="title_copied">Skopiowano tytuł</string>
+    <string name="verification_title">Wymagana weryfikacja</string>
+    <string name="verification_banner_text">YouTube zażądał weryfikacji przed załadowaniem kolejnych treści. Istniejące treści pozostają dostępne.</string>
+    <string name="verification_banner_action">Zweryfikuj</string>
+    <string name="verification_banner_dismiss">Odrzuć</string>
+    <string name="verification_close">Zamknij</string>
+    <string name="verification_completed">Weryfikacja zakończona. Ponawianie…</string>
+    <string name="verification_still_blocked">Nadal zablokowane po weryfikacji. Spróbuj ponownie później.</string>
 </resources>

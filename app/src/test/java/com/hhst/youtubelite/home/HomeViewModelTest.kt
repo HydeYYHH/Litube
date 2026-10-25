@@ -57,20 +57,27 @@ class HomeViewModelTest {
     }
 
     @Test fun coldStartPaintsTheCapturedSnapshotAndTheLiveLoadReplacesIt() = runTest {
+        // Unconfined Main keeps seeding, load and paint synchronous; no scheduler pumping.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
         val dir = java.nio.file.Files.createTempDirectory("content-snapshots").toFile()
         val store = com.hhst.youtubelite.core.ContentSnapshots(dir, com.google.gson.Gson())
         store.write("home", "visitor", "All", listOf(
             FeedItem.Video("cached-1", "Cached", "Blender", "1K views", "bunny", "9:56", "blender")))
         val vm = HomeViewModel(repository { _, _ ->
             HomePage(listOf(FeedItem.Video("live-1", "Live", "Blender", "2K views", "bunny", "9:56", "blender")))
-        }, SavedStateHandle(), snapshots = store)
+        }, SavedStateHandle(), snapshots = store, seedDispatcher = UnconfinedTestDispatcher())
         // The snapshot paints before any request; it carries no cursor and no live claim.
         val seeded = vm.uiState.value.content as HomeContent.Feed
         assertEquals(listOf("cached-1"), seeded.page.items.map { it.id })
         assertTrue(seeded.refreshing)
         assertNull(seeded.page.nextKey)
         vm.onAction(HomeAction.Refresh)
-        advanceUntilIdle()
+        // The persisted snapshot write hops to real IO; wait for it before reading the store.
+        val writeDeadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < writeDeadline &&
+            store.read<FeedItem.Video>("home", "visitor", "All",
+                com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type
+            )?.map { (it as FeedItem.Video).id }?.singleOrNull() != "live-1") Thread.sleep(20)
         val live = vm.uiState.value.content as HomeContent.Feed
         assertEquals(listOf("live-1"), live.page.items.map { it.id })
         assertEquals(listOf("live-1"), store.read<FeedItem.Video>("home", "visitor", "All",
@@ -415,6 +422,23 @@ class HomeViewModelTest {
         vm.verificationCompleted(url)
         advanceUntilIdle()
         assertEquals(2, calls)
+    }
+
+    @Test fun asynchronousSnapshotPaintsWhileAutomaticLoadIsPending() = runTest {
+        val directory = java.nio.file.Files.createTempDirectory("home-seed").toFile()
+        val store = com.hhst.youtubelite.core.ContentSnapshots(directory)
+        val row = FeedItem.Video("cached", "Cached", "Author", "1K views", "bunny", "1:00", "blender")
+        store.write("home", "visitor", "All", listOf(row))
+        val response = kotlinx.coroutines.CompletableDeferred<HomePage>()
+        try {
+            val vm = HomeViewModel(repository { _, _ -> response.await() }, SavedStateHandle(), loadOnStart = true,
+                snapshots = store, seedDispatcher = StandardTestDispatcher(testScheduler))
+            runCurrent()
+            assertEquals(listOf(row), (vm.uiState.value.content as HomeContent.Feed).page.items)
+            response.complete(HomePage(emptyList()))
+            advanceUntilIdle()
+            assertTrue(vm.uiState.value.content is HomeContent.Empty)
+        } finally { directory.deleteRecursively() }
     }
 
 }

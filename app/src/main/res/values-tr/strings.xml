@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">İptal edildi</string>
     <string name="about_save_failed">Uygulama günlükleri kaydedilemedi. Başka bir kaydetme konumu seçip tekrar deneyin.</string>
     <string name="player_live_unavailable">Canlı yayın kullanılamıyor. Daha sonra tekrar deneyin.</string>
+    <string name="autoplay">Otomatik oynatma</string>
+    <string name="queue_item_already">Zaten sırada</string>
+    <string name="title_copied">Başlık kopyalandı</string>
+    <string name="verification_title">Doğrulama gerekli</string>
+    <string name="verification_banner_text">YouTube, daha fazla içerik yüklenmeden önce doğrulama istedi. Mevcut içerik erişilebilir kalır.</string>
+    <string name="verification_banner_action">Doğrula</string>
+    <string name="verification_banner_dismiss">Yoksay</string>
+    <string name="verification_close">Kapat</string>
+    <string name="verification_completed">Doğrulama tamamlandı. Yeniden deneniyor…</string>
+    <string name="verification_still_blocked">Doğrulamadan sonra hâlâ engellendi. Lütfen daha sonra tekrar deneyin.</string>
 </resources>

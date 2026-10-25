@@ -1,5 +1,11 @@
 package com.hhst.youtubelite.downloader.engine
 
+import com.hhst.youtubelite.extractor.MediaProtocol
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
+import com.hhst.youtubelite.extractor.StreamClient
+import com.hhst.youtubelite.extractor.WebAccount
+import com.hhst.youtubelite.extractor.YoutubeWebSession
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.CompletionKind
 import com.hhst.youtubelite.downloader.core.DownloadConfig
@@ -24,9 +30,6 @@ import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.muxedFormat
 import com.hhst.youtubelite.downloader.resolve.subtitle
 import com.grack.nanojson.JsonObject
-import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -178,9 +181,9 @@ class DownloadEngineE2ETest {
     @Test
     fun attachmentFailure_isPartialAndRetryFailedOnly() = runBlocking {
         val media = load("downloader/media/avc_aac.mp4")
-        val session = YoutubeSession("subtitle-test", YoutubeSession.Account.ANONYMOUS,
+        val session = YoutubeWebSession("subtitle-test", WebAccount.ANONYMOUS,
             0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(), { "" })
-        val subtitlePlan = RequestPlan(session, ClientProfile.WEB, RequestPlan.Protocol.HTTPS, RequestPlan.Range.NONE, false)
+        val subtitlePlan = MediaRequestPlan(session, StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.NONE, false)
         server.dispatcher = mediaDispatcher(media) { request ->
             if ("timedtext" in request.path.orEmpty()) MockResponse().setResponseCode(404) else null
         }

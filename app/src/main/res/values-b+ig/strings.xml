@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Kagbuo</string>
     <string name="about_save_failed">Enweghị ike ịchekwa ndekọ ngwa. Họrọ ebe nchekwa ọzọ wee nwaa ọzọ.</string>
     <string name="player_live_unavailable">Nkwanye ndụ adịghị. Gbalịa ọzọ ma emechaa.</string>
+    <string name="autoplay">Autoplay</string>
+    <string name="queue_item_already">Ọ nọ na ndenje agbanwereela</string>
+    <string name="title_copied">Edepụtala aha</string>
+    <string name="verification_title">Nyocha dị mkpa</string>
+    <string name="verification_banner_text">YouTube rịọrọ nyocha tupu ibu ọdịnaya ọzọ. Ọdịnaya dị adị na-anọgide na-enweta.</string>
+    <string name="verification_banner_action">Nyochaa</string>
+    <string name="verification_banner_dismiss">Meghari</string>
+    <string name="verification_close">Mechiri</string>
+    <string name="verification_completed">Emechaala nyocha. Na-anwa ọzọ…</string>
+    <string name="verification_still_blocked">Ka na-egbochi mgbe nyocha gasịrị. Nwalite ọzọ mgbe e mesịrị.</string>
 </resources>

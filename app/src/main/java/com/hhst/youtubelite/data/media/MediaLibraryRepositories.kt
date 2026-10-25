@@ -128,7 +128,12 @@ class MediaNotificationsRepository(private val client: MediaClient) : Notificati
 class MediaExploreRepository(private val client: MediaClient) : ExploreRepository {
     override suspend fun explore(category: ExploreCategory) = client.read { context, http ->
         val page = loadHome(HomeSection.valueOf(category.name.uppercase()), context, http = http).requireValue()
-        ExplorePage(category, page.items.filter { it.kind == "video" }.map(MediaItem::feedVideo))
+        // Shelves stay carousels; the flat list keeps the fallback grid useful.
+        val sections = page.groups.mapNotNull { group ->
+            val videos = group.items.filter { it.kind == "video" }.map(MediaItem::feedVideo)
+            ExploreSection(group.title, videos).takeIf { videos.isNotEmpty() }
+        }
+        ExplorePage(category, sections.flatMap { it.videos }.ifEmpty { page.items.filter { it.kind == "video" }.map(MediaItem::feedVideo) }, sections)
     }
 }
 
@@ -142,26 +147,32 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
             val video = loadWatch(startId, context, http = http).requireValue()
             val seed = ShortItem(startId, video.title.orEmpty(), video.author.orEmpty(), video.channelId.orEmpty(),
                 "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "")
-            val rest = try {
-                surroundingItems(context, http).filter { it.id != startId }
-            } catch (error: MediaException) {
-                emptyList()
-            }
-            ShortsPage(listOf(seed) + rest)
+            ShortsPage(listOf(seed), INITIAL_CURSOR)
         } else {
-            ShortsPage(surroundingItems(context, http))
+            shortsPage(context, http, null)
         }
     }
 
-    /** Feed items around the seed; plain failure for seedless entries. */
-    private fun surroundingItems(context: RequestContext, http: HttpClient): List<ShortItem> {
-        val page = if (channelId == null) loadHome(HomeSection.SHORTS, context, http = http).requireValue() else {
+    override suspend fun shortsNext(cursor: String): ShortsPage = client.read { context, http ->
+        shortsPage(context, http, cursor.takeUnless { it == INITIAL_CURSOR })
+    }
+
+    private fun shortsPage(context: RequestContext, http: HttpClient, cursor: String?): ShortsPage {
+        val page = pageFor(cursor, context, http)
+        return ShortsPage(page.items.filter { it.kind in setOf("video", "short") }.map {
+            ShortItem(it.id, it.title.orEmpty(), it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), "", "", "")
+        }, page.nextKey)
+    }
+
+    private fun pageFor(cursor: String?, context: RequestContext, http: HttpClient): BrowsePage {
+        if (channelId == null) return loadHome(HomeSection.SHORTS, context, cursor, http).requireValue()
+        return if (cursor != null) loadChannel(channelId, context, continuation = cursor, http = http).requireValue().page
+        else {
             val channel = loadChannel(channelId!!, context, http = http).requireValue()
             val tab = channel.page.tabs.firstOrNull { it.title.equals("Shorts", true) }
             if (tab == null) channel.page.copy(items = emptyList()) else loadChannel(channelId, context, tab.params, http = http).requireValue().page
         }
-        return page.items.filter { it.kind in setOf("video", "short") }.map {
-            ShortItem(it.id, it.title.orEmpty(), it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), "", "", "")
-        }
     }
+
+    private companion object { const val INITIAL_CURSOR = "local:shorts-initial" }
 }

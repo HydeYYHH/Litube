@@ -13,7 +13,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.grack.nanojson.JsonObject
+import com.hhst.youtubelite.extractor.ExtractionContext
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
+import com.hhst.youtubelite.extractor.ExtractionTransport
+import com.hhst.youtubelite.extractor.WebAccount
+import com.hhst.youtubelite.extractor.YoutubeWebSession
 import com.hhst.youtubelite.extractor.ExtractionTestActivity
 import com.hhst.youtubelite.extractor.RemoteEjsRuntime
 import com.hhst.youtubelite.core.MmkvJsonCache
@@ -25,8 +29,6 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.services.youtube.streams.*
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -37,15 +39,39 @@ class DiagnosticExportAndroidTest {
     private val app = InstrumentationRegistry.getInstrumentation().targetContext
     private val gson = Gson()
     private fun extraction(context: DiagnosticContext) = ExtractionContext(
-        YoutubeSession("fixture", YoutubeSession.Account.ANONYMOUS, 0, null, null, null, null, "fixture", 0,
+        YoutubeWebSession("fixture", WebAccount.ANONYMOUS, 0, null, null, null, null, "fixture", 0,
             null, "offline", JsonObject(), { "" }),
-        object : Downloader() {
-            override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response = throw IOException("JS_NO_NETWORK")
-        }, ChallengeSolver { _, _, _, _ -> ChallengeSolver.Solutions(emptyMap(), emptyMap()) }, null,
-        false, false, System.nanoTime() + TimeUnit.SECONDS.toNanos(20), { true }, ExtractionDiagnostics().scoped(context))
+        object : ExtractionTransport {
+            override fun get(context: com.hhst.youtubelite.extractor.ExtractionContext, url: String, headers: Map<String, List<String>>) = throw IOException("JS_NO_NETWORK")
+            override fun post(context: com.hhst.youtubelite.extractor.ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray) = throw IOException("JS_NO_NETWORK")
+        }, false, false, true, "",
+        System.nanoTime() + TimeUnit.SECONDS.toNanos(20), { true }, ExtractionDiagnostics().scoped(context))
 
     private fun rows(zip: ZipFile, name: String) = zip.getInputStream(zip.getEntry(name)).bufferedReader().readLines()
         .filter { it.isNotBlank() }.map { JsonParser.parseString(it).asJsonObject }
+
+    @Test fun unresponsiveSnapshotProviderYieldsAPartialArchive() {
+        val release = java.util.concurrent.CountDownLatch(1)
+        AppLog.registerSnapshot("blocked-fixture") {
+            while (release.count > 0) {
+                try { release.await() } catch (_: InterruptedException) { }
+            }
+            mapOf("state" to "ready")
+        }
+        try {
+            val start = SystemClock.elapsedRealtime()
+            ZipFile(AppLog.export(app)).use { zip ->
+                val context = JsonParser.parseString(zip.getInputStream(zip.getEntry("context.json")).bufferedReader().readText()).asJsonObject
+                assertEquals("unavailable", context.getAsJsonObject("providers").getAsJsonObject("blocked-fixture").get("state").asString)
+                val manifest = JsonParser.parseString(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()).asJsonObject
+                assertFalse(manifest.getAsJsonObject("statistics").getAsJsonObject("process_flush").get("provider:blocked-fixture").asBoolean)
+            }
+            assertTrue(SystemClock.elapsedRealtime() - start < 6500)
+        } finally {
+            release.countDown()
+            AppLog.registerSnapshot("blocked-fixture") { mapOf("state" to "released") }
+        }
+    }
 
     @Test fun corruptStorageRetainsFailureWithoutTheCachedBody() {
         val kv = requireNotNull(MMKV.mmkvWithID("diagnostic-corruption-fixture"))

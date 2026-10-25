@@ -1,7 +1,7 @@
 package com.hhst.youtubelite.extractor
 
+import com.grack.nanojson.JsonObject
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -68,16 +68,34 @@ class ExtractorEpochTest {
         override fun putChapters(videoId: String, chapters: ChapterList) = Unit
     }
 
-    /** Fails every request in-flight so extraction work never leaves the JVM. */
-    private fun offlineDownloader(): HttpDownloader = HttpDownloader(
-        OkHttpClient.Builder()
-            .addInterceptor { throw IOException("offline epoch test") }
-            .build(),
-    )
+    /** Fails every resolution so extraction work never leaves the JVM. */
+    private class FailingHost : PlaybackHost {
+        private val diagnostics = object : EngineDiagnostics {
+            override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) {}
+        }
+        private val transport = object : ExtractionTransport {
+            override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>) = throw IOException("offline epoch test")
+            override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray) = throw IOException("offline epoch test")
+        }
+        override fun context(videoId: String, fresh: Boolean, catalog: Boolean, demand: PlaybackDemand?,
+                             taskCurrent: () -> Boolean, deadlineNanos: Long, playbackPriority: Boolean,
+                             diagnosticContext: com.hhst.youtubelite.diagnostics.DiagnosticContext): ExtractionContext =
+            ExtractionContext(YoutubeWebSession("offline", WebAccount.ANONYMOUS, 0, null, null, null, null, "UA", 0, null, "test", JsonObject()) { "" },
+                transport, false, catalog, playbackPriority, "", deadlineNanos, taskCurrent, diagnostics)
+        override fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean): MscPlayback.Resolved =
+            throw IOException("offline epoch test")
+        override fun chapters(videoId: String, context: ExtractionContext): List<Chapter> =
+            throw IOException("offline epoch test")
+        override fun deferredClients(videoId: String): Set<StreamClient> = emptySet()
+        override fun cache(inner: Cache, context: () -> ExtractionContext): Cache = inner
+        override fun invalidateStream(videoId: String) {}
+        override fun scopeHint(): String = "offline"
+        override fun recoveryScope(): String = "offline"
+    }
 
     private fun extractor(cache: Cache): Extractor = Extractor(
-        downloader = offlineDownloader(),
         cache = cache,
+        host = FailingHost(),
     )
 
     @Test

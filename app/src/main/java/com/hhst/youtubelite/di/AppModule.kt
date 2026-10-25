@@ -59,10 +59,13 @@ import com.hhst.youtubelite.extractor.AndroidChallengeSolver
 import com.hhst.youtubelite.extractor.BrowserPlayerResponses
 import com.hhst.youtubelite.extractor.Cache
 import com.hhst.youtubelite.extractor.DiskCache
+import com.hhst.youtubelite.extractor.AdaptiveClientOrder
+import com.hhst.youtubelite.extractor.PlaybackHost
+import com.hhst.youtubelite.extractor.PoTokenMinter
+import com.hhst.youtubelite.extractor.SignatureSolver
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.HeavyJsGate
-import com.hhst.youtubelite.extractor.HttpDownloader
 import com.hhst.youtubelite.extractor.LayeredCache
 import com.hhst.youtubelite.extractor.MemCache
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
@@ -86,6 +89,7 @@ import com.tencent.mmkv.MMKV
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
+import org.koin.dsl.bind
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -96,6 +100,8 @@ val appModule = module {
     single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::freshContext) }
     single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots"), get()) }
     single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get()) }
+    // Session-owned watch progress reporting; activities publish metadata and attach playback.
+    single { com.hhst.youtubelite.data.media.PlaybackWatchReporting(get(), { get<com.hhst.youtubelite.data.media.ContentRepositories>().localLibrary }) }
     single {
         DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -118,20 +124,20 @@ val appModule = module {
     single { ExtensionManager(get()) }
     single { HapticsController(androidContext(), get()) }
 
-    single { HttpDownloader(get()) }
     single { WebViewTimerOccupancy(AndroidWebViewTimerClock()) }
     single { HeavyJsGate() }
     single { ExtractionDiagnostics() }
     single { YoutubeSessionProvider(androidContext(), get(), get()) }
     single { BrowserPlayerResponses(get()) }
     single { YoutubeMediaRequests(get<YoutubeSessionProvider>(), get()) }
-    single { AndroidChallengeSolver(androidContext(), get(), get()) }
-    single { PoTokenProvider(androidContext(), get(), get()) }
-    single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get()) }
+    single { AndroidChallengeSolver(androidContext(), get(), get()) } bind SignatureSolver::class
+    single { PoTokenProvider(androidContext(), get(), get()) } bind PoTokenMinter::class
+    single { AdaptiveClientOrder() }
+    single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get(), get(),
+        playback = com.hhst.youtubelite.extractor.MscPlayback(get(), get(), com.hhst.youtubelite.data.media.MediaSession::freshContext)) } bind PlaybackHost::class
     single { OEmbedTitleFetcher(get()) }
     single {
         Extractor(
-            downloader = get(),
             cache = get(),
             host = get(),
         )

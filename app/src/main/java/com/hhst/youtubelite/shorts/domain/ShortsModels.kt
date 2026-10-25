@@ -12,7 +12,7 @@ data class ShortItem(
     val comments: String,
 )
 
-data class ShortsPage(val items: List<ShortItem>)
+data class ShortsPage(val items: List<ShortItem>, val nextKey: String? = null)
 
 sealed interface ShortsContent {
     data object Loading : ShortsContent
@@ -26,6 +26,8 @@ data class ShortsUiState(
     val startItemId: String? = null,
     val overlay: ShortsOverlay = ShortsOverlay.None,
     val currentItemId: String? = startItemId,
+    val appendLoading: Boolean = false,
+    val appendFailed: Boolean = false,
     /** Production mode: account writes run in the ViewModel and the feedback-only menu hides. */
     val live: Boolean = false,
     /** Confirmed viewer state per item/channel, applied only after the server confirms. */
@@ -50,6 +52,9 @@ sealed interface ShortsNavigationRequest {
 
 sealed interface ShortsAction {
     data object Retry : ShortsAction
+    /** Near-end prefetch; a no-op without a continuation key. */
+    data object LoadMore : ShortsAction
+    data object RetryMore : ShortsAction
     data class OpenChannel(val channelId: String) : ShortsAction
     data class OpenComments(val itemId: String) : ShortsAction
     data object CloseComments : ShortsAction

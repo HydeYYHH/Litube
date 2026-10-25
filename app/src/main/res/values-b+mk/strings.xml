@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Откажан</string>
     <string name="about_save_failed">Не може да се зачуваат дневниците на апликациите. Изберете друга локација за зачувување и обидете се повторно.</string>
     <string name="player_live_unavailable">Преносот во живо не е достапен. Обидете се повторно подоцна.</string>
+    <string name="autoplay">Автоматска репродукција</string>
+    <string name="queue_item_already">Веќе е во редица</string>
+    <string name="title_copied">Насловот е копиран</string>
+    <string name="verification_title">Потребна е потврда</string>
+    <string name="verification_banner_text">YouTube побара потврда пред да се вчита повеќе содржина. Постојната содржина останува достапна.</string>
+    <string name="verification_banner_action">Потврди</string>
+    <string name="verification_banner_dismiss">Отфрли</string>
+    <string name="verification_close">Затвори</string>
+    <string name="verification_completed">Потврдата е завршена. Се обидува повторно…</string>
+    <string name="verification_still_blocked">Сè уште блокирано по потврдата. Обидете се повторно подоцна.</string>
 </resources>

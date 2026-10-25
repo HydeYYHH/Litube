@@ -13,7 +13,6 @@ import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.HttpDownloader
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -77,7 +76,7 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
             oldPreferences.keys.filter { it.startsWith("skip_") }.forEach { prefs.setEnabled(it, false) }
             prefs.setEnabled(PreferenceKeys.ENABLE_PIP, true)
             prefs.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
-            extractorField.set(engine, Extractor(GlobalContext.get().get<HttpDownloader>(), streamCache(stream, "Offline watch", 120), scope))
+            extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 120), scope))
         }
     }
 

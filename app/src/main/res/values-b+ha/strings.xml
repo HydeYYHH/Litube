@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">An soke</string>
     <string name="about_save_failed">An kasa ajiye rajistan ayyukan app. Zaɓi wani wurin ajiyewa kuma a sake gwadawa.</string>
     <string name="player_live_unavailable">Ba a samun watsa shirye-shirye kai tsaye. A sake gwadawa daga baya.</string>
+    <string name="autoplay">Kunna kai tsaye</string>
+    <string name="queue_item_already">Tana cikin layi tun a baya</string>
+    <string name="title_copied">An kwafi taken</string>
+    <string name="verification_title">Ana bukatar tabbaci</string>
+    <string name="verification_banner_text">YouTube ta nemi tabbaci kafin ƙarin abun ciki ya loda. Abun cikin da ke akwai ya kasance a fili.</string>
+    <string name="verification_banner_action">Tabbatar</string>
+    <string name="verification_banner_dismiss">Kora</string>
+    <string name="verification_close">Rufe</string>
+    <string name="verification_completed">An kammala tabbaci. Ana sake gwadawa…</string>
+    <string name="verification_still_blocked">Har yanzu an toshe bayan tabbaci. Sake gwadawa daga baya.</string>
 </resources>

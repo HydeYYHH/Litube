@@ -15,52 +15,50 @@ import okhttp3.ResponseBody
 import okio.Buffer
 import okio.ForwardingSource
 import okio.buffer
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import java.io.IOException
 
 /** Shared media request construction and bounded compatibility feedback, injected into consumers. */
 class YoutubeMediaRequests(
-    private val current: (YoutubeSession) -> Boolean,
+    private val current: (YoutubeWebSession) -> Boolean,
     private val diagnostics: ExtractionDiagnostics,
-    private val invalidationReason: (YoutubeSession) -> String? = { "unknown" },
+    private val invalidationReason: (YoutubeWebSession) -> String? = { "unknown" },
 ) {
     // Issued CDN URLs survive page-configuration refreshes; only account or route changes end a read.
     constructor(sessions: YoutubeSessionProvider, diagnostics: ExtractionDiagnostics) : this(sessions::isMediaCurrent, diagnostics, sessions::mediaInvalidationReason)
-    private val plans = LinkedHashMap<String, RequestPlan>(128, .75f, true)
+    private val plans = LinkedHashMap<String, MediaRequestPlan>(128, .75f, true)
     private val post = LinkedHashSet<String>()
     private val cancellation = Executors.newSingleThreadScheduledExecutor {
         Thread(it, "youtube-media-cancellation").apply { isDaemon = true }
     }
 
-    @Synchronized fun register(url: String, plan: RequestPlan) {
+    @Synchronized fun register(url: String, plan: MediaRequestPlan) {
         plans[normalized(url)] = plan
         while (plans.size > 512) { val first = plans.keys.first(); plans.remove(first); post.remove(first) }
     }
-    @Synchronized fun plan(url: String): RequestPlan? = plans[normalized(url)]
-    fun isCurrent(plan: RequestPlan): Boolean = current(plan.session)
-    fun invalidationReason(plan: RequestPlan): String = invalidationReason(plan.session) ?: "unknown"
+    @Synchronized fun plan(url: String): MediaRequestPlan? = plans[normalized(url)]
+    fun isCurrent(plan: MediaRequestPlan): Boolean = current(plan.session)
+    fun invalidationReason(plan: MediaRequestPlan): String = invalidationReason(plan.session) ?: "unknown"
     private fun normalized(url: String) = url.toHttpUrl().newBuilder().removeAllQueryParameters("range").removeAllQueryParameters("rn").build().toString()
 
-    fun build(url: String, plan: RequestPlan, position: Long = 0, length: Long = -1,
-              extraHeaders: Map<String, String> = emptyMap(), range: RequestPlan.Range = plan.range): Request {
+    fun build(url: String, plan: MediaRequestPlan, position: Long = 0, length: Long = -1,
+              extraHeaders: Map<String, String> = emptyMap(), range: MediaRange = plan.range): okhttp3.Request {
         if (!current(plan.session)) throw IOException("MEDIA_SESSION_CHANGED")
         if (plan.expiresAtMillis <= System.currentTimeMillis()) throw IOException("MEDIA_URL_EXPIRED")
         if (position < 0 || length == 0L) throw IOException("MEDIA_RANGE_INVALID")
         var limit = if (length < 0) plan.chunkLimit else minOf(length, plan.chunkLimit)
         if (plan.resourceLength > 0) limit = minOf(limit, (plan.resourceLength - position).coerceAtLeast(0))
-        if (range != RequestPlan.Range.NONE && limit <= 0) throw IOException("MEDIA_READ_POSITION_OUT_OF_RANGE")
-        val builder = Request.Builder().url(url).tag(RequestPlan::class.java, plan)
+        if (range != MediaRange.NONE && limit <= 0) throw IOException("MEDIA_READ_POSITION_OUT_OF_RANGE")
+        val builder = okhttp3.Request.Builder().url(url).tag(MediaRequestPlan::class.java, plan)
         plan.headers.forEach { (name, value) -> builder.header(name, value) }
         extraHeaders.filterKeys { it.lowercase() !in setOf("authorization", "cookie", "user-agent", "range") }
             .forEach { (name, value) -> builder.header(name, value) }
         builder.header("User-Agent", plan.userAgent).header("Accept-Encoding", "identity")
         val cookies = plan.cookies(url)
         if (cookies.isNotEmpty()) builder.header("Cookie", cookies)
-        if (range != RequestPlan.Range.NONE && limit > 0) {
+        if (range != MediaRange.NONE && limit > 0) {
             val end = position + limit - 1
             if (end < position) throw IOException("MEDIA_RANGE_OVERFLOW")
-            if (range == RequestPlan.Range.QUERY) {
+            if (range == MediaRange.QUERY) {
                 builder.url(url.toHttpUrl().newBuilder().removeAllQueryParameters("range")
                     .addQueryParameter("range", "$position-$end").build())
             } else builder.header("Range", "bytes=$position-$end")
@@ -72,13 +70,13 @@ class YoutubeMediaRequests(
 
     fun interceptor() = Interceptor { chain ->
         val initial = chain.request()
-        val plan = initial.tag(RequestPlan::class.java) ?: plan(initial.url.toString()) ?: return@Interceptor chain.proceed(initial)
+        val plan = initial.tag(MediaRequestPlan::class.java) ?: plan(initial.url.toString()) ?: return@Interceptor chain.proceed(initial)
         val context = initial.tag(DiagnosticContext::class.java)
         val reported = AtomicBoolean()
         fun sessionChanged(): IOException {
             if (reported.compareAndSet(false, true)) AppLog.event(
                 AppLog.Category.EXTRACTOR, "media_session_invalidated",
-                mapOf("reason" to invalidationReason(plan), "client" to plan.profile.name, "protocol" to plan.protocol.name),
+                mapOf("reason" to invalidationReason(plan), "client" to plan.client.name, "protocol" to plan.protocol.name),
                 critical = true, context = context)
             return IOException("MEDIA_SESSION_CHANGED")
         }
@@ -115,10 +113,10 @@ class YoutubeMediaRequests(
             response.close()
             response = exchange(request.newBuilder().post(byteArrayOf(0x78, 0).toRequestBody()).build())
             if (response.isSuccessful) synchronized(this) { post.add(normalized(initial.url.toString())) }
-            diagnostics.event("media", plan.profile.name, "GET_POST_COMPATIBILITY", (System.nanoTime() - started) / 1_000_000, response.code)
+            diagnostics.event("media", plan.client.name, "GET_POST_COMPATIBILITY", (System.nanoTime() - started) / 1_000_000, response.code)
         }
         if (!current(plan.session)) { response.close(); throw sessionChanged() }
-        diagnostics.event("media", plan.profile.name, plan.protocol.name, (System.nanoTime() - started) / 1_000_000, response.code)
+        diagnostics.event("media", plan.client.name, plan.protocol.name, (System.nanoTime() - started) / 1_000_000, response.code)
         val mediaType = response.header("Content-Type").orEmpty().lowercase()
         if (response.isSuccessful && (mediaType.startsWith("text/html") || mediaType.startsWith("application/json"))) {
             response.close(); throw IOException("MEDIA_ERROR_BODY")
@@ -142,7 +140,7 @@ class YoutubeMediaRequests(
                     if (changed.get()) throw sessionChanged()
                     if (count < 0 && window.expectedBytes >= 0 && received != window.expectedBytes) throw IOException("MEDIA_EARLY_EOF")
                     if (count > 0) {
-                        if (received == 0L) diagnostics.event("read", plan.profile.name, "FIRST_BYTES", (System.nanoTime() - started) / 1_000_000, response.code)
+                        if (received == 0L) diagnostics.event("read", plan.client.name, "FIRST_BYTES", (System.nanoTime() - started) / 1_000_000, response.code)
                         received += count
                         if (window.expectedBytes >= 0 && received > window.expectedBytes) throw IOException("MEDIA_LENGTH_MISMATCH")
                     }
@@ -160,10 +158,10 @@ class YoutubeMediaRequests(
     data class Window(val expectedBytes: Long, val total: Long?)
 
     /** Shared range interpretation for player, download and proxy, including query-cropped views. */
-    fun window(response: Response, plan: RequestPlan): Window {
+    fun window(response: Response, plan: MediaRequestPlan): Window {
         val query = response.request.url.queryParameter("range")
         val raw = query ?: response.request.header("Range")?.removePrefix("bytes=")
-            ?: if (plan.range == RequestPlan.Range.NONE) return Window(response.body?.contentLength() ?: -1, null)
+            ?: if (plan.range == MediaRange.NONE) return Window(response.body?.contentLength() ?: -1, null)
             else throw IOException("MEDIA_RANGE_MISSING")
         val bounds = raw.split('-')
         val start = bounds.getOrNull(0)?.toLongOrNull() ?: throw IOException("MEDIA_RANGE_INVALID")
@@ -178,7 +176,7 @@ class YoutubeMediaRequests(
         val count = cr?.let { it.end - it.start + 1 } ?: length
         // Range.NONE names the whole object. A player-added Range header is optional, so a 200
         // without Content-Range is that object and the caller skips to the requested offset.
-        val wholeObject = response.code == 200 && query == null && cr == null && plan.range == RequestPlan.Range.NONE
+        val wholeObject = response.code == 200 && query == null && cr == null && plan.range == MediaRange.NONE
         if (count == 0L || (!wholeObject && (count > wanted || length > wanted))) throw IOException("MEDIA_RANGE_IGNORED")
         if (response.code == 200 && query == null && cr == null && plan.resourceLength > 0 && length != plan.resourceLength) throw IOException("MEDIA_OBJECT_CHANGED")
         if (!wholeObject && response.code == 200 && query == null && cr == null && (start != 0L || length < 0 || length > wanted)) throw IOException("MEDIA_RANGE_IGNORED")

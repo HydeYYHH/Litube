@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">保存をキャンセルしました</string>
     <string name="about_save_failed">診断ログを保存できませんでした。別の保存先を選んで再試行してください。</string>
     <string name="player_live_unavailable">ライブ配信を再生できません。しばらくしてから再試行してください。</string>
+    <string name="autoplay">自動再生</string>
+    <string name="queue_item_already">すでにキューにあります</string>
+    <string name="title_copied">タイトルをコピーしました</string>
+    <string name="verification_title">確認が必要です</string>
+    <string name="verification_banner_text">コンテンツをさらに読み込む前に、YouTube が確認を求めています。既存のコンテンツは引き続き利用できます。</string>
+    <string name="verification_banner_action">確認</string>
+    <string name="verification_banner_dismiss">破棄</string>
+    <string name="verification_close">閉じる</string>
+    <string name="verification_completed">確認が完了しました。再試行しています…</string>
+    <string name="verification_still_blocked">確認後も引き続きブロックされています。後でもう一度お試しください。</string>
 </resources>

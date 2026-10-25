@@ -36,6 +36,9 @@ class FixtureShortsRepository(private val scenario: ShortsScenario = ShortsScena
 
 interface ShortsRepository {
     suspend fun shorts(): ShortsPage
+
+    /** Continuation read; fixture feeds report no further pages. */
+    suspend fun shortsNext(cursor: String): ShortsPage = ShortsPage(emptyList())
 }
 
 enum class ShortsScenario(val argument: String) {

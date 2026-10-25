@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Сохранение отменено</string>
     <string name="about_save_failed">Не удалось сохранить журналы диагностики. Выберите другое место и повторите попытку.</string>
     <string name="player_live_unavailable">Прямая трансляция недоступна. Повторите попытку позже.</string>
+    <string name="autoplay">Автовоспроизведение</string>
+    <string name="queue_item_already">Уже в очереди</string>
+    <string name="title_copied">Название скопировано</string>
+    <string name="verification_title">Требуется подтверждение</string>
+    <string name="verification_banner_text">YouTube запросил подтверждение, прежде чем загрузить больше контента. Существующий контент остаётся доступным.</string>
+    <string name="verification_banner_action">Подтвердить</string>
+    <string name="verification_banner_dismiss">Скрыть</string>
+    <string name="verification_close">Закрыть</string>
+    <string name="verification_completed">Подтверждение завершено. Повторная попытка…</string>
+    <string name="verification_still_blocked">После подтверждения всё ещё заблокировано. Повторите попытку позже.</string>
 </resources>

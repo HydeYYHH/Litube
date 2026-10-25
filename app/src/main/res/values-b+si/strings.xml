@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">අවලංගු කරන ලදී</string>
     <string name="about_save_failed">යෙදුම් ලොග සුරැකීමට නොහැකි විය. වෙනත් සුරැකීමේ ස්ථානයක් තෝරා නැවත උත්සාහ කරන්න.</string>
     <string name="player_live_unavailable">සජීවී විකාශය ලබාගත නොහැක. පසුව නැවත උත්සාහ කරන්න.</string>
+    <string name="autoplay">ස්වයංක්‍රීය ධාවනය</string>
+    <string name="queue_item_already">දැනටමත් පෝලිමේ ඇත</string>
+    <string name="title_copied">මාතෘකාව පිටපත් කරන ලදී</string>
+    <string name="verification_title">සත්‍යාපනය අවශ්‍යයි</string>
+    <string name="verification_banner_text">වැඩි අන්තර්ගතයක් පූරණය කිරීමට පෙර YouTube සත්‍යාපනය ඉල්ලීය. පවතින අන්තර්ගතය ලබා ගත හැකිව පවතී.</string>
+    <string name="verification_banner_action">සත්‍යාපනය කරන්න</string>
+    <string name="verification_banner_dismiss">ඉවත් කරන්න</string>
+    <string name="verification_close">වසන්න</string>
+    <string name="verification_completed">සත්‍යාපනය සම්පූර්ණයි. නැවත උත්සාහ කරමින්…</string>
+    <string name="verification_still_blocked">සත්‍යාපනයෙන් පසුවත් අවහිරයි. කරුණාකර පසුව නැවත උත්සාහ කරන්න.</string>
 </resources>

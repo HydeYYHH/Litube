@@ -11,7 +11,6 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
-import com.hhst.youtubelite.extractor.HttpDownloader
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
@@ -83,7 +82,7 @@ class TransportRecoveryAndroidTest {
         try {
             keys.forEach { prefs.setEnabled(it, false) }
             instrumentation.runOnMainSync {
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), extractionCache, scope),
+                engine = PlaybackEngine(app, Extractor(extractionCache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), stateCache, prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer

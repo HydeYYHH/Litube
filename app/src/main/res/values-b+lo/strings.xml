@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ຍົກເລີກ</string>
     <string name="about_save_failed">ບໍ່ສາມາດບັນທຶກບັນທຶກແອັບຯໄດ້. ເລືອກສະຖານທີ່ບັນທຶກອື່ນ ແລະລອງໃໝ່ອີກ.</string>
     <string name="player_live_unavailable">ບໍ່ສາມາດເບິ່ງການຖ່າຍທອດສົດໄດ້. ກະລຸນາລອງໃໝ່ພາຍຫຼັງ.</string>
+    <string name="autoplay">ຫຼິ້ນອັດຕະໂນມັດ</string>
+    <string name="queue_item_already">ມີຢູ່ໃນຄິວແລ້ວ</string>
+    <string name="title_copied">ສຳເນົາຊື່ແລ້ວ</string>
+    <string name="verification_title">ຕ້ອງການການຢືນຢັນ</string>
+    <string name="verification_banner_text">YouTube ຮ້ອງຂໍການຢືນຢັນກ່ອນທີ່ຈະໂຫຼດເນື້ອຫາເພີ່ມເຕີມ. ເນື້ອຫາທີ່ມີຢູ່ຍັງສາມາດໃຊ້ໄດ້.</string>
+    <string name="verification_banner_action">ຢືນຢັນ</string>
+    <string name="verification_banner_dismiss">ປິດການແຈ້ງເຕືອນ</string>
+    <string name="verification_close">ປິດ</string>
+    <string name="verification_completed">ຢືນຢັນສຳເລັດແລ້ວ. ກຳລັງລອງໃໝ່…</string>
+    <string name="verification_still_blocked">ຍັງຖືກບລັອກຫຼັງຈາກຢືນຢັນ. ກະລຸນາລອງໃໝ່ພາຍຫຼັງ.</string>
 </resources>

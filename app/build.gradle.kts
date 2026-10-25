@@ -30,7 +30,7 @@ android {
         versionCode = 400
         versionName = "4.0.0-preview01"
         buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
-        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};NewPipe=${libs.newpipe.extractor.get().version}\"")
+        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};MSC=external/mediaservicecore\"")
         testInstrumentationRunner = "com.hhst.youtubelite.ContentTestRunner"
     }
 
@@ -146,10 +146,8 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     implementation(libs.okhttp)
     implementation(libs.gson)
+    implementation(libs.nanojson)
     implementation(libs.mmkv)
-    implementation(libs.newpipe.extractor) {
-        exclude(group = "org.mozilla", module = "rhino-engine")
-    }
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.exoplayer.hls)

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Ləğv edildi</string>
     <string name="about_save_failed">Tətbiq qeydlərini saxlamaq mümkün olmadı. Başqa saxlama yeri seçin və yenidən cəhd edin.</string>
     <string name="player_live_unavailable">Canlı yayım əlçatan deyil. Daha sonra yenidən cəhd edin.</string>
+    <string name="autoplay">Avtomatik oxutma</string>
+    <string name="queue_item_already">Artıq növbədədir</string>
+    <string name="title_copied">Başlıq kopyalandı</string>
+    <string name="verification_title">Yoxlama tələb olunur</string>
+    <string name="verification_banner_text">Daha çox məzmun yüklənməzdən əvvəl YouTube yoxlama tələb etdi. Mövcud məzmun əlçatan qalır.</string>
+    <string name="verification_banner_action">Yoxla</string>
+    <string name="verification_banner_dismiss">Rədd et</string>
+    <string name="verification_close">Bağla</string>
+    <string name="verification_completed">Yoxlama tamamlandı. Yenidən cəhd olunur…</string>
+    <string name="verification_still_blocked">Yoxlamadan sonra da bloklanıb. Zəhmət olmasa sonra yenidən cəhd edin.</string>
 </resources>

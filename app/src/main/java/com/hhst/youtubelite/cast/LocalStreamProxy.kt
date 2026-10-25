@@ -5,7 +5,6 @@ import com.hhst.youtubelite.diagnostics.*
 import android.content.Context
 import android.view.View
 import com.hhst.youtubelite.R
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
 import android.net.ConnectivityManager
 import android.os.SystemClock
@@ -18,6 +17,7 @@ import androidx.media3.extractor.ChunkIndex
 import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.core.Markup
 import androidx.core.os.ConfigurationCompat
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.player.datasource.YoutubeHttpDataSource
 import fi.iki.elonen.NanoHTTPD
@@ -61,7 +61,7 @@ class LocalStreamProxy(
         val configId: Long,
         val publishedVideoId: String? = null,
         val itag: Int? = null,
-        val requestPlan: RequestPlan? = null,
+        val requestPlan: MediaRequestPlan? = null,
         val diagnostic: DiagnosticContext = DiagnosticContext(),
     )
 
@@ -116,8 +116,8 @@ class LocalStreamProxy(
         videoItag: Int? = null,
         audioItag: Int? = null,
         generation: Long? = null,
-        videoRequestPlan: RequestPlan? = null,
-        audioRequestPlan: RequestPlan? = null,
+        videoRequestPlan: MediaRequestPlan? = null,
+        audioRequestPlan: MediaRequestPlan? = null,
     ) {
         val configId = generation ?: configGen.incrementAndGet()
         val tokens = mutableMapOf<String, StreamInfo>()
@@ -438,7 +438,7 @@ class LocalStreamProxy(
                         } catch (t: Throwable) {
                             if (recoverable(t)) {
                                 val failedPlan = mediaRequests?.plan(refreshed.youtubeUrl) ?: refreshed.requestPlan
-                                val backup = urlRefresher?.backupUrl(token, info.publishedVideoId, info.itag, failedPlan?.profile?.name)
+                                val backup = urlRefresher?.backupUrl(token, info.publishedVideoId, info.itag, failedPlan?.client?.name)
                                 if (backup != null) {
                                     val alternate = synchronized(streamInfoLock) {
                                         val latest = streamInfo[token]?.takeIf { it.configId == info.configId }

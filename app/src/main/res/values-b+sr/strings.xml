@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Отказано</string>
     <string name="about_save_failed">Није могуће сачувати евиденцију апликација. Изаберите другу локацију за чување и покушајте поново.</string>
     <string name="player_live_unavailable">Пренос уживо није доступан. Покушајте поново касније.</string>
+    <string name="autoplay">Аутоматско репродуковање</string>
+    <string name="queue_item_already">Већ је у реду</string>
+    <string name="title_copied">Наслов је копиран</string>
+    <string name="verification_title">Потребна је потврда</string>
+    <string name="verification_banner_text">YouTube је затражио потврду пре учитавања додатног садржаја. Постојећи садржај остаје доступан.</string>
+    <string name="verification_banner_action">Потврди</string>
+    <string name="verification_banner_dismiss">Одбаци</string>
+    <string name="verification_close">Затвори</string>
+    <string name="verification_completed">Потврда је завршена. Покушава се поново…</string>
+    <string name="verification_still_blocked">И даље блокирано након потврде. Покушајте поново касније.</string>
 </resources>

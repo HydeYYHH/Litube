@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ସଞ୍ଚୟ ବାତିଲ ହୋଇଛି</string>
     <string name="about_save_failed">ଲଗ୍ ସଞ୍ଚୟ କରିହେଲା ନାହିଁ। ଅନ୍ୟ ସ୍ଥାନ ବାଛି ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</string>
     <string name="player_live_unavailable">ଲାଇଭ୍ ଷ୍ଟ୍ରିମ୍ ଉପଲବ୍ଧ ନାହିଁ। ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</string>
+    <string name="autoplay">ଅଟୋପ୍ଲେ</string>
+    <string name="queue_item_already">ପୂର୍ବରୁ ଧାଡ଼ିରେ ଅଛି</string>
+    <string name="title_copied">ଶୀର୍ଷକ କପି ହୋଇଗଲା</string>
+    <string name="verification_title">ଯାଞ୍ଚ ଆବଶ୍ୟକ</string>
+    <string name="verification_banner_text">ଅଧିକ ବିଷୟବସ୍ତୁ ଲୋଡ୍ ହେବା ପୂର୍ବରୁ YouTube ଯାଞ୍ଚ ମାଗିଛି। ଏବେକାର ବିଷୟବସ୍ତୁ ଉପଲବ୍ଧ ରହିବ।</string>
+    <string name="verification_banner_action">ଯାଞ୍ଚ କରନ୍ତୁ</string>
+    <string name="verification_banner_dismiss">ଖାରଜ କରନ୍ତୁ</string>
+    <string name="verification_close">ବନ୍ଦ କରନ୍ତୁ</string>
+    <string name="verification_completed">ଯାଞ୍ଚ ସମ୍ପୂର୍ଣ୍ଣ ହେଲା। ପୁଣି ଚେଷ୍ଟା କରୁଅଛି…</string>
+    <string name="verification_still_blocked">ଯାଞ୍ଚ ପରେ ମଧ୍ୟ ଅବରୋଧିତ। ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</string>
 </resources>

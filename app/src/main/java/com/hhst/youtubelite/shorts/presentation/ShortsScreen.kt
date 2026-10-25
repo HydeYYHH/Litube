@@ -80,16 +80,26 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
     state: ShortsUiState) {
     val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
     val currentAction by rememberUpdatedState(onAction)
-    LaunchedEffect(pagerState, items) {
+    LaunchedEffect(pagerState, items, (state.content as? ShortsContent.Ready)?.page?.nextKey) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             items.getOrNull(page)?.let { currentAction(ShortsAction.SelectItem(it.id)) }
+            // Prefetch the continuation before the pager runs out of pages.
+            if (page >= items.size - 3) currentAction(ShortsAction.LoadMore)
         }
     }
+    Box(Modifier.fillMaxSize()) {
     VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
         ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null,
             rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
             subscribed = state.subscriptions[items[page].channelId] == true,
             menuVisible = !state.live)
+    }
+    if (state.appendFailed) AppText(androidx.compose.ui.res.stringResource(R.string.retry),
+        Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(bottom = 16.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF272727))
+            .clickable(role = Role.Button) { onAction(ShortsAction.RetryMore) }
+            .heightIn(min = 48.dp).padding(horizontal = 20.dp, vertical = 12.dp)
+            .testTag("shorts-append-retry"), color = Color.White)
     }
 }
 

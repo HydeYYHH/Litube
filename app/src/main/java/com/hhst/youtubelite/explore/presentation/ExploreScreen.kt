@@ -60,7 +60,9 @@ fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBa
                         onDismiss = { onAction(ExploreAction.DismissVerification) },
                         modifier = Modifier.testTag("explore-verification"),
                     ) else LibraryError("explore-error") { onAction(ExploreAction.Retry) }
-                    is ExploreContent.Ready -> CategoryContainer(content.page.videos, width, onAction)
+                    is ExploreContent.Ready -> if (content.page.sections.isNotEmpty())
+                        SectionedContainer(content.page.sections, onAction)
+                    else CategoryContainer(content.page.videos, width, onAction)
                 }
             }
         }
@@ -84,7 +86,36 @@ private fun CategoryChips(selected: ExploreCategory, onAction: (ExploreAction) -
     }
 }
 
-/** The one container template every category renders through. */
+/** Server shelves render as titled horizontal carousels. */
+@Composable
+private fun SectionedContainer(sections: List<com.hhst.youtubelite.explore.domain.ExploreSection>, onAction: (ExploreAction) -> Unit) {
+    androidx.compose.foundation.lazy.LazyColumn(
+        Modifier.fillMaxSize().testTag("explore-sections"),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        sections.forEachIndexed { index, section ->
+            item(key = "section-$index", contentType = "section-header") {
+                Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, bottom = 8.dp).testTag("explore-section-${index}-title")) {
+                    AppText(section.title ?: "Explore", size = 18, line = 24, weight = FontWeight.Bold)
+                }
+            }
+            item(key = "carousel-$index", contentType = "carousel") {
+                LazyRow(
+                    Modifier.fillMaxWidth().testTag("explore-carousel-$index"),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                ) {
+                    listItems(section.videos, key = { it.id }, contentType = { "video" }) { item ->
+                        Box(Modifier.width(300.dp)) {
+                            ExploreVideoCard(item, compact = false, onAction = onAction)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun CategoryContainer(videos: List<FeedItem.Video>, width: Float, onAction: (ExploreAction) -> Unit) {
     val columns = when {

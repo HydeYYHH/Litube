@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Batal</string>
     <string name="about_save_failed">Ora bisa nyimpen log app. Pilih lokasi nyimpen liyane lan coba maneh.</string>
     <string name="player_live_unavailable">Siaran langsung ora kasedhiya. Coba maneh mengko.</string>
+    <string name="autoplay">Puter otomatis</string>
+    <string name="queue_item_already">Wes ana ing antrean</string>
+    <string name="title_copied">Judhul disalin</string>
+    <string name="verification_title">Perlu verifikasi</string>
+    <string name="verification_banner_text">YouTube njaluk verifikasi sadurunge muat konten liyane. Konten sing wis ana tetep bisa diakses.</string>
+    <string name="verification_banner_action">Verifikasi</string>
+    <string name="verification_banner_dismiss">Abaiake</string>
+    <string name="verification_close">Tutup</string>
+    <string name="verification_completed">Verifikasi rampung. Nyoba maneh…</string>
+    <string name="verification_still_blocked">Isih diblokir sawise verifikasi. Coba maneh mengko.</string>
 </resources>

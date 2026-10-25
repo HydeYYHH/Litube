@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Anulat</string>
     <string name="about_save_failed">Nu s-au putut salva jurnalele aplicației. Alegeți o altă locație de salvare și încercați din nou.</string>
     <string name="player_live_unavailable">Transmisia în direct nu este disponibilă. Încercați din nou mai târziu.</string>
+    <string name="autoplay">Redare automată</string>
+    <string name="queue_item_already">Este deja în coadă</string>
+    <string name="title_copied">Titlu copiat</string>
+    <string name="verification_title">Verificare necesară</string>
+    <string name="verification_banner_text">YouTube a solicitat o verificare înainte de a încărca mai mult conținut. Conținutul existent rămâne disponibil.</string>
+    <string name="verification_banner_action">Verifică</string>
+    <string name="verification_banner_dismiss">Respinge</string>
+    <string name="verification_close">Închide</string>
+    <string name="verification_completed">Verificare finalizată. Reîncerc…</string>
+    <string name="verification_still_blocked">Încă blocat după verificare. Încercați din nou mai târziu.</string>
 </resources>

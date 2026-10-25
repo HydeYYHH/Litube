@@ -14,14 +14,24 @@ internal object DiagnosticArchive {
     private val legacyFields = setOf("video_id", "operation", "task", "stage", "duration_ms", "http_status", "sequence",
         "profile", "detail", "state", "position_ms", "error_code", "decoder", "count", "fps", "expected_fps",
         "rendered", "dropped", "ratio", "reextract", "phase", "generation", "batch", "reason", "timestamp")
-    fun write(target: File, sources: Map<String, String>, environment: Map<String, Any?>, statistics: Map<String, Any?>) {
+    fun write(target: File, sources: Map<String, String>, environment: Map<String, Any?>, statistics: Map<String, Any?>,
+              deadline: () -> Boolean = { false }) {
         val records = mutableListOf<DiagnosticEvent>()
         var invalid = 0; var legacy = 0; var unknownFields = 0
         var legacySequence = 0L
+        val stopped = mutableSetOf<String>()
         val sourceInfo = sources.map { (name, content) ->
             var rows = 0
+            if (deadline()) {
+                stopped += name
+                return@map mapOf("name" to name, "lines" to 0, "deadline_stopped" to true)
+            }
             content.lineSequence().filter { it.isNotBlank() }.forEachIndexed { index, line ->
                 rows++
+                if (rows % 256 == 0 && deadline()) {
+                    stopped += name
+                    return@map mapOf("name" to name, "lines" to rows, "deadline_stopped" to true)
+                }
                 runCatching {
                     require(line.toByteArray(Charsets.UTF_8).size <= 64_000)
                     val json = JsonParser.parseString(line).asJsonObject
@@ -125,6 +135,7 @@ internal object DiagnosticArchive {
             "time_end" to timeline.maxOfOrNull { it.time }, "event_count" to timeline.size,
             "incident_count" to incidents.size, "processes" to records.map { it.process }.distinct().sorted(),
             "source_files" to sourceInfo, "invalid_rows" to invalid, "legacy_rows" to legacy,
+            "deadline_stopped_files" to stopped.toList(),
             "discarded_legacy_fields" to unknownFields, "statistics" to statistics,
             "statistics_by_process" to records.groupBy { it.process + ":" + it.session }.mapValues { (_, rows) ->
                 rows.lastOrNull { it.event == "logger_health" }?.let { it.fields + mapOf("as_of_time" to it.time,

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Hætt við</string>
     <string name="about_save_failed">Gat ekki vistað forritaskrár. Veldu aðra vistunarstað og reyndu aftur.</string>
     <string name="player_live_unavailable">Bein útsending er ekki tiltæk. Reyndu aftur síðar.</string>
+    <string name="autoplay">Sjálfvirk spilun</string>
+    <string name="queue_item_already">Þegar í biðröð</string>
+    <string name="title_copied">Titill afritaður</string>
+    <string name="verification_title">Sannprófun nauðsynleg</string>
+    <string name="verification_banner_text">YouTube ba um sannprófun áður en hægt er að hlaða meira efni. Fyrirliggjandi efni helst aðgengilegt.</string>
+    <string name="verification_banner_action">Sannprófaðu</string>
+    <string name="verification_banner_dismiss">Hafna</string>
+    <string name="verification_close">Loka</string>
+    <string name="verification_completed">Sannprófun lokið. Reynir aftur…</string>
+    <string name="verification_still_blocked">Enn lokað eftir sannprófun. Reyndu aftur seinna.</string>
 </resources>

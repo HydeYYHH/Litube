@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">రద్దు చేయబడింది</string>
     <string name="about_save_failed">యాప్ లాగ్‌లను సేవ్ చేయడం సాధ్యపడలేదు. మరొక సేవ్ స్థానాన్ని ఎంచుకుని, మళ్లీ ప్రయత్నించండి.</string>
     <string name="player_live_unavailable">ప్రత్యక్ష ప్రసారం అందుబాటులో లేదు. తర్వాత మళ్లీ ప్రయత్నించండి.</string>
+    <string name="autoplay">ఆటోప్లే</string>
+    <string name="queue_item_already">ఇప్పటికే క్యూలో ఉంది</string>
+    <string name="title_copied">శీర్షిక కాపీ చేయబడింది</string>
+    <string name="verification_title">ధృవీకరణ అవసరం</string>
+    <string name="verification_banner_text">మరిన్ని కంటెంట్ లోడ్ కాకముందు YouTube ధృవీకరణను అడిగింది. ఇప్పటికే ఉన్న కంటెంట్ అందుబాటులో ఉంటుంది.</string>
+    <string name="verification_banner_action">ధృవీకరించు</string>
+    <string name="verification_banner_dismiss">విస్మరించు</string>
+    <string name="verification_close">మూసివేయి</string>
+    <string name="verification_completed">ధృవీకరణ పూర్తయింది. మళ్లీ ప్రయత్నిస్తోంది…</string>
+    <string name="verification_still_blocked">ధృవీకరణ తర్వాత కూడా బ్లాక్ అయింది. తర్వాత మళ్లీ ప్రయత్నించండి.</string>
 </resources>

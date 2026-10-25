@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Atšauktas</string>
     <string name="about_save_failed">Nepavyko išsaugoti programų žurnalų. Pasirinkite kitą išsaugojimo vietą ir bandykite dar kartą.</string>
     <string name="player_live_unavailable">Tiesioginė transliacija nepasiekiama. Bandykite vėliau.</string>
+    <string name="autoplay">Automatinis atkūrimas</string>
+    <string name="queue_item_already">Jau eilėje</string>
+    <string name="title_copied">Pavadinimas nukopijuotas</string>
+    <string name="verification_title">Reikalingas patikrinimas</string>
+    <string name="verification_banner_text">YouTube paprašė patikrinimo prieš įkeliant daugiau turinio. Esamas turinys išlieka prieinamas.</string>
+    <string name="verification_banner_action">Patikrinti</string>
+    <string name="verification_banner_dismiss">Atmesti</string>
+    <string name="verification_close">Uždaryti</string>
+    <string name="verification_completed">Patikrinimas baigtas. Bandoma dar kartą…</string>
+    <string name="verification_still_blocked">Po patikrinimo vis dar užblokuota. Bandykite dar kartą vėliau.</string>
 </resources>

@@ -32,8 +32,6 @@ sealed interface SubscriptionsContent {
     data object Failed : SubscriptionsContent
 }
 
-sealed interface SubscriptionsTab { data object FeedTab : SubscriptionsTab; data object ChannelsTab : SubscriptionsTab }
-
 /** The subscribed-channel list is its own read: it loads and fails independently of the feed. */
 sealed interface SubscriptionsChannels {
     data object Loading : SubscriptionsChannels

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Cancel·lat</string>
     <string name="about_save_failed">No s\'han pogut desar els registres de l\'aplicació. Trieu una altra ubicació de desar i torneu-ho a provar.</string>
     <string name="player_live_unavailable">Emissió en directe no disponible. Torna-ho a provar més tard.</string>
+    <string name="autoplay">Reproducció automàtica</string>
+    <string name="queue_item_already">Ja és a la cua</string>
+    <string name="title_copied">Títol copiat</string>
+    <string name="verification_title">Cal verificació</string>
+    <string name="verification_banner_text">YouTube ha demanat verificació abans de carregar més contingut. El contingut existent continua disponible.</string>
+    <string name="verification_banner_action">Verifica</string>
+    <string name="verification_banner_dismiss">Descarta</string>
+    <string name="verification_close">Tanca</string>
+    <string name="verification_completed">Verificació acabada. Reintentant…</string>
+    <string name="verification_still_blocked">Encara blocat després de la verificació. Torna-ho a provar més tard.</string>
 </resources>

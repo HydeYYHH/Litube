@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Atcelts</string>
     <string name="about_save_failed">Nevarēja saglabāt lietotņu žurnālus. Izvēlieties citu saglabāšanas vietu un mēģiniet vēlreiz.</string>
     <string name="player_live_unavailable">Tiešraide nav pieejama. Mēģiniet vēlāk.</string>
+    <string name="autoplay">Automātiska atskaņošana</string>
+    <string name="queue_item_already">Jau rindā</string>
+    <string name="title_copied">Nosaukums nokopēts</string>
+    <string name="verification_title">Nepieciešama verifikācija</string>
+    <string name="verification_banner_text">YouTube pieprasīja verifikāciju, pirms ielādēt vairāk satura. Esošais saturs paliek pieejams.</string>
+    <string name="verification_banner_action">Verificēt</string>
+    <string name="verification_banner_dismiss">Noraidīt</string>
+    <string name="verification_close">Aizvērt</string>
+    <string name="verification_completed">Verifikācija pabeigta. Mēģina vēlreiz…</string>
+    <string name="verification_still_blocked">Pēc verifikācijas joprojām bloķēts. Mēģiniet vēlāk vēlreiz.</string>
 </resources>

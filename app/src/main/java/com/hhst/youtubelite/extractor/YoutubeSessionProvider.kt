@@ -7,8 +7,6 @@ import java.util.concurrent.Executors
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.URI
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
-import org.schabi.newpipe.extractor.services.youtube.streams.SessionProvider
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -27,7 +25,6 @@ import com.hhst.youtubelite.core.Constants
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
@@ -35,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Captures credentials once; consumers never merge a newer Cookie into an older response. */
 class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
-                             private val diagnostics: ExtractionDiagnostics? = null) : SessionProvider {
+                             private val diagnostics: ExtractionDiagnostics? = null) {
     private val networkGeneration = AtomicLong()
     private val lock = Any()
     private val capturePermit = Semaphore(1, true)
@@ -87,21 +84,18 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         }
     }
 
-    fun capture(videoId: String): YoutubeSession = capture(videoId, false)
-
-    override fun capture(videoId: String, fresh: Boolean): YoutubeSession =
-        captureBounded(videoId, fresh, Long.MAX_VALUE, { true })
+    fun capture(videoId: String): YoutubeWebSession = captureBounded(videoId, false, Long.MAX_VALUE, { true })
 
     /** Invoked off the lock whenever a browser document supplies session configuration. */
     @Volatile var onBrowserConfiguration: (() -> Unit)? = null
 
     /** The configured session when no page read is needed; never touches the network. */
-    fun captureCached(): YoutubeSession? = try {
+    fun captureCached(): YoutubeWebSession? = try {
         captureBounded("", false, System.nanoTime() + TimeUnit.SECONDS.toNanos(2), { true }, allowPage = false)
     } catch (_: IOException) { null }
 
     fun captureBounded(videoId: String, fresh: Boolean, deadline: Long, current: () -> Boolean,
-                       allowPage: Boolean = true): YoutubeSession = withPermit(deadline, current) {
+                       allowPage: Boolean = true): YoutubeWebSession = withPermit(deadline, current) {
         val cookies = CookieManager.getInstance().getCookie(ORIGIN).orEmpty()
         val domainCookies = listOf(ORIGIN, "https://youtube.com", "https://m.youtube.com", "https://music.youtube.com")
             .associateWith { if (it == ORIGIN) cookies else CookieManager.getInstance().getCookie(it).orEmpty() }
@@ -164,14 +158,14 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         val user = config.getString("USER_SESSION_ID") ?: (if (secondary) syncParts[1] else syncParts.firstOrNull())?.takeIf { it.isNotBlank() }
         val visitor = config.getString("VISITOR_DATA") ?: config.getObject("INNERTUBE_CONTEXT").getObject("client").getString("visitorData")
         val loggedIn = config.getBoolean("LOGGED_IN", cookies.contains("LOGIN_INFO=") || cookies.contains("SAPISID="))
-        val account = if (!loggedIn) YoutubeSession.Account.ANONYMOUS
-            else if (config.getBoolean("IS_PREMIUM", false)) YoutubeSession.Account.PREMIUM
-            else YoutubeSession.Account.AUTHENTICATED
+        val account = if (!loggedIn) WebAccount.ANONYMOUS
+            else if (config.getBoolean("IS_PREMIUM", false)) WebAccount.PREMIUM
+            else WebAccount.AUTHENTICATED
         val scope = digest("$identity:$generation:$visitor:$sync:${accountIndex(config)}")
-        YoutubeSession(scope, account, accountIndex(config), delegated, user,
+        YoutubeWebSession(scope, account, accountIndex(config), delegated, user,
             sync.takeIf { it.isNotBlank() }, visitor, ua,
             capturedRoute, config.getString("PLAYER_JS_URL"), if (fetchPage) configSource else "config-cache:$configSource", config,
-            YoutubeSession.Credentials { origin -> domainCookies[origin].orEmpty() })
+            SessionCredentials { origin -> domainCookies[origin].orEmpty() })
         }
     }
 
@@ -192,7 +186,8 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                     url = pageRedirect(url, response.header("Location") ?: throw IOException("PAGE_REDIRECT_MISSING"))
                     null
                 } else {
-                    if (!response.isSuccessful) throw StreamHttpException("PAGE", response.code, StreamHttpException.parseRetryAfter(response.header("Retry-After"), System.currentTimeMillis()))
+                    if (!response.isSuccessful) throw PageHttpException("PAGE", response.code,
+                        PageResponse.headerText(response.header("Retry-After"), System.currentTimeMillis()))
                     val source = response.body?.source() ?: throw IOException("PAGE_EMPTY")
                     if (source.request(8L * 1024 * 1024 + 1)) throw IOException("PAGE_TOO_LARGE")
                     source.readUtf8().also { diagnostics?.event("request", "session-page", "GET", (System.nanoTime() - started) / 1_000_000, response.code) }
@@ -220,7 +215,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         try { return block() } finally { capturePermit.release() }
     }
 
-    override fun isCurrent(session: YoutubeSession): Boolean = synchronized(lock) {
+    fun isCurrent(session: YoutubeWebSession): Boolean = synchronized(lock) {
         session.networkGeneration == networkGeneration.get() && session.key == currentKey() && identity == scopeHint()
     }
 
@@ -230,11 +225,11 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
      * switch) therefore must not abort a read in flight; only a different signed-in account or a
      * different network route does, because those can invalidate the issued URL or its audience.
      */
-    fun isMediaCurrent(session: YoutubeSession): Boolean =
+    fun isMediaCurrent(session: YoutubeWebSession): Boolean =
         mediaInvalidationReason(session) == null
 
     /** A safe reason code, never a cookie, account identifier or network address. */
-    fun mediaInvalidationReason(session: YoutubeSession): String? = when {
+    fun mediaInvalidationReason(session: YoutubeWebSession): String? = when {
         session.networkGeneration != networkGeneration.get() -> "network_route_changed"
         !mediaCookies.matches(session.cookies(ORIGIN), CookieManager.getInstance().getCookie(ORIGIN).orEmpty()) -> "account_cookie_changed"
         else -> null
@@ -246,11 +241,13 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
 
     private fun identityHint(cookies: String, ua: String, route: Long): String {
-        identityHint?.takeIf { it.cookies == cookies && it.userAgent == ua && it.route == route }?.let { return it.value }
+        val account = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+        val scopedAgent = "$ua:${account.accountId}:${account.generation}"
+        identityHint?.takeIf { it.cookies == cookies && it.userAgent == scopedAgent && it.route == route }?.let { return it.value }
         val auth = cookies.split(';').map { it.trim() }.filter {
             it.substringBefore('=') in setOf("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO", "VISITOR_INFO1_LIVE")
         }.sorted().joinToString(";")
-        return digest("$auth:$ua:$route").also { identityHint = IdentityHint(cookies, ua, route, it) }
+        return digest("$auth:$scopedAgent:$route").also { identityHint = IdentityHint(cookies, scopedAgent, route, it) }
     }
 
     /** Includes account/visitor/configuration changes even when the SID cookies are unchanged. */
@@ -299,9 +296,9 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         true
     }
 
-    /** Persistent metadata is scoped to the account, independently of visitor and route churn. */
-    fun accountScope(session: YoutubeSession): String =
-        digest("${session.account}:${session.accountIndex}:${session.dataSyncId.orEmpty()}:${authCookies(session.cookies(ORIGIN))}")
+    /** Metadata never crosses the captured identity boundary. */
+    fun accountScope(session: YoutubeWebSession): String =
+        digest("${session.account}:${session.accountIndex}:${session.dataSyncId.orEmpty()}:${authCookies(session.cookies(ORIGIN))}:${session.key}")
 
     companion object {
         private fun pageOrigin(url: String): String {

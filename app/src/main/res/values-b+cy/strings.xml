@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Wedi\'i ganslo</string>
     <string name="about_save_failed">Methu cadw logiau ap. Dewiswch leoliad arbed arall a cheisiwch eto.</string>
     <string name="player_live_unavailable">Nid yw\'r llif byw ar gael. Ceisiwch eto yn nes ymlaen.</string>
+    <string name="autoplay">Awtochwarae</string>
+    <string name="queue_item_already">Eisoes yn y ciw</string>
+    <string name="title_copied">Copiwyd y teitl</string>
+    <string name="verification_title">Mae angen gwirio</string>
+    <string name="verification_banner_text">Gofynnodd YouTube am wiriad cyn llwytho mwy o gynnwys. Mae cynnwys presennol yn parhau i fod ar gael.</string>
+    <string name="verification_banner_action">Gwirio</string>
+    <string name="verification_banner_dismiss">Cau</string>
+    <string name="verification_close">Cau</string>
+    <string name="verification_completed">Mae\'r gwiriad wedi gorffen. Yn ceisio eto…</string>
+    <string name="verification_still_blocked">O hyd wedi ei rwystro ar ôl gwirio. Rhowch gynnig arall arni yn nes ymlaen.</string>
 </resources>

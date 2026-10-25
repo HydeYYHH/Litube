@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Ar ceal</string>
     <string name="about_save_failed">Níorbh fhéidir logaí feidhmchláir a shábháil. Roghnaigh suíomh sábháil eile agus bain triail eile as.</string>
     <string name="player_live_unavailable">Níl an sruth beo ar fáil. Bain triail eile as níos déanaí.</string>
+    <string name="autoplay">Uathsheinn</string>
+    <string name="queue_item_already">Ceithre cheana féin sa scuaine</string>
+    <string name="title_copied">Cóipeáladh an teideal</string>
+    <string name="verification_title">Fíorú de dhíth</string>
+    <string name="verification_banner_text">D\'iarr YouTube fíorú sula lódálfar níos mó ábhair. Fanann an t-ábhar atá ann ar fáil.</string>
+    <string name="verification_banner_action">Fíoraigh</string>
+    <string name="verification_banner_dismiss">Déan neamhaird</string>
+    <string name="verification_close">Dún</string>
+    <string name="verification_completed">Tá an fíorú críochnaithe. Ag triail arís…</string>
+    <string name="verification_still_blocked">Fós blocáilte tar éis an fhíoraithe. Bain triail eile as níos déanaí.</string>
 </resources>

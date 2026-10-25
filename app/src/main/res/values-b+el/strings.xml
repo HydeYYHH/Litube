@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Ακυρώθηκε</string>
     <string name="about_save_failed">Δεν ήταν δυνατή η αποθήκευση αρχείων καταγραφής εφαρμογών. Επιλέξτε μια άλλη τοποθεσία αποθήκευσης και δοκιμάστε ξανά.</string>
     <string name="player_live_unavailable">Η ζωντανή μετάδοση δεν είναι διαθέσιμη. Δοκιμάστε ξανά αργότερα.</string>
+    <string name="autoplay">Αυτόματη αναπαραγωγή</string>
+    <string name="queue_item_already">Βρίσκεται ήδη στην ουρά</string>
+    <string name="title_copied">Ο τίτλος αντιγράφηκε</string>
+    <string name="verification_title">Απαιτείται επαλήθευση</string>
+    <string name="verification_banner_text">Το YouTube ζήτησε επαλήθευση πριν φορτωθούν περισσότερα περιεχόμενα. Τα υπάρχοντα περιεχόμενα παραμένουν διαθέσιμα.</string>
+    <string name="verification_banner_action">Επαλήθευση</string>
+    <string name="verification_banner_dismiss">Απόρριψη</string>
+    <string name="verification_close">Κλείσιμο</string>
+    <string name="verification_completed">Η επαλήθευση ολοκληρώθηκε. Γίνεται νέα προσπάθεια…</string>
+    <string name="verification_still_blocked">Παραμένει μπλοκαρισμένο μετά την επαλήθευση. Δοκιμάστε ξανά αργότερα.</string>
 </resources>

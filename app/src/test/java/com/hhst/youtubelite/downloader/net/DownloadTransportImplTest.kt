@@ -10,7 +10,6 @@ import com.hhst.youtubelite.downloader.core.DownloadChunk
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.downloader.io.FileIntegrity
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
@@ -450,13 +449,13 @@ class DownloadTransportImplTest {
         server.enqueue(cropped("EFGH"))
         server.enqueue(cropped("IJKL"))
         server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
-        val session = org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession(
-            "test", org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession.Account.ANONYMOUS,
+        val session = com.hhst.youtubelite.extractor.YoutubeWebSession(
+            "test", com.hhst.youtubelite.extractor.WebAccount.ANONYMOUS,
             0, null, null, null, null, "UA", 0, null, "test", com.grack.nanojson.JsonObject(), { "" })
-        val plan = RequestPlan(session,
-            org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS,
-            RequestPlan.Protocol.HTTPS,
-            RequestPlan.Range.QUERY, false)
+        val plan = com.hhst.youtubelite.extractor.MediaRequestPlan(session,
+            com.hhst.youtubelite.extractor.StreamClient.VISIONOS,
+            com.hhst.youtubelite.extractor.MediaProtocol.HTTPS,
+            com.hhst.youtubelite.extractor.MediaRange.QUERY, false)
         val requests = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
         val transfer = DownloadTransportImpl(client = DownloadHttpClients.create(), chunkBytes = 4,
             sleeper = DownloadSleeper { }, mediaRequests = requests)

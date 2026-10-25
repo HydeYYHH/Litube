@@ -71,4 +71,57 @@ class ContentSnapshotsTest {
         val kept = File(root, "home").listFiles()!!.filter { it.extension == "json" }
         assertTrue("snapshot files must stay bounded, got ${kept.size}", kept.size <= 48)
     }
+
+    @Test fun concurrentWritersOfOneKeyNeverLeaveATornSnapshot() {
+        val (snapshots, root) = store()
+        val writers = (1..8).map { index -> Thread {
+            repeat(40) { round -> snapshots.write("home", "acct-1", "All", listOf(Row("w$index-$round"))) }
+        } }
+        writers.forEach(Thread::start)
+        writers.forEach { it.join(30_000) }
+        val read = snapshots.read<Row>("home", "acct-1", "All", rowsType)
+        assertTrue("a concurrent same-key write must leave one readable snapshot", read != null && read.size == 1)
+        assertTrue("no temp may survive concurrent writes", root.walkTopDown().none { it.extension == "tmp" })
+    }
+
+    @Test fun leftoverTempsDoNotCountTowardTheKindCap() {
+        val (snapshots, root) = store()
+        snapshots.write("home", "acct-1", "All", listOf(Row("v1")))
+        File(File(root, "home"), "acct-1-deadbeef.123.tmp").writeText("torn")
+        for (index in 0 until 60) snapshots.write("home", "acct-1", "query-$index", listOf(Row("v$index")))
+        val kept = File(root, "home").listFiles()!!.filter { it.extension == "json" }
+        assertTrue("temps must not evict live snapshots: ${kept.size}", kept.size <= 48)
+        assertNull(snapshots.read<Row>("home", "acct-1", "nonexistent", rowsType))
+    }
+
+    @Test fun futureCapturesAndOversizedFilesAreDiscarded() {
+        var now = 10_000L
+        val (snapshots, root) = store { now }
+        snapshots.write("home", "account", "All", listOf(Row("future")))
+        now = 9_000L
+        assertNull(snapshots.read<Row>("home", "account", "All", rowsType))
+        snapshots.write("home", "account", "All", listOf(Row("fresh")))
+        File(root, "home").listFiles()!!.single { it.extension == "json" }
+            .writeText("x".repeat(2 * 1024 * 1024 + 1))
+        assertNull(snapshots.read<Row>("home", "account", "All", rowsType))
+    }
+
+    @Test fun sanitizedAccountNamesCannotCollideAndEmptyResultsClearTheSnapshot() {
+        val (snapshots, _) = store()
+        snapshots.write("home", "account/a", "All", listOf(Row("private")))
+        assertNull(snapshots.read<Row>("home", "account?a", "All", rowsType))
+        snapshots.clear(account = "account?a")
+        assertEquals("private", snapshots.read<Row>("home", "account/a", "All", rowsType)!!.single().id)
+        snapshots.write("home", "account/a", "All", emptyList())
+        assertNull(snapshots.read<Row>("home", "account/a", "All", rowsType))
+    }
+
+    @Test fun anInterruptedAtomicWriteRetainsThePreviousCapture() {
+        val (snapshots, root) = store()
+        snapshots.write("home", "account", "All", listOf(Row("retained")))
+        val file = File(root, "home").listFiles()!!.single { it.extension == "json" }
+        assertTrue(file.renameTo(File(file.path + ".bak")))
+        File(file.path + ".new").writeText("{broken")
+        assertEquals("retained", snapshots.read<Row>("home", "account", "All", rowsType)!!.single().id)
+    }
 }

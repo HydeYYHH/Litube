@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">저장을 취소했습니다</string>
     <string name="about_save_failed">진단 로그를 저장할 수 없습니다. 다른 저장 위치를 선택하고 다시 시도하세요.</string>
     <string name="player_live_unavailable">실시간 방송을 재생할 수 없습니다. 나중에 다시 시도하세요.</string>
+    <string name="autoplay">자동 재생</string>
+    <string name="queue_item_already">이미 대기열에 있음</string>
+    <string name="title_copied">제목이 복사되었습니다</string>
+    <string name="verification_title">인증이 필요합니다</string>
+    <string name="verification_banner_text">YouTube에서 더 많은 콘텐츠를 로드하기 전에 인증을 요청했습니다. 기존 콘텐츠는 계속 사용할 수 있습니다.</string>
+    <string name="verification_banner_action">인증</string>
+    <string name="verification_banner_dismiss">무시</string>
+    <string name="verification_close">닫기</string>
+    <string name="verification_completed">인증이 완료되었습니다. 다시 시도하는 중…</string>
+    <string name="verification_still_blocked">인증 후에도 계속 차단되어 있습니다. 나중에 다시 시도해 주세요.</string>
 </resources>

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">বাতিল</string>
     <string name="about_save_failed">অ্যাপ লগ সেভ করা যায়নি। অন্য একটি সংরক্ষণ অবস্থান চয়ন করুন এবং আবার চেষ্টা করুন.</string>
     <string name="player_live_unavailable">লাইভ স্ট্রিম উপলব্ধ নেই। পরে আবার চেষ্টা করুন।</string>
+    <string name="autoplay">অটোপ্লে</string>
+    <string name="queue_item_already">ইতিমধ্যে সারিতে আছে</string>
+    <string name="title_copied">শিরোনাম কপি হয়েছে</string>
+    <string name="verification_title">যাচাইকরণ প্রয়োজন</string>
+    <string name="verification_banner_text">আরও কনটেন্ট লোড হওয়ার আগে YouTube যাচাইকরণ চেয়েছে। বিদ্যমান কনটেন্ট অ্যাক্সেসযোগ্য থাকে।</string>
+    <string name="verification_banner_action">যাচাই করুন</string>
+    <string name="verification_banner_dismiss">বাতিল</string>
+    <string name="verification_close">বন্ধ করুন</string>
+    <string name="verification_completed">যাচাইকরণ শেষ। আবার চেষ্টা করা হচ্ছে…</string>
+    <string name="verification_still_blocked">যাচাইকরণের পরেও ব্লক করা। পরে আবার চেষ্টা করুন।</string>
 </resources>

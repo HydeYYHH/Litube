@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Imeghairiwa</string>
     <string name="about_save_failed">Haikuweza kuhifadhi kumbukumbu za programu. Chagua eneo lingine la kuhifadhi na ujaribu tena.</string>
     <string name="player_live_unavailable">Mtiririko wa moja kwa moja haupatikani. Jaribu tena baadaye.</string>
+    <string name="autoplay">Kucheza kiotomatiki</string>
+    <string name="queue_item_already">Iko kwenye foleni tayari</string>
+    <string name="title_copied">Kichwa kilinakiliwa</string>
+    <string name="verification_title">Uthibitisho unahitajika</string>
+    <string name="verification_banner_text">YouTube imeomba uthibitisho kabla ya kupakia maudhui zaidi. Maudhui yaliyopo yanabaki yanapatikana.</string>
+    <string name="verification_banner_action">Thibitisha</string>
+    <string name="verification_banner_dismiss">Ondoa</string>
+    <string name="verification_close">Funga</string>
+    <string name="verification_completed">Uthibitisho umekamilika. Inajaribu tena…</string>
+    <string name="verification_still_blocked">Bado imezuiwa baada ya uthibitisho. Jaribu tena baadaye.</string>
 </resources>

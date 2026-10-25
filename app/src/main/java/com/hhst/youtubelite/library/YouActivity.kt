@@ -192,7 +192,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 }
             }
             if (state.overlay == LibraryOverlay.Account) {
-                val account = (state.content as? LibraryContent.Ready)?.page?.account
+                val account = (state.content as? LibraryContent.Ready)?.page?.account?.takeIf { state.signedIn }
                 if (account == null) {
                     val actions = listOf(AccountMenuAction.SwitchAccount, AccountMenuAction.Settings, AccountMenuAction.About)
                     MenuBottomSheet(

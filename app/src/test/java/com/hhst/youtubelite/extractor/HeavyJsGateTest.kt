@@ -4,18 +4,23 @@ import com.grack.nanojson.JsonObject
 import java.util.Collections
 import org.junit.Assert.*
 import org.junit.Test
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class HeavyJsGateTest {
+    private val noopDiagnostics = object : EngineDiagnostics {
+        override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) {}
+    }
+    private val noopTransport = object : ExtractionTransport {
+        override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>) = throw IOException("offline")
+        override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray) = throw IOException("offline")
+    }
     private fun context(deadline: Long = Long.MAX_VALUE, playback: Boolean = true, current: () -> Boolean = { true }) =
-        ExtractionContext(YoutubeSession("test", YoutubeSession.Account.ANONYMOUS, 0, null, null,
-            null, null, "UA", 0, null, "test", JsonObject(), { "" }), null, null, null,
-            false, false, deadline, current, { _, _, _, _, _ -> }).withPlaybackPriority(playback)
+        ExtractionContext(YoutubeWebSession("test", WebAccount.ANONYMOUS, 0, null, null,
+            null, null, "UA", 0, null, "test", JsonObject(), { "" }), noopTransport,
+            false, false, playback, "", deadline, current, noopDiagnostics)
 
     @Test fun queuedDeadlineExpiresBeforeTheOwnerReleases() {
         val gate = HeavyJsGate()

@@ -9,6 +9,7 @@ import com.hhst.youtubelite.watch.domain.SignInRequiredException
 import com.hhst.youtubelite.watch.domain.UnconfirmedActionException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,8 @@ class HomeViewModel(
     private val avatars: com.hhst.youtubelite.data.media.MediaAvatarDirectory? = null,
     private val snapshots: com.hhst.youtubelite.core.ContentSnapshots? = null,
     private val accountKey: () -> String = { "visitor" },
+    /** Snapshot seeding IO runs here; tests inject the runTest scheduler. */
+    private val seedDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
@@ -43,6 +46,7 @@ class HomeViewModel(
     private var loadJob: Job? = null
     private var saveJob: Job? = null
     private var generation = 0
+    private var liveResultReceived = false
 
     init {
         seedSnapshot()
@@ -53,12 +57,23 @@ class HomeViewModel(
     /** Cold start paints the last captured rows and the live load replaces them. */
     private fun seedSnapshot() {
         val store = snapshots ?: return
-        val rows = store.read<FeedItem.Video>("home", accountKey(), _state.value.selectedChip,
-            com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type) ?: return
-        if (rows.isEmpty()) return
-        _state.update { state ->
-            if (state.content !is HomeContent.Empty && state.content !is HomeContent.Loading) return@update state
-            state.copy(content = HomeContent.Feed(HomePage(items = rows), refreshing = true))
+        val seedGeneration = generation
+        val account = accountKey()
+        val chip = _state.value.selectedChip
+        // Snapshot read/parse never blocks the main thread; it still paints well
+        // ahead of the network load, and never over a live result.
+        viewModelScope.launch {
+            val rows = withContext(seedDispatcher) {
+                store.read<FeedItem.Video>("home", account, chip,
+                    com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type)
+            } ?: return@launch
+            if (rows.isEmpty()) return@launch
+            _state.update { state ->
+                if (liveResultReceived || accountKey() != account || state.selectedChip != chip ||
+                    generation > seedGeneration + 1 ||
+                    state.content !is HomeContent.Empty && state.content !is HomeContent.Loading) return@update state
+                state.copy(content = HomeContent.Feed(HomePage(items = rows), refreshing = true))
+            }
         }
     }
 
@@ -361,6 +376,7 @@ class HomeViewModel(
         if (append && (feed?.append == AppendState.Loading || feed?.refreshing == true)) return
         loadJob?.cancel()
         val requestGeneration = ++generation
+        val requestAccount = accountKey()
         val filter = uiState.value.selectedChip
         _state.update { state -> state.copy(verification = null, content = when {
             append && feed != null -> feed.copy(append = AppendState.Loading)
@@ -371,16 +387,21 @@ class HomeViewModel(
             try {
                 val page = repository.loadHome(filter, next)
                 if (requestGeneration != generation) return@launch
+                liveResultReceived = true
                 val combined = if (append && feed != null) page.copy(items = mergeFeed(feed.page.items, page.items)) else page
                 _state.update { it.copy(content = if (combined.items.isEmpty()) HomeContent.Empty(
                     title = combined.messages.firstOrNull() ?: HomeContent.Empty().title,
                 ) else HomeContent.Feed(combined)) }
-                snapshots?.write("home", accountKey(), filter, combined.items.filterIsInstance<FeedItem.Video>())
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    snapshots?.write("home", requestAccount, filter, combined.items.filterIsInstance<FeedItem.Video>())
+                }
+                if (requestGeneration != generation) return@launch
                 fillMissingAvatars(combined.items)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: com.hhst.youtubelite.data.media.MediaException) {
                 if (requestGeneration != generation) return@launch
+                liveResultReceived = true
                 if (error.failure.isTrafficChallenge()) {
                     // Keep a working feed browsable and surface the challenge as a banner;
                     // a first-load challenge becomes the state the card renders over.
@@ -396,6 +417,7 @@ class HomeViewModel(
                 }
             } catch (_: Exception) {
                 if (requestGeneration != generation) return@launch
+                liveResultReceived = true
                 _state.update { it.copy(content = if (feed != null) feed.copy(refreshing = false,
                     append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = !append) else HomeContent.Failed) }
             }

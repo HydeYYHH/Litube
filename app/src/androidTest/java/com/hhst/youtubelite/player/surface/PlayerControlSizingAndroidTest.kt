@@ -230,7 +230,7 @@ class PlayerControlSizingAndroidTest {
             compose.runOnIdle { fontScale = scale }
             compose.waitForIdle()
             val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
-            val rects = listOf(R.string.queue, R.string.segments, R.string.subtitles, R.string.more_options).map {
+            val rects = listOf(R.string.queue, R.string.playback_end_next, R.string.subtitles, R.string.more_options).map {
                 button(compose.onNodeWithContentDescription(compose.activity.getString(it)), frame, density,
                     widthDp = if (it == R.string.subtitles || it == R.string.more_options) 40 else 48)
             }

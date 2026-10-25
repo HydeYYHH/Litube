@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">বাতিল কৰা হৈছে</string>
     <string name="about_save_failed">এপ লগসমূহ সংৰক্ষণ কৰিব পৰা নগ\'ল। অন্য সংৰক্ষণ স্থান বাছক আৰু পুনৰ চেষ্টা কৰক।</string>
     <string name="player_live_unavailable">লাইভ ষ্ট্ৰিম উপলব্ধ নহয়। পিছত পুনৰ চেষ্টা কৰক।</string>
+    <string name="autoplay">স্বতঃপ্লে</string>
+    <string name="queue_item_already">ইতিমধ্যে কিউত আছে</string>
+    <string name="title_copied">শিৰোনামা কপি কৰা হৈছে</string>
+    <string name="verification_title">সত্যাপনৰ প্ৰয়োজন</string>
+    <string name="verification_banner_text">অধিক সামগ্ৰী লোড হোৱাৰ আগতে YouTube-এ সত্যাপন বিচাৰিছে। বৰ্তমান সামগ্ৰী উপলব্ধ থাকে।</string>
+    <string name="verification_banner_action">সত্যাপন কৰক</string>
+    <string name="verification_banner_dismiss">বাতিল কৰক</string>
+    <string name="verification_close">বন্ধ কৰক</string>
+    <string name="verification_completed">সত্যাপন সম্পূৰ্ণ হৈছে। পুনঃ চেষ্টা কৰি আছে…</string>
+    <string name="verification_still_blocked">সত্যাপনৰ পিছতো অৱৰুদ্ধ। অনুগ্ৰহ কৰি পিছত পুনঃ চেষ্টা কৰক।</string>
 </resources>

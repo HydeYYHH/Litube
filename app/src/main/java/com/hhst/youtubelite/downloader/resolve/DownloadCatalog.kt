@@ -2,11 +2,11 @@ package com.hhst.youtubelite.downloader.resolve
 
 import com.hhst.youtubelite.downloader.core.DownloadConfig
 import com.hhst.youtubelite.extractor.Format
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Subtitle
 import com.hhst.youtubelite.player.datasource.StreamSelection
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
 /** Extractor snapshot the download layer selects from. Playback models are unchanged. */
 data class DownloadCatalog(
@@ -82,7 +82,7 @@ data class DownloadSidecarChoice(
     val mimeType: String,
     val extension: String,
     val language: String? = null,
-    @Transient val requestPlan: RequestPlan? = null,
+    @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
 /** Shared parse vs independent URL-refresh. Cancel only the wait, never the parse. */

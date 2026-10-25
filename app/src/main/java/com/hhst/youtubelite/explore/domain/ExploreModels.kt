@@ -12,7 +12,12 @@ enum class ExploreCategory(val label: String) {
 data class ExplorePage(
     val category: ExploreCategory,
     val videos: List<FeedItem.Video>,
+    /** Server shelves, in order; empty for fixture feeds. */
+    val sections: List<ExploreSection> = emptyList(),
 )
+
+/** One server shelf rendered as a carousel row. */
+data class ExploreSection(val title: String?, val videos: List<FeedItem.Video>)
 
 sealed interface ExploreContent {
     data object Loading : ExploreContent

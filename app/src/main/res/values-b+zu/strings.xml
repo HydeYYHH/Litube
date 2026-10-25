@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Kukhanseliwe</string>
     <string name="about_save_failed">Ayikwazanga ukulondoloza amalogi ohlelo lokusebenza. Khetha enye indawo yokulondoloza bese uzama futhi.</string>
     <string name="player_live_unavailable">Ukusakaza bukhoma akutholakali. Zama futhi ngokuhamba kwesikhathi.</string>
+    <string name="autoplay">Ukudlala ngokuzenzakalela</string>
+    <string name="queue_item_already">Sekumi emugqeni</string>
+    <string name="title_copied">Isihloko sikopishiwe</string>
+    <string name="verification_title">Kudingeka ukuqinisekiswa</string>
+    <string name="verification_banner_text">YouTube icela ukuqinisekisa ngaphambi kokulayisha okwengeziwe. Okukhona kuqhubekaukutholakala.</string>
+    <string name="verification_banner_action">Qinisekisa</string>
+    <string name="verification_banner_dismiss">Yekisa</string>
+    <string name="verification_close">Vala</string>
+    <string name="verification_completed">Ukuqinisekisa kuphelile. Izama futhi…</string>
+    <string name="verification_still_blocked">Kusavalekile ngemva kokuqinisekisa. Zama futhi ngemva kwesikhathi.</string>
 </resources>

@@ -30,6 +30,7 @@ object AppLog {
     @Volatile private var recorder: DiagnosticRecorder? = null
     private val queue = DiagnosticQueue()
     private val enqueueLock = Any()
+    private val snapshotTasks = DiagnosticTasks()
     /** Event wake for the writer thread; a permit may arrive with no data and costs one idle spin. */
     private val wake = java.util.concurrent.ArrayBlockingQueue<Unit>(1)
     private val dropped = AtomicLong()
@@ -47,7 +48,11 @@ object AppLog {
         val process = if (Build.VERSION.SDK_INT >= 28) Application.getProcessName()
             else runCatching { File("/proc/self/cmdline").readText().trimEnd('\u0000') }.getOrDefault(application.packageName)
         recorder = DiagnosticRecorder(process, Process.myPid(), session, System::currentTimeMillis, SystemClock::elapsedRealtime, ::enqueue) {
-            providers.mapValues { runCatching { it.value.snapshot() }.getOrDefault(mapOf("state" to "unknown")) }
+            val deadline = SystemClock.elapsedRealtime() + 250
+            providers.mapValues {
+                snapshotTasks.call((deadline - SystemClock.elapsedRealtime()).coerceAtMost(100)) { it.value.snapshot() }
+                    ?: mapOf("state" to "unavailable")
+            }
         }
         Thread({ writeLoop() }, "diagnostics-writer").apply { isDaemon = true; start() }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -151,12 +156,14 @@ object AppLog {
     /** Called on IO; unresponsive auxiliary processes yield an explicitly partial archive. */
     fun export(context: Context): File {
         val deadline = SystemClock.elapsedRealtime() + 5_000
+        fun expired() = SystemClock.elapsedRealtime() >= deadline
         event(Category.APP, "diagnostic_export.start")
         val coverage = linkedMapOf("main" to flush(minOf(2_000, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))))
         remoteFlushes.forEach { (name, remote) ->
-            coverage[name] = runCatching { remote(minOf(2_000, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))) }.getOrDefault(false)
+            val budget = minOf(2_000L, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            coverage[name] = snapshotTasks.call(budget) { remote(budget) } ?: false
         }
-        val sources = storage?.snapshot(maxBytes = EXPORT_SNAPSHOT_BYTES) { SystemClock.elapsedRealtime() >= deadline }
+        val sources = storage?.snapshot(maxBytes = EXPORT_SNAPSHOT_BYTES) { expired() }
             ?: (emptyMap<String, String>() to 0)
         val environment = mapOf("app_version" to context.packageManager.getPackageInfo(context.packageName, 0).versionName,
             "build_id" to BuildConfig.DIAGNOSTIC_BUILD_ID, "build_type" to BuildConfig.BUILD_TYPE,
@@ -165,12 +172,26 @@ object AppLog {
             "webview" to (WebViewCompat.getCurrentWebViewPackage(context)?.versionName ?: "unknown"),
             "dependencies" to BuildConfig.DIAGNOSTIC_DEPENDENCIES, "available_storage_bytes" to context.filesDir.usableSpace,
             "snapshots" to recorder?.currentSnapshots().orEmpty().map { mapOf("category" to it.category, "context" to it.context, "fields" to it.fields) },
-            "providers" to providers.mapValues { runCatching { DiagnosticRedaction.fields(it.value.snapshot()) }.getOrDefault(mapOf("state" to "unknown")) })
+            "providers" to providers.mapValues { (name, provider) ->
+                val result = snapshotTasks.call(minOf(250L, deadline - SystemClock.elapsedRealtime())) {
+                    DiagnosticRedaction.fields(provider.snapshot())
+                }
+                coverage["provider:$name"] = result != null
+                result ?: mapOf("state" to "unavailable")
+            })
         cleanExports(context)
         val directory = File(context.cacheDir, "diagnostic-exports").apply { mkdirs() }
-        val archive = File(directory, "litube-diagnostics-" + System.currentTimeMillis() + ".zip")
-        DiagnosticArchive.write(archive, sources.first, environment, statistics() + mapOf("process_flush" to coverage, "skipped_files" to sources.second))
-        event(Category.APP, "diagnostic_export.end", mapOf("outcome" to "SUCCESS", "partial" to (coverage.values.any { !it } || sources.second > 0), "files" to sources.first.size))
+        val archive = File.createTempFile("litube-diagnostics-", ".zip", directory)
+        try {
+            DiagnosticArchive.write(archive, sources.first, environment,
+                statistics() + mapOf("process_flush" to coverage, "skipped_files" to sources.second), deadline = ::expired)
+        } catch (failure: Exception) {
+            archive.delete()
+            throw failure
+        }
+        event(Category.APP, "diagnostic_export.end", mapOf("outcome" to "SUCCESS",
+            "partial" to (coverage.values.any { !it } || sources.second > 0 || expired()), "files" to sources.first.size,
+            "deadline_hit" to expired()))
         return archive
     }
     private fun cleanExports(context: Context) {

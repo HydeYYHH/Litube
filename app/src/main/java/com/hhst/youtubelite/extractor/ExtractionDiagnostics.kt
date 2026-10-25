@@ -3,10 +3,9 @@ package com.hhst.youtubelite.extractor
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import java.util.WeakHashMap
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 
 /** Bounded local diagnostics containing only enums, counters and durations. */
-class ExtractionDiagnostics : ExtractionContext.Diagnostics {
+class ExtractionDiagnostics : EngineDiagnostics {
     data class Event(val sequence: Long, val stage: String, val profile: String, val detail: String,
                      val elapsedMillis: Long, val httpStatus: Int)
     private val events = ArrayDeque<Event>()
@@ -14,12 +13,12 @@ class ExtractionDiagnostics : ExtractionContext.Diagnostics {
     private val contexts = WeakHashMap<ExtractionContext, DiagnosticContext>()
     @Synchronized fun bind(context: ExtractionContext, diagnostic: DiagnosticContext) { contexts[context] = diagnostic }
     @Synchronized fun contextOf(context: ExtractionContext): DiagnosticContext? = contexts[context]
-    private class Scoped(val context: DiagnosticContext, val owner: ExtractionDiagnostics) : ExtractionContext.Diagnostics {
+    private class Scoped(val context: DiagnosticContext, val owner: ExtractionDiagnostics) : EngineDiagnostics {
         override fun event(stage: String, profile: String, detail: String, elapsed: Long, status: Int) = owner.record(stage, profile, detail, elapsed, status, context)
     }
-    fun scoped(context: DiagnosticContext): ExtractionContext.Diagnostics = Scoped(context, this)
+    fun scoped(context: DiagnosticContext): EngineDiagnostics = Scoped(context, this)
     companion object { fun diagnosticContext(context: ExtractionContext): DiagnosticContext? = (context.diagnostics as? Scoped)?.context }
-    fun forContext(context: ExtractionContext): ExtractionContext.Diagnostics = contextOf(context)?.let(::scoped) ?: this
+    fun forContext(context: ExtractionContext): EngineDiagnostics = contextOf(context)?.let(::scoped) ?: this
     override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) =
         record(stage, profile, detail, elapsedMillis, httpStatus, null)
     @Synchronized private fun record(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int, context: DiagnosticContext?) {

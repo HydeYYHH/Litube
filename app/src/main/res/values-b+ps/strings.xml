@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">لغوه</string>
     <string name="about_save_failed">د اپلیکیشن لاګونه نشي خوندي کولی. بل خوندي ځای غوره کړئ او بیا هڅه وکړئ.</string>
     <string name="player_live_unavailable">ژوندۍ خپرونه شتون نه لري. وروسته بیا هڅه وکړئ.</string>
+    <string name="autoplay">اتوماتیک لوب</string>
+    <string name="queue_item_already">دمخه په قطار کې دی</string>
+    <string name="title_copied">سرلیک کاپي شو</string>
+    <string name="verification_title">تصدیق ته اړتیا ده</string>
+    <string name="verification_banner_text">د نور مینځپانګې د لوډېدو دمخه یوټیوب تصدیق وغوښت. شتون مینځپانګه لاسرسی لري.</string>
+    <string name="verification_banner_action">تصدیق کړه</string>
+    <string name="verification_banner_dismiss">رد کړه</string>
+    <string name="verification_close">بندول</string>
+    <string name="verification_completed">تصدیق بشپړ شو. بیا هڅه کیږي…</string>
+    <string name="verification_still_blocked">د تصدیق وروسته بیا هم بند دی. وروسته بیا هڅه وکړئ.</string>
 </resources>

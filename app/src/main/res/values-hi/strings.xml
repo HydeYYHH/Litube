@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">रद्द हुआ</string>
     <string name="about_save_failed">ऐप लॉग सहेजे नहीं जा सके. कोई अन्य सहेजें स्थान चुनें और पुनः प्रयास करें।</string>
     <string name="player_live_unavailable">लाइव स्ट्रीम उपलब्ध नहीं है। बाद में फिर कोशिश करें।</string>
+    <string name="autoplay">ऑटोप्ले</string>
+    <string name="queue_item_already">पहले से कतार में है</string>
+    <string name="title_copied">शीर्षक कॉपी हो गया</string>
+    <string name="verification_title">सत्यापन आवश्यक है</string>
+    <string name="verification_banner_text">ज़्यादा कॉन्टेंट लोड होने से पहले YouTube ने सत्यापन मांगा है। मौजूदा कॉन्टेंट उपलब्ध रहता है।</string>
+    <string name="verification_banner_action">सत्यापित करें</string>
+    <string name="verification_banner_dismiss">खारिज करें</string>
+    <string name="verification_close">बंद करें</string>
+    <string name="verification_completed">सत्यापन पूरा हुआ। दोबारा कोशिश हो रही है…</string>
+    <string name="verification_still_blocked">सत्यापन के बाद भी ब्लॉक है। कृपया बाद में फिर कोशिश करें।</string>
 </resources>

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Đã hủy</string>
     <string name="about_save_failed">Could not save app logs. Hãy chọn một vị trí lưu khác và thử lại.</string>
     <string name="player_live_unavailable">Không thể phát trực tiếp. Vui lòng thử lại sau.</string>
+    <string name="autoplay">Tự động phát</string>
+    <string name="queue_item_already">Đã có trong hàng đợi</string>
+    <string name="title_copied">Đã sao chép tiêu đề</string>
+    <string name="verification_title">Cần xác minh</string>
+    <string name="verification_banner_text">YouTube đã yêu cầu xác minh trước khi tải thêm nội dung. Nội dung hiện tại vẫn tiếp tục khả dụng.</string>
+    <string name="verification_banner_action">Xác minh</string>
+    <string name="verification_banner_dismiss">Bỏ qua</string>
+    <string name="verification_close">Đóng</string>
+    <string name="verification_completed">Đã hoàn tất xác minh. Đang thử lại…</string>
+    <string name="verification_still_blocked">Vẫn bị chặn sau khi xác minh. Hãy thử lại sau.</string>
 </resources>

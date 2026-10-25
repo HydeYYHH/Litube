@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Dibolaykeun</string>
     <string name="about_save_failed">Teu bisa nyimpen log aplikasi. Pilih lokasi simpen anu sanés sareng cobian deui.</string>
     <string name="player_live_unavailable">Siaran langsung teu sayogi. Cobian deui engké.</string>
+    <string name="autoplay">Pidio otomatis</string>
+    <string name="queue_item_already">Aya di antrean</string>
+    <string name="title_copied">Judul ditiron</string>
+    <string name="verification_title">Perlu vérikasi</string>
+    <string name="verification_banner_text">YouTube mundut vérikasi saméméh muateun eusi tambahan. Eusi anu aya tetep bisa diaksés.</string>
+    <string name="verification_banner_action">Vérikasi</string>
+    <string name="verification_banner_dismiss">Antep</string>
+    <string name="verification_close">Tutup</string>
+    <string name="verification_completed">Vérikasi réngsé. Nyoba deui…</string>
+    <string name="verification_still_blocked">Kahalang kénéh sanggeus vérikasi. Coba deui engké.</string>
 </resources>

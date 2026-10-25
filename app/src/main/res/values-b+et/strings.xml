@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Tühistatud</string>
     <string name="about_save_failed">Rakenduse logisid ei saanud salvestada. Valige mõni muu salvestuskoht ja proovige uuesti.</string>
     <string name="player_live_unavailable">Otseülekanne pole saadaval. Proovige hiljem uuesti.</string>
+    <string name="autoplay">Automaatesitus</string>
+    <string name="queue_item_already">Juba järjekorras</string>
+    <string name="title_copied">Pealkiri kopeeritud</string>
+    <string name="verification_title">Nõutakse verifitseerimist</string>
+    <string name="verification_banner_text">YouTube palus verifitseerimist enne sisu täiendavat laadimist. Olemasolev sisu jääb kättesaadavaks.</string>
+    <string name="verification_banner_action">Verifitseeri</string>
+    <string name="verification_banner_dismiss">Loobu</string>
+    <string name="verification_close">Sulge</string>
+    <string name="verification_completed">Verifitseerimine lõpetatud. Proovitakse uuesti…</string>
+    <string name="verification_still_blocked">Pärast verifitseerimist on ikka blokeeritud. Proovige hiljem uuesti.</string>
 </resources>

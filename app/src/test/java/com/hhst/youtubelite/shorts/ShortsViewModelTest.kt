@@ -112,4 +112,33 @@ class ShortsViewModelTest {
         assertTrue(items.all { it.channelId == "studio" })
     }
 
+    @Test fun appendFailureRequiresExplicitRetryAndRepeatedCursorsStop() = runTest {
+        var calls = 0
+        val samples = FixtureShortsRepository.sample()
+        val vm = ShortsViewModel(object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(listOf(samples[0]), "next")
+            override suspend fun shortsNext(cursor: String): ShortsPage {
+                if (++calls == 1) error("offline")
+                return ShortsPage(listOf(samples[0], samples[1], samples[1]), "next")
+            }
+        }, SavedStateHandle(), ShortsScenario.Content, null)
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.LoadMore)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.appendFailed)
+        assertEquals(1, (vm.uiState.value.content as ShortsContent.Ready).page.items.size)
+        vm.onAction(ShortsAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        vm.onAction(ShortsAction.RetryMore)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.appendFailed)
+        val page = (vm.uiState.value.content as ShortsContent.Ready).page
+        assertEquals(2, page.items.size)
+        assertNull(page.nextKey)
+        vm.onAction(ShortsAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
 }

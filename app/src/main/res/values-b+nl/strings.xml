@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Geannuleerd</string>
     <string name="about_save_failed">Could not save app logs. Kies een andere opslaglocatie en probeer het opnieuw.</string>
     <string name="player_live_unavailable">Livestream niet beschikbaar. Probeer het later opnieuw.</string>
+    <string name="autoplay">Automatisch afspelen</string>
+    <string name="queue_item_already">Staat al in de wachtrij</string>
+    <string name="title_copied">Titel gekopieerd</string>
+    <string name="verification_title">Verificatie vereist</string>
+    <string name="verification_banner_text">YouTube vroeg om verificatie voordat meer content kan worden geladen. Bestaande content blijft beschikbaar.</string>
+    <string name="verification_banner_action">Verifiëren</string>
+    <string name="verification_banner_dismiss">Negeren</string>
+    <string name="verification_close">Sluiten</string>
+    <string name="verification_completed">Verificatie voltooid. Opnieuw proberen…</string>
+    <string name="verification_still_blocked">Nog steeds geblokkeerd na verificatie. Probeer het later opnieuw.</string>
 </resources>

@@ -54,4 +54,52 @@ class LocalLibraryStoreTest {
         }
         assertEquals(100, LocalLibraryStore(storage).playlists().playlists.size)
     }
+    @Test fun burstsOfWritesCoalesceIntoASingleLatestStateFlush() {
+        val writes = java.util.concurrent.atomic.AtomicInteger()
+        val inner = MemoryAuthStore()
+        val storage = object : AuthStore {
+            override fun read(key: String) = inner.read(key)
+            override fun write(key: String, value: String?) {
+                writes.incrementAndGet()
+                inner.write(key, value)
+            }
+        }
+        val queued = java.util.concurrent.ConcurrentLinkedQueue<Runnable>()
+        val library = LocalLibraryStore(storage, writer = java.util.concurrent.Executor { queued.add(it) })
+        library.record(video("one"))
+        library.record(video("two"))
+        // Nothing is marshalled or persisted while the writer is idle; memory stays current.
+        assertEquals(0, writes.get())
+        assertEquals(listOf("two", "one"), library.history().entries.map { it.videoId })
+        // The first flush persists the latest pending state; the queued remainder becomes a no-op.
+        queued.poll()!!.run()
+        assertEquals(1, writes.get())
+        assertEquals(listOf("two", "one"), LocalLibraryStore(inner).history().entries.map { it.videoId })
+        queued.poll()!!.run()
+        assertEquals(1, writes.get())
+    }
+
+    @Test fun explicitEditsPropagateWriteFailureWithoutChangingMemory() {
+        val storage = object : AuthStore {
+            override fun read(key: String): String? = null
+            override fun write(key: String, value: String?) { throw java.io.IOException("disk_full") }
+        }
+        val library = LocalLibraryStore(storage)
+        assertThrows(java.io.IOException::class.java) { library.create("Films", "", video("one")) }
+        assertTrue(library.playlists().playlists.isEmpty())
+        assertThrows(java.io.IOException::class.java) { library.pause(true) }
+        assertFalse(library.paused())
+    }
+
+    @Test fun queuedHistoryCannotOverwriteAnExplicitCollectionEdit() {
+        val storage = MemoryAuthStore()
+        val queued = java.util.concurrent.ConcurrentLinkedQueue<Runnable>()
+        val library = LocalLibraryStore(storage, writer = java.util.concurrent.Executor { queued.add(it) })
+        library.record(video("one"))
+        library.create("Films", "", video("two"))
+        queued.forEach(Runnable::run)
+        val restored = LocalLibraryStore(storage)
+        assertEquals("Films", restored.playlists().playlists.single().title)
+        assertEquals("one", restored.history().entries.single().videoId)
+    }
 }

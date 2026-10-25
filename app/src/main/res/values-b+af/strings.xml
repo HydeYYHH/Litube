@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Gekanselleer</string>
     <string name="about_save_failed">Kon nie programloglêers stoor nie. Kies \'n ander stoorplek en probeer weer.</string>
     <string name="player_live_unavailable">Regstreekse stroom nie beskikbaar nie. Probeer later weer.</string>
+    <string name="autoplay">Outoomaties speel</string>
+    <string name="queue_item_already">Reeds in waglys</string>
+    <string name="title_copied">Titel gekopieer</string>
+    <string name="verification_title">Verifikasie vereis</string>
+    <string name="verification_banner_text">YouTube het verifikasie versoek voordat meer inhoud gelaai kan word. Bestaande inhoud bly beskikbaar.</string>
+    <string name="verification_banner_action">Verifieer</string>
+    <string name="verification_banner_dismiss">Verwerp</string>
+    <string name="verification_close">Maak toe</string>
+    <string name="verification_completed">Verifikasie voltooi. Probeer weer…</string>
+    <string name="verification_still_blocked">Nog geblokkeer na verifikasie. Probeer later weer.</string>
 </resources>

@@ -68,6 +68,17 @@ class ChannelScreenAndroidTest {
         if (received >= 0) assertEquals("Offline channel page received network data", received, TrafficStats.getUidRxBytes(Process.myUid()))
     }
 
+    @Test fun switchingTabsDoesNotCollapseAnExpandedHeader() {
+        launchChannel()
+        awaitNode("channel-header")
+        val top = compose.onNodeWithTag("channel-header").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("channel-tab-Videos").performClick()
+        awaitNode("channel-videos-list")
+        compose.waitForIdle()
+        assertEquals(top, compose.onNodeWithTag("channel-header").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithTag("channel-name").assertIsDisplayed()
+    }
+
     @Test fun tabsSwitchLocallyAndKeepTheirScrollsAcrossSwitchesAndRecreation() {
         launchChannel()
         awaitNode("channel-home-list")

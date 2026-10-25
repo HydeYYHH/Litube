@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Ezeztatuta</string>
     <string name="about_save_failed">Ezin izan dira gorde aplikazioen erregistroak. Aukeratu beste gordetze-kokapen bat eta saiatu berriro.</string>
     <string name="player_live_unavailable">Zuzeneko erreprodukzioa ez dago erabilgarri. Saiatu berriro geroago.</string>
+    <string name="autoplay">Erreprodukzio automatikoa</string>
+    <string name="queue_item_already">Jadan ilaran dago</string>
+    <string name="title_copied">Izenburua kopiatu da</string>
+    <string name="verification_title">Egiaztapena behar da</string>
+    <string name="verification_banner_text">YouTube-k egiaztapena eskatu du eduki gehiago kargatu aurretik. Dagoen edukia eskuragarri jarraitzen du.</string>
+    <string name="verification_banner_action">Egiaztatu</string>
+    <string name="verification_banner_dismiss">Baztertu</string>
+    <string name="verification_close">Itxi</string>
+    <string name="verification_completed">Egiaztapena amaitu da. Berriro saiatzen…</string>
+    <string name="verification_still_blocked">Egiaztatu ondoren oraindik blokeatuta. Saiatu berriro geroago.</string>
 </resources>

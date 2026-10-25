@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Dibatalkan</string>
     <string name="about_save_failed">Could not save app logs. Pilih lokasi penyimpanan lain dan coba lagi.</string>
     <string name="player_live_unavailable">Siaran langsung tidak tersedia. Coba lagi nanti.</string>
+    <string name="autoplay">Putar otomatis</string>
+    <string name="queue_item_already">Sudah ada di antrean</string>
+    <string name="title_copied">Judul disalin</string>
+    <string name="verification_title">Verifikasi diperlukan</string>
+    <string name="verification_banner_text">YouTube meminta verifikasi sebelum memuat lebih banyak konten. Konten yang ada tetap tersedia.</string>
+    <string name="verification_banner_action">Verifikasi</string>
+    <string name="verification_banner_dismiss">Abaikan</string>
+    <string name="verification_close">Tutup</string>
+    <string name="verification_completed">Verifikasi selesai. Mencoba lagi…</string>
+    <string name="verification_still_blocked">Masih diblokir setelah verifikasi. Coba lagi nanti.</string>
 </resources>

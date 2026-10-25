@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Speichern abgebrochen</string>
     <string name="about_save_failed">Diagnoseprotokolle konnten nicht gespeichert werden. Wählen Sie einen anderen Speicherort und versuchen Sie es erneut.</string>
     <string name="player_live_unavailable">Livestream nicht verfügbar. Versuchen Sie es später erneut.</string>
+    <string name="autoplay">Autoplay</string>
+    <string name="queue_item_already">Bereits in der Warteschlange</string>
+    <string name="title_copied">Titel kopiert</string>
+    <string name="verification_title">Bestätigung erforderlich</string>
+    <string name="verification_banner_text">YouTube hat eine Bestätigung angefordert, bevor weitere Inhalte geladen werden. Vorhandene Inhalte bleiben verfügbar.</string>
+    <string name="verification_banner_action">Bestätigen</string>
+    <string name="verification_banner_dismiss">Ausblenden</string>
+    <string name="verification_close">Schließen</string>
+    <string name="verification_completed">Bestätigung abgeschlossen. Wird wiederholt…</string>
+    <string name="verification_still_blocked">Nach der Bestätigung weiterhin blockiert. Bitte später erneut versuchen.</string>
 </resources>

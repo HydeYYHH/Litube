@@ -19,7 +19,7 @@ object DownloadResourceIdentity {
         val resource = format.resourceIdentity?.takeIf { it.isNotBlank() }
             ?: return "dl:unproven:${YoutubeSessionDigest.of(format.url)}:0"
         val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(
-            "$resource:${key.audioTrack}:${key.codec}:${key.drc}:${key.hdr}:${key.protocol}".toByteArray())
+            "$resource:$key".toByteArray())
         val length = format.requestPlan?.resourceLength?.takeIf { it > 0 }
             ?: DownloadBitrate.queryParam(format.url, "clen")?.toLongOrNull() ?: 0
         return "dl:v2:$encoded:$length"

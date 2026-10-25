@@ -34,7 +34,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
 /** Same-account native extraction through first decoded frame, with immediate cache replays. */
 @UnstableApi
@@ -65,7 +64,7 @@ class YoutubeLoadSpeedAndroidTest {
             }
             else MediaSourceResolver(GlobalContext.get().get<PlayerDataSource>())
         val records = mutableListOf<Map<String, Any>>()
-        val demand = StreamDemand(720, null, false, setOf("avc", "vp9", "vp09", "hvc", "hev", "av01"))
+        val demand = PlaybackDemand(720, null, false, setOf("avc", "vp9", "vp09", "hvc", "hev", "av01"))
         val leadMs = args.getString("prepareLeadMs", "0").toLong()
         // Stands in for the browser document: "session" captures configuration only, "full" also initializes.
         val preload = args.getString("preload", "none")

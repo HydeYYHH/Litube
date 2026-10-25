@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Zrušené</string>
     <string name="about_save_failed">Nepodarilo sa uložiť denníky aplikácie. Vyberte iné miesto uloženia a skúste to znova.</string>
     <string name="player_live_unavailable">Živý prenos nie je dostupný. Skúste to znova neskôr.</string>
+    <string name="autoplay">Automatické prehrávanie</string>
+    <string name="queue_item_already">Už je v poradí</string>
+    <string name="title_copied">Názov skopírovaný</string>
+    <string name="verification_title">Vyžaduje sa overenie</string>
+    <string name="verification_banner_text">YouTube si vyžiadal overenie pred načítaním ďalšieho obsahu. Existujúci obsah zostáva dostupný.</string>
+    <string name="verification_banner_action">Overiť</string>
+    <string name="verification_banner_dismiss">Zavrieť upozornenie</string>
+    <string name="verification_close">Zavrieť</string>
+    <string name="verification_completed">Overenie dokončené. Skúša sa znova…</string>
+    <string name="verification_still_blocked">Po overení je stále zablokované. Skúste to neskôr znova.</string>
 </resources>

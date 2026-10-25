@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ਰੱਦ</string>
     <string name="about_save_failed">ਐਪ ਲੌਗਸ ਨੂੰ ਸੁਰੱਖਿਅਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ। ਕੋਈ ਹੋਰ ਸੁਰੱਖਿਅਤ ਟਿਕਾਣਾ ਚੁਣੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
     <string name="player_live_unavailable">ਲਾਈਵ ਸਟ੍ਰੀਮ ਉਪਲਬਧ ਨਹੀਂ ਹੈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
+    <string name="autoplay">ਆਟੋ-ਪਲੇ</string>
+    <string name="queue_item_already">ਪਹਿਲਾਂ ਹੀ ਕਤਾਰ ਵਿੱਚ ਹੈ</string>
+    <string name="title_copied">ਸਿਰਲੇਖ ਕਾਪੀ ਹੋ ਗਿਆ</string>
+    <string name="verification_title">ਪੁਸ਼ਟੀਕਰਨ ਲੋੜੀਂਦਾ ਹੈ</string>
+    <string name="verification_banner_text">ਹੋਰ ਸਮੱਗਰੀ ਲੋਡ ਹੋਣ ਤੋਂ ਪਹਿਲਾਂ YouTube ਨੇ ਪੁਸ਼ਟੀਕਰਨ ਮੰਗਿਆ ਹੈ। ਮੌਜੂਦਾ ਸਮੱਗਰੀ ਉਪਲਬਧ ਰਹੇਗੀ।</string>
+    <string name="verification_banner_action">ਪੁਸ਼ਟੀ ਕਰੋ</string>
+    <string name="verification_banner_dismiss">ਰੱਦ ਕਰੋ</string>
+    <string name="verification_close">ਬੰਦ ਕਰੋ</string>
+    <string name="verification_completed">ਪੁਸ਼ਟੀਕਰਨ ਪੂਰਾ ਹੋਇਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਜਾਰੀ…</string>
+    <string name="verification_still_blocked">ਪੁਸ਼ਟੀ ਤੋਂ ਬਾਅਦ ਵੀ ਬਲੌਕ ਹੈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
 </resources>

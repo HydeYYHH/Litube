@@ -9,7 +9,7 @@ class ContentRepositories(val client: MediaClient, kv: com.tencent.mmkv.MMKV? = 
         private val storage = kv ?: com.tencent.mmkv.MMKV.defaultMMKV()
         override fun read(key: String) = storage.decodeString(key, null)
         override fun write(key: String, value: String?) { check(storage.encode(key, value)) { "device_library_write_failed" } }
-    }) }
+    }, writer = LocalLibraryStore.backgroundWriter()) }
     val home by lazy { MediaHomeRepository(client) }
     val search by lazy { MediaSearchRepository(client) }
     val watch by lazy { MediaWatchRepository(client) }

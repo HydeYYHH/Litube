@@ -7,13 +7,15 @@ import com.hhst.youtubelite.saves.domain.SaveChoice
 import java.util.UUID
 
 /** Device-owned collections use a separate namespace from account data. */
-class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = Gson()) {
+class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = Gson(),
+    private val writer: java.util.concurrent.Executor = java.util.concurrent.Executor { it.run() }) {
     private data class Collection(val id: String, val title: String, val description: String, val videos: List<HistoryEntry>)
     private data class Data(val history: List<HistoryEntry> = emptyList(), val collections: List<Collection> = emptyList(), val paused: Boolean = false)
     private var loaded: Data? = null
     private var data: Data
         get() = loaded ?: read().also { loaded = it }
         set(value) { loaded = value }
+    private val pending = java.util.concurrent.atomic.AtomicReference<Data?>()
 
     private fun read(): Data = runCatching {
         store.read(KEY)?.let { json ->
@@ -31,7 +33,7 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
     @Synchronized fun paused() = data.paused
     @Synchronized fun record(entry: HistoryEntry) {
         if (data.paused) return
-        save(data.copy(history = (listOf(entry.copy(removeToken = entry.videoId)) + data.history.filter { it.videoId != entry.videoId }).take(500)))
+        save(data.copy(history = (listOf(entry.copy(removeToken = entry.videoId)) + data.history.filter { it.videoId != entry.videoId }).take(500)), deferred = true)
     }
     @Synchronized fun remove(videoId: String) = save(data.copy(history = data.history.filter { it.videoId != videoId }))
     @Synchronized fun clear() = save(data.copy(history = emptyList()))
@@ -65,12 +67,35 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
     }
     private fun summary(list: Collection) = PlaylistSummary(list.id, list.title, "On this device", "", list.videos.size,
         list.videos.firstOrNull()?.artwork.orEmpty(), "", null)
-    private fun save(next: Data) {
-        store.write(KEY, gson.toJson(next))
+    private fun save(next: Data, deferred: Boolean = false) {
+        if (!deferred) {
+            store.write(KEY, gson.toJson(next))
+            pending.set(null)
+            data = next
+            return
+        }
         data = next
+        pending.set(next)
+        writer.execute {
+            synchronized(this) {
+                val snapshot = pending.getAndSet(null) ?: return@synchronized
+                try {
+                    store.write(KEY, gson.toJson(snapshot))
+                } catch (error: Exception) {
+                    com.hhst.youtubelite.diagnostics.AppLog.event(
+                        com.hhst.youtubelite.diagnostics.AppLog.Category.STORAGE, "device_library_write_failed", failure = error)
+                }
+            }
+        }
     }
     companion object {
         const val WATCH_LATER = "local:watch-later"
         private const val KEY = "device-library:data"
+
+        /** Production writer: one daemon thread, so callers never marshal the library inline. */
+        fun backgroundWriter(): java.util.concurrent.Executor =
+            java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+                Thread(runnable, "device-library-writer").apply { isDaemon = true }
+            }
     }
 }

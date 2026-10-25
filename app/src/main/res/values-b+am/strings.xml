@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">ተሰርዟል።</string>
     <string name="about_save_failed">የመተግበሪያ ምዝግብ ማስታወሻዎችን ማስቀመጥ አልተቻለም። ሌላ የማስቀመጫ ቦታ ይምረጡ እና እንደገና ይሞክሩ።</string>
     <string name="player_live_unavailable">የቀጥታ ስርጭት አይገኝም። ቆይተው እንደገና ይሞክሩ።</string>
+    <string name="autoplay">በራስ-ሰር ማጫወት</string>
+    <string name="queue_item_already">በተራ ውስጥ አስቀድሞ አለ</string>
+    <string name="title_copied">ርዕስ ተቀድቷል</string>
+    <string name="verification_title">ማረጋገጫ ያስፈልጋል</string>
+    <string name="verification_banner_text">ተጨማሪ ይዘት ከመጫኑ በፊት YouTube ማረጋገጫ ጠየቀ። ነባር ይዘት ይገኛል።</string>
+    <string name="verification_banner_action">አረጋግጥ</string>
+    <string name="verification_banner_dismiss">አስወግድ</string>
+    <string name="verification_close">ዝጋ</string>
+    <string name="verification_completed">ማረጋገጫ ተጠናቋል። እንደገና በመሞከር ላይ…</string>
+    <string name="verification_still_blocked">ከማረጋገጡ በኋላ አሁንም ታግዷል። እባክዎ ቆይተው ይሞክሩ።</string>
 </resources>

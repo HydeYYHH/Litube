@@ -1,4 +1,4 @@
--keep class org.koin.** { *; }
+# Explicit DI factories do not require reflective construction.
 -dontwarn org.koin.**
 
 -keepclassmembers class * {
@@ -20,7 +20,6 @@
 -keep class com.hhst.youtubelite.player.sponsor.SponsorBlockParser$SegmentData { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Format { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.PoIntegrity { <init>(...); <fields>; }
--keep class org.schabi.newpipe.extractor.services.youtube.streams.FormatKey { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Metadata { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Subtitle { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.extractor.Chapter { <init>(...); <fields>; }
@@ -37,16 +36,16 @@
 -keep class com.hhst.youtubelite.downloader.core.EnqueueResult { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.downloader.core.TaskRef { <init>(...); <fields>; }
 -keep class com.hhst.youtubelite.core.MmkvJsonCache$Entry { <init>(...); <fields>; }
+-keep class com.hhst.youtubelite.home.domain.FeedItem$Video { <init>(...); <fields>; }
 
 -keep class com.hhst.youtubelite.downloader.engine.DownloadTransferWorker { *; }
 -keep class com.hhst.youtubelite.downloader.engine.DownloadFinalizeWorker { *; }
 -keep class com.hhst.youtubelite.downloader.engine.DownloadUidtJobService { *; }
 -keep class com.hhst.youtubelite.downloader.engine.KoinDownloadWorkerFactory { *; }
 
-# Optional jsoup / NewPipe paths unused on Android.
+# Optional jsoup paths unused on Android.
 -dontwarn java.beans.**
 -dontwarn com.google.re2j.**
--dontwarn org.mozilla.javascript.engine.**
 
 
 -keep class com.hhst.youtubelite.data.media.LocalLibraryStore$Data { <init>(...); <fields>; }

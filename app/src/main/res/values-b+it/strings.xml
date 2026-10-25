@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Salvataggio annullato</string>
     <string name="about_save_failed">Impossibile salvare i log diagnostici. Scegli un\'altra posizione e riprova.</string>
     <string name="player_live_unavailable">Diretta non disponibile. Riprova più tardi.</string>
+    <string name="autoplay">Riproduzione automatica</string>
+    <string name="queue_item_already">Già in coda</string>
+    <string name="title_copied">Titolo copiato</string>
+    <string name="verification_title">Verifica richiesta</string>
+    <string name="verification_banner_text">YouTube ha richiesto una verifica prima di caricare altri contenuti. I contenuti esistenti restano disponibili.</string>
+    <string name="verification_banner_action">Verifica</string>
+    <string name="verification_banner_dismiss">Ignora</string>
+    <string name="verification_close">Chiudi</string>
+    <string name="verification_completed">Verifica completata. Nuovo tentativo…</string>
+    <string name="verification_still_blocked">Ancora bloccato dopo la verifica. Riprova più tardi.</string>
 </resources>

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Адменена</string>
     <string name="about_save_failed">Не атрымалася захаваць журналы праграмы. Выберыце іншае месца захавання і паўтарыце спробу.</string>
     <string name="player_live_unavailable">Прамая трансляцыя недаступная. Паўтарыце спробу пазней.</string>
+    <string name="autoplay">Аўтапрайграванне</string>
+    <string name="queue_item_already">Ужо ў чарзе</string>
+    <string name="title_copied">Назва скапіявана</string>
+    <string name="verification_title">Патрабуецца праверка</string>
+    <string name="verification_banner_text">YouTube запрасіў праверку перад загрузкай дадатковага змесціва. Існае змесціва застаецца даступным.</string>
+    <string name="verification_banner_action">Праверыць</string>
+    <string name="verification_banner_dismiss">Адхіліць</string>
+    <string name="verification_close">Закрыць</string>
+    <string name="verification_completed">Праверка скончаная. Паўтор…</string>
+    <string name="verification_still_blocked">Пасля праверкі ўсё яшчэ заблакавана. Паспрабуйце пазней.</string>
 </resources>

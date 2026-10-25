@@ -56,6 +56,14 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
 
     private var loadJob: kotlinx.coroutines.Job? = null
     private var generation = 0
+    private var sessionGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
+
+    /** Identity-scoped sections re-read after an account switch. */
+    fun updateSession(generation: Long) {
+        if (generation == sessionGeneration) return
+        sessionGeneration = generation
+        load(_uiState.value.category)
+    }
 
     init {
         if (scenario == ExploreScenario.Loading) {
@@ -112,6 +120,14 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 exploreViewModel.onAction(ExploreAction.DismissVerification)
                 exploreViewModel.onAction(ExploreAction.Retry)
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Explore sections are identity-scoped server-side (visitor vs account).
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            exploreViewModel.updateSession(com.hhst.youtubelite.data.media.MediaSession.snapshot().generation)
         }
     }
 

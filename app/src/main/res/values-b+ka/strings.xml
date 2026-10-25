@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">გაუქმებულია</string>
     <string name="about_save_failed">აპების ჟურნალის შენახვა ვერ მოხერხდა. აირჩიეთ სხვა შენახვის ადგილი და სცადეთ ხელახლა.</string>
     <string name="player_live_unavailable">პირდაპირი ტრანსლაცია მიუწვდომელია. სცადეთ მოგვიანებით.</string>
+    <string name="autoplay">ავტომატური დაკვრა</string>
+    <string name="queue_item_already">უკვე რიგშია</string>
+    <string name="title_copied">სათაური დაკოპირდა</string>
+    <string name="verification_title">საჭიროა გადამოწმება</string>
+    <string name="verification_banner_text">YouTube ითხოვს გადამოწმებას დამატებითი შინაარსის ჩატვირთვამდე. არსებული შინაარსი ხელმისაწვდომი რჩება.</string>
+    <string name="verification_banner_action">გადაამოწმე</string>
+    <string name="verification_banner_dismiss">უარყოფა</string>
+    <string name="verification_close">დახურვა</string>
+    <string name="verification_completed">გადამოწმება დასრულდა. ხელახლა ცდა…</string>
+    <string name="verification_still_blocked">გადამოწმების შემდეგაც დაბლოკილია. სცადეთ მოგვიანებით.</string>
 </resources>

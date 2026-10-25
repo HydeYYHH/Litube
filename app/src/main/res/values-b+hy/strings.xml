@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Չեղարկված</string>
     <string name="about_save_failed">Չհաջողվեց պահպանել հավելվածների մատյանները: Choose another save location and try again.</string>
     <string name="player_live_unavailable">Ուղիղ հեռարձակումը հասանելի չէ։ Փորձեք կրկին ավելի ուշ։</string>
+    <string name="autoplay">Ինքնագործարկում</string>
+    <string name="queue_item_already">Արդեն հերթում է</string>
+    <string name="title_copied">Վերնագիրը պատճենվեց</string>
+    <string name="verification_title">Պահանջվում է ստուգում</string>
+    <string name="verification_banner_text">YouTube-ը ստուգում է պահանջել լրացուցիչ բովանդակություն բեռնելուց առաջ։ Առկա բովանդակությունը մնում է հասանելի։</string>
+    <string name="verification_banner_action">Ստուգել</string>
+    <string name="verification_banner_dismiss">Բաց թողնել</string>
+    <string name="verification_close">Փակել</string>
+    <string name="verification_completed">Ստուգումն ավարտվեց։ Կրկին փորձ…</string>
+    <string name="verification_still_blocked">Ստուգումից հետո այդուհանդերձ արգելափակված է։ Փորձեք ավելի ուշ։</string>
 </resources>

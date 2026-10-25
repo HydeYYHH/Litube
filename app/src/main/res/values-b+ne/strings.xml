@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">रद्द गरियो</string>
     <string name="about_save_failed">एप लगहरू बचत गर्न सकिएन। अर्को बचत स्थान छान्नुहोस् र फेरि प्रयास गर्नुहोस्।</string>
     <string name="player_live_unavailable">लाइभ स्ट्रिम उपलब्ध छैन। पछि फेरि प्रयास गर्नुहोस्।</string>
+    <string name="autoplay">स्वतः प्ले</string>
+    <string name="queue_item_already">पहिले नै लाममा छ</string>
+    <string name="title_copied">शीर्षक सारियो</string>
+    <string name="verification_title">प्रमाणीकरण आवश्यक छ</string>
+    <string name="verification_banner_text">थप सामग्री लोड हुनुअघि YouTube ले प्रमाणीकरण मागेको छ। अहिलेको सामग्री उपलब्ध रहन्छ।</string>
+    <string name="verification_banner_action">प्रमाणित गर्नुहोस्</string>
+    <string name="verification_banner_dismiss">खारेज गर्नुहोस्</string>
+    <string name="verification_close">बन्द गर्नुहोस्</string>
+    <string name="verification_completed">प्रमाणीकरण सम्पन्न भयो। पुन: प्रयास गर्दै…</string>
+    <string name="verification_still_blocked">प्रमाणीकरणपछि पनि रोकिएको छ। पछि फेरि प्रयास गर्नुहोस्।</string>
 </resources>

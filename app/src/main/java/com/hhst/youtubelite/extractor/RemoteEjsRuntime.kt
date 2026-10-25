@@ -33,12 +33,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.ChallengeSolver
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 
 /** The fallback owns a separate browser process/data directory; terminating it cannot kill the account WebView. */
 internal object EjsRuntimeProcess {
@@ -248,12 +242,15 @@ class EjsRuntimeService : Service() {
                             text.toString()
                         }
                         val timeout = data.getLong("timeout").coerceAtLeast(1)
-                        val context = ExtractionContext(YoutubeSession("ejs-only", YoutubeSession.Account.ANONYMOUS,
+                        val context = ExtractionContext(YoutubeWebSession("ejs-only", WebAccount.ANONYMOUS,
                             0, null, null, null, null, "", 0, null, "isolated-ejs", JsonObject(), { "" }),
-                            object : Downloader() { override fun execute(request: Request): Response = throw IOException("JS_NO_NETWORK") },
-                            ChallengeSolver { _, _, _, _ -> ChallengeSolver.Solutions(emptyMap(), emptyMap()) }, null,
-                            false, false, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout), { live },
-                            { _, _, _, _, _ -> })
+                            object : ExtractionTransport {
+                                override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse = throw IOException("JS_NO_NETWORK")
+                                override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray): PageResponse = throw IOException("JS_NO_NETWORK")
+                            },
+                            live = false, catalog = false, playbackPriority = false,
+                            deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout), current = { live },
+                            diagnostics = object : EngineDiagnostics { override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) {} })
                         val result = requireNotNull(runtime).evaluate(code, timeout, context)
                         if (result.length > 256 * 1024) throw IOException("JS_RESULT_LIMIT")
                         response.putString("result", result)

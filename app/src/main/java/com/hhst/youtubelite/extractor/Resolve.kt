@@ -1,320 +1,138 @@
 package com.hhst.youtubelite.extractor
 
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
-import org.schabi.newpipe.extractor.stream.AudioTrackType
-import org.schabi.newpipe.extractor.stream.StreamType
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamCandidate
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import org.schabi.newpipe.extractor.Image
-import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.StreamExtractor
-import org.schabi.newpipe.extractor.stream.StreamInfo
-import org.schabi.newpipe.extractor.stream.VideoStream
-import java.util.concurrent.atomic.AtomicBoolean
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlaybackLoad
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerAnswer
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerFormat
 
-/**
- * Shared `/player` payload for metadata and stream.
- *
- * Fetched at most once, only when a promise needs the network. The extractor
- * instance is shared with [resolveChapters] so chapters reuse the already
- * fetched player state instead of building a second extractor (which would
- * re-issue `/player` behind the scenes).
- */
-internal class PlayerPage private constructor(
-    val info: StreamInfo,
-    val extractor: StreamExtractor,
-) {
-    companion object {
-        fun shared(
-            videoId: String,
-            scope: CoroutineScope,
-            context: (() -> ExtractionContext)? = null,
-            plans: YoutubeMediaRequests? = null,
-            refresh: (() -> ExtractionContext)? = null,
-        ): () -> PlayerPage {
-            val deferred = CompletableDeferred<PlayerPage>()
-            val started = AtomicBoolean(false)
-            return {
-                if (started.compareAndSet(false, true)) {
-                    scope.launch(Dispatchers.IO) {
-                        try {
-                            val page = try { fetch(videoId, context, plans) } catch (failure: Exception) {
-                                val forbidden = generateSequence(failure as Throwable?) { it.cause }.any {
-                                    it is StreamHttpException && it.status == 403
-                                }
-                                if (!forbidden || refresh == null) throw failure
-                                val refreshed = refresh()
-                                fetch(videoId, { refreshed }, plans)
-                            }
-                            deferred.complete(page)
-                        } catch (t: Throwable) {
-                            deferred.completeExceptionally(t)
-                        }
-                    }
-                }
-                runBlocking { deferred.await() }
-            }
-        }
+/** Maps one core playback load into the app's cached metadata and stream models. */
 
-        private fun fetch(videoId: String,
-                          context: (() -> ExtractionContext)?,
-                          plans: YoutubeMediaRequests?): PlayerPage {
-            val extractor = ServiceList.YouTube.getStreamExtractor(VideoId.watchUrl(videoId))
-            context?.let { (extractor as YoutubeStreamExtractor).setExtractionContext(it()) }
-            val info = StreamInfo.getInfo(extractor)
-            (extractor as? YoutubeStreamExtractor)?.engineResult?.let { result ->
-                (result.candidates + result.manifests).forEach { plans?.register(it.url, it.requestPlan) }
-            }
-            return PlayerPage(info, extractor)
-        }
-    }
+internal fun mapMetadata(videoId: String, answer: PlayerAnswer): Metadata = Metadata().apply {
+    val details = answer.details
+    id = details?.videoId ?: videoId
+    title = details?.title.orEmpty()
+    author = details?.author
+    description = details?.description
+    duration = details?.durationSeconds?.coerceAtLeast(0L) ?: 0L
+    thumbnailUrl = details?.thumbnail ?: VideoId.thumbnailUrl(videoId)
+    isLive = answer.live
 }
 
-/** Cache hit or `/player`, then persist [Metadata]. */
-internal fun Promise<Metadata>.resolveMetadata(
-    videoId: String,
-    cache: Cache,
-    player: () -> PlayerPage,
-) {
-    cache.getMetadata(videoId)?.let { cached ->
-        set { copyFrom(cached) }
-        return
-    }
-    set { fillFrom(player()) }
-    cache.putMetadata(videoId, value)
-}
+internal fun mapStream(load: PlaybackLoad, context: ExtractionContext): Stream {
+    val answer = requireNotNull(load.answer) { "stream mapping requires a successful answer" }
+    val client = MscPlayback.mapClient(requireNotNull(load.client))
+    val expiresAt = answer.expiresAtMs ?: Long.MAX_VALUE
+    fun wholeObjectPlan(protocol: MediaProtocol, resourceLength: Long = -1) =
+        MediaRequestPlan(context.session, client, protocol, MediaRange.NONE,
+            allowPostFallback = false, resourceLength = resourceLength, expiresAtMillis = expiresAt)
 
-/** Cache hit or `/player`, then persist [Stream]. */
-internal fun Promise<Stream>.resolveStream(
-    videoId: String,
-    cache: Cache,
-    player: () -> PlayerPage,
-) {
-    cache.getStream(videoId)?.let { cached ->
-        set { copyFrom(cached) }
-        return
-    }
-    set { fillFrom(player()) }
-    cache.putStream(videoId, value)
-}
-
-/**
- * Cache hit or `/next`, then persist [ChapterList].
- *
- * Reuses [PlayerPage]'s extractor when the player page was already fetched —
- * `fetchNextResponse` then costs one `/next` POST and nothing else. When
- * chapters resolve first (WebView prefetch race), this blocks on the shared
- * player page instead of issuing a second `/player`; only if that fetch
- * *fails* does a private extractor run here, requesting just `/next`.
- */
-internal fun Promise<ChapterList>.resolveChapters(
-    videoId: String,
-    cache: Cache,
-    player: () -> PlayerPage,
-) {
-    cache.getChapters(videoId)?.let { cached ->
-        set { copyFrom(cached) }
-        return
-    }
-    val extractor = player().extractor
-    val chapters = StreamInfo.getSegments(extractor).map {
-        Chapter(
-            title = it.title.orEmpty(),
-            startSeconds = it.startTimeSeconds,
-            previewUrl = it.previewUrl,
-        )
-    }
-    set { this.chapters = chapters }
-    cache.putChapters(videoId, value)
-}
-
-private fun Metadata.fillFrom(page: PlayerPage) {
-    val info = page.info
-    val extractor = page.extractor
-    id = info.id
-    title = info.name.orEmpty()
-    author = runCatching { extractor.uploaderName }.getOrNull()
-    description = runCatching { extractor.description.content }.getOrNull()
-    duration = runCatching { extractor.length }.getOrDefault(0L).coerceAtLeast(0L)
-    thumbnailUrl = bestImageUrl(runCatching { extractor.thumbnails }.getOrDefault(emptyList()))
-        ?: VideoId.thumbnailUrl(info.id)
-    isLive = runCatching {
-        info.streamType == StreamType.LIVE_STREAM ||
-            info.streamType == StreamType.AUDIO_LIVE_STREAM
-    }.getOrDefault(false)
-}
-
-private fun Stream.fillFrom(page: PlayerPage) {
-    val info = page.info
-    formats = buildList {
-        info.videoOnlyStreams.forEach { add(it.toFormat(videoOnly = true)) }
-        info.audioStreams.forEach { add(it.toFormat()) }
-        info.videoStreams.forEach { add(it.toFormat()) }
-    }
+    // Muxed formats may arrive as the ANDROID reel floor; their URLs answer to that identity.
+    val floorClient = load.floorClient?.let(MscPlayback::mapClient) ?: client
+    val formats = (answer.muxedFormats.asSequence().map {
+        // Muxed itag 18 videoplayback ignores `range=` and serves Range headers.
+        it.toFormat(chunkPlan(it, context, floorClient, expiresAt, MediaRange.HEADER), muxed = true)
+    } +
+        answer.adaptiveFormats.asSequence().map {
+            it.toFormat(chunkPlan(it, context, client, expiresAt, MediaRange.QUERY), muxed = false)
+        })
+        .mapNotNull { it }
         .filter { it.url.isNotBlank() }
-        .sortedWith(
-            compareByDescending<Format> { it.height }
-                .thenByDescending { it.bitrate },
+        .sortedWith(compareByDescending<Format> { it.height }.thenByDescending { it.bitrate })
+        .toList()
+
+    val subtitles = answer.captions.mapNotNull { caption ->
+        val url = caption.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        Subtitle(
+            url = vttUrl(url),
+            languageCode = caption.language.orEmpty(),
+            autoGenerated = caption.automatic,
+            mimeType = "text/vtt",
+            requestPlan = wholeObjectPlan(MediaProtocol.HTTPS),
         )
-    subtitles = runCatching { page.extractor.subtitlesDefault }
-        .getOrDefault(emptyList())
-        .mapNotNull { track ->
-            val url = track.content.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            Subtitle(
-                url = url,
-                languageCode = track.languageTag.orEmpty(),
-                autoGenerated = track.isAutoGenerated,
-                mimeType = track.format?.mimeType.orEmpty(),
-            )
-        }
-    dashUrl = info.dashMpdUrl?.takeIf { it.isNotBlank() }
-    hlsUrl = info.hlsUrl?.takeIf { it.isNotBlank() }
-    val engine = (page.extractor as? YoutubeStreamExtractor)?.engineResult
-    if (engine != null) {
-        subtitles = engine.captions.mapNotNull { caption ->
-            val track = caption.track
-            val url = track.getString("baseUrl", "").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val parsed = url.toHttpUrlOrNull() ?: return@mapNotNull null
-            Subtitle(
-                url = parsed.newBuilder().removeAllQueryParameters("fmt").addQueryParameter("fmt", "vtt").build().toString(),
-                languageCode = track.getString("languageCode", ""),
-                autoGenerated = track.getString("kind", "") == "asr" || track.getString("vssId", "").startsWith("a."),
-                mimeType = "text/vtt",
-                requestPlan = caption.plan,
-            )
-        }.distinctBy { it.languageCode to it.autoGenerated }
-        val byUrl = engine.candidates.associateBy { it.url }
-        formats = formats.map { format -> byUrl[format.url]?.let {
-            format.copy(formatKey = it.key, resourceIdentity = it.resourceIdentity,
-                expiresAtMillis = it.expiresAtMillis, requestPlan = it.requestPlan)
-        } ?: format }
-        val originals = formats.associateBy { it.formatKey }
-        formats = engine.candidates.mapNotNull { candidate ->
-            originals[candidate.key]?.copy(
-                url = candidate.url,
-                requestPlan = candidate.requestPlan,
-                resourceIdentity = candidate.resourceIdentity,
-                expiresAtMillis = candidate.expiresAtMillis,
-            )?.withAudioIdentity(candidate) ?: candidate.asFormat()
-        }
-        dashRequestPlan = engine.manifests.firstOrNull { it.url == dashUrl }?.requestPlan
-        hlsRequestPlan = engine.manifests.firstOrNull { it.url == hlsUrl }?.requestPlan
-        manifests = engine.manifests.map { Manifest(it.url, it.key.protocol, it.requestPlan, it.expiresAtMillis) }
+    }.distinctBy { it.languageCode to it.autoGenerated }
+
+    val manifests = buildList {
+        answer.hlsUrl?.takeIf { it.isNotBlank() }?.let { add(Manifest(it, MediaProtocol.HLS, wholeObjectPlan(MediaProtocol.HLS), expiresAt)) }
+        answer.dashUrl?.takeIf { it.isNotBlank() }?.let { add(Manifest(it, MediaProtocol.DASH, wholeObjectPlan(MediaProtocol.DASH), expiresAt)) }
+    }
+    val dash = manifests.firstOrNull { it.protocol == MediaProtocol.DASH }
+    val hls = manifests.firstOrNull { it.protocol == MediaProtocol.HLS }
+
+    return Stream().apply {
+        this.formats = formats
+        this.subtitles = subtitles
+        this.manifests = manifests
+        dashUrl = dash?.url
+        dashRequestPlan = dash?.requestPlan
+        hlsUrl = hls?.url
+        hlsRequestPlan = hls?.requestPlan
     }
 }
 
-private fun VideoStream.toFormat(videoOnly: Boolean = false): Format {
-    val item = runCatching { itagItem }.getOrNull()
-    return Format(
-        url = content,
-        height = height,
-        width = width,
-        bitrate = bitrate,
-        fps = fps,
-        qualityLabel = getResolution(),
-        codec = codec,
-        container = format?.name,
-        itag = itag.takeIf { it > 0 },
-        videoOnly = videoOnly,
-        mimeType = format?.mimeType.orEmpty(),
-        initStart = initStart,
-        initEnd = initEnd,
-        indexStart = indexStart,
-        indexEnd = indexEnd,
-        approxDurationMs = item?.approxDurationMs ?: -1L,
-    )
-}
+/** Media bytes are addressed as bounded `range=` windows on googlevideo. */
+private fun chunkPlan(format: PlayerFormat, context: ExtractionContext, client: StreamClient, expiresAt: Long,
+    range: MediaRange) =
+    MediaRequestPlan(context.session, client, MediaProtocol.HTTPS, range,
+        allowPostFallback = true, resourceLength = format.contentLength ?: -1, expiresAtMillis = expiresAt)
 
-private fun Format.withAudioIdentity(
-    candidate: StreamCandidate,
-): Format {
-    if (!audioOnly || !audioTrackId.isNullOrBlank() || candidate.key.audioTrack.isBlank()) return this
-    return copy(
-        audioTrackId = candidate.key.audioTrack,
-        audioLocale = audioLocale ?: candidate.key.audioTrack.substringBefore('.').takeIf { it.isNotBlank() },
-    )
-}
-
-private fun StreamCandidate.asFormat(): Format {
-    val track = format.getObject("audioTrack")
-    val id = key.audioTrack.ifBlank { track.getString("id", "") }.takeIf { it.isNotBlank() }
-    val mime = format.getString("mimeType", "")
-    val init = format.getObject("initRange")
-    val index = format.getObject("indexRange")
+private fun PlayerFormat.toFormat(plan: MediaRequestPlan, muxed: Boolean): Format? {
+    val url = url?.takeIf { it.isNotBlank() } ?: return null
+    val mime = mimeType.orEmpty()
+    val audio = mime.startsWith("audio/")
+    val video = mime.startsWith("video/")
+    if (!audio && !video && mime.isNotEmpty()) return null
+    val container = when {
+        mime.contains("webm") -> "WEBM"
+        mime.contains("mp4") -> "MPEG_4"
+        mime.isNotEmpty() -> mime.substringAfter('/').uppercase()
+        else -> null
+    }
+    val trackType = MscPlayback.audioTrackType(this)
+    val track = audioTrack
     return Format(
         url = url,
-        bitrate = format.getInt("bitrate", format.getInt("averageBitrate", 0)),
-        codec = key.codec.ifBlank { null },
-        itag = key.itag.takeIf { it > 0 },
-        audioOnly = audioOnly,
-        videoOnly = videoOnly,
-        height = format.getInt("height", 0),
-        width = format.getInt("width", 0),
-        fps = format.getInt("fps", 0),
-        qualityLabel = format.getString("qualityLabel", "").takeIf { it.isNotBlank() },
-        container = if (mime.contains("webm")) "WEBM" else "MPEG_4",
+        height = height ?: 0,
+        width = width ?: 0,
+        bitrate = bitrate ?: 0,
+        fps = fps ?: 0,
+        qualityLabel = qualityLabel ?: qualityLabel(height ?: 0, fps ?: 0),
+        codec = codecs.firstOrNull(),
+        container = container,
+        itag = itag,
+        videoOnly = video && !muxed,
+        audioOnly = audio,
         mimeType = mime,
-        initStart = init.getString("start", "-1").toIntOrNull() ?: -1,
-        initEnd = init.getString("end", "-1").toIntOrNull() ?: -1,
-        indexStart = index.getString("start", "-1").toIntOrNull() ?: -1,
-        indexEnd = index.getString("end", "-1").toIntOrNull() ?: -1,
-        approxDurationMs = format.getString("approxDurationMs", "-1").toLongOrNull() ?: -1L,
-        audioLocale = id?.substringBefore('.')?.takeIf { it.isNotBlank() },
-        audioTrackId = id,
-        audioTrackName = track.getString("displayName", "").takeIf { it.isNotBlank() },
-        audioTrackType = when {
-            track.getBoolean("audioIsDefault", false) -> "original"
-            track.getBoolean("isAutoDubbed", false) -> "dubbed"
-            else -> null
-        },
-        audioTrackOriginal = track.getBoolean("audioIsDefault", false),
-        formatKey = key,
-        resourceIdentity = resourceIdentity,
-        expiresAtMillis = expiresAtMillis,
-        requestPlan = requestPlan,
+        initStart = initRange?.start?.toInt() ?: -1,
+        initEnd = initRange?.end?.toInt() ?: -1,
+        indexStart = indexRange?.start?.toInt() ?: -1,
+        indexEnd = indexRange?.end?.toInt() ?: -1,
+        approxDurationMs = approxDurationMs ?: -1L,
+        sampleRate = sampleRate ?: -1,
+        audioChannels = audioChannels ?: -1,
+        audioLocale = track?.language,
+        audioTrackId = track?.id,
+        audioTrackName = track?.name,
+        audioTrackType = trackType,
+        audioTrackOriginal = trackType == "original" || track?.isDefault == true,
+        formatKey = listOfNotNull(itag?.toString(), track?.id, codecs.firstOrNull()).joinToString("|"),
+        resourceIdentity = resourceIdentity(url, itag, contentLength),
+        expiresAtMillis = if (plan.expiresAtMillis == Long.MAX_VALUE) null else plan.expiresAtMillis,
+        requestPlan = plan,
     )
 }
 
-private fun AudioStream.toFormat(): Format {
-    val item = runCatching { itagItem }.getOrNull()
-    return Format(
-        url = content,
-        bitrate = if (averageBitrate > 0) averageBitrate else bitrate,
-        codec = codec,
-        container = format?.name,
-        itag = itag.takeIf { it > 0 },
-        audioOnly = true,
-        mimeType = format?.mimeType.orEmpty(),
-        initStart = initStart,
-        initEnd = initEnd,
-        indexStart = indexStart,
-        indexEnd = indexEnd,
-        approxDurationMs = item?.approxDurationMs ?: -1L,
-        sampleRate = item?.sampleRate ?: -1,
-        audioChannels = item?.audioChannels ?: -1,
-        audioLocale = audioLocale?.toLanguageTag()?.takeIf { it.isNotBlank() },
-        audioTrackId = audioTrackId?.takeIf { it.isNotBlank() },
-        audioTrackName = audioTrackName?.takeIf { it.isNotBlank() },
-        audioTrackType = audioTrackType?.name?.lowercase(),
-        audioTrackOriginal = audioTrackType == AudioTrackType.ORIGINAL,
-    )
+private fun qualityLabel(height: Int, fps: Int): String? =
+    if (height <= 0) null else if (fps > 30) "${height}p$fps" else "${height}p"
+
+/** Timedtext defaults to XML; the app model declares WebVTT sidecars. */
+private fun vttUrl(url: String): String {
+    val base = url.substringBefore('#')
+    val fragment = if (url.contains('#')) "#" + url.substringAfter('#') else ""
+    val query = base.substringAfter('?', "").split('&').filter { it.isNotEmpty() && it.substringBefore('=') != "fmt" }
+    return base.substringBefore('?') + "?" + (query + "fmt=vtt").joinToString("&") + fragment
 }
 
-private fun bestImageUrl(images: List<Image>): String? {
-    if (images.isEmpty()) return null
-    val rank = mapOf(
-        Image.ResolutionLevel.HIGH to 3,
-        Image.ResolutionLevel.MEDIUM to 2,
-        Image.ResolutionLevel.LOW to 1,
-        Image.ResolutionLevel.UNKNOWN to 0,
-    )
-    return images.maxByOrNull { rank[it.estimatedResolutionLevel] ?: 0 }?.url
+/** Stable object identity: itag + content length + audio xtags survive URL rotation. */
+internal fun resourceIdentity(url: String, itag: Int?, contentLength: Long?): String {
+    val xtags = MscPlayback.urlParameter("xtags", url).orEmpty()
+    return YoutubeSessionProvider.digest("${itag ?: 0}:${contentLength ?: -1}:$xtags")
 }

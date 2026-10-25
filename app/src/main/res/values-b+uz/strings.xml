@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Bekor qilingan</string>
     <string name="about_save_failed">Ilova jurnallari saqlanmadi. Boshqa saqlash joyini tanlang va qaytadan urining.</string>
     <string name="player_live_unavailable">Jonli efir mavjud emas. Keyinroq qayta urinib ko‘ring.</string>
+    <string name="autoplay">Avtomatik ijro</string>
+    <string name="queue_item_already">Navbatda allaqachon bor</string>
+    <string name="title_copied">Sarlavha nusxalandi</string>
+    <string name="verification_title">Tasdiqlash talab qilinadi</string>
+    <string name="verification_banner_text">Qoʻshimcha kontent yuklanishidan oldin YouTube tasdiqlash soʻradi. Mavjud kontent foydalanish mumkin boʻlib qoladi.</string>
+    <string name="verification_banner_action">Tasdiqlash</string>
+    <string name="verification_banner_dismiss">Bekor qilish</string>
+    <string name="verification_close">Yopish</string>
+    <string name="verification_completed">Tasdiqlash tugallandi. Qayta urinilmoqda…</string>
+    <string name="verification_still_blocked">Tasdiqlangandan keyin ham bloklangan. Keyinroq qayta urinib koʻring.</string>
 </resources>

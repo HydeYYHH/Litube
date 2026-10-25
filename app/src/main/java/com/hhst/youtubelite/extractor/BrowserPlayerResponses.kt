@@ -5,8 +5,6 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.grack.nanojson.JsonParser as NanoJsonParser
 import com.google.gson.JsonParser
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 
 /** One-way capture: never delays, replaces or fabricates browser responses. */
 class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
@@ -47,13 +45,13 @@ class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
         }
     }
 
-    fun get(request: Request, context: ExtractionContext): String? {
-        if (request.httpMethod() != "POST" || !request.url().startsWith("https://www.youtube.com/youtubei/v1/player")) return null
-        val body = request.dataToSend()?.toString(Charsets.UTF_8) ?: return null
+    fun get(url: String, method: String, body: String?, session: YoutubeWebSession): String? {
+        if (method != "POST" || !url.startsWith("https://www.youtube.com/youtubei/v1/player")) return null
+        if (body == null) return null
         val semantics = runCatching { JsonParser.parseString(body).asJsonObject.toString() }.getOrNull() ?: return null
         val hint = sessions.captureStamp()
         return synchronized(entries) {
-            entries.values.firstOrNull { it.scope == hint && it.semantics == semantics && it.generation == it.document() && System.currentTimeMillis() - it.at < 120_000 && sessions.isCurrent(context.session) }?.body
+            entries.values.firstOrNull { it.scope == hint && it.semantics == semantics && it.generation == it.document() && System.currentTimeMillis() - it.at < 120_000 && sessions.isCurrent(session) }?.body
         }
     }
 }

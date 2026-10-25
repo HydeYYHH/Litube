@@ -255,56 +255,16 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             (application as com.hhst.youtubelite.App).startMediaRuntime()
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
                 intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { savedInstanceState == null && it > 0 })
-            val watchTimeReporter = com.hhst.youtubelite.data.media.WatchTimeReporter(sources.client, lifecycleScope)
-            suspend fun recordLocalHistory() {
-                val playback = playerViewModel.uiState.value
-                val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
-                val generation = MediaSession.snapshot().generation
-                if (playback.isPlaying && !MediaSession.signedIn() && !MediaSession.privateBrowsing() && video != null && video.id == playback.videoId) {
-                    val entry = com.hhst.youtubelite.library.domain.HistoryEntry(video.id, video.id, video.title,
-                        video.channel, video.channelId, video.artwork, "",
-                        progress = if (playback.durationMs > 0) (playerViewModel.positionState.value.toFloat() / playback.durationMs).coerceIn(0f, 1f) else null,
-                        section = "On this device")
-                    try {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            MediaSession.withAnonymousSession(generation) {
-                                if (!MediaSession.privateBrowsing()) sources.localLibrary.record(entry)
-                            }
-                        }
-                    } catch (error: kotlinx.coroutines.CancellationException) {
-                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    } catch (error: Exception) {
-                        com.hhst.youtubelite.diagnostics.AppLog.event(
-                            com.hhst.youtubelite.diagnostics.AppLog.Category.STORAGE, "local_history.write_failed", failure = error)
-                    }
-                }
-            }
-            lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    kotlinx.coroutines.flow.combine(
-                        playerViewModel.uiState.map { it.isPlaying to it.videoId }.distinctUntilChanged(),
-                        watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video?.id }.distinctUntilChanged(),
-                    ) { playback, video -> playback to video }.collect { recordLocalHistory() }
-                }
-            }
+            // Progress reporting is session-owned (PlaybackWatchReporting): this activity only
+            // publishes the loaded page's metadata, so reporting keeps running after the
+            // activity stops while playback continues in PiP or the mini player.
+            val reporting = org.koin.java.KoinJavaComponent.getKoin()
+                .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>()
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video }
                         .distinctUntilChanged()
-                        .collect { video ->
-                            if (video != null) watchTimeReporter.watch(video.id, video.tracking) else watchTimeReporter.stop()
-                        }
-                }
-            }
-            lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    while (true) {
-                        kotlinx.coroutines.delay(5_000)
-                        recordLocalHistory()
-                        watchTimeReporter.tick(playerViewModel.positionState.value,
-                            playerViewModel.uiState.value.durationMs, playerViewModel.uiState.value.isPlaying,
-                            playerViewModel.uiState.value.videoId)
-                    }
+                        .collect { video -> reporting.publish(video) }
                 }
             }
             lifecycleScope.launch {

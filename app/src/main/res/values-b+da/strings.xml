@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Annulleret</string>
     <string name="about_save_failed">Applogfilerne kunne ikke gemmes. Vælg en anden gemmeplacering, og prøv igen.</string>
     <string name="player_live_unavailable">Livestream er ikke tilgængelig. Prøv igen senere.</string>
+    <string name="autoplay">Autoplay</string>
+    <string name="queue_item_already">Allerede i køen</string>
+    <string name="title_copied">Titel kopieret</string>
+    <string name="verification_title">Verifikation påkrævet</string>
+    <string name="verification_banner_text">YouTube bad om verifikation, før mere indhold kan indlæses. Eksisterende indhold forbliver tilgængeligt.</string>
+    <string name="verification_banner_action">Verificér</string>
+    <string name="verification_banner_dismiss">Afvis</string>
+    <string name="verification_close">Luk</string>
+    <string name="verification_completed">Verifikation fuldført. Prøver igen…</string>
+    <string name="verification_still_blocked">Stadig blokeret efter verifikation. Prøv igen senere.</string>
 </resources>

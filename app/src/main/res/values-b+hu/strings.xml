@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Törölve</string>
     <string name="about_save_failed">Nem sikerült menteni az alkalmazásnaplókat. Válasszon másik mentési helyet, és próbálja újra.</string>
     <string name="player_live_unavailable">Az élő közvetítés nem érhető el. Próbálja újra később.</string>
+    <string name="autoplay">Automatikus lejátszás</string>
+    <string name="queue_item_already">Már a várólistán van</string>
+    <string name="title_copied">Cím kimásolva</string>
+    <string name="verification_title">Ellenőrzés szükséges</string>
+    <string name="verification_banner_text">A YouTube ellenőrzést kért, mielőtt további tartalom töltődne be. A meglévő tartalom elérhető marad.</string>
+    <string name="verification_banner_action">Ellenőrzés</string>
+    <string name="verification_banner_dismiss">Elvetés</string>
+    <string name="verification_close">Bezárás</string>
+    <string name="verification_completed">Az ellenőrzés befejeződött. Újrapróbálkozás…</string>
+    <string name="verification_still_blocked">Az ellenőrzés után is blokkolva maradt. Próbálja újra később.</string>
 </resources>

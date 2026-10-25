@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Zrušeno</string>
     <string name="about_save_failed">Protokoly aplikace nelze uložit. Vyberte jiné místo uložení a zkuste to znovu.</string>
     <string name="player_live_unavailable">Živý přenos není dostupný. Zkuste to znovu později.</string>
+    <string name="autoplay">Automatické přehrávání</string>
+    <string name="queue_item_already">Už je ve frontě</string>
+    <string name="title_copied">Název zkopírován</string>
+    <string name="verification_title">Vyžaduje se ověření</string>
+    <string name="verification_banner_text">YouTube požádal o ověření před načtením dalšího obsahu. Stávající obsah zůstává dostupný.</string>
+    <string name="verification_banner_action">Ověřit</string>
+    <string name="verification_banner_dismiss">Skrýt</string>
+    <string name="verification_close">Zavřít</string>
+    <string name="verification_completed">Ověření dokončeno. Zkouší se znovu…</string>
+    <string name="verification_still_blocked">Po ověření je stále zablokováno. Zkuste to později.</string>
 </resources>

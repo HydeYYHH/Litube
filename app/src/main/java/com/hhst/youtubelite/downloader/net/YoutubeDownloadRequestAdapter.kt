@@ -4,7 +4,8 @@ import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.downloader.core.DownloadSettings
 import com.hhst.youtubelite.extractor.Format
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -36,7 +37,7 @@ data class YoutubeDownloadRequestPlan(
     val cookiePolicy: DownloadCookiePolicy,
     val headers: Map<String, String>,
     val resourceIdentity: String,
-    @Transient val requestPlan: RequestPlan? = null,
+    @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
 object YoutubeDownloadRequestAdapter {
@@ -45,10 +46,10 @@ object YoutubeDownloadRequestAdapter {
         val plan = format.requestPlan ?: return adaptUrl(videoId, format.url, format.itag)
         return YoutubeDownloadRequestPlan(DownloadHttpMethod.GET, format.url,
             when (plan.range) {
-                RequestPlan.Range.QUERY -> DownloadRangeMode.QUERY_PARAM
-                RequestPlan.Range.HEADER -> DownloadRangeMode.HTTP_HEADER
+                MediaRange.QUERY -> DownloadRangeMode.QUERY_PARAM
+                MediaRange.HEADER -> DownloadRangeMode.HTTP_HEADER
                 else -> DownloadRangeMode.NONE
-            }, plan.profile.clientName, DownloadCookiePolicy.NONE,
+            }, plan.client.clientName, DownloadCookiePolicy.NONE,
             plan.headers + mapOf("User-Agent" to plan.userAgent, "Accept-Encoding" to "identity"),
             DownloadResourceIdentity.of(videoId, format), requestPlan = plan)
     }

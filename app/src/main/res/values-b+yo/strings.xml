@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Fagilee</string>
     <string name="about_save_failed">Ko le fi awọn akọọlẹ app pamọ. Yan ipo fifipamọ miiran ki o tun gbiyanju lẹẹkansi.</string>
     <string name="player_live_unavailable">Ìṣànwọlé tààrà kò sí. Gbìyànjú lẹ́ẹ̀kan sí i nígbà míì.</string>
+    <string name="autoplay">Ṣiṣẹ laifọwọyi</string>
+    <string name="queue_item_already">Ti n ninu ipo tẹlẹ</string>
+    <string name="title_copied">Akole ti daakọ</string>
+    <string name="verification_title">Ijerọsi n nilo</string>
+    <string name="verification_banner_text">YouTube beere fun ijerọsi ṣaaju ki diẹ sii akoonu le ṣe igbasilẹ. Akoonu ti o wa tesiwaju ni gbigba.</string>
+    <string name="verification_banner_action">Fidi rẹ</string>
+    <string name="verification_banner_dismiss">Fi sile</string>
+    <string name="verification_close">Ti</string>
+    <string name="verification_completed">Ijerọsi ti parun. N gbiyanju lẹẹkansi…</string>
+    <string name="verification_still_blocked">Titi wa ni idinilẹ lẹyin ijerọsi. Gbiyanju lẹẹkansi nigba miran.</string>
 </resources>

@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Отменено</string>
     <string name="about_save_failed">Регистрационните файлове на приложението не можаха да бъдат запазени. Изберете друго място за запазване и опитайте отново.</string>
     <string name="player_live_unavailable">Предаването на живо не е достъпно. Опитайте отново по-късно.</string>
+    <string name="autoplay">Автоматично възпроизвеждане</string>
+    <string name="queue_item_already">Вече е в опашката</string>
+    <string name="title_copied">Заглавието е копирано</string>
+    <string name="verification_title">Изисква се проверка</string>
+    <string name="verification_banner_text">YouTube поиска проверка, преди да се зареди още съдържание. Наличното съдържание остава достъпно.</string>
+    <string name="verification_banner_action">Провери</string>
+    <string name="verification_banner_dismiss">Отхвърли</string>
+    <string name="verification_close">Затвори</string>
+    <string name="verification_completed">Проверката приключи. Опит отново…</string>
+    <string name="verification_still_blocked">Все още е блокирано след проверката. Опитайте отново по-късно.</string>
 </resources>

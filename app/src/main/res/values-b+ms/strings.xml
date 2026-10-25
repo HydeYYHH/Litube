@@ -303,4 +303,14 @@
     <string name="about_save_cancelled">Dibatalkan</string>
     <string name="about_save_failed">Tidak dapat menyimpan log apl. Pilih lokasi simpan lain dan cuba lagi.</string>
     <string name="player_live_unavailable">Strim langsung tidak tersedia. Cuba lagi nanti.</string>
+    <string name="autoplay">Main automatik</string>
+    <string name="queue_item_already">Sudah dalam baris gilir</string>
+    <string name="title_copied">Tajuk disalin</string>
+    <string name="verification_title">Pengesahan diperlukan</string>
+    <string name="verification_banner_text">YouTube meminta pengesahan sebelum memuatkan lebih banyak kandungan. Kandungan sedia ada kekal tersedia.</string>
+    <string name="verification_banner_action">Sahkan</string>
+    <string name="verification_banner_dismiss">Ketepikan</string>
+    <string name="verification_close">Tutup</string>
+    <string name="verification_completed">Pengesahan selesai. Mencuba semula…</string>
+    <string name="verification_still_blocked">Masih disekat selepas pengesahan. Cuba lagi nanti.</string>
 </resources>
