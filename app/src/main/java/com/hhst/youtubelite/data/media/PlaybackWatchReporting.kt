@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -53,16 +54,19 @@ class PlaybackWatchReporting(
     @Volatile private var armed: ArmedTracking? = null
     private var loop: Job? = null
     @Volatile private var privacyEpoch = 0L
+    private var localRecordKey: Triple<String, Long, Long>? = null
+    private var localRecordPositionMs = -1L
 
     /** Monotonic refresh hint; page consumers separately validate their current identity. */
     private val _anonymousReportSignal = MutableStateFlow(0L)
     val anonymousReportSignal = _anonymousReportSignal.asStateFlow()
     init {
-        reporter.onAnonymousReport = { _anonymousReportSignal.value += 1L }
+        reporter.onAnonymousReport = { _anonymousReportSignal.update { it + 1L } }
     }
 
     fun onPrivacyChanged() {
         privacyEpoch++
+        localRecordKey = null
         reporter.cancelPending()
     }
 
@@ -74,25 +78,25 @@ class PlaybackWatchReporting(
     @Synchronized fun armTracking(videoId: String, tracking: PlayerTracking?, generation: Long = MediaSession.snapshot().generation) {
         if (generation != MediaSession.snapshot().generation) return
         armed = ArmedTracking(videoId, tracking, generation)
-        if (video?.id == videoId && video?.sessionGeneration == generation) {
-            reporter.watch(videoId, usableTracking(tracking) ?: usableTracking(video?.tracking), generation)
-        }
+        val pageTracking = video?.takeIf { it.id == videoId && it.sessionGeneration == generation }?.tracking
+        reporter.watch(videoId, usableTracking(tracking) ?: usableTracking(pageTracking), generation)
     }
 
-    /** Publishes the loaded page metadata; null clears both sinks. */
+    /** Publishes page metadata without interrupting an armed playback session. */
     @Synchronized fun publish(value: ReportingVideo?) {
         val generation = MediaSession.snapshot().generation
         if (value?.sessionGeneration != null && value.sessionGeneration != generation) return
         video = value?.copy(sessionGeneration = generation)
+        localRecordKey = null
         if (value == null) {
-            reporter.stop()
+            if (armed == null) reporter.finish()
             return
         }
-        // Reporting endpoints come from the playback response, not the page:
-        // a publish without them must keep the endpoints armed for this video.
-        val tracking = usableTracking(armed?.takeIf { it.videoId == value.id && it.generation == generation }?.tracking)
-            ?: usableTracking(value.tracking)
-        reporter.watch(value.id, tracking, generation)
+        val active = armed?.takeIf { it.generation == generation }
+        if (active == null) reporter.watch(value.id, usableTracking(value.tracking), generation)
+        else if (active.videoId == value.id) {
+            reporter.watch(value.id, usableTracking(active.tracking) ?: usableTracking(value.tracking), generation)
+        }
     }
 
     private fun usableTracking(value: PlayerTracking?): PlayerTracking? =
@@ -112,8 +116,16 @@ class PlaybackWatchReporting(
     fun detach() {
         loop?.cancel()
         loop = null
-        reporter.stop()
+        reporter.finish()
     }
+
+    fun finishPlayback(sample: PlaybackSample) {
+        tick(sample)
+        reporter.finish()
+        if (armed?.videoId == sample.videoId) armed = null
+    }
+
+    internal suspend fun awaitPendingReports() = reporter.awaitPendingReport()
 
     /** One reporting pass; internal so tests drive it without the wall-clock loop. */
     fun tick(sample: PlaybackSample?) {
@@ -123,6 +135,16 @@ class PlaybackWatchReporting(
             return
         }
         if (sample == null) return
+        if (sample.videoId == null) {
+            reporter.finish()
+            armed = null
+            return
+        }
+        val generation = MediaSession.snapshot().generation
+        armed?.takeIf { it.videoId == sample.videoId && it.generation == generation }?.let {
+            val pageTracking = video?.takeIf { page -> page.id == it.videoId && page.sessionGeneration == generation }?.tracking
+            reporter.watch(it.videoId, usableTracking(it.tracking) ?: usableTracking(pageTracking), generation)
+        }
         reporter.tick(sample.positionMs, sample.durationMs, sample.playing, sample.videoId,
             sample.discontinuityEpoch)
         recordLocal(sample)
@@ -134,6 +156,10 @@ class PlaybackWatchReporting(
         if (MediaSession.signedIn() || MediaSession.privateBrowsing()) return
         val generation = MediaSession.snapshot().generation
         if (video.sessionGeneration != generation) return
+        val recordKey = Triple(video.id, generation, sample.discontinuityEpoch)
+        if (localRecordKey == recordKey && sample.positionMs - localRecordPositionMs in 0 until LOCAL_RECORD_EVERY_MS) return
+        localRecordKey = recordKey
+        localRecordPositionMs = sample.positionMs
         val requestPrivacy = privacyEpoch
         scope.launch {
             try {
@@ -158,6 +184,7 @@ class PlaybackWatchReporting(
     }
 
     private companion object {
-        const val TICK_MS = 5_000L
+        const val TICK_MS = 1_000L
+        const val LOCAL_RECORD_EVERY_MS = 5_000L
     }
 }

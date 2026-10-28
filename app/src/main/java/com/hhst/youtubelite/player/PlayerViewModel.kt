@@ -279,6 +279,10 @@ class PlayerViewModel(
         // Playback responses carry short-lived watch-reporting endpoints; the
         // session owner consumes them directly, keyed by the loaded media identity.
         engine.onWatchContext = { videoId, tracking, generation -> reporting?.armTracking(videoId, tracking, generation) }
+        engine.onWatchBoundary = { state, position ->
+            reporting?.finishPlayback(com.hhst.youtubelite.data.media.PlaybackSample(state.videoId, position,
+                state.durationMs, state.isPlaying, state.discontinuityEpoch))
+        }
         viewModelScope.launch {
             queue.state.collect { q ->
                 val nav = queueNavAvailability()

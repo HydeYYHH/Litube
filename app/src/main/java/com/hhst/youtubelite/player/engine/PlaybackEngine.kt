@@ -243,6 +243,9 @@ interface PlaybackApi {
      * (watch-time URLs) ride on it and belong to the session owner, not the UI.
      */
     var onWatchContext: ((videoId: String, tracking: PlayerTracking?, sessionGeneration: Long) -> Unit)?
+    var onWatchBoundary: ((PlaybackSnapshot, Long) -> Unit)?
+        get() = null
+        set(_) {}
     val snapshot: StateFlow<PlaybackSnapshot>
 }
 
@@ -356,6 +359,7 @@ class PlaybackEngine(
     override var onCastManifestReload: (() -> Unit)? = null
 
     override var onWatchContext: ((videoId: String, tracking: PlayerTracking?, sessionGeneration: Long) -> Unit)? = null
+    override var onWatchBoundary: ((PlaybackSnapshot, Long) -> Unit)? = null
 
     /** Drives the playback notification service; injected to avoid a hard dep. */
     var notificationController: PlaybackNotificationController? = null
@@ -608,6 +612,7 @@ class PlaybackEngine(
             resumePlayback(activePlayer())
             return
         }
+        reportWatchBoundary()
         persistPosition()
         attemptContext = DiagnosticContext(videoId = videoId)
         recoveryHistory.clear()
@@ -814,6 +819,7 @@ class PlaybackEngine(
     }
 
     override fun stop() {
+        reportWatchBoundary()
         progressWatchdog.reset("cancelled")
         playbackOperation?.finish(DiagnosticOutcome.CANCELLED, "user_stopped")
         playbackGeneration.incrementAndGet()
@@ -835,6 +841,13 @@ class PlaybackEngine(
         recoveryHistory.clear()
         attachCastPlayer(null)
         notificationController?.onStopped()
+    }
+
+    private fun reportWatchBoundary() {
+        val state = _snapshot.value
+        if (state.videoId == null || state.videoId != currentMetadata?.id || attachedGeneration != playbackGeneration.get()) return
+        val active = activePlayer()
+        onWatchBoundary?.invoke(state.copy(isPlaying = active.isPlaying), active.currentPosition.coerceAtLeast(0))
     }
 
     // -- surface --

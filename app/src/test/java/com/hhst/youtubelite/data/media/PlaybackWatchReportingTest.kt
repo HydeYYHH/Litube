@@ -219,6 +219,64 @@ class PlaybackWatchReportingTest {
         reporting.detach()
     }
 
+    @Test fun playbackReportsWithoutPageMetadataAndKeepsHistoryEmpty() {
+        anonymousVisitor()
+        val reporting = reporting()
+        reporting.armTracking("v1", tracking, MediaSession.snapshot().generation)
+        reporting.tick(PlaybackSample("v1", 0, 30_000, true))
+        awaitRequests(1)
+        reporting.tick(PlaybackSample("v1", 3_000, 30_000, true))
+        reporting.detach()
+        kotlinx.coroutines.runBlocking { activeReporter?.awaitPendingReport() }
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().url.contains("et=3.0"))
+        assertTrue(library.history().entries.isEmpty())
+        assertEquals(1L, reporting.anonymousReportSignal.value)
+    }
+
+    @Test fun clearingPageMetadataDoesNotDisarmAnActivePlayer() {
+        anonymousVisitor()
+        val reporting = reporting()
+        reporting.armTracking("v1", tracking, MediaSession.snapshot().generation)
+        reporting.publish(video("v1"))
+        reporting.tick(PlaybackSample("v1", 0, 30_000, true))
+        awaitRequests(1)
+        reporting.publish(null)
+        reporting.tick(PlaybackSample("v1", 10_000, 30_000, true))
+        awaitRequests(2)
+        assertEquals(1L, reporting.anonymousReportSignal.value)
+        reporting.detach()
+    }
+
+    @Test fun missingEngineTrackingPreservesUsablePageEndpoints() {
+        anonymousVisitor()
+        val reporting = reporting()
+        reporting.armTracking("v1", null, MediaSession.snapshot().generation)
+        reporting.publish(video("v1"))
+        reporting.tick(PlaybackSample("v1", 0, 30_000, true))
+        awaitRequests(1)
+        reporting.tick(PlaybackSample("v1", 3_000, 30_000, true))
+        reporting.finishPlayback(PlaybackSample("v1", 3_500, 30_000, false))
+        kotlinx.coroutines.runBlocking { activeReporter?.awaitPendingReport() }
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().url.contains("et=3.5"))
+        reporting.detach()
+    }
+
+    @Test fun aPlaybackBoundaryIncludesProgressAfterTheLastSamplerTick() {
+        anonymousVisitor()
+        val reporting = reporting()
+        reporting.armTracking("v1", tracking, MediaSession.snapshot().generation)
+        reporting.tick(PlaybackSample("v1", 0, 30_000, true))
+        awaitRequests(1)
+        reporting.tick(PlaybackSample("v1", 2_000, 30_000, true))
+        reporting.finishPlayback(PlaybackSample("v1", 3_750, 30_000, false))
+        kotlinx.coroutines.runBlocking { activeReporter?.awaitPendingReport() }
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().url.contains("et=3.75"))
+        reporting.detach()
+    }
+
     @Test fun privateBrowsingReportsNothing() {
         MediaSession.initialize(MemoryAuthStore()) { true }
         MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)

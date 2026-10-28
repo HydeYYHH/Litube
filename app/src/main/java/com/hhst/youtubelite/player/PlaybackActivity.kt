@@ -119,10 +119,11 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity(),
         PlaybackSession.register(playerViewModel)
         // Session-owned progress reporting: the loop samples this playback for as long as
         // the process keeps it, not just while an activity is started.
+        val reportingPlayer = playerViewModel
         org.koin.java.KoinJavaComponent.getKoin()
             .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>().attach {
-                val state = playerViewModel.uiState.value
-                com.hhst.youtubelite.data.media.PlaybackSample(state.videoId, playerViewModel.positionState.value,
+                val state = reportingPlayer.uiState.value
+                com.hhst.youtubelite.data.media.PlaybackSample(state.videoId, reportingPlayer.positionState.value,
                     state.durationMs, state.isPlaying, state.discontinuityEpoch)
             }
         PipAutoEnter.register(this)

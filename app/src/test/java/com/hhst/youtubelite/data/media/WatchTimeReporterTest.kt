@@ -74,6 +74,27 @@ class WatchTimeReporterTest {
         awaitRequests(2)
     }
 
+    @Test fun aFailedTailRetriesAfterSwitchingToAnotherVideo() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("first", tracking)
+        reporter.tick(0, 30_000, true)
+        reporter.awaitPendingReport()
+        reporter.tick(3_000, 30_000, true)
+        failRequests = true
+        reporter.finish()
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        failRequests = false
+        fakeNow.addAndGet(60_000)
+        reporter.watch("second", tracking)
+        reporter.tick(0, 30_000, true)
+        reporter.awaitPendingReport()
+        assertEquals(4, requests.size)
+        val tail = requests.last { it.url.contains("/watchtime") }
+        assertTrue(tail.url.contains("docid=first"))
+        assertTrue(tail.url.contains("et=3.0"))
+    }
+
     @Test fun aBackwardSeekResetsTheRangeWithoutAZeroLengthReport() {
         val reporter = reporter()
         reporter.watch("video", tracking)
@@ -287,6 +308,66 @@ class WatchTimeReporterTest {
         Thread.sleep(300)
         assertTrue(requests.isEmpty())
     }
+    @Test fun switchingVideosFlushesTheObservedShortTailWithItsOwnNonce() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("first", tracking)
+        reporter.tick(0, 30_000, true)
+        reporter.awaitPendingReport()
+        reporter.tick(3_000, 30_000, true)
+        reporter.watch("second", tracking)
+        reporter.tick(0, 30_000, true)
+        reporter.awaitPendingReport()
+        val first = requests.filter { it.url.contains("docid=first") }
+        assertEquals(2, first.size)
+        assertTrue(first.last().url.contains("st=0.0"))
+        assertTrue(first.last().url.contains("et=3.0"))
+        fun nonce(url: String) = Regex("[?&]cpn=([^&]+)").find(url)?.groupValues?.get(1)
+        assertEquals(nonce(first.first().url), nonce(first.last().url))
+        assertNotEquals(nonce(first.first().url), nonce(requests.single { it.url.contains("docid=second") }.url))
+    }
+
+    @Test fun pausingFlushesTheTailWithoutRepeatingIt() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(0, 30_000, true)
+        reporter.awaitPendingReport()
+        reporter.tick(2_500, 30_000, false)
+        reporter.awaitPendingReport()
+        reporter.tick(2_500, 30_000, false)
+        reporter.finish()
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().url.contains("et=2.5"))
+    }
+
+    @Test fun shortIntervalsOnBothSidesOfASeekNeverIncludeTheSkippedSpan() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(0, 100_000, true, discontinuityEpoch = 0)
+        reporter.awaitPendingReport()
+        reporter.tick(2_000, 100_000, true, discontinuityEpoch = 0)
+        reporter.tick(50_000, 100_000, true, discontinuityEpoch = 1)
+        reporter.tick(54_000, 100_000, true, discontinuityEpoch = 1)
+        reporter.finish()
+        reporter.awaitPendingReport()
+        val intervals = requests.filter { it.url.contains("/stats/watchtime") }
+        assertEquals(2, intervals.size)
+        assertTrue(intervals[0].url.contains("st=0.0") && intervals[0].url.contains("et=2.0"))
+        assertTrue(intervals[1].url.contains("st=50.0") && intervals[1].url.contains("et=54.0"))
+    }
+
+    @Test fun anEndedShortReportsItsLastInterval() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(0, 5_000, true)
+        reporter.awaitPendingReport()
+        reporter.tick(5_000, 5_000, false)
+        reporter.finish()
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().url.contains("et=5.0"))
+    }
+
     @Test fun leavingPrivateModeDoesNotReportThePrivateInterval() {
         var privateBrowsing = false
         MediaSession.initialize(MemoryAuthStore()) { privateBrowsing }
