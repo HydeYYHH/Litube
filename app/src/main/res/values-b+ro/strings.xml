@@ -65,6 +65,10 @@
     <string name="queue_remove">Scoateți din coadă</string>
     <string name="application_not_found">Aplicația nu a fost găsită</string>
     <string name="segments">Segmente</string>
+    <string name="chapters">Capitole</string>
+    <string name="no_chapters">Niciun capitol</string>
+    <string name="skippable_segments">Segmente care pot fi sărite</string>
+    <string name="show_more_replies">Afișează mai multe răspunsuri</string>
     <string name="no_segments">Nu există segmente ignorabile</string>
     <string name="subtitles">Subtitrări</string>
     <string name="playback_end_next">Joacă în continuare</string>

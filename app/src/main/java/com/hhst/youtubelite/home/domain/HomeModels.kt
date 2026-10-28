@@ -43,7 +43,12 @@ enum class AppendState { Idle, Loading, Failed }
 sealed interface HomeContent {
     data object Loading : HomeContent
     data class Feed(val page: HomePage, val refreshing: Boolean = false, val append: AppendState = AppendState.Idle, val refreshFailed: Boolean = false) : HomeContent
-    data class Empty(val title: String = "Try searching to get started", val message: String = "Start watching videos to help us build a feed of videos you'll love.") : HomeContent
+    /**
+     * A real watch landed and recommendations may exist now: the empty card
+     * stays painted while the quiet re-check runs (no Loading flash).
+     */
+    /** Blank [title]/[message] fall back to localized strings in the UI layer. */
+    data class Empty(val title: String = "", val message: String = "", val refreshing: Boolean = false) : HomeContent
     data object Failed : HomeContent
 }
 

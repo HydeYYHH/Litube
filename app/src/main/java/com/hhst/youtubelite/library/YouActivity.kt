@@ -95,7 +95,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == YouViewModel::class.java)
                 return YouViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, signedIn,
-                    if (fixtures) null else sources.saves) as T
+                    if (fixtures) null else sources.saves, if (fixtures) null else sources.librarySource) as T
             }
         })[YouViewModel::class.java]
         lifecycleScope.launch {
@@ -259,12 +259,12 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     onDismiss = { showSwitchSheet = false })
             }
             if (confirmSignOut) {
-                com.hhst.youtubelite.ui.components.YoutubeAlertDialog(
+                com.hhst.youtubelite.ui.components.AppAlertDialog(
                     onDismissRequest = { confirmSignOut = false },
                     title = { com.hhst.youtubelite.ui.design.AppText("Sign out?") },
                     text = { com.hhst.youtubelite.ui.design.AppText("This removes the account from this device. Downloads and settings are kept.") },
                     confirmButton = {
-                        com.hhst.youtubelite.ui.components.YoutubeTextButton(onClick = {
+                        com.hhst.youtubelite.ui.components.AppTextButton(onClick = {
                             confirmSignOut = false
                             if (!fixtures) {
                                 com.hhst.youtubelite.data.media.MediaSession.signOut()
@@ -272,11 +272,11 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                                 youViewModel.updateSession(session.signedIn, session.generation)
                             }
                         }, modifier = Modifier.testTag("account-signout-confirm")) {
-                            com.hhst.youtubelite.ui.design.AppText("Sign out", color = com.hhst.youtubelite.ui.theme.YoutubeStyle.Action)
+                            com.hhst.youtubelite.ui.design.AppText("Sign out", color = com.hhst.youtubelite.ui.theme.AppStyle.Action)
                         }
                     },
                     dismissButton = {
-                        com.hhst.youtubelite.ui.components.YoutubeTextButton(onClick = { confirmSignOut = false }) {
+                        com.hhst.youtubelite.ui.components.AppTextButton(onClick = { confirmSignOut = false }) {
                             com.hhst.youtubelite.ui.design.AppText("Cancel")
                         }
                     })

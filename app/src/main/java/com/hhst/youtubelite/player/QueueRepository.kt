@@ -56,6 +56,32 @@ class QueueRepository(
         save()
     }
 
+    /**
+     * "Play next": insert [item] directly after the playing entry, or move it
+     * there when it is already queued. The playing item itself is never moved;
+     * with no playing entry in the list the target lands at the head, which is
+     * where [nextStrict] resumes an unknown current. The plain [add] path keeps
+     * its append semantics.
+     */
+    fun addNext(item: QueueItem) {
+        val clean = sanitize(item)?.let {
+            it.copy(title = it.title.ifBlank { it.videoId })
+        } ?: return
+        val playing = playingVideoId
+        if (playing == clean.videoId) return
+        _state.update { s ->
+            val without = s.items.filterNot { it.videoId == clean.videoId }
+            val after = without.indexOfFirst { it.videoId == playing }
+            val at = if (after >= 0) after + 1 else 0
+            val items = without.toMutableList().apply { add(at.coerceAtMost(size), clean) }
+            // Insert-after-current orders targets newest-first, so overflow must
+            // drop from the tail (oldest targets) — the head-first eviction that
+            // fits append order would evict the target the user just chose.
+            s.copy(items = evictOverflow(items, keepVideoId = playingVideoId, dropFromHead = false))
+        }
+        save()
+    }
+
     fun remove(videoId: String) {
         _state.update { s -> s.copy(items = s.items.filterNot { it.videoId == videoId }) }
         save()
@@ -103,11 +129,12 @@ class QueueRepository(
     }
 
     /** Caps [items] at [MAX_ITEMS], dropping entries other than [keepVideoId] first. */
-    private fun evictOverflow(items: List<QueueItem>, keepVideoId: String?): List<QueueItem> {
+    private fun evictOverflow(items: List<QueueItem>, keepVideoId: String?, dropFromHead: Boolean = true): List<QueueItem> {
         if (items.size <= MAX_ITEMS) return items
         val kept = items.toMutableList()
         while (kept.size > MAX_ITEMS) {
-            val drop = kept.indexOfFirst { it.videoId != keepVideoId }
+            val drop = (if (dropFromHead) kept.indexOfFirst { it.videoId != keepVideoId }
+                else kept.indexOfLast { it.videoId != keepVideoId })
             if (drop < 0) break
             kept.removeAt(drop)
         }

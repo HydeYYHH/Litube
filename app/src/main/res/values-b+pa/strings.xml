@@ -65,6 +65,10 @@
     <string name="queue_remove">ਕਤਾਰ ਤੋਂ ਹਟਾਓ</string>
     <string name="application_not_found">ਐਪਲੀਕੇਸ਼ਨ ਨਹੀਂ ਮਿਲੀ</string>
     <string name="segments">ਖੰਡ</string>
+    <string name="chapters">ਅਧਿਆਇ</string>
+    <string name="no_chapters">ਕੋਈ ਅਧਿਆਇ ਨਹੀਂ</string>
+    <string name="skippable_segments">ਛੱਡਣ ਯੋਗ ਸੈਗਮੈਂਟ</string>
+    <string name="show_more_replies">ਹੋਰ ਜਵਾਬ ਦਿਖਾਓ</string>
     <string name="no_segments">ਕੋਈ ਛੱਡਣਯੋਗ ਹਿੱਸੇ ਨਹੀਂ</string>
     <string name="subtitles">ਉਪਸਿਰਲੇਖ</string>
     <string name="playback_end_next">ਅਗਲਾ ਖੇਡੋ</string>

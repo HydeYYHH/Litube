@@ -32,12 +32,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +54,8 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -65,10 +68,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 
 private val ScrimTop = Brush.verticalGradient(
@@ -131,7 +136,6 @@ fun TopBar(
     positionState: State<Long>,
     onBack: () -> Unit,
     onQueue: () -> Unit,
-    onSegments: () -> Unit,
     onLoop: () -> Unit,
     onMore: () -> Unit,
     onSubtitle: () -> Unit,
@@ -142,7 +146,6 @@ fun TopBar(
     onCast: () -> Unit = {},
     onSubtitleStyle: () -> Unit = {},
     showAuthor: Boolean = true,
-    compactBottom: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -252,11 +255,9 @@ fun TopBar(
                         modifier = Modifier.width(40.dp),
                         iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
                     )
-                    val overflowMenu = (compact && menu == PlayerAnchorMenu.Segments) ||
-                        (compactBottom && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality))
-                    if (overflowMenu && callbacks != null) {
-                        PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                    }
+                    // Speed/quality open from the More sheet and surface once,
+                    // anchored to the bottom chrome row; the top bar must not
+                    // render a second dropdown for the same menu state.
                 }
             }
         }
@@ -345,11 +346,18 @@ fun CenterControls(
 }
 
 /**
- * Bottom: 2 dp time bar (drawn just above the controls row), then
- * position / duration | speed | quality | fullscreen.
+ * Bottom: 2 dp time bar (drawn just above the controls row), then the info
+ * band — position / duration and the current-chapter entry — with fullscreen
+ * at the end. Speed and quality live in the More sheet; the settings anchor
+ * menus surface from the fullscreen slot when opened there.
  *
  * Position/buffered arrive as [State]s and are consumed only by the time bar
  * and [PositionText], so 4 Hz playback ticks never recompose this bar.
+ *
+ * [onTrackAnchor] reports the px distance from this bar's bottom edge up to
+ * the visible track center, so overlay chips and subtitles anchor to the
+ * measured track instead of a guessed constant (the controls row grows with
+ * font scale and wrapping).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -360,16 +368,19 @@ fun BottomBar(
     onSeek: (Long) -> Unit,
     onFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
-    onSpeed: () -> Unit = {},
-    onQuality: () -> Unit = {},
+    chapters: List<Chapter> = emptyList(),
+    hasSegments: Boolean = false,
+    onOpenChapters: () -> Unit = {},
     menu: PlayerAnchorMenu? = null,
     onDismissMenu: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
     compact: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
+    onTrackAnchor: (Int) -> Unit = {},
 ) {
-    val autoLabel = stringResource(R.string.player_quality_auto)
-    Column(modifier = modifier.fillMaxWidth()) {
+    val trackMeasurements = remember { IntArray(2) }
+    fun reportTrackAnchor() = onTrackAnchor((trackMeasurements[0] - trackMeasurements[1]).coerceAtLeast(0))
+    Column(modifier = modifier.fillMaxWidth().onSizeChanged { trackMeasurements[0] = it.height; reportTrackAnchor() }) {
         PlayerTimeBar(
             positionState = positionState,
             bufferedPositionState = bufferedPositionState,
@@ -380,14 +391,20 @@ fun BottomBar(
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
             onCommit = { callbacks?.onTimeBarCommit() },
             // Keep the 48 dp seek target while sharing its lower half with the
-            // controls row. The visible track sits at the boundary of the row.
-            modifier = Modifier.layout { measurable, constraints ->
+            // controls row. The visible track sits at the canvas middle, i.e.
+            // the bottom edge of the halved slot. onGloballyPositioned is
+            // listed before the layout modifier so it observes the halved
+            // slot; after it, size.height would be the full 48 dp canvas.
+            modifier = Modifier.onGloballyPositioned { coords ->
+                trackMeasurements[1] = coords.positionInParent().y.roundToInt() + coords.size.height
+                reportTrackAnchor()
+            }.layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height / 2) { placeable.place(0, 0) }
             },
         )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val wraps = !compact && compactBottomControls(state, maxWidth.value, sizing.textSp)
+            val chipMaxWidth = maxWidth * 0.4f
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -402,66 +419,40 @@ fun BottomBar(
                         isLive = state.isLive,
                         textSizeSp = sizing.textSp,
                     )
+                    // The chapter entry is part of the always-shown bottom readout
+                    // (time + current chapter); compact mode only drops the
+                    // secondary action buttons, never this chip.
+                    ChapterEntryChip(
+                        chapters = chapters,
+                        hasSegments = hasSegments,
+                        positionState = positionState,
+                        onOpen = onOpenChapters,
+                        textSizeSp = sizing.textSp,
+                        modifier = Modifier.padding(start = 6.dp).widthIn(max = chipMaxWidth),
+                    )
                 }
                 Row(
-                    modifier = (if (wraps) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                        .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp),
+                    modifier = Modifier.heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (!compact) {
-                        Box {
-                            ChromeTextButton(label = PlayerUi.speedLabel(state.speed), onClick = onSpeed,
-                                textSizeSp = sizing.textSp)
-                            if (menu == PlayerAnchorMenu.Speed && callbacks != null) {
-                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                            }
-                        }
-                        Box(Modifier.weight(1f, fill = false)) {
-                            ChromeTextButton(
-                                label = PlayerUi.qualityButtonLabel(
-                                    pinned = state.qualityLabel,
-                                    active = state.activeQuality,
-                                    autoPrefix = autoLabel,
-                                    videoHeight = state.videoHeight,
-                                ),
-                                onClick = onQuality,
-                                textSizeSp = sizing.textSp,
-                            )
-                            if (menu == PlayerAnchorMenu.Quality && callbacks != null) {
-                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                            }
+                    Box {
+                        PlayerIconButton(
+                            icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
+                            contentDescription = stringResource(R.string.action_fullscreen),
+                            onClick = onFullscreen,
+                            iconSize = sizing.iconDp,
+                        )
+                        // Speed/quality open from the More sheet; the dropdown
+                        // surfaces here, anchored to the last chrome row.
+                        if (callbacks != null && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality)) {
+                            PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
                         }
                     }
-                    PlayerIconButton(
-                        icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
-                        contentDescription = stringResource(R.string.action_fullscreen),
-                        onClick = onFullscreen,
-                        iconSize = sizing.iconDp,
-                    )
                 }
             }
         }
     }
-}
-
-/** Measure the bottom labels off-screen; returns true when they must wrap into More. */
-@Composable
-internal fun compactBottomControls(state: PlayerUiState, widthDp: Float,
-    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP): Boolean {
-    val density = LocalDensity.current
-    val measurer = rememberTextMeasurer()
-    val style = TextStyle(fontSize = textSizeSp.sp)
-    fun width(label: String) = with(density) { measurer.measure(label, style).size.width.toDp().value }
-    val duration = if (state.isLive) stringResource(R.string.player_live) else PlayerUi.formatTime(state.durationMs)
-    // Width probe: widen every digit to '8' (the widest) so the reservation covers any time value.
-    val sample = if (state.isLive) "88:88:88" else PlayerUi.formatTime(state.durationMs)
-        .map { if (it.isDigit()) '8' else it }.joinToString("").let { if (it.length < 5) "88:88" else it }
-    val speedWidth = maxOf(48f, width(PlayerUi.speedLabel(state.speed)) + 12)
-    val quality = PlayerUi.qualityButtonLabel(state.qualityLabel, state.activeQuality,
-        stringResource(R.string.player_quality_auto), state.videoHeight)
-    val qualityWidth = maxOf(48f, width(quality) + 12)
-    return width("$sample / $duration") + speedWidth + qualityWidth + 48 + 16 > widthDp
 }
 
 /** Position / duration text, isolated so position ticks stay inside this leaf. */
@@ -515,37 +506,6 @@ fun ControlScrims(modifier: Modifier = Modifier) {
                 .height(PlayerUi.GRADIENT_DP.dp)
                 .align(Alignment.BottomCenter)
                 .background(ScrimBottom),
-        )
-    }
-}
-
-/** Readable speed / quality label with an independent 48 dp touch target. */
-@Composable
-private fun ChromeTextButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP,
-) {
-    Box(
-        modifier = modifier
-            .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp)
-            .widthIn(min = PlayerUi.TOP_ACTION_DP.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
-                onClick = onClick,
-            )
-            .padding(horizontal = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = PlayerUi.Icon,
-            fontSize = textSizeSp.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }

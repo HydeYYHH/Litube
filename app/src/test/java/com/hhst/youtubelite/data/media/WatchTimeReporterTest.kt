@@ -2,13 +2,12 @@ package com.hhst.youtubelite.data.media
 
 import com.liskovsoft.youtubeapi.videoinfo.V2.AccessToken
 import com.liskovsoft.youtubeapi.videoinfo.V2.Account
-import com.liskovsoft.youtubeapi.videoinfo.V2.HttpClient
-import com.liskovsoft.youtubeapi.videoinfo.V2.HttpReply
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpRequest
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 import com.liskovsoft.youtubeapi.videoinfo.V2.SignInClient
 import com.liskovsoft.youtubeapi.videoinfo.V2.WatchHistory
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
@@ -19,18 +18,19 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 
 class WatchTimeReporterTest {
 
+    private var activeReporter: WatchTimeReporter? = null
     private val requests = ConcurrentLinkedQueue<HttpRequest>()
-    private val http = object : HttpClient {
-        override fun execute(request: HttpRequest): HttpReply {
-            requests.add(request)
-            return HttpReply(200, "", emptyMap())
-        }
-    }
+    private var failRequests = false
+    private var hangRequests = false
     private val tracking = PlayerTracking(
         "https://www.youtube.com/api/stats/playback?ei=e",
         "https://www.youtube.com/api/stats/watchtime?ei=e")
+    private val fakeNow = AtomicLong(0)
 
     @Before fun setUp() {
+        failRequests = false
+        hangRequests = false
+        fakeNow.set(0)
         MediaSession.initialize(MemoryAuthStore())
         MediaSession.completeSignIn(SignInClient("id", "secret", "device"),
             AccessToken("access", "refresh", 4_000_000_000_000),
@@ -38,20 +38,26 @@ class WatchTimeReporterTest {
         requests.clear()
     }
 
-    @After fun tearDown() = MediaSession.initialize(MemoryAuthStore())
+    @After fun tearDown() {
+        activeReporter?.stop()
+        MediaSession.initialize(MemoryAuthStore())
+    }
 
+    /** The reporter's history sends through this client, so failure modes live in the interceptor. */
     private fun reporter(): WatchTimeReporter {
         val client = MediaClient(okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
             requests.add(HttpRequest(chain.request().method, chain.request().url.toString()))
+            if (hangRequests) Thread.sleep(2_000)
             okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
-                .code(200).message("OK").body("".toResponseBody()).build()
+                .code(if (failRequests) 500 else 200).message("X").body("".toResponseBody()).build()
         }.build(), { MediaSession.snapshot() })
-        return WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), WatchHistory(http, "cpn"))
+        return WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), now = fakeNow::get).also { activeReporter = it }
     }
 
     private fun awaitRequests(count: Int) {
         val deadline = System.currentTimeMillis() + 5_000
         while (requests.size < count && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        kotlinx.coroutines.runBlocking { activeReporter?.awaitPendingReport() }
         assertEquals(count, requests.size)
     }
 
@@ -59,21 +65,47 @@ class WatchTimeReporterTest {
         val reporter = reporter()
         reporter.watch("video", tracking)
         reporter.tick(0, 100_000, playing = true)
-        awaitRequests(2) // first update creates the watch record, then reports watch time
+        // The first update creates the playback record; watch time needs a real interval.
+        awaitRequests(1)
         reporter.tick(5_000, 100_000, playing = true) // throttled
         Thread.sleep(300)
-        assertEquals(2, requests.size)
+        assertEquals(1, requests.size)
         reporter.tick(11_000, 100_000, playing = true)
-        awaitRequests(3)
+        awaitRequests(2)
     }
 
-    @Test fun aBackwardSeekStartsANewRangeImmediately() {
+    @Test fun aBackwardSeekResetsTheRangeWithoutAZeroLengthReport() {
         val reporter = reporter()
         reporter.watch("video", tracking)
         reporter.tick(20_000, 100_000, playing = true)
-        awaitRequests(2)
+        awaitRequests(1)
         reporter.tick(2_000, 100_000, playing = true)
-        awaitRequests(3)
+        // The seek itself carries no watchable interval: nothing is sent.
+        Thread.sleep(300)
+        assertEquals(1, requests.size)
+        // The next forward report chains from the seek target.
+        reporter.tick(12_000, 100_000, playing = true)
+        awaitRequests(2)
+        val watchtime = requests.last().url
+        assertTrue(watchtime.contains("st=2.0"))
+        assertTrue(watchtime.contains("et=12.0"))
+    }
+
+    @Test fun aForwardSeekReanchorsWithoutCountingTheSkippedSpan() {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(10_000, 200_000, playing = true, discontinuityEpoch = 0)
+        awaitRequests(1)
+        // Seek from 10s to 100s: the skipped 90s span is never reported.
+        reporter.tick(100_000, 200_000, playing = true, discontinuityEpoch = 1)
+        Thread.sleep(300)
+        assertEquals(1, requests.size)
+        // Playback continues from the new anchor: the next interval is real.
+        reporter.tick(110_000, 200_000, playing = true, discontinuityEpoch = 1)
+        awaitRequests(2)
+        val watchtime = requests.last().url
+        assertTrue(watchtime.contains("st=100.0"))
+        assertTrue(watchtime.contains("et=110.0"))
     }
 
     @Test fun pausedOrStoppedPlaybackDoesNotReport() {
@@ -83,7 +115,7 @@ class WatchTimeReporterTest {
         Thread.sleep(300)
         assertEquals(0, requests.size)
         reporter.tick(5_000, 100_000, playing = true)
-        awaitRequests(2)
+        awaitRequests(1)
         reporter.stop()
         requests.clear()
         reporter.tick(20_000, 100_000, playing = true)
@@ -107,24 +139,136 @@ class WatchTimeReporterTest {
         val reporter = reporter()
         reporter.watch("video", tracking)
         reporter.tick(5_000, 100_000, playing = true)
-        awaitRequests(2)
+        awaitRequests(1)
         privateBrowsing = true
         reporter.tick(20_000, 100_000, playing = true)
         Thread.sleep(300)
-        assertEquals(2, requests.size)
+        assertEquals(1, requests.size)
         reporter.stop()
+    }
+
+    @Test fun privacyToggledMidSessionCancelsTheQueuedReport() {
+        var privateBrowsing = false
+        MediaSession.initialize(MemoryAuthStore()) { privateBrowsing }
+        MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
+        val reporter = reporter()
+        hangRequests = true // the wire stays busy long enough to toggle mid-flight
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (requests.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(1, requests.size) // already on the wire; not claimed to be retractable
+        privateBrowsing = true
+        reporter.cancelPending()
+        reporter.tick(30_000, 100_000, playing = true)
+        hangRequests = false
+        privateBrowsing = false
+        // Privacy lifted: the armed video reports again.
+        reporter.tick(41_000, 100_000, playing = true)
+        awaitRequests(2)
+        reporter.stop()
+    }
+
+    @Test fun failedReportsBackOffAndSuspend() {
+        failRequests = true
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        awaitRequests(1)
+        // Immediate retries are gated by the backoff clock.
+        reporter.tick(16_000, 100_000, playing = true)
+        Thread.sleep(300)
+        assertEquals(1, requests.size)
+        // Burn through the failure budget: each retry waits out its backoff.
+        repeat(4) {
+            fakeNow.addAndGet(120_000)
+            reporter.tick(30_000 + it * 15_000L, 200_000, playing = true)
+            val deadline = System.currentTimeMillis() + 5_000
+            val expected = requests.size + 1
+            while (requests.size < expected && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        }
+        assertEquals(5, requests.size)
+        // Suspended: even with time advance, no further attempts leave.
+        fakeNow.addAndGet(600_000)
+        reporter.tick(120_000, 200_000, playing = true)
+        Thread.sleep(300)
+        assertEquals(5, requests.size)
+        reporter.stop()
+    }
+
+    @Test fun anonymousSuccessSignalsARefreshOnlyAfterAWatchedInterval() = kotlinx.coroutines.runBlocking {
+        MediaSession.initialize(MemoryAuthStore()) { false }
+        MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
+        val reporter = reporter()
+        var signals = 0
+        reporter.onAnonymousReport = { signals += 1 }
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        reporter.awaitPendingReport()
+        assertEquals(0, signals)
+        reporter.tick(15_000, 100_000, playing = true)
+        reporter.awaitPendingReport()
+        assertEquals(1, signals)
+        reporter.stop()
+    }
+
+    @Test fun seekDuringBackoffReanchorsWithoutResettingTheRetryDeadline() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(0, 200_000, true, discontinuityEpoch = 0)
+        reporter.awaitPendingReport()
+        failRequests = true
+        reporter.tick(11_000, 200_000, true, discontinuityEpoch = 0)
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        reporter.tick(80_000, 200_000, false, discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        failRequests = false
+        reporter.tick(90_000, 200_000, true, discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        assertEquals(2, requests.size)
+        fakeNow.set(70_000)
+        reporter.tick(90_000, 200_000, true, discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        assertTrue(requests.last().url.contains("st=80.0"))
+        assertTrue(requests.last().url.contains("et=90.0"))
+    }
+
+    @Test fun seekingBeforePlaybackDoesNotCreateAView() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(80_000, 200_000, false, discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        assertTrue(requests.isEmpty())
+        reporter.tick(81_000, 200_000, true, discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        assertEquals(1, requests.size)
+        assertTrue(requests.last().url.contains("cmt=81.0"))
+    }
+
+    @Test fun anotherVideosSeekDoesNotMoveTheActiveWatchAnchor() = kotlinx.coroutines.runBlocking {
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 200_000, true)
+        reporter.awaitPendingReport()
+        reporter.tick(80_000, 200_000, false, playingVideoId = "other", discontinuityEpoch = 1)
+        reporter.awaitPendingReport()
+        reporter.tick(15_000, 200_000, true)
+        reporter.awaitPendingReport()
+        assertTrue(requests.last().url.contains("st=5.0"))
     }
 
     @Test fun trackingFromThePreviousIdentityCannotBeSentAfterSignOut() {
         val reporter = reporter()
         reporter.watch("video", tracking)
         reporter.tick(5_000, 100_000, playing = true)
-        awaitRequests(2)
+        awaitRequests(1)
         MediaSession.signOut()
         MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
         reporter.tick(20_000, 100_000, playing = true)
         Thread.sleep(300)
-        assertEquals(2, requests.size)
+        assertEquals(1, requests.size)
         reporter.stop()
     }
 
@@ -143,4 +287,26 @@ class WatchTimeReporterTest {
         Thread.sleep(300)
         assertTrue(requests.isEmpty())
     }
+    @Test fun leavingPrivateModeDoesNotReportThePrivateInterval() {
+        var privateBrowsing = false
+        MediaSession.initialize(MemoryAuthStore()) { privateBrowsing }
+        MediaSession.rememberVisitor("visitor", MediaSession.snapshot().generation)
+        val reporter = reporter()
+        reporter.watch("video", tracking)
+        reporter.tick(5_000, 100_000, playing = true)
+        awaitRequests(1)
+        Thread.sleep(100)
+        privateBrowsing = true
+        reporter.tick(20_000, 100_000, playing = true)
+        privateBrowsing = false
+        reporter.tick(30_000, 100_000, playing = true)
+        awaitRequests(2)
+        assertTrue(requests.last().url.contains("/stats/playback"))
+        Thread.sleep(100)
+        reporter.tick(40_000, 100_000, playing = true)
+        awaitRequests(3)
+        assertTrue(requests.last().url.contains("st=30.0"))
+        reporter.stop()
+    }
+
 }

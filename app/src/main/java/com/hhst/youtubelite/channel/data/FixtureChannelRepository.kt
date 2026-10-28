@@ -44,6 +44,14 @@ class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelSc
         return ChannelPostsPage(FixturePostRepository.samplePosts(channelId))
     }
 
+    override suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage {
+        delay(160)
+        if (scenario == ChannelScenario.Error) throw java.io.IOException("Local error scenario")
+        if (scenario == ChannelScenario.Empty) return com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList())
+        return com.hhst.youtubelite.library.domain.PlaylistCollectionPage(
+            com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries())
+    }
+
     companion object {
         fun samplePage(channelId: String = "blender") = ChannelPage(
             profile(channelId), sampleVideos(), com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries(),

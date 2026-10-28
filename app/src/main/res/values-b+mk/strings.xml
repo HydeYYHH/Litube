@@ -65,6 +65,10 @@
     <string name="queue_remove">Отстрани од редот</string>
     <string name="application_not_found">Апликацијата не е пронајдена</string>
     <string name="segments">Сегменти</string>
+    <string name="chapters">Поглавја</string>
+    <string name="no_chapters">Нема поглавја</string>
+    <string name="skippable_segments">Сегменти што може да се прескокнат</string>
+    <string name="show_more_replies">Прикажи повеќе одговори</string>
     <string name="no_segments">Нема сегменти што може да се прескокнат</string>
     <string name="subtitles">Преводи</string>
     <string name="playback_end_next">Пушти следно</string>

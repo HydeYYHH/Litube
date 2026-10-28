@@ -1,8 +1,6 @@
 package com.hhst.youtubelite.extractor
 
 import android.content.Context
-import com.grack.nanojson.JsonWriter
-import com.grack.nanojson.JsonObject as NanoJsonObject
 import com.google.gson.JsonObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
@@ -89,11 +87,11 @@ class PoTokenProvider(
                 it.evaluate(bundle + "\n'loaded'", remaining(), context)
             }
         }
-        fun pairedChallenge(config: NanoJsonObject): JsonObject? {
+        fun pairedChallenge(config: JsonObject): JsonObject? {
             config.remove("_BG_CHALLENGE")?.let {
-                return JsonParser.parseString(JsonWriter.string(it)).asJsonObject
+                return it as? JsonObject
             }
-            val raw = config.remove("_BG_CHALLENGE_RAW") as? String ?: return null
+            val raw = (config.remove("_BG_CHALLENGE_RAW") as? com.google.gson.JsonPrimitive)?.asString ?: return null
             val parsed = loadedRuntime().evaluate("WebPo.challenge(${gson.toJson(raw)})", remaining(), context)
             return JsonParser.parseString(parsed).takeIf { it.isJsonObject }?.asJsonObject
         }
@@ -109,8 +107,8 @@ class PoTokenProvider(
             if (page.responseCode == 200) {
                 val paired = YoutubeSessionProvider.parseConfig(page.responseBody)
                 if (context.session.account != WebAccount.ANONYMOUS
-                    && (!paired.getBoolean("LOGGED_IN", false) || YoutubeSessionProvider.accountIndex(paired) != context.session.accountIndex
-                        || context.session.dataSyncId?.let { it != paired.getString("DATASYNC_ID") } == true)) throw IOException("PO_ACCOUNT_PAGE_MISMATCH")
+                    && (!paired.flag("LOGGED_IN", false) || YoutubeSessionProvider.accountIndex(paired) != context.session.accountIndex
+                        || context.session.dataSyncId?.let { it != paired.text("DATASYNC_ID") } == true)) throw IOException("PO_ACCOUNT_PAGE_MISMATCH")
                 pairedChallenge(paired)?.let {
                     config = paired
                     challenge = it
@@ -120,8 +118,8 @@ class PoTokenProvider(
         }
         if (challenge == null) {
             val headers = InnertubeAuth.headers(context.session, StreamClient.WEB, YoutubeSessionProvider.ORIGIN, System.currentTimeMillis() / 1000)
-            val inner = config.getObject("INNERTUBE_CONTEXT")
-            val body = "{\"context\":${JsonWriter.string(inner)},\"engagementType\":\"ENGAGEMENT_TYPE_UNBOUND\"}"
+            val inner = config.obj("INNERTUBE_CONTEXT")
+            val body = "{\"context\":$inner,\"engagementType\":\"ENGAGEMENT_TYPE_UNBOUND\"}"
             val response = context.post("${YoutubeSessionProvider.ORIGIN}/youtubei/v1/att/get?prettyPrint=false", headers, body.toByteArray())
             requireResponse(response, "PO_ATTESTATION")
             challenge = JsonParser.parseString(response.responseBody).asJsonObject.getAsJsonObject("bgChallenge")
@@ -137,7 +135,7 @@ class PoTokenProvider(
         val source = context.get(url, mapOf("User-Agent" to listOf(context.session.userAgent)))
         requireResponse(source, "PO_INTERPRETER")
         initializationStage = "RUNTIME_LOAD"
-        loadedRuntime().evaluate("globalThis.yt={config_:${JsonWriter.string(config)}};\n" + source.responseBody + "\n'loaded'", remaining(), context)
+        loadedRuntime().evaluate("globalThis.yt={config_:$config};\n" + source.responseBody + "\n'loaded'", remaining(), context)
         initializationStage = "SNAPSHOT"
         val snapshot = runtime!!.evaluate("WebPo.snapshot(${gson.toJson(challenge)})", remaining(), context)
         val headers = mapOf("User-Agent" to listOf(context.session.userAgent), "Content-Type" to listOf("application/json+protobuf"),

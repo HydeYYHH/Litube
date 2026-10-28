@@ -65,6 +65,10 @@
     <string name="queue_remove">Remover da fila</string>
     <string name="application_not_found">Nenhum app encontrado</string>
     <string name="segments">Trechos</string>
+    <string name="chapters">Capítulos</string>
+    <string name="no_chapters">Nenhum capítulo</string>
+    <string name="skippable_segments">Segmentos ignoráveis</string>
+    <string name="show_more_replies">Mostrar mais respostas</string>
     <string name="no_segments">Nenhum trecho para pular</string>
     <string name="subtitles">Legendas</string>
     <string name="playback_end_next">Reproduzir próximo</string>

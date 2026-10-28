@@ -141,6 +141,68 @@ class QueueRepositoryTest {
     }
 
     @Test
+    fun addNext_insertsDirectlyAfterThePlayingItem() {
+        val repo = QueueRepository(MemJsonCache())
+        repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
+        repo.upsertPlaying(item("b"))
+        repo.addNext(item("n"))
+        assertEquals(listOf(vid("a"), vid("b"), vid("n"), vid("c")),
+            repo.state.value.items.map { it.videoId })
+    }
+
+    @Test
+    fun addNext_movesAnAlreadyQueuedItemInsteadOfDuplicating() {
+        val repo = QueueRepository(MemJsonCache())
+        repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
+        repo.upsertPlaying(item("a"))
+        repo.addNext(item("c"))
+        val ids = repo.state.value.items.map { it.videoId }
+        assertEquals(listOf(vid("a"), vid("c"), vid("b")), ids)
+        assertEquals(3, ids.distinct().size)
+    }
+
+    @Test
+    fun addNext_keepsThePlayingItemAndNeverDuplicatesIt() {
+        val repo = QueueRepository(MemJsonCache())
+        repo.add(item("a")); repo.add(item("b"))
+        repo.upsertPlaying(item("a"))
+        repo.addNext(item("a"))
+        assertEquals(listOf(vid("a"), vid("b")), repo.state.value.items.map { it.videoId })
+    }
+
+    @Test
+    fun addNext_withoutAQueuedPlayingItem_landsAtTheHead() {
+        val repo = QueueRepository(MemJsonCache())
+        repo.add(item("a")); repo.add(item("b"))
+        repo.addNext(item("n"))
+        assertEquals(vid("n"), repo.state.value.items.first().videoId)
+    }
+
+    @Test
+    fun addNext_isCapacityBoundedAndKeepsThePlayingItem() {
+        val repo = QueueRepository(MemJsonCache())
+        val playing = item("play")
+        repo.upsertPlaying(playing)
+        repeat(60) { repo.addNext(item("v$it")) }
+        assertEquals(50, repo.state.value.items.size)
+        assertTrue(repo.state.value.items.any { it.videoId == playing.videoId })
+        // The most recent "play next" target sits right after the playing item.
+        assertEquals(playing.videoId, repo.state.value.items.first().videoId)
+        assertEquals(vid("v59"), repo.state.value.items[1].videoId)
+    }
+
+    @Test
+    fun add_stillAppendsAtTheTailAfterAddNext() {
+        val repo = QueueRepository(MemJsonCache())
+        repo.add(item("a")); repo.add(item("b"))
+        repo.upsertPlaying(item("a"))
+        repo.addNext(item("n"))
+        repo.add(item("tail"))
+        assertEquals(listOf(vid("a"), vid("n"), vid("b"), vid("tail")),
+            repo.state.value.items.map { it.videoId })
+    }
+
+    @Test
     fun add_doesNotEvictPlayingItem() {
         val repo = QueueRepository(MemJsonCache())
         val playing = item("play")

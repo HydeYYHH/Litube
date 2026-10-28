@@ -10,7 +10,7 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 internal class PlaybackLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
     override fun getRetryDelayMsFor(info: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
         return when (PlaybackRecovery.classify(info.exception)) {
-            PlaybackRecovery.Reason.HTTP_403, PlaybackRecovery.Reason.URL_STALE,
+            PlaybackRecovery.Reason.HTTP_403, PlaybackRecovery.Reason.INVALID_MEDIA_RESPONSE, PlaybackRecovery.Reason.URL_STALE,
             PlaybackRecovery.Reason.SESSION_CHANGED -> C.TIME_UNSET
             PlaybackRecovery.Reason.TRANSPORT_FAILED ->
                 if (info.mediaLoadData.dataType == C.DATA_TYPE_MEDIA_INITIALIZATION &&

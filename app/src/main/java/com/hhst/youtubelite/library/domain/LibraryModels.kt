@@ -33,6 +33,18 @@ data class YouPage(
 
 data class HistoryPage(val entries: List<HistoryEntry>, val nextKey: String? = null)
 
+/**
+ * Undo record for one local history removal. Position recovery uses the
+ * stable video ids of the removed entry's neighbours (never a full list
+ * snapshot), so restoring cannot overwrite changes the user made afterwards.
+ */
+data class RemovedHistoryEntry(
+    val entry: HistoryEntry,
+    val prevVideoId: String?,
+    val nextVideoId: String?,
+    val index: Int,
+)
+
 /** One server page of the personal playlist collection. */
 data class PlaylistCollectionPage(val playlists: List<PlaylistSummary>, val nextKey: String? = null)
 
@@ -66,6 +78,9 @@ enum class LibraryRow(val label: String) {
     Downloads("Downloads");
 }
 
+/** Which storage backs the library surfaces. Signed out is always the device; the choice is offered after sign-in. */
+enum class LibrarySource(val label: String) { Device("On this device"), Account("Account") }
+
 sealed interface LibraryOverlay {
     data object None : LibraryOverlay
     data object Account : LibraryOverlay
@@ -80,8 +95,13 @@ data class LibraryUiState(
     val content: LibraryContent = LibraryContent.Loading,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    /** The active library storage; [sourceSelectable] when the user may switch it. */
+    val source: LibrarySource = LibrarySource.Account,
+    val sourceSelectable: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
+    /** Pending local-history removal the user can still undo. */
+    val undo: RemovedHistoryEntry? = null,
 )
 
 data class HistoryUiState(
@@ -89,12 +109,16 @@ data class HistoryUiState(
     val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    val source: LibrarySource = LibrarySource.Account,
+    val sourceSelectable: Boolean = false,
     /** Production mode: manage-history entry and live menu writes enabled. */
     val live: Boolean = false,
     /** Two-step confirmation for the destructive clear action. */
     val confirmClear: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
+    /** Pending local-history removal the user can still undo. */
+    val undo: RemovedHistoryEntry? = null,
 )
 
 data class CollectionUiState(
@@ -102,6 +126,8 @@ data class CollectionUiState(
     val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
+    val source: LibrarySource = LibrarySource.Account,
+    val sourceSelectable: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
@@ -144,6 +170,8 @@ sealed interface LibraryAction {
     data class SubmitSearch(val query: String) : LibraryAction
     data object SignIn : LibraryAction
     data object OpenAccountMenu : LibraryAction
+    /** The signed-in user switching which storage the library surfaces read and write. */
+    data class SourceSelected(val source: LibrarySource) : LibraryAction
     data class AccountSelected(val action: com.hhst.youtubelite.account.domain.AccountMenuAction) : LibraryAction
     data object OpenNotifications : LibraryAction
     data object OpenHistory : LibraryAction
@@ -156,6 +184,9 @@ sealed interface LibraryAction {
     data class OpenPlaylist(val playlistId: String) : LibraryAction
     data class OpenMenu(val videoId: String) : LibraryAction
     data class MenuSelected(val action: HistoryMenuAction) : LibraryAction
+    /** Restores the entry recorded by the last local-history removal. */
+    data object UndoHistoryRemove : LibraryAction
+    data object DismissUndo : LibraryAction
     data object OpenManageHistory : LibraryAction
     data object PauseHistory : LibraryAction
     data object ResumeHistory : LibraryAction

@@ -65,6 +65,10 @@
     <string name="queue_remove">පෝලිමෙන් ඉවත් කරන්න</string>
     <string name="application_not_found">යෙදුම හමු නොවීය</string>
     <string name="segments">කොටස්</string>
+    <string name="chapters">පරිච්ඡේද</string>
+    <string name="no_chapters">පරිච්ඡේද නැත</string>
+    <string name="skippable_segments">මඟහැරිය හැකි කොටස්</string>
+    <string name="show_more_replies">තවත් පිළිතුරු පෙන්වන්න</string>
     <string name="no_segments">මඟ හැරිය හැකි කොටස් නොමැත</string>
     <string name="subtitles">උපසිරැසි</string>
     <string name="playback_end_next">ඊළඟට ක්‍රීඩා කරන්න</string>

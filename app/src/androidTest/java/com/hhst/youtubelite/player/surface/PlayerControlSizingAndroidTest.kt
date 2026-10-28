@@ -19,7 +19,6 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.player.PlayerUiState
@@ -42,9 +41,6 @@ class PlayerControlSizingAndroidTest {
             Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
         compose.waitUntil(10_000) { compose.activity.resources.configuration.orientation == expected }
     }
-
-    private fun back() = InstrumentationRegistry.getInstrumentation()
-        .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
 
     private fun button(node: SemanticsNodeInteraction, frame: Rect, density: Float, widthDp: Int = 48): Rect {
         node.assertIsDisplayed()
@@ -90,35 +86,23 @@ class PlayerControlSizingAndroidTest {
             full.performTouchInput { click() }
             compose.runOnIdle { assertEquals(old + 1, calls["onFullscreenToggle"]) }
 
-            val quality = compose.onAllNodesWithText("Auto 1080p").fetchSemanticsNodes()
-            if (quality.isNotEmpty()) {
-                val q = compose.onNodeWithText("Auto 1080p")
-                val qRect = button(q, frame, density)
-                assertTrue("Quality and fullscreen targets overlap", qRect.right <= fullRect.left + 1)
-                q.performTouchInput { click() }
-            } else {
-                more.performTouchInput { click() }
-                compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
-                    .performScrollTo().performTouchInput { click() }
-            }
+            // Speed and quality live only in the More sheet now.
+            more.performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
+                .performScrollTo().performTouchInput { click() }
             val oldQuality = calls["onQuality"] ?: 0
             compose.onNodeWithText("720p").assertIsDisplayed().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldQuality + 1, calls["onQuality"]) }
-            if (compose.onAllNodesWithText("1.0x").fetchSemanticsNodes().isNotEmpty()) {
-                compose.onNodeWithText("1.0x").performTouchInput { click() }
-            } else {
-                more.performTouchInput { click() }
-                compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed))
-                    .performScrollTo().performTouchInput { click() }
-            }
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options))
+                .performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed))
+                .performScrollTo().performTouchInput { click() }
             val oldSpeed = calls["onSpeed"] ?: 0
             compose.onNodeWithText("1.5x").performScrollTo().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldSpeed + 1, calls["onSpeed"]) }
-            more.performTouchInput { click() }
-            compose.onNodeWithText(compose.activity.getString(R.string.segments))
-                .performScrollTo().performTouchInput { click() }
-            compose.onNodeWithText(compose.activity.getString(R.string.no_segments)).assertIsDisplayed()
-            back()
+            // Chapters and skippable segments live in the info band behind the
+            // chapter chip; with neither present the entry stays hidden.
+            compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
             compose.waitForIdle()
         }
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performTouchInput { click() }
@@ -147,13 +131,10 @@ class PlayerControlSizingAndroidTest {
         val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
         val time = compose.onNodeWithText("1:11:12").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText("2:22:24").assertIsDisplayed()
-        val speed = button(compose.onNodeWithText("1.0x"), frame, density)
-        val quality = button(compose.onNodeWithText("Auto 1080p"), frame, density)
         val full = button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
-        assertTrue("Time must have its own row when the controls no longer fit", time.bottom <= speed.top)
-        assertTrue("Bottom targets overlap", speed.right <= quality.left + 1 && quality.right <= full.left + 1)
+        assertTrue("Time and fullscreen targets overlap", time.right <= full.left + 1)
         val subtitle = compose.onNodeWithText("Readable subtitle").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue("Wrapped time row overlaps captions", subtitle.bottom <= time.top)
+        assertTrue("Captions overlap the info band", subtitle.bottom <= time.top)
         DeviceEvidence.captureScene("controls-tall-320-font20")
     }
 
@@ -235,7 +216,6 @@ class PlayerControlSizingAndroidTest {
                     widthDp = if (it == R.string.subtitles || it == R.string.more_options) 40 else 48)
             }
             rects.zipWithNext().forEach { (a, b) -> assertTrue("Top targets overlap", a.right <= b.left + 1) }
-            button(compose.onNodeWithText("Auto 1080p"), frame, density)
             button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
             compose.onNodeWithText("1:11:12").assertIsDisplayed()
             Thread.sleep(200) // SurfaceView and vector redraw follow the platform frame clock.

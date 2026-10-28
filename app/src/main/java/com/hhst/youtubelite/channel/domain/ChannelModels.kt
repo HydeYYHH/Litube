@@ -43,6 +43,10 @@ data class ChannelPage(
     val homeShelves: List<ChannelHomeShelf> = emptyList(),
     /** Continuation for the videos tab; null when the server has no further page. */
     val videosNextKey: String? = null,
+    /** The videos tab was not part of the landing read; it loads on demand. */
+    val videosDeferred: Boolean = false,
+    /** The playlists tab was not part of the landing read; it loads on demand. */
+    val playlistsDeferred: Boolean = false,
 )
 
 /** One server page of the videos tab. */
@@ -101,6 +105,14 @@ interface ChannelRepository {
     suspend fun liveNext(channelId: String, cursor: String): ChannelLivePage = ChannelLivePage()
 
     suspend fun posts(channelId: String): ChannelPostsPage
+
+    /** The playlists tab, read on demand so it never blocks the first paint. */
+    suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage =
+        com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList())
+
+    /** Further playlists after [cursor]; finite tabs return an empty page. */
+    suspend fun playlistsNext(channelId: String, cursor: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage =
+        com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList())
 
     /** Further posts after [cursor]; finite tabs return an empty page. */
     suspend fun postsNext(channelId: String, cursor: String): ChannelPostsPage = ChannelPostsPage(emptyList())
@@ -165,15 +177,21 @@ data class ChannelUiState(
     val shorts: ChannelSection<List<ChannelShort>> = ChannelSection.Loading,
     val live: ChannelSection<ChannelLivePage> = ChannelSection.Loading,
     val posts: ChannelSection<List<PostSummary>> = ChannelSection.Loading,
+    /** First-read state of a deferred videos tab; Ready means page.videos is populated. */
+    val videosTab: ChannelSection<Unit> = ChannelSection.Ready(Unit),
+    /** The playlists tab; Ready carries the rows, Loading/Failed are tab-local. */
+    val playlists: ChannelSection<List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>> = ChannelSection.Loading,
     /** Server continuations and append states for the paginated sections. */
     val shortsNextKey: String? = null,
     val liveNextKey: String? = null,
     val postsNextKey: String? = null,
     val searchNextKey: String? = null,
+    val playlistsNextKey: String? = null,
     val shortsAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val liveAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val postsAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val searchAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    val playlistsAppend: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val shortsSort: ChannelSortOption = ChannelSortOption.Latest,
     val liveSort: ChannelSortOption = ChannelSortOption.Latest,
     val expandedPosts: Set<String> = emptySet(),
@@ -274,6 +292,7 @@ sealed interface ChannelAction {
     data object LoadShortsNext : ChannelAction
     data object LoadLiveNext : ChannelAction
     data object LoadPostsNext : ChannelAction
+    data object LoadPlaylistsNext : ChannelAction
     data object LoadSearchNext : ChannelAction
     /** Re-runs a failed server channel search. */
     data object RetrySearch : ChannelAction

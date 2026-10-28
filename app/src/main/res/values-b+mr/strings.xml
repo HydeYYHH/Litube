@@ -65,6 +65,10 @@
     <string name="queue_remove">रांगेतून काढा</string>
     <string name="application_not_found">अर्ज सापडला नाही</string>
     <string name="segments">विभाग</string>
+    <string name="chapters">प्रकरणे</string>
+    <string name="no_chapters">प्रकरणे नाहीत</string>
+    <string name="skippable_segments">वगळता येणारे सेगमेंट</string>
+    <string name="show_more_replies">अधिक उत्तरे दाखवा</string>
     <string name="no_segments">वगळण्यायोग्य विभाग नाहीत</string>
     <string name="subtitles">उपशीर्षके</string>
     <string name="playback_end_next">पुढे खेळा</string>

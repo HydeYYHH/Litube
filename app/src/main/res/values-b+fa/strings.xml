@@ -65,6 +65,10 @@
     <string name="queue_remove">حذف از صف</string>
     <string name="application_not_found">برنامه یافت نشد</string>
     <string name="segments">بخش ها</string>
+    <string name="chapters">فصل‌ها</string>
+    <string name="no_chapters">فصلی وجود ندارد</string>
+    <string name="skippable_segments">بخش‌های قابل رد کردن</string>
+    <string name="show_more_replies">نمایش پاسخ‌های بیشتر</string>
     <string name="no_segments">هیچ بخش قابل رد شدنی وجود ندارد</string>
     <string name="subtitles">زیرنویس</string>
     <string name="playback_end_next">پخش بعدی</string>

@@ -65,6 +65,10 @@
     <string name="queue_remove">Премахване от опашката</string>
     <string name="application_not_found">Приложението не е намерено</string>
     <string name="segments">Сегменти</string>
+    <string name="chapters">Глави</string>
+    <string name="no_chapters">Няма глави</string>
+    <string name="skippable_segments">Сегменти за пропускане</string>
+    <string name="show_more_replies">Показване на още отговори</string>
     <string name="no_segments">Няма сегменти с възможност за пропускане</string>
     <string name="subtitles">Субтитри</string>
     <string name="playback_end_next">Играй следващата</string>

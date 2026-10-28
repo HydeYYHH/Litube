@@ -66,7 +66,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == CollectionViewModel::class.java)
-                return CollectionViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
+                return CollectionViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(), if (fixtures) null else sources.librarySource) as T
             }
         })[CollectionViewModel::class.java]
         lifecycleScope.launch {
@@ -132,8 +132,10 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     companion object {
         const val EXTRA_SCENARIO = "playlists_scenario"
 
+        // The default scenario is never attached: parse(null) already yields Content,
+        // and a scenario extra would trip the fixture-scene heuristic on normal navigation.
         fun intent(context: Context, scenario: LibraryScenario? = null) =
             Intent(context, PlaylistsActivity::class.java)
-                .apply { if (scenario != null) putExtra(EXTRA_SCENARIO, scenario.argument) }
+                .apply { if (scenario != null && scenario != LibraryScenario.Content) putExtra(EXTRA_SCENARIO, scenario.argument) }
     }
 }

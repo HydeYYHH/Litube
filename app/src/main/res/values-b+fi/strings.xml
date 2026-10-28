@@ -65,6 +65,10 @@
     <string name="queue_remove">Poista jonosta</string>
     <string name="application_not_found">Sovellusta ei löydy</string>
     <string name="segments">Segmentit</string>
+    <string name="chapters">Luvut</string>
+    <string name="no_chapters">Ei lukuja</string>
+    <string name="skippable_segments">Ohitettavat segmentit</string>
+    <string name="show_more_replies">Näytä lisää vastauksia</string>
     <string name="no_segments">Ei ohitettavia segmenttejä</string>
     <string name="subtitles">Tekstitykset</string>
     <string name="playback_end_next">Pelaa seuraavaksi</string>

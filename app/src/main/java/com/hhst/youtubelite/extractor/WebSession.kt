@@ -1,9 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
-import com.grack.nanojson.JsonParser
-import com.grack.nanojson.JsonParserException
-import com.grack.nanojson.JsonWriter
+import com.google.gson.JsonObject
 
 /** Account state captured with the page configuration. */
 enum class WebAccount { ANONYMOUS, AUTHENTICATED, PREMIUM }
@@ -32,7 +29,7 @@ class YoutubeWebSession(
     configuration: JsonObject,
     private val credentials: SessionCredentials,
 ) {
-    private val configuration: JsonObject = copy(configuration)
+    private val configuration: JsonObject = configuration.deepCopy()
     /** The page's WEB client version, when the captured configuration is a WEB one. */
     val webClientVersion: String?
 
@@ -40,29 +37,23 @@ class YoutubeWebSession(
     val videoBoundGvs: Boolean
 
     init {
-        this.webClientVersion = this.configuration.getObject("INNERTUBE_CONTEXT")
-            .getObject("client")
-            .takeIf { it.getString("clientName") == "WEB" }?.getString("clientVersion")
-        this.videoBoundGvs = this.configuration.getObject("WEB_PLAYER_CONTEXT_CONFIGS").values
-            .filterIsInstance<JsonObject>().any { value ->
-                queryFlags(value.getString("serializedExperimentFlags", ""))
+        this.webClientVersion = this.configuration.obj("INNERTUBE_CONTEXT")
+            .obj("client")
+            .takeIf { it.text("clientName") == "WEB" }?.text("clientVersion")
+        this.videoBoundGvs = this.configuration.obj("WEB_PLAYER_CONTEXT_CONFIGS").entrySet()
+            .mapNotNull { it.value as? JsonObject }.any { value ->
+                queryFlags(value.text("serializedExperimentFlags", ""))
                     .get("html5_generate_content_po_token") == "true"
             }
     }
 
-    fun configuration(): JsonObject = copy(configuration)
+    fun configuration(): JsonObject = configuration.deepCopy()
 
     fun cookies(origin: String): String = credentials.cookies(origin)
 
     fun scope(): String = "$key:$networkGeneration"
 
     private companion object {
-        fun copy(value: JsonObject): JsonObject = try {
-            JsonParser.`object`().from(JsonWriter.string(value))
-        } catch (failure: JsonParserException) {
-            throw IllegalArgumentException("Invalid session configuration", failure)
-        }
-
         /** Minimal `key=value&key=value` reader for serialized experiment flags. */
         fun queryFlags(serialized: String): Map<String, String> = serialized.split('&')
             .filter { it.contains('=') }

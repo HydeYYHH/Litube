@@ -66,6 +66,10 @@
     <string name="queue_remove">从队列移除</string>
     <string name="application_not_found">未找到可打开该链接的应用</string>
     <string name="segments">片段</string>
+    <string name="chapters">章节</string>
+    <string name="no_chapters">没有章节</string>
+    <string name="skippable_segments">可跳过片段</string>
+    <string name="show_more_replies">显示更多回复</string>
     <string name="no_segments">没有可跳过的片段</string>
     <string name="subtitles">字幕</string>
     <string name="playback_end_next">播放下一个</string>

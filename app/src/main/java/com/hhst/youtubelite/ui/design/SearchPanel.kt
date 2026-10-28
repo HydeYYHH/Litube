@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 @Composable
 internal fun SearchPanel(
@@ -58,29 +60,29 @@ internal fun SearchPanel(
     LaunchedEffect(Unit) { focus.requestFocus(); keyboard?.show() }
     DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
     Box(Modifier.fillMaxSize().padding(top = toolbarHeight).background(DesignTokens.Scrim)
-        .clickable(onClick = close).semantics { contentDescription = "Close search" })
+        .clickable(onClick = close).appDescription(R.string.a11y_close_search))
     Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
         Row(Modifier.fillMaxWidth().height(toolbarHeight).background(
             if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Surface), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Back, "Back", onClick = close)
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = close)
             Row(Modifier.weight(1f).height(fieldHeight).clip(RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp))
                 .background(DesignTokens.Ghost).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 BasicTextField(field, { field = it; onQueryChanged(it.text) },
-                    Modifier.weight(1f).focusRequester(focus).testTag("search-input").semantics { contentDescription = "Search YouTube" },
+                    Modifier.weight(1f).focusRequester(focus).testTag("search-input").appDescription(R.string.a11y_search_youtube),
                     textStyle = DesignTokens.text(15, 22), singleLine = true, cursorBrush = SolidColor(DesignTokens.Ink),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); onSubmit(query) }),
                     decorationBox = { inner -> Box { if (query.isEmpty()) AppText("Search YouTube", size = 15, line = 22, color = DesignTokens.Secondary); inner() } })
                 if (query.isNotEmpty()) Box(Modifier.size(50.dp, 16.dp).clickable(role = Role.Button) {
                     onQueryChanged(""); focus.requestFocus(); keyboard?.show()
-                }.semantics { contentDescription = "Clear search" }.padding(start = 8.dp, end = 26.dp)) { AppIcon(AppIcon.Close, Modifier.size(16.dp)) }
+                }.appDescription(R.string.a11y_clear_search).padding(start = 8.dp, end = 26.dp)) { AppIcon(AppIcon.Close, Modifier.size(16.dp)) }
             }
             Box(Modifier.size(36.dp, fieldHeight).clip(RoundedCornerShape(topEnd = 32.dp, bottomEnd = 32.dp)).background(DesignTokens.Ghost)
                 .clickable(role = Role.Button) { keyboard?.hide(); onSubmit(query) }
-                .semantics { contentDescription = "Search" }, contentAlignment = Alignment.CenterStart) { AppIcon(AppIcon.Search) }
+                .appDescription(R.string.a11y_search), contentAlignment = Alignment.CenterStart) { AppIcon(AppIcon.Search) }
             Spacer(Modifier.width(8.dp))
             if (query.isEmpty()) Box(Modifier.padding(start = 4.dp, end = 12.dp).size(32.dp).background(DesignTokens.Ghost, CircleShape), contentAlignment = Alignment.Center) {
-                AppIconButton(AppIcon.Voice, "Search with your voice", modifier = Modifier.wrapContentSize(unbounded = true), diameter = 40.dp) { onVoiceSearch() }
+                AppIconButton(AppIcon.Voice, stringResource(R.string.a11y_voice_search), modifier = Modifier.wrapContentSize(unbounded = true), diameter = 40.dp) { onVoiceSearch() }
             }
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("search-suggestions")) {
@@ -92,7 +94,7 @@ internal fun SearchPanel(
                     BasicText(entry, Modifier.weight(1f).padding(horizontal = 8.dp), style = DesignTokens.text(14, 17), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (onRemoveHistory != null) Box(Modifier.size(37.dp).clickable(role = Role.Button) {
                         onRemoveHistory(entry)
-                    }.semantics { contentDescription = "Remove $entry from search history" }, contentAlignment = Alignment.Center) {
+                    }.appDescription(R.string.a11y_remove_from_search_history, entry), contentAlignment = Alignment.Center) {
                         AppIcon(AppIcon.Close, Modifier.size(14.dp))
                     }
                 }
@@ -111,7 +113,7 @@ internal fun SearchPanel(
                     BasicText(text, Modifier.weight(1f).padding(horizontal = 8.dp), style = DesignTokens.text(14, 17), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Box(Modifier.size(37.dp).background(DesignTokens.Border.copy(alpha = 0.05f)).clickable(role = Role.Button) {
                         onQueryChanged(suggestion); focus.requestFocus(); keyboard?.show()
-                    }.semantics { contentDescription = "Use suggestion $suggestion" }.padding(end = 4.dp), contentAlignment = Alignment.CenterEnd) {
+                    }.appDescription(R.string.a11y_use_suggestion, suggestion).padding(end = 4.dp), contentAlignment = Alignment.CenterEnd) {
                         AppIcon(AppIcon.ArrowUpLeft, Modifier.offset(y = 2.dp))
                     }
                 }

@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,12 +30,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -65,6 +71,8 @@ import com.hhst.youtubelite.ui.design.MenuSheetLayout
 import com.hhst.youtubelite.ui.design.messageCardShadow
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import androidx.compose.runtime.snapshotFlow
+import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.ui.design.LocalMotionScale
 
 /** Comments sheet and docked panel. */
 @Composable
@@ -103,6 +111,22 @@ fun CommentsPanel(
                 playerHeight = WatchLayout.playerHeight(width, height),
                 windowHeight = height,
             ).roundToInt().toFloat()
+            val density = LocalDensity.current.density
+            val scope = rememberCoroutineScope()
+            val close by rememberUpdatedState(onClose)
+            val canDrag by rememberUpdatedState(state.overlay == CommentsOverlay.None)
+            val motionScale by rememberUpdatedState(LocalMotionScale.current)
+            val sheetHeight = (height - top).coerceAtLeast(0f)
+            val motion = remember(state.target, sheetHeight, density) {
+                CommentSheetMotion(scope, sheetHeight * density, density, { canDrag },
+                    { motionScale > 0f }, { close() })
+            }
+            val headerDrag = Modifier.draggable(
+                state = rememberDraggableState { motion.drag(it) },
+                orientation = Orientation.Vertical,
+                enabled = canDrag,
+                onDragStopped = { motion.settle(it) },
+            )
             Box(Modifier.fillMaxSize()) {
                 // The sheet has no tinted scrim in the sample; the exposed page area still dismisses.
                 Box(
@@ -110,20 +134,23 @@ fun CommentsPanel(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { onClose() }
-                        .semantics { contentDescription = "Close comments" }
+                        ) { motion.dismiss() }
+                        .appDescription(R.string.a11y_close_comments)
                         .testTag("comments-scrim"),
                 )
                 CommentsSurface(
                     state = state,
                     commentCount = commentCount,
                     onAction = onAction,
-                    onClose = onClose,
+                    onClose = motion::dismiss,
                     panelWidth = width,
                     compact = true,
                     listState = listState,
+                    headerModifier = headerDrag,
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .height((height - top).coerceAtLeast(0f).dp),
+                        .height(sheetHeight.dp)
+                        .graphicsLayer { translationY = motion.offset }
+                        .nestedScroll(motion),
                 )
             }
         }
@@ -140,6 +167,7 @@ private fun CommentsSurface(
     compact: Boolean,
     listState: LazyListState,
     modifier: Modifier = Modifier,
+    headerModifier: Modifier = Modifier,
 ) {
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -157,7 +185,7 @@ private fun CommentsSurface(
                 .semantics { paneTitle = "Comments" }
                 .testTag("comments-panel"),
         ) {
-            if (compact) HandleStrip() else Spacer(Modifier.height(CommentsLayout.HeaderTopGap.dp))
+            if (compact) HandleStrip(headerModifier) else Spacer(Modifier.height(CommentsLayout.HeaderTopGap.dp))
             // The modal sheet owns the gesture and the semantics above the panel.
             Box(Modifier.weight(1f).fillMaxWidth().then(if (modal) Modifier.clearAndSetSemantics {} else Modifier)) {
                 Column(Modifier.fillMaxSize()) {
@@ -174,6 +202,7 @@ private fun CommentsSurface(
                             )
                         },
                         onClose = onClose,
+                        modifier = headerModifier,
                     )
                     CommentsBody(state = state, listState = listState, onAction = onAction)
                 }
@@ -280,7 +309,7 @@ private fun CommentComposerSheet(
     }
     Box(
         Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onCancel() }
-            .semantics { contentDescription = "Close comment editor" },
+            .appDescription(R.string.a11y_close_comment_editor),
     )
     BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
         Column(
@@ -349,7 +378,7 @@ private fun CommentComposerSheet(
 private fun DeleteCommentSheet(ownComment: Boolean, onCancel: () -> Unit, onDelete: () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onCancel() }
-            .semantics { contentDescription = "Close delete confirmation" },
+            .appDescription(R.string.a11y_close_delete_confirmation),
     )
     BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
         Column(
@@ -410,9 +439,9 @@ private fun ComposerAction(
 }
 
 @Composable
-private fun HandleStrip() {
+private fun HandleStrip(modifier: Modifier = Modifier) {
     Box(
-        Modifier.fillMaxWidth().height(CommentsLayout.HandleStripHeight.dp).testTag("comments-handle"),
+        modifier.fillMaxWidth().height(CommentsLayout.HandleStripHeight.dp).testTag("comments-handle"),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
@@ -427,8 +456,9 @@ private fun HandleStrip() {
 private fun CommentsHeader(
     sort: CommentSort, count: String, panelWidth: Float, docked: Boolean, showSort: Boolean,
     onSort: () -> Unit, onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val measurer = rememberTextMeasurer()
         val titleWidth = measurer.measure("Comments", DesignTokens.text(
@@ -448,7 +478,7 @@ private fun CommentsHeader(
                     SortControl(label, onSort)
                     Spacer(Modifier.width(8.dp))
                 }
-                AppIconButton(AppIcon.Close, "Close comments", diameter = CommentsLayout.CloseTarget.dp,
+                AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_comments), diameter = CommentsLayout.CloseTarget.dp,
                     modifier = Modifier.testTag("comments-close"), onClick = onClose)
             }
             if (stacked) Box(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 8.dp)) {
@@ -464,7 +494,7 @@ private fun CommentsHeader(
 private fun SortControl(label: String, onClick: () -> Unit) {
     Box(
         Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp).testTag("comments-sort").semantics { contentDescription = "Sort comments" },
+            .padding(horizontal = 12.dp).testTag("comments-sort").appDescription(R.string.a11y_sort_comments),
         contentAlignment = Alignment.Center,
     ) { AppText(label, size = 14, line = 20, weight = FontWeight.Medium) }
 }
@@ -599,7 +629,7 @@ private fun Simplebox(onAction: (CommentAction) -> Unit) {
                     .border(1.dp, DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha), RoundedCornerShape(CommentsLayout.InputRadius.dp))
                     .clickable(role = Role.Button) { onAction(CommentAction.Compose) }
                     .testTag("comments-input")
-                    .semantics { contentDescription = "Add a comment" }
+                    .appDescription(R.string.a11y_add_comment)
                     .padding(start = CommentsLayout.InputTextInset.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -671,11 +701,30 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
                     Modifier.fillMaxWidth().padding(start = CommentsLayout.ReplyToggleStart.dp, end = 20.dp)
                         .testTag("comment-${thread.id}-replies"),
                 ) {
-                    if (thread.repliesLoading) AppText("Loading replies…", size = 12, line = 18)
+                    if (thread.repliesLoading && thread.replies.isEmpty()) AppText("Loading replies…", size = 12, line = 18)
                     if (thread.repliesFailed) AppText("Couldn't load replies. Tap below to retry.", size = 12, line = 18)
                     thread.replies.forEach { reply ->
                         ReplyContent(thread.id, reply, onAction)
                         Spacer(Modifier.height(CommentsLayout.ReplyRowGap.dp))
+                    }
+                    // Replies page in one page per tap; the loaded prefix stays.
+                    if (thread.repliesNextCursor != null && !thread.repliesFailed) {
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(min = 40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(enabled = !thread.repliesLoading, role = Role.Button) {
+                                    onAction(CommentAction.LoadMoreReplies(thread.id))
+                                }
+                                .testTag("comment-${thread.id}-replies-more"),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (thread.repliesLoading) {
+                                CircularProgressIndicator(Modifier.size(16.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
+                            } else {
+                                AppText(stringResource(R.string.show_more_replies), size = 13, line = 18,
+                                    weight = FontWeight.Medium, color = DesignTokens.Secondary)
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -764,9 +813,7 @@ private fun CommentAuthorRow(
     onAction: (CommentAction) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(end = 4.dp).semantics {
-            contentDescription = "Open channel ${author.handle}"
-        }.clickable(role = Role.Button) {
+        Modifier.fillMaxWidth().padding(end = 4.dp).appDescription(R.string.a11y_open_channel, author.handle).clickable(role = Role.Button) {
             if (channelId.isNotEmpty()) onAction(CommentAction.OpenAuthor(channelId))
         }.testTag("comment-$testTagSuffix-open-author"),
     ) {
@@ -813,7 +860,7 @@ private fun CommentActions(
             Modifier.size(CommentsLayout.KebabTarget.dp).clip(CircleShape)
                 .clickable(role = Role.Button, onClick = onMore)
                 .testTag("$tagPrefix-more")
-                .semantics { contentDescription = "More actions for $description" },
+                .appDescription(R.string.a11y_more_actions_for, description),
             contentAlignment = Alignment.Center,
         ) { AppIcon(AppIcon.More, Modifier.size(CommentsLayout.KebabIcon.dp)) }
     }
@@ -876,6 +923,6 @@ private fun CommentAvatar(author: CommentAuthor, size: Dp, channelId: String, on
     com.hhst.youtubelite.ui.design.Artwork(author.artwork,
         modifier = Modifier.size(size).clip(CircleShape).then(if (channelId.isBlank()) Modifier else
             Modifier.clickable(role = Role.Button) { onAction(CommentAction.OpenAuthor(channelId)) }
-                .semantics { contentDescription = "Open channel ${author.handle}" }),
+                .appDescription(R.string.a11y_open_channel, author.handle)),
     )
 }

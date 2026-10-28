@@ -145,6 +145,10 @@ class YoutubeLoadSpeedAndroidTest {
                         "networkRequests" to events.count { it.stage == "request" },
                         "playerRequests" to events.count { it.stage == "player" && it.detail != "browser-response-cache" },
                         "streamCacheHit" to events.any { it.stage == "stream-cache" && it.detail == "HIT" },
+                        "hasPlaybackTracking" to !stream.tracking?.playbackUrl.isNullOrBlank(),
+                        "hasWatchTimeTracking" to !stream.tracking?.watchTimeUrl.isNullOrBlank(),
+                        "playbackTrackingOrigin" to trackingOrigin(stream.tracking?.playbackUrl),
+                        "watchTimeTrackingOrigin" to trackingOrigin(stream.tracking?.watchTimeUrl),
                         "events" to events,
                         "waterfall" to synchronized(waterfall) { waterfall.toList() })
                     records += record
@@ -156,6 +160,11 @@ class YoutubeLoadSpeedAndroidTest {
             File(instrumentation.targetContext.filesDir, "youtube-load-speed.json").writeText(Gson().toJson(records))
         }
     }
+
+    private fun trackingOrigin(url: String?): String = runCatching {
+        val uri = java.net.URI(url.orEmpty())
+        "${uri.scheme}://${uri.host}${uri.path}"
+    }.getOrDefault("invalid")
 }
 
 /** Media3 load timeline relative to source creation; URLs reduce to kind, itag and segment index. */

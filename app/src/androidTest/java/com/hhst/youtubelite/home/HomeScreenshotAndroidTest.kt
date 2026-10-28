@@ -44,14 +44,14 @@ class HomeScreenshotAndroidTest {
                 Box(Modifier.requiredSize(width.dp, 844.dp)) { HomeScreen(HomeUiState(content = HomeContent.Loading), {}) }
             }
         }
-        val phone = compose.onNodeWithTag("skeleton-thumb-0").fetchSemanticsNode().boundsInRoot
+        val phone = compose.onNodeWithTag("skeleton-thumb-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(0f, phone.left, 0.5f)
         assertEquals(48f, phone.top, 0.5f)
         assertEquals(390f, phone.width, 0.5f)
         assertEquals(219.375f, phone.height, 0.6f)
         compose.runOnIdle { width = 1280 }
-        val wide = compose.onNodeWithTag("skeleton-thumb-0").fetchSemanticsNode().boundsInRoot
-        val third = compose.onNodeWithTag("skeleton-thumb-2").fetchSemanticsNode().boundsInRoot
+        val wide = compose.onNodeWithTag("skeleton-thumb-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val third = compose.onNodeWithTag("skeleton-thumb-2", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(16f, wide.left, 0.5f)
         assertEquals(64f, wide.top, 0.5f)
         assertEquals(404.917f, wide.width, 0.6f)

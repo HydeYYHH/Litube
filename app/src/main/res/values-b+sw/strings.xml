@@ -65,6 +65,10 @@
     <string name="queue_remove">Ondoa kwenye foleni</string>
     <string name="application_not_found">Ombi halijapatikana</string>
     <string name="segments">Sehemu</string>
+    <string name="chapters">Sura</string>
+    <string name="no_chapters">Hakuna sura</string>
+    <string name="skippable_segments">Sehemu zinazoweza kurukwa</string>
+    <string name="show_more_replies">Onyesha majibu zaidi</string>
     <string name="no_segments">Hakuna sehemu zinazoweza kurukwa</string>
     <string name="subtitles">Manukuu</string>
     <string name="playback_end_next">Cheza inayofuata</string>

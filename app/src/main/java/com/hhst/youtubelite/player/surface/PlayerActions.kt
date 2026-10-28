@@ -41,6 +41,8 @@ interface PlayerPlaybackActions {
     fun onQueueMove(fromIndex: Int, toIndex: Int)
     /** Page media-menu "Add to queue". */
     fun onQueueAdd(item: QueueItem)
+    /** Video action panel "Play next": after the playing entry, moving an existing entry. */
+    fun onQueueAddNext(item: QueueItem)
     fun onRetry()
     fun onCastStop()
     fun onCastDevice(id: String)

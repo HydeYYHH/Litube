@@ -1,0 +1,210 @@
+package com.hhst.youtubelite.data.media
+
+import com.hhst.youtubelite.library.domain.HistoryEntry
+import com.hhst.youtubelite.library.domain.LibrarySource
+import com.liskovsoft.youtubeapi.videoinfo.V2.AccessToken
+import com.liskovsoft.youtubeapi.videoinfo.V2.Account
+import com.liskovsoft.youtubeapi.videoinfo.V2.SignInClient
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * The device/account isolation matrix: which backend answers each library and save call for
+ * {signed out, signed in + Device, signed in + Account}, and what identity transitions keep.
+ */
+class LibrarySourceIsolationTest {
+
+    private lateinit var sessionStore: MemoryAuthStore
+    private lateinit var source: LibrarySourceStore
+    private lateinit var calls: MutableList<String>
+    private lateinit var local: LocalLibraryStore
+
+    private class Recording(val calls: MutableList<String>) : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val request = chain.request()
+            val body = request.body?.let { okio.Buffer().also(it::writeTo).readUtf8() }.orEmpty()
+            synchronized(calls) { calls += request.url.encodedPath + " " + body }
+            val payload = when {
+                "accounts_list" in request.url.encodedPath -> """{"contents":[{"accountItemRenderer":
+                    {"accountId":{"simpleText":"owner"},"accountName":{"runs":[{"text":"Owner"}]},
+                    "accountByline":{"runs":[{"text":"owner@example.com"}]},"isSelected":true}}]}"""
+                // Writes must win over the browse prefix: edit_playlist lives under /browse.
+                "edit_playlist" in request.url.encodedPath || "playlist/create" in request.url.encodedPath
+                    || "/like/" in request.url.encodedPath -> """{"success":true,"playlistId":"srv-list"}"""
+                "/browse" in request.url.encodedPath -> """{"contents":[{"videoRenderer":{"videoId":"srv-video",
+                    "title":{"simpleText":"Server video"},"lengthText":{"simpleText":"1:00"}}}]}"""
+                else -> """{"success":true,"playlistId":"srv-list"}"""
+            }
+            return Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(payload.toResponseBody("application/json".toMediaType())).build()
+        }
+    }
+
+    @Before fun setUp() {
+        sessionStore = MemoryAuthStore()
+        MediaSession.initialize(sessionStore)
+        source = LibrarySourceStore(MemoryAuthStore())
+        calls = mutableListOf()
+        local = LocalLibraryStore(MemoryAuthStore())
+    }
+
+    @After fun tearDown() {
+        MediaSession.tokenFactory = { initial, client -> com.liskovsoft.youtubeapi.videoinfo.V2.AccountToken(initial, client) }
+        MediaSession.initialize(MemoryAuthStore())
+    }
+
+    private fun signIn() = MediaSession.completeSignIn(SignInClient("id", "secret", "device"),
+        AccessToken("access", "refresh", 4_000_000_000_000),
+        listOf(Account("owner", "Owner", "owner@example.com", "", selected = true, disabled = false, pageId = null)))
+
+    private fun repositories(): Triple<MediaLibraryRepository, MediaSaveRepository, MediaPlaylistRepository> {
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor(Recording(calls)).build()) { MediaSession.freshContext() }
+        val sourceOf: () -> LibrarySource = { source.current() }
+        return Triple(MediaLibraryRepository(client, local, sourceOf),
+            MediaSaveRepository(client, local, sourceOf), MediaPlaylistRepository(client, local, sourceOf))
+    }
+
+    private fun entry(id: String) = HistoryEntry(id, id, "Title $id", "Author", "channel", "art", "1:00", section = "Today")
+
+    @Test fun signedOutReadsAndWritesStayOnTheDevice() = runBlocking {
+        val (library, saves, _) = repositories()
+        local.record(entry("seed"))
+        val accountCalls = calls.size
+        assertEquals("On this device", library.you().account.name)
+        assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
+        library.playlists()
+        saves.choices("seed")
+        saves.saveWatchLater("seed")
+        saves.setContaining("local:watch-later", "seed", false)
+        saves.create("Mine", "", "seed")
+        library.removeFromHistory("seed")
+        library.setHistoryPaused(true)
+        library.setHistoryPaused(false)
+        library.clearHistory()
+        assertEquals("no server call may fire for a signed-out library", accountCalls, calls.size)
+    }
+
+    @Test fun signedInAccountSourceHitsTheServerAndLeavesTheDeviceAlone() = runBlocking {
+        signIn()
+        local.record(entry("seed"))
+        val (library, saves, playlist) = repositories()
+        val before = calls.size
+        assertEquals("Owner", library.you().account.name)
+        library.history()
+        library.playlists()
+        saves.choices("seed")
+        saves.saveWatchLater("srv-video")
+        assertTrue("account source must reach the server", calls.size > before)
+        assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") && it.contains("srv-video") })
+        // The device store neither answered nor changed.
+        assertEquals(listOf("seed"), local.history().entries.map { it.videoId })
+        assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
+        // "WL" resolves to the server list, not the device one (the parse shape is irrelevant here).
+        runCatching { playlist.playlist("WL") }
+        assertTrue(calls.last().contains("WL"))
+    }
+
+    @Test fun signedInDeviceSourceKeepsEveryCallLocal() = runBlocking {
+        signIn()
+        source.select(LibrarySource.Device)
+        local.record(entry("seed"))
+        val (library, saves, playlist) = repositories()
+        val before = calls.size
+        assertEquals("On this device", library.you().account.name)
+        assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
+        library.playlists()
+        saves.choices("seed")
+        saves.saveWatchLater("seed")
+        saves.create("Mine", "", "seed")
+        library.setHistoryPaused(true)
+        library.setHistoryPaused(false)
+        // The device Watch Later answers while signed in.
+        assertEquals("Watch later", playlist.playlist("WL")?.summary?.title)
+        assertEquals("no server call may fire under the device source", before, calls.size)
+        assertEquals(listOf("seed"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
+    }
+
+    @Test fun identityTransitionsKeepDeviceDataAndNeverWriteTheServer() = runBlocking {
+        val (library, saves, _) = repositories()
+        local.record(entry("seed"))
+        saves.saveWatchLater("seed")
+        val deviceBefore = local.history().entries.map { it.videoId } to
+            local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId }
+        val callsBefore = calls.size
+        signIn()
+        MediaSession.selectAccount("owner")
+        MediaSession.signOut()
+        assertEquals("transitions never write the server", callsBefore, calls.size)
+        assertEquals(deviceBefore, local.history().entries.map { it.videoId } to
+            local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
+        // After sign-out the same repository instance is back on the device store.
+        assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
+        assertEquals(callsBefore, calls.size)
+    }
+
+    @Test fun watchLaterIsADistinctListPerSource() = runBlocking {
+        signIn()
+        local.record(entry("local-one"))
+        val (_, saves, playlist) = repositories()
+        saves.saveWatchLater("srv-video")
+        assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") })
+        assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
+        source.select(LibrarySource.Device)
+        saves.saveWatchLater("local-one")
+        val callsAfterDeviceSave = calls.size
+        assertEquals(listOf("local-one"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
+        // Reading "WL" now answers the device list; the account list was a different call earlier.
+        assertEquals("Watch later", playlist.playlist("WL")?.summary?.title)
+        assertEquals(callsAfterDeviceSave, calls.size)
+    }
+    @Test fun devicePlaylistIdsCannotBeSentToTheAccount() = runBlocking {
+        signIn()
+        val (_, saves, _) = repositories()
+        val before = calls.size
+        val result = runCatching { saves.setContaining(LocalLibraryStore.WATCH_LATER, "seed", true) }
+        assertTrue(result.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertEquals(before, calls.size)
+    }
+
+    @Test fun accountPlaylistChoicesCannotMutateTheDevice() = runBlocking {
+        signIn()
+        val (_, saves, _) = repositories()
+        source.select(LibrarySource.Device)
+        val result = runCatching { saves.setContaining("server-playlist", "seed", true) }
+        assertTrue(result.exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertTrue(calls.isEmpty())
+    }
+
+    @Test fun queuedAccountWritesAreCancelledAfterSelectingDevice() = runBlocking {
+        signIn()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor(Recording(calls)).build()) {
+            entered.countDown()
+            check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            MediaSession.snapshot()
+        }
+        val saves = MediaSaveRepository(client, local) { source.current() }
+        val pending = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).let { scope ->
+            scope.async { runCatching { saves.saveWatchLater("server-video") } }
+        }
+        try {
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            source.select(LibrarySource.Device)
+        } finally { release.countDown() }
+        assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertTrue(calls.isEmpty())
+        assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
+    }
+
+}

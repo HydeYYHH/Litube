@@ -11,6 +11,8 @@ data class CommentThread(
     val authorChannelId: String = "",
     val ownedByViewer: Boolean = false,
     val replyKey: String? = null,
+    /** Continuation for the next replies page; null when the thread is fully read. */
+    val repliesNextCursor: String? = null,
     val repliesLoading: Boolean = false,
     val repliesFailed: Boolean = false,
 )
@@ -36,13 +38,22 @@ data class CommentsPage(
     val sortFallback: Boolean = false,
 )
 
+/** One replies page under a thread. */
+data class RepliesPage(val replies: List<CommentReply>, val nextCursor: String?)
+
 sealed interface CommentTarget {
     data class Video(val id: String) : CommentTarget
     data class Post(val identity: com.hhst.youtubelite.post.domain.PostIdentity) : CommentTarget
 }
 
 interface CommentsRepository {
-    suspend fun replies(target: CommentTarget, thread: CommentThread): List<CommentReply> = thread.replies
+    /**
+     * One replies page for [thread]; [cursor] is null for the first page, the
+     * thread's `repliesNextCursor` afterwards. The default serves the inline
+     * fixture replies once and never paginates.
+     */
+    suspend fun repliesPage(target: CommentTarget, thread: CommentThread, cursor: String?): RepliesPage =
+        RepliesPage(if (cursor == null) thread.replies else emptyList(), null)
     suspend fun comments(target: CommentTarget, sort: CommentSort, cursor: String?): CommentsPage
     suspend fun comments(videoId: String, sort: CommentSort, cursor: String?): CommentsPage =
         comments(CommentTarget.Video(videoId), sort, cursor)
@@ -158,6 +169,8 @@ sealed interface CommentAction {
     data object CloseMenu : CommentAction
     data class MenuAction(val action: CommentMenuAction) : CommentAction
     data class ToggleReplies(val commentId: String) : CommentAction
+    /** Fetch the next replies page for an expanded thread. */
+    data class LoadMoreReplies(val commentId: String) : CommentAction
     data object Compose : CommentAction
     data class DraftChanged(val text: String) : CommentAction
     data object SubmitDraft : CommentAction

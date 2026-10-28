@@ -1,11 +1,6 @@
 package com.hhst.youtubelite.player.surface
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -14,28 +9,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,10 +44,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
-import com.hhst.youtubelite.extractor.Chapter
-import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.PlayerUiState
-import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 /** What a Subtitles dropdown pick means. */
@@ -132,21 +115,6 @@ fun PlayerAnchorDropdown(
                 footer = OptionRow(SubtitlePick.Style, stringResource(R.string.subtitle_style)),
             )
         }
-        PlayerAnchorMenu.Segments -> {
-            val jumpedTemplate = stringResource(R.string.jumped_to_segment)
-            SegmentsDropdown(
-                chapters = state.chapters,
-                segments = state.sponsorSegments,
-                positionState = positionState,
-                fallbackThumb = state.videoId?.let { VideoId.thumbnailUrl(it) },
-                onSeek = { startMs, label ->
-                    callbacks.onSeek(startMs)
-                    callbacks.onHint(jumpedTemplate.format(label))
-                    onDismiss()
-                },
-                onDismiss = onDismiss,
-            )
-        }
         null -> Unit
     }
 }
@@ -201,157 +169,6 @@ private fun <T> OptionDropdown(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SegmentsDropdown(
-    chapters: List<Chapter>,
-    segments: List<SponsorBlockManager.Segment>,
-    positionState: State<Long>,
-    fallbackThumb: String?,
-    onSeek: (Long, String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var preview by remember { mutableStateOf<Chapter?>(null) }
-    // Only the current-chapter index depends on the ticking position; read
-    // it through derivedStateOf so the 4 Hz ticks recompose this menu only
-    // when the highlighted chapter actually changes.
-    val currentIndex by remember(chapters) {
-        derivedStateOf {
-            val positionMs = positionState.value
-            var idx = -1
-            chapters.forEachIndexed { i, ch ->
-                if (positionMs >= ch.startSeconds * 1000L) idx = i
-            }
-            idx
-        }
-    }
-    // Width must be measured on the same text the rows render (localized
-    // category labels can be wider than the raw key).
-    val labels = buildList {
-        if (chapters.isNotEmpty()) {
-            chapters.forEach {
-                add(it.title.ifBlank { stringResource(R.string.segments) } + "  " +
-                    PlayerUi.formatTime(it.startSeconds * 1000L))
-            }
-        } else if (segments.isNotEmpty()) {
-            segments.forEach {
-                add(stringResource(PlayerUi.segmentLabelRes(it.category)) + "  " +
-                    PlayerUi.formatTime(it.startMs))
-            }
-        } else {
-            add(stringResource(R.string.no_segments))
-        }
-    }
-    val menuWidth = popupMenuWidth(labels)
-    val previewChapter = preview
-    if (previewChapter != null) {
-        val startMs = previewChapter.startSeconds * 1000L
-        val title = previewChapter.title.ifBlank { stringResource(R.string.segments) }
-        SegmentPreviewDialog(
-            title = title,
-            timeLabel = PlayerUi.formatTime(startMs),
-            thumbnailUrl = previewChapter.previewUrl ?: fallbackThumb,
-            onJump = { onSeek(startMs, title) },
-            onDismiss = { preview = null },
-        )
-        return
-    }
-    LazyPopup(onDismiss = onDismiss, width = menuWidth) {
-        if (chapters.isNotEmpty()) {
-            itemsIndexed(chapters) { index, chapter ->
-                val startMs = chapter.startSeconds * 1000L
-                val title = chapter.title.ifBlank { stringResource(R.string.segments) }
-                val selected = index == currentIndex
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onClick = { onSeek(startMs, title) },
-                            onLongClick = { preview = chapter },
-                        )
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = title,
-                        modifier = Modifier
-                            .weight(1f)
-                            .basicMarquee(iterations = Int.MAX_VALUE),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        fontSize = SettingsTokens.BodySize.sp,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                    )
-                    Text(
-                        PlayerUi.formatTime(startMs),
-                        fontSize = SettingsTokens.DetailSize.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                if (index != chapters.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                }
-            }
-        } else if (segments.isNotEmpty()) {
-            itemsIndexed(segments) { index, segment ->
-                val label = stringResource(PlayerUi.segmentLabelRes(segment.category))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSeek(segment.startMs, label) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(PlayerUi.segmentColor(segment.category)),
-                    )
-                    Text(
-                        text = label,
-                        modifier = Modifier
-                            .weight(1f)
-                            .basicMarquee(iterations = Int.MAX_VALUE),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = SettingsTokens.BodySize.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                    )
-                    Text(
-                        PlayerUi.formatTime(segment.startMs),
-                        fontSize = SettingsTokens.DetailSize.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                if (index != segments.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                }
-            }
-        } else {
-            item {
-                Text(
-                    text = stringResource(R.string.no_segments),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = SettingsTokens.BodySize.sp,
-                    maxLines = 1,
                 )
             }
         }
@@ -481,39 +298,6 @@ private fun ListPopup(
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
                     .verticalScroll(rememberScrollState()),
-                content = content,
-            )
-        }
-    }
-}
-
-/** [ListPopup] for long lists (chapters): lazy rows under the same 70% cap. */
-@Composable
-private fun LazyPopup(
-    onDismiss: () -> Unit,
-    width: Dp,
-    content: LazyListScope.() -> Unit,
-) {
-    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.7f).dp
-    Popup(
-        popupPositionProvider = BelowAnchorPositionProvider,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(
-            focusable = true,
-            clippingEnabled = false,
-        ),
-    ) {
-        Surface(
-            modifier = Modifier.requiredWidth(width),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 0.dp,
-            shadowElevation = 4.dp,
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight),
                 content = content,
             )
         }

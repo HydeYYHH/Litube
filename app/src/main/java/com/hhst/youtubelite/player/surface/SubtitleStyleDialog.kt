@@ -27,12 +27,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import com.hhst.youtubelite.ui.components.YoutubeSlider as Slider
+import com.hhst.youtubelite.ui.components.AppSlider as Slider
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
+import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -65,7 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 /** Coalescing window for style pushes while the user drags a control. */
@@ -102,8 +102,8 @@ internal fun SubtitleStyleDialog(
         onDispose { onChange(draft) }
     }
     val sliderColors = SliderDefaults.colors(
-        thumbColor = YoutubeStyle.Action,
-        activeTrackColor = YoutubeStyle.Action,
+        thumbColor = AppStyle.Action,
+        activeTrackColor = AppStyle.Action,
         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
     )
     PlayerModalSheet(onDismiss = onDismiss, fullscreen = fullscreen) {

@@ -75,7 +75,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HistoryViewModel::class.java)
                 return HistoryViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(),
-                    if (fixtures) null else sources.saves) as T
+                    if (fixtures) null else sources.saves, if (fixtures) null else sources.librarySource) as T
             }
         })[HistoryViewModel::class.java]
         lifecycleScope.launch {
@@ -192,17 +192,17 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 )
             }
             if (state.overlay == LibraryOverlay.ManageHistory && state.confirmClear) {
-                com.hhst.youtubelite.ui.components.YoutubeAlertDialog(
+                com.hhst.youtubelite.ui.components.AppAlertDialog(
                     onDismissRequest = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
                     title = { androidx.compose.material3.Text("Clear watch history?") },
                     text = { androidx.compose.material3.Text("Your watch history will be cleared on this account. This can't be undone.") },
                     confirmButton = {
-                        com.hhst.youtubelite.ui.components.YoutubeTextButton(
+                        com.hhst.youtubelite.ui.components.AppTextButton(
                             onClick = { historyViewModel.onAction(LibraryAction.ConfirmClearHistory) },
                         ) { androidx.compose.material3.Text("Clear") }
                     },
                     dismissButton = {
-                        com.hhst.youtubelite.ui.components.YoutubeTextButton(
+                        com.hhst.youtubelite.ui.components.AppTextButton(
                             onClick = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
                         ) { androidx.compose.material3.Text("Cancel") }
                     },
@@ -228,8 +228,10 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
     companion object {
         const val EXTRA_SCENARIO = "history_scenario"
 
+        // The default scenario is never attached: parse(null) already yields Content,
+        // and a scenario extra would trip the fixture-scene heuristic on normal navigation.
         fun intent(context: Context, scenario: LibraryScenario? = null) =
             Intent(context, HistoryActivity::class.java)
-                .apply { if (scenario != null) putExtra(EXTRA_SCENARIO, scenario.argument) }
+                .apply { if (scenario != null && scenario != LibraryScenario.Content) putExtra(EXTRA_SCENARIO, scenario.argument) }
     }
 }

@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.player.surface
 
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -15,34 +14,33 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -62,10 +60,8 @@ import com.hhst.youtubelite.ui.YoutubeThumb
 internal fun QueueSheet(
     items: List<QueueItem>,
     currentId: String?,
-    enabled: Boolean,
     loopMode: LoopMode,
     onItem: (String) -> Unit,
-    onEnabled: (Boolean) -> Unit,
     onClear: () -> Unit,
     onRemove: (String) -> Unit,
     onLoop: () -> Unit,
@@ -74,97 +70,40 @@ internal fun QueueSheet(
     onDownloadAll: () -> Unit = {},
     onDownloadItem: (QueueItem) -> Unit = {},
 ) {
-    // Working copy: drag reorders locally and commits once per drop, so the
-    // persisted queue is not rewritten on every animation frame. pointerInput
-    // coroutines capture these once and never see a replacement, so the state
-    // object is created once and re-synced (not re-created) when items change,
-    // and the persisted list is read through rememberUpdatedState.
-    var localItems by remember { mutableStateOf(items) }
-    val persistedItems = rememberUpdatedState(items)
     var confirmClear by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    // While a row is under the finger, external queue updates (e.g. the
-    // playing item's metadata upsert) must not clobber the working copy.
-    // The drag start index is resolved live so the commit below can map the
-    // local reorder back onto the persisted list by id.
-    var dragInProgress by remember { mutableStateOf(false) }
-    var dragStartIndex by remember { mutableIntStateOf(-1) }
-    // Auto-scroll inputs fed by the dragged row: which item is under the
-    // drag, and the pointer's viewport-relative Y (NaN = not yet known).
-    var dragKeyId by remember { mutableStateOf<String?>(null) }
-    var dragPointerY by remember { mutableFloatStateOf(Float.NaN) }
+    val scope = rememberCoroutineScope()
+    val drag = remember(listState) { QueueDragState(listState, scope, items) }
+    val source = rememberUpdatedState(items)
+    val move = rememberUpdatedState(onMove)
     val density = LocalDensity.current
-    LaunchedEffect(items, dragInProgress) {
-        if (!dragInProgress) localItems = items
+    LaunchedEffect(items) { drag.synchronize(items) }
+    LaunchedEffect(items.isNotEmpty()) {
+        val index = items.indexOfFirst { it.videoId == currentId }
+        if (index >= 0) listState.scrollToItem(index)
     }
-    // Scroll the playing item near the top ONCE per sheet opening — re-running
-    // on every items emission would yank the list back after each drag commit.
-    LaunchedEffect(localItems.isNotEmpty()) {
-        if (localItems.isNotEmpty()) {
-            val idx = localItems.indexOfFirst { it.videoId == currentId }
-            if (idx >= 0) listState.scrollToItem(idx, 200)
-        }
-    }
-    // Edge auto-scroll: while the finger is pinned inside the top/bottom edge
-    // band, scroll the list every frame (speed ramps with edge proximity) and
-    // swap the dragged row with whichever row now sits under the pointer —
-    // the per-row delta accumulator only sees finger movement, so a queue
-    // taller than the viewport could otherwise never be reordered past it.
-    LaunchedEffect(dragInProgress) {
-        if (!dragInProgress) return@LaunchedEffect
-        val edgePx = with(density) { AUTO_SCROLL_EDGE_DP.dp.toPx() }
-        val maxSpeedPx = with(density) { AUTO_SCROLL_SPEED_DP.dp.toPx() }
+    LaunchedEffect(drag.draggingKey) {
+        if (drag.draggingKey == null) return@LaunchedEffect
+        val edge = with(density) { AUTO_SCROLL_EDGE_DP.dp.toPx() }
+        val speed = with(density) { AUTO_SCROLL_SPEED_DP.dp.toPx() }
         var lastFrame = 0L
-        while (dragInProgress) {
-            // Frame callback only computes (it cannot suspend); the actual
-            // scroll + swap run after it, against refreshed layout info.
-            var delta = 0f
-            withFrameNanos { now ->
-                if (lastFrame != 0L) {
-                    val dt = ((now - lastFrame) / 1_000_000_000f).coerceIn(0f, 0.1f)
-                    val y = dragPointerY
-                    if (!y.isNaN()) {
-                        val info = listState.layoutInfo
-                        val viewportStart = -info.beforeContentPadding.toFloat()
-                        val viewportEnd = info.viewportSize.height + info.afterContentPadding.toFloat()
-                        delta = when {
-                            y < viewportStart + edgePx ->
-                                -maxSpeedPx * ((viewportStart + edgePx - y) / edgePx).coerceIn(0f, 1f) * dt
-                            y > viewportEnd - edgePx ->
-                                maxSpeedPx * ((y - (viewportEnd - edgePx)) / edgePx).coerceIn(0f, 1f) * dt
-                            else -> 0f
-                        }
-                    }
-                }
-                lastFrame = now
-            }
-            if (delta != 0f) {
-                // dispatchRawDelta: non-suspend raw scroll on the list's own
-                // scrollable scope — per-frame nudges need no gesture framing.
-                listState.dispatchRawDelta(delta)
-                // While pinned at an edge the finger is stationary, so the
-                // per-row delta accumulator never fires: swap the dragged row
-                // with whichever row the scroll brought under the pointer.
+        while (drag.draggingKey != null) {
+            val now = withFrameNanos { it }
+            if (lastFrame != 0L) {
+                val dt = ((now - lastFrame) / 1_000_000_000f).coerceIn(0f, .05f)
                 val info = listState.layoutInfo
-                val y = dragPointerY
-                val underKey = if (y.isNaN()) {
-                    null
-                } else {
-                    info.visibleItemsInfo
-                        .firstOrNull { y >= it.offset && y < it.offset + it.size }
-                        ?.key as? String
+                val y = drag.pointerY
+                val fraction = when {
+                    y < info.viewportStartOffset + edge ->
+                        -((info.viewportStartOffset + edge - y) / edge).coerceIn(0f, 1f)
+                    y > info.viewportEndOffset - edge ->
+                        ((y - info.viewportEndOffset + edge) / edge).coerceIn(0f, 1f)
+                    else -> 0f
                 }
-                val dragKey = dragKeyId
-                if (underKey != null && dragKey != null && underKey != dragKey) {
-                    val from = localItems.indexOfFirst { it.videoId == dragKey }
-                    val to = localItems.indexOfFirst { it.videoId == underKey }
-                    if (from >= 0 && to >= 0 && from != to) {
-                        localItems = localItems.toMutableList().apply {
-                            add(to, removeAt(from))
-                        }
-                    }
-                }
+                if (fraction != 0f) listState.dispatchRawDelta(speed * fraction * dt)
             }
+            lastFrame = now
+            drag.reorderVisible()
         }
     }
 
@@ -226,17 +165,6 @@ internal fun QueueSheet(
                 modifier = Modifier.size(40.dp),
                 enabled = items.isNotEmpty(),
             )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = stringResource(R.string.queue_autoplay),
-                fontSize = SettingsTokens.BodySize.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 8.dp),
-            )
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabled,
-            )
         }
         if (confirmClear) {
             AlertDialog(
@@ -270,7 +198,7 @@ internal fun QueueSheet(
                 },
             )
         }
-        if (localItems.isEmpty()) {
+        if (drag.items.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -285,61 +213,42 @@ internal fun QueueSheet(
                 )
             }
         } else {
-            LazyColumn(state = listState, modifier = Modifier.weight(1f, fill = false)) {
-                itemsIndexed(localItems, key = { _, it -> it.videoId }) { index, item ->
-                    val current = item.videoId == currentId
-                    DraggableQueueRow(
+            LazyColumn(
+                state = listState,
+                userScrollEnabled = drag.draggingKey == null,
+                modifier = Modifier.weight(1f, fill = false).testTag("queue-list")
+                    .pointerInput(drag) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { drag.start(it.y) },
+                            onDragEnd = { drag.finish(source.value, false, move.value) },
+                            onDragCancel = { drag.finish(source.value, true, move.value) },
+                        ) { change, amount ->
+                            if (drag.draggingKey != null) {
+                                change.consume()
+                                drag.dragBy(amount.y)
+                            }
+                        }
+                    },
+            ) {
+                items(drag.items, key = { it.videoId }) { item ->
+                    val raised = drag.isRaised(item.videoId)
+                    val dragging = drag.draggingKey == item.videoId
+                    QueueRow(
                         item = item,
-                        current = current,
-                        listState = listState,
-                        onItem = { if (current) onClose() else onItem(item.url) },
-                        onRemove = { onRemove(item.videoId) },
-                        onDragStarted = {
-                            dragInProgress = true
-                            dragStartIndex = localItems.indexOfFirst { it.videoId == item.videoId }
-                            dragKeyId = item.videoId
-                            dragPointerY = Float.NaN
-                        },
-                        onDragPointer = { dragPointerY = it },
-                        onDrag = { delta ->
-                            // pointerInput does not restart on lambda captures,
-                            // so the closure may hold the pre-reorder index —
-                            // resolve the row's live position instead.
-                            val from = localItems.indexOfFirst { it.videoId == item.videoId }
-                            if (from < 0) return@DraggableQueueRow
-                            val target = (from + delta).coerceIn(0, localItems.lastIndex)
-                            if (target != from) {
-                                localItems = localItems.toMutableList().apply {
-                                    add(target, removeAt(from))
-                                }
-                            }
-                        },
-                        onDragEnd = {
-                            dragInProgress = false
-                            dragKeyId = null
-                            dragPointerY = Float.NaN
-                            val from = dragStartIndex
-                            val to = localItems.indexOfFirst { it.videoId == item.videoId }
-                            if (from < 0 || to < 0 || from == to) {
-                                // Nothing moved (or the row vanished): adopt the
-                                // persisted list to absorb any external change.
-                                localItems = persistedItems.value
-                                return@DraggableQueueRow
-                            }
-                            // Commit the local reorder, mapped by id onto the
-                            // persisted list: rows added/removed elsewhere shift
-                            // the target, but the dragged row's id is stable.
-                            val persisted = persistedItems.value
-                            val persistedFrom = persisted.indexOfFirst { it.videoId == item.videoId }
-                            if (persistedFrom >= 0) {
-                                val persistedTo = (persistedFrom + (to - from))
-                                    .coerceIn(0, persisted.lastIndex)
-                                if (persistedTo != persistedFrom) onMove(persistedFrom, persistedTo)
-                            }
-                            // Keep the local order on screen; the repository
-                            // re-emission (or the resync above) reconciles drift.
-                        },
-                        onDownload = { onDownloadItem(item) },
+                        current = item.videoId == currentId,
+                        dragging = dragging,
+                        modifier = Modifier
+                            .animateItem(
+                                fadeInSpec = null,
+                                fadeOutSpec = null,
+                                placementSpec = if (raised) null else spring(stiffness = 650f, dampingRatio = 1f),
+                            )
+                            .zIndex(if (raised) 1f else 0f)
+                            .graphicsLayer { translationY = drag.translation(item.videoId) }
+                            .testTag("queue-row-${item.videoId}"),
+                        onItem = { if (drag.canTap()) { if (item.videoId == currentId) onClose() else onItem(item.url) } },
+                        onRemove = { if (drag.canTap()) onRemove(item.videoId) },
+                        onDownload = { if (drag.canTap()) onDownloadItem(item) },
                     )
                 }
             }
@@ -347,81 +256,27 @@ internal fun QueueSheet(
     }
 }
 
-/**
- * Queue row with long-press drag reorder: the whole row
- * is the drag handle; a plain tap still plays.
- */
 @Composable
-private fun DraggableQueueRow(
+private fun QueueRow(
     item: QueueItem,
     current: Boolean,
-    listState: LazyListState,
+    dragging: Boolean,
+    modifier: Modifier,
     onItem: () -> Unit,
     onRemove: () -> Unit,
-    onDragStarted: () -> Unit,
-    onDragPointer: (Float) -> Unit,
-    onDrag: (Int) -> Unit,
-    onDragEnd: () -> Unit,
     onDownload: () -> Unit,
 ) {
-    var dragging by remember { mutableStateOf(false) }
-    var rowHeightPx by remember { mutableFloatStateOf(0f) }
-    // Per-event deltas are sub-row at normal speed; accumulate and consume
-    // only whole rows so slow drags still move.
-    var dragRemainderPx by remember { mutableFloatStateOf(0f) }
-    // A long press that ends without dragging must not play: the drag detector
-    // leaves the up unconsumed and the inner clickable sees a tap. Guard on
-    // drag-end recency instead of relying on consumption semantics.
-    var lastDragEndAt by remember { mutableLongStateOf(0L) }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
         val thumbnailWidth = (maxWidth * .24f).coerceIn(72.dp, 112.dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .onSizeChanged { rowHeightPx = it.height.toFloat().coerceAtLeast(1f) }
                 .background(when {
-                    dragging -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    dragging -> MaterialTheme.colorScheme.surfaceContainerHigh
                     current -> MaterialTheme.colorScheme.surfaceVariant
                     else -> Color.Transparent
                 })
-                .pointerInput(item.videoId) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            dragging = true
-                            dragRemainderPx = 0f
-                            onDragStarted()
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            lastDragEndAt = SystemClock.uptimeMillis()
-                            onDragEnd()
-                        },
-                        onDragCancel = {
-                            dragging = false
-                            lastDragEndAt = SystemClock.uptimeMillis()
-                            onDragEnd()
-                        },
-                    ) { change, amount ->
-                        change.consume()
-                        // Pointer Y in the list's item-offset space: the row's
-                        // viewport offset plus the local hit position. Feeds the
-                        // sheet's edge auto-scroll loop.
-                        val rowInfo = listState.layoutInfo.visibleItemsInfo
-                            .firstOrNull { it.key == item.videoId }
-                        onDragPointer(
-                            if (rowInfo != null) rowInfo.offset + change.position.y else Float.NaN,
-                        )
-                        dragRemainderPx += amount.y
-                        val rows = (dragRemainderPx / rowHeightPx).toInt()
-                        if (rows != 0) {
-                            dragRemainderPx -= rows * rowHeightPx
-                            onDrag(rows)
-                        }
-                    }
-                }
-                .clickable(onClick = {
-                    if (SystemClock.uptimeMillis() - lastDragEndAt >= GestureMath.TAP_SUPPRESS_MS) onItem()
-                })
+                .clickable(onClick = onItem)
                 .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),

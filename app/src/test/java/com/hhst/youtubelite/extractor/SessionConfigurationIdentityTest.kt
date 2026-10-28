@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
 import java.io.IOException
 import org.junit.Assert.*
 import org.junit.Test
@@ -30,8 +29,8 @@ class SessionConfigurationIdentityTest {
     }
 
     @Test fun videoAndLiveHintsDoNotChangeTheAccountConfiguration() {
-        val first = JsonObject(mapOf("VISITOR_DATA" to "visitor", "_VIDEO_ID" to "first", "_IS_LIVE" to true))
-        val second = JsonObject(mapOf("VISITOR_DATA" to "visitor", "_VIDEO_ID" to "second", "_IS_LIVE" to false))
+        val first = jsonObjectOf("VISITOR_DATA" to "visitor", "_VIDEO_ID" to "first", "_IS_LIVE" to true)
+        val second = jsonObjectOf("VISITOR_DATA" to "visitor", "_VIDEO_ID" to "second", "_IS_LIVE" to false)
         assertEquals(YoutubeSessionProvider.configurationIdentity(first), YoutubeSessionProvider.configurationIdentity(second))
     }
 
@@ -59,12 +58,13 @@ class SessionConfigurationIdentityTest {
     }
 
     @Test fun identityAndExperimentChangesInvalidateTheSharedConfiguration() {
-        val initial = JsonObject(mapOf("VISITOR_DATA" to "visitor", "LOGGED_IN" to true))
+        val initial = jsonObjectOf("VISITOR_DATA" to "visitor", "LOGGED_IN" to true)
         for ((field, value) in mapOf("VISITOR_DATA" to "different", "SESSION_INDEX" to 1,
             "DATASYNC_ID" to "another-account", "LOGGED_IN" to false, "DELEGATED_SESSION_ID" to "another-channel",
             "PLAYER_JS_URL" to "another-player",
-            "EXPERIMENT_FLAGS" to JsonObject(mapOf("tokenBinding" to true)))) {
-            val changed = JsonObject(initial).apply { put(field, value) }
+            "EXPERIMENT_FLAGS" to jsonObjectOf("tokenBinding" to true))) {
+            val changed = initial.deepCopy()
+            changed.add(field, jsonObjectOf(field to value).get(field))
             assertNotEquals(field, YoutubeSessionProvider.configurationIdentity(initial), YoutubeSessionProvider.configurationIdentity(changed))
         }
     }

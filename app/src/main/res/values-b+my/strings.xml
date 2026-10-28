@@ -65,6 +65,10 @@
     <string name="queue_remove">တန်းစီခြင်းမှ ဖယ်ရှားပါ။</string>
     <string name="application_not_found">အပလီကေးရှင်းကို ရှာမတွေ့ပါ။</string>
     <string name="segments">အပိုင်းများ</string>
+    <string name="chapters">အခန်းများ</string>
+    <string name="no_chapters">အခန်းများ မရှိပါ</string>
+    <string name="skippable_segments">ကျော်ဖြတ်နိုင်သော အပိုင်းများ</string>
+    <string name="show_more_replies">နောက်ထပ် အဖြေများကို ပြပါ</string>
     <string name="no_segments">ကျော်နိုင်သော အပိုင်းများ မရှိပါ။</string>
     <string name="subtitles">စာတန်းများ</string>
     <string name="playback_end_next">နောက်တစ်ခု ကစားပါ။</string>

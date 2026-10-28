@@ -14,26 +14,35 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.editPlaylist
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadPlaylistChoices
 import com.liskovsoft.youtubeapi.videoinfo.V2.savePlaylist
 
-class MediaSaveRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : SaveRepository {
-    override suspend fun choices(videoId: String): List<SaveChoice> = if (!MediaSession.signedIn() && local != null)
-        device { it.choices(videoId) } else try {
-        client.read { context, http ->
-            if (!context.signedIn) throw SignInRequiredException()
-            loadPlaylistChoices(videoId, context, http).requireValue()
-                .map { SaveChoice(it.id, it.title.orEmpty().ifBlank { it.id }, it.contains) }
+class MediaSaveRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
+    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : SaveRepository {
+    private fun operation() = LibraryOperation(local, source)
+    override suspend fun choices(videoId: String): List<SaveChoice> {
+        val operation = operation()
+        if (operation.device) return device(operation) { it.choices(videoId) }
+        return try {
+            client.read { context, http ->
+                operation.check()
+                if (!context.signedIn) throw SignInRequiredException()
+                loadPlaylistChoices(videoId, context, operation.transport(http)).requireValue()
+                    .map { SaveChoice(it.id, it.title.orEmpty().ifBlank { it.id }, it.contains) }
+                    .also { operation.check() }
+            }
+        } catch (error: MediaException) {
+            if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()
+            throw error
         }
-    } catch (error: MediaException) {
-        if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()
-        throw error
     }
 
     override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {
-        if (!MediaSession.signedIn() && local != null) {
-            val generation = MediaSession.snapshot().generation
+        val operation = operation()
+        if (playlistId.startsWith("local:") != operation.device)
+            throw kotlinx.coroutines.CancellationException("Playlist source changed")
+        if (operation.device) {
             val video = localVideo(videoId)
-            return device(generation) { it.setContaining(playlistId, video, contains) }
+            return device(operation) { it.setContaining(playlistId, video, contains) }
         }
-        write { context, http ->
+        write(operation) { context, http ->
             editPlaylist(playlistId,
                 listOf(if (contains) PlaylistChange.Add(videoId) else PlaylistChange.RemoveByVideoId(videoId)),
                 context, http).requireValue().action
@@ -41,22 +50,28 @@ class MediaSaveRepository(private val client: MediaClient, private val local: Lo
     }
 
     override suspend fun saveWatchLater(videoId: String) {
-        if (!MediaSession.signedIn() && local != null) return setContaining(LocalLibraryStore.WATCH_LATER, videoId, true)
-        write { context, http -> editPlaylist("WL", listOf(PlaylistChange.Add(videoId)), context, http).requireValue().action }
+        val operation = operation()
+        if (operation.device) {
+            val video = localVideo(videoId)
+            return device(operation) { it.setContaining(LocalLibraryStore.WATCH_LATER, video, true) }
+        }
+        write(operation) { context, http -> editPlaylist("WL", listOf(PlaylistChange.Add(videoId)), context, http).requireValue().action }
     }
 
     override suspend fun savePlaylistToLibrary(playlistId: String) {
-        write { context, http -> savePlaylist(playlistId, true, context, http).requireValue().action }
+        val operation = operation()
+        if (operation.device) throw UnsupportedOperationException("Account library required")
+        write(operation) { context, http -> savePlaylist(playlistId, true, context, http).requireValue().action }
     }
 
     override suspend fun create(title: String, description: String, videoId: String): SaveChoice {
-        if (!MediaSession.signedIn() && local != null) {
-            val generation = MediaSession.snapshot().generation
+        val operation = operation()
+        if (operation.device) {
             val video = localVideo(videoId)
-            return device(generation) { it.create(title, description, video) }
+            return device(operation) { it.create(title, description, video) }
         }
         var created: SaveChoice? = null
-        write { context, http ->
+        write(operation) { context, http ->
             val reply = createPlaylist(title, videoId, context, description.ifBlank { null }, http).requireValue()
             val id = reply.playlistId ?: throw UnconfirmedActionException()
             created = SaveChoice(id, title, contains = true)
@@ -65,9 +80,9 @@ class MediaSaveRepository(private val client: MediaClient, private val local: Lo
         return created!!
     }
 
-    private suspend fun <T> device(generation: Long = MediaSession.snapshot().generation, block: (LocalLibraryStore) -> T): T =
+    private suspend fun <T> device(operation: LibraryOperation, block: (LocalLibraryStore) -> T): T =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            MediaSession.withAnonymousSession(generation) { block(requireNotNull(local)) }
+            operation.local { block(requireNotNull(local)) }
         }
 
     private suspend fun localVideo(id: String): com.hhst.youtubelite.library.domain.HistoryEntry {
@@ -82,11 +97,12 @@ class MediaSaveRepository(private val client: MediaClient, private val local: Lo
         }
     }
 
-    private suspend fun write(block: (RequestContext, HttpClient) -> ActionReply) {
+    private suspend fun write(operation: LibraryOperation, block: (RequestContext, HttpClient) -> ActionReply) {
         try {
             client.read { context, http ->
+                operation.check()
                 if (!context.signedIn) throw SignInRequiredException()
-                if (!block(context, http).confirmed) throw UnconfirmedActionException()
+                if (!block(context, operation.transport(http)).confirmed) throw UnconfirmedActionException()
             }
         } catch (error: MediaException) {
             if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()

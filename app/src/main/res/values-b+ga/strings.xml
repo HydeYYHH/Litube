@@ -65,6 +65,10 @@
     <string name="queue_remove">Bain den scuaine</string>
     <string name="application_not_found">Ní bhfuarthas an t-iarratas</string>
     <string name="segments">Deighleoga</string>
+    <string name="chapters">Caibidlí</string>
+    <string name="no_chapters">Gan chaibidlí</string>
+    <string name="skippable_segments">Míreanna inscipeála</string>
+    <string name="show_more_replies">Taispeáin tuilleadh freagraí</string>
     <string name="no_segments">Níl aon mhíreanna inscipeála</string>
     <string name="subtitles">Fotheidil</string>
     <string name="playback_end_next">Seinn an chéad cheann eile</string>

@@ -65,6 +65,10 @@
     <string name="queue_remove">له کتار څخه لرې کړئ</string>
     <string name="application_not_found">غوښتنلیک ونه موندل شو</string>
     <string name="segments">برخې</string>
+    <string name="chapters">فصلونه</string>
+    <string name="no_chapters">فصلونه نشته</string>
+    <string name="skippable_segments">پریږدونکي برخې</string>
+    <string name="show_more_replies">نور ځوابونه ښکاره کړئ</string>
     <string name="no_segments">د پریښودو وړ برخې نشته</string>
     <string name="subtitles">فرعي سرلیکونه</string>
     <string name="playback_end_next">بل لوبه وکړئ</string>

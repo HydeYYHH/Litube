@@ -65,6 +65,10 @@
     <string name="queue_remove">Kendu ilaratik</string>
     <string name="application_not_found">Ez da aplikazioa aurkitu</string>
     <string name="segments">Segmentuak</string>
+    <string name="chapters">Kapituluak</string>
+    <string name="no_chapters">Ez dago kapitulurik</string>
+    <string name="skippable_segments">Saltatzeko segmentuak</string>
+    <string name="show_more_replies">Erakutsi erantzun gehiago</string>
     <string name="no_segments">Ez dago salta daitekeen segmenturik</string>
     <string name="subtitles">Azpitituluak</string>
     <string name="playback_end_next">Jokatu hurrengoa</string>

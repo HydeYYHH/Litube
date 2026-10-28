@@ -65,6 +65,10 @@
     <string name="queue_remove">Հեռացնել հերթից</string>
     <string name="application_not_found">Հավելվածը չի գտնվել</string>
     <string name="segments">Սեգմենտներ</string>
+    <string name="chapters">Գլուխներ</string>
+    <string name="no_chapters">Գլուխներ չկան</string>
+    <string name="skippable_segments">Բաց թողնվող հատվածներ</string>
+    <string name="show_more_replies">Ցույց տալ ավելի շատ պատասխաններ</string>
     <string name="no_segments">Բաց թողնելով հատվածներ չկան</string>
     <string name="subtitles">Ենթագրեր</string>
     <string name="playback_end_next">Խաղացեք հաջորդը</string>

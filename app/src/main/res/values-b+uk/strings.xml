@@ -65,6 +65,10 @@
     <string name="queue_remove">Видалити з черги</string>
     <string name="application_not_found">Програму не знайдено</string>
     <string name="segments">Сегменти</string>
+    <string name="chapters">Розділи</string>
+    <string name="no_chapters">Немає розділів</string>
+    <string name="skippable_segments">Сегменти, які можна пропустити</string>
+    <string name="show_more_replies">Показати більше відповідей</string>
     <string name="no_segments">Немає сегментів, які можна пропустити</string>
     <string name="subtitles">Субтитри</string>
     <string name="playback_end_next">Грати далі</string>

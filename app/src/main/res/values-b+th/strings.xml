@@ -65,6 +65,10 @@
     <string name="queue_remove">ลบออกจากคิว</string>
     <string name="application_not_found">ไม่พบแอปพลิเคชัน</string>
     <string name="segments">เซ็กเมนต์</string>
+    <string name="chapters">ตอน</string>
+    <string name="no_chapters">ไม่มีตอน</string>
+    <string name="skippable_segments">ส่วนที่ข้ามได้</string>
+    <string name="show_more_replies">แสดงการตอบกลับเพิ่มเติม</string>
     <string name="no_segments">ไม่มีส่วนที่ข้ามได้</string>
     <string name="subtitles">คำบรรยาย</string>
     <string name="playback_end_next">เล่นถัดไป</string>

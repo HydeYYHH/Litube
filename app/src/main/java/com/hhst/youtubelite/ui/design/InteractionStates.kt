@@ -40,7 +40,7 @@ fun Modifier.appStateLayer(
             focused -> focusedColor ?: palette.stateLayer
             else -> Color.Transparent
         },
-        animationSpec = tween(if (pressed) 0 else scaledMotion(120, LocalMotionScale.current)), label = "state-layer",
+        animationSpec = tween(if (pressed) 0 else motionDuration(120, LocalMotionScale.current)), label = "state-layer",
     )
     drawBehind {
         if (color != Color.Transparent) {

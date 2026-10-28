@@ -16,6 +16,7 @@ object PreferenceKeys {
     const val ENABLE_BACKGROUND_PLAY = "enable_background_play"
     const val ENABLE_PIP = "enable_pip"
     const val ENABLE_IN_APP_MINI_PLAYER = "enable_in_app_mini_player"
+    const val DATA_SAVER = "data_saver"
 
     const val SKIP_SPONSORS = "skip_sponsors"
     const val SKIP_SELF_PROMO = "skip_self_promo"
@@ -27,6 +28,9 @@ object PreferenceKeys {
     const val SKIP_FILLER = "skip_filler"
     const val SKIP_POI_HIGHLIGHT = "skip_poi_highlight"
     const val SPONSOR_COUNTDOWN = "sponsor_countdown"
+
+    const val DEARROW_TITLES = "dearrow_titles"
+    const val DEARROW_THUMBNAILS = "dearrow_thumbnails"
 
     const val ENABLE_SHOW_LIKES = "enable_show_likes"
 
@@ -80,12 +84,15 @@ object PreferenceKeys {
         SKIP_FILLER to true,
         SKIP_POI_HIGHLIGHT to true,
         SPONSOR_COUNTDOWN to true,
+        DEARROW_TITLES to false,
+        DEARROW_THUMBNAILS to false,
         REMEMBER_LAST_POSITION to true,
         REMEMBER_QUALITY to true,
         ENABLE_BACKGROUND_PLAY to true,
         ENABLE_AUTOPLAY to true,
         ENABLE_PIP to true,
         ENABLE_IN_APP_MINI_PLAYER to true,
+        DATA_SAVER to false,
         REMEMBER_RESIZE_MODE to false,
         REMEMBER_PLAYBACK_SPEED to false,
         USE_ORIGINAL_TITLE to false,

@@ -65,6 +65,10 @@
     <string name="queue_remove">대기열에서 삭제</string>
     <string name="application_not_found">앱을 찾을 수 없습니다</string>
     <string name="segments">구간</string>
+    <string name="chapters">챕터</string>
+    <string name="no_chapters">챕터 없음</string>
+    <string name="skippable_segments">건너뛸 수 있는 세그먼트</string>
+    <string name="show_more_replies">답글 더보기</string>
     <string name="no_segments">건너뛸 구간이 없습니다</string>
     <string name="subtitles">자막</string>
     <string name="playback_end_next">다음 동영상 재생</string>

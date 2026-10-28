@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import java.util.Collections
 import org.junit.Assert.*
 import org.junit.Test

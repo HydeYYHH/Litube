@@ -49,6 +49,10 @@ import com.hhst.youtubelite.subscriptions.domain.*
 import com.hhst.youtubelite.ui.components.MainTab
 import com.hhst.youtubelite.ui.components.MainNavigationBar
 import com.hhst.youtubelite.ui.design.*
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 /** The subscriptions page: chip strip, feed grid and the channels overlay. */
 @Composable
@@ -90,7 +94,7 @@ private fun SubscriptionsTopBar(width: Float, onAction: (SubscriptionsAction) ->
         }
         AppText("Subscriptions", Modifier.weight(1f).testTag("subscriptions-title"), size = 20, line = 28,
             weight = FontWeight.Bold, maxLines = 1)
-        AppIconButton(AppIcon.Search, "Search YouTube") { onAction(SubscriptionsAction.OpenSearch) }
+        AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(SubscriptionsAction.OpenSearch) }
     }
 }
 
@@ -132,7 +136,7 @@ private fun ChannelAvatarStrip(channels: List<SubscribedChannel>, onAction: (Sub
             }
         }
         item(key = "all-channels") {
-            AppIconButton(AppIcon.ChannelGrid, "All channels",
+            AppIconButton(AppIcon.ChannelGrid, stringResource(R.string.a11y_all_channels),
                 modifier = Modifier.testTag("subscriptions-manage"), diameter = 40.dp) {
                 onAction(SubscriptionsAction.ShowChannels)
             }
@@ -233,8 +237,8 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
     Column(Modifier.testTag("subs-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
             .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }
-            .semantics { contentDescription = "${item.title}, ${item.duration}" }) {
-            SubscriptionsArtwork(item.artwork, Modifier.fillMaxSize())
+            .appDescription(R.string.a11y_title_duration, item.title, item.duration)) {
+            VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
                 .background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -245,18 +249,18 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
             Row(Modifier.padding(start = 12.dp, top = 8.dp, end = 0.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(40.dp).clip(CircleShape).clickable(role = Role.Button) {
                     onAction(SubscriptionsAction.OpenChannel(item.channelId))
-                }.testTag("subs-channel-${item.channelId}").semantics { contentDescription = "Go to channel ${item.author}" }) {
-                    SubscriptionsArtwork(item.artwork, Modifier.fillMaxSize())
+                }.testTag("subs-channel-${item.channelId}").appDescription(R.string.a11y_go_to_channel, item.author)) {
+                    VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f)) {
                     Column(Modifier.padding(end = 48.dp)
                         .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
-                        AppText(item.title, size = 14, exactLineHeight = 17.5.sp, weight = FontWeight.Medium, maxLines = 2)
+                        AppText(rememberDeArrowTitle(item.id, item.title), size = 14, exactLineHeight = 17.5.sp, weight = FontWeight.Medium, maxLines = 2)
                         AppText("${item.author} • ${item.metadata}", Modifier.padding(top = 3.dp),
                             size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
                     }
-                    AppIconButton(AppIcon.More, "More actions for ${item.title}",
+                    AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
                         modifier = Modifier.align(Alignment.TopEnd), diameter = 48.dp) {
                         onAction(SubscriptionsAction.OpenMenu(item.id))
                     }
@@ -266,17 +270,17 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
             Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) {
                     onAction(SubscriptionsAction.OpenChannel(item.channelId))
-                }.testTag("subs-channel-${item.channelId}").semantics { contentDescription = "Go to channel ${item.author}" }) {
-                    SubscriptionsArtwork(item.artwork, Modifier.fillMaxSize())
+                }.testTag("subs-channel-${item.channelId}").appDescription(R.string.a11y_go_to_channel, item.author)) {
+                    VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
                     Column(Modifier.mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
-                        AppText(item.title, Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
+                        AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
                         AppText("${item.author} · ${item.metadata}", Modifier.padding(top = 2.dp), size = 12, line = 18,
                             color = DesignTokens.Secondary, maxLines = 1)
                     }
-                    AppIconButton(AppIcon.More, "More actions for ${item.title}",
+                    AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
                         modifier = Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-6).dp),
                         diameter = 40.dp) { onAction(SubscriptionsAction.OpenMenu(item.id)) }
                 }
@@ -300,7 +304,7 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, onAction: (Subscrip
     Box(Modifier.fillMaxSize().background(DesignTokens.Background).testTag("channels-overlay")) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onAction(SubscriptionsAction.CloseChannels) }
+                AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onAction(SubscriptionsAction.CloseChannels) }
                 AppText("All subscriptions", Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.weight(1f))
             }

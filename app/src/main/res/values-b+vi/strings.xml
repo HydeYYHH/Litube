@@ -65,6 +65,10 @@
     <string name="queue_remove">Xóa khỏi hàng đợi</string>
     <string name="application_not_found">Không tìm thấy ứng dụng</string>
     <string name="segments">Phân đoạn</string>
+    <string name="chapters">Chương</string>
+    <string name="no_chapters">Không có chương</string>
+    <string name="skippable_segments">Phân đoạn có thể bỏ qua</string>
+    <string name="show_more_replies">Hiển thị thêm câu trả lời</string>
     <string name="no_segments">Không có phân đoạn nào có thể bỏ qua</string>
     <string name="subtitles">Phụ đề</string>
     <string name="playback_end_next">Chơi tiếp</string>

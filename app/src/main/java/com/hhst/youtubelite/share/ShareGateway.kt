@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
 import android.content.Context
+import com.hhst.youtubelite.R
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -79,7 +80,7 @@ class ShareGateway(
             return false
         }
         lastCopiedUrl = url
-        Toast.makeText(activity, "Link copied", Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, R.string.link_copied, Toast.LENGTH_SHORT).show()
         return true
     }
 }

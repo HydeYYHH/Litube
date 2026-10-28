@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +33,9 @@ import com.hhst.youtubelite.home.presentation.PillButton
 import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 /** Shared rendering for the library feature (You page, history and playlists). */
 
@@ -64,7 +68,7 @@ internal fun LibraryMessageCard(title: String, message: String, tag: String, act
 
 @Composable
 internal fun LibrarySkeleton(tag: String) {
-    Column(Modifier.fillMaxSize().testTag(tag).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxSize().testTag(tag).clearAndSetSemantics {}.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).background(DesignTokens.Ghost, CircleShape))
             Spacer(Modifier.width(12.dp))
@@ -110,7 +114,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
             .clip(RoundedCornerShape(8.dp))
             .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)
             .semanticsLabel("${entry.title}, ${entry.duration}")) {
-            LibraryArtwork(entry.artwork, Modifier.fillMaxSize())
+            VideoArtwork(entry.videoId, entry.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(5.dp)
                 .background(if (entry.duration == "LIVE") DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -120,13 +124,13 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Column(Modifier.padding(start = 8.dp, end = 48.dp)
                 .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)) {
-                AppText(entry.title, size = 14, exactLineHeight = 17.5.sp, maxLines = if (compact) 3 else 1)
+                AppText(rememberDeArrowTitle(entry.videoId, entry.title), size = 14, exactLineHeight = 17.5.sp, maxLines = if (compact) 3 else 1)
                 AppText(entry.author, size = 12, line = 15, color = DesignTokens.Secondary, maxLines = 1)
                 if (entry.views.isNotEmpty()) {
                     AppText(entry.views, size = 12, line = 15, color = DesignTokens.Secondary, maxLines = 1)
                 }
             }
-            AppIconButton(AppIcon.More, "More actions for ${entry.title}",
+            AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, entry.title),
                 modifier = Modifier.align(Alignment.TopEnd), diameter = 48.dp) { onMenu() }
         }
     }
@@ -167,14 +171,14 @@ internal fun HistoryShelf(entries: List<HistoryEntry>, onOpen: (String) -> Unit)
             Column(Modifier.width(175.dp).testTag("library-history-${entry.id}")
                 .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork)) { onOpen(entry.videoId) }) {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp))) {
-                    LibraryArtwork(entry.artwork, Modifier.fillMaxSize())
+                    VideoArtwork(entry.videoId, entry.artwork, Modifier.fillMaxSize())
                     entry.progress?.let { progress ->
                         Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.5f))) {
                             Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f)).background(DesignTokens.Red))
                         }
                     }
                 }
-                AppText(entry.title, Modifier.padding(top = 6.dp), size = 14, line = 20, maxLines = 2)
+                AppText(rememberDeArrowTitle(entry.videoId, entry.title), Modifier.padding(top = 6.dp), size = 14, line = 20, maxLines = 2)
             }
         }
     }

@@ -25,7 +25,7 @@ interface PlaybackHost {
     fun scopeHint(): String
     fun recoveryScope(): String
     /** Feedback is accepted only when the failed request has an exact, current client plan. */
-    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext?): StreamClient? = null
+    fun noteMediaRejected(videoId: String, url: String, reason: MediaRejection, diagnosticContext: DiagnosticContext?): StreamClient? = null
     /** Compiles the solver ahead of playback using an already captured configuration. */
     fun initialize(): Boolean = false
     fun extractionDiagnostics(): String = ""
@@ -52,8 +52,8 @@ class Extractor(
     fun installBrowserCapture(view: WebView, generation: () -> Long) = host?.installBrowserCapture(view, generation)
     /** Blocking; compiles the solver and opens connections for an already configured session. */
     fun initialize(): Boolean = host?.initialize() ?: false
-    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): StreamClient? =
-        host?.noteMediaForbidden(videoId, url, diagnosticContext)
+    fun noteMediaRejected(videoId: String, url: String, reason: MediaRejection, diagnosticContext: DiagnosticContext? = null): StreamClient? =
+        host?.noteMediaRejected(videoId, url, reason, diagnosticContext)
     fun extractionDiagnostics(): String = host?.extractionDiagnostics().orEmpty()
     fun recoveryScope(): String = host?.recoveryScope().orEmpty()
 
@@ -66,13 +66,28 @@ class Extractor(
         synchronized(selectionLock) {
             val slot = startExtraction(urlOrId, false, demand, true)
             if (selectedPreparation !== slot) selectedPreparation?.cancelPreparation()
+            slot.selectPreparation()
             selectedPreparation = slot
+        }
+    }
+
+    class Prefetch internal constructor(val extraction: Extraction, private val release: () -> Unit) {
+        private val closed = AtomicBoolean(false)
+        fun cancel() { if (closed.compareAndSet(false, true)) release() }
+    }
+
+    fun prefetch(urlOrId: String, demand: PlaybackDemand?): Prefetch = synchronized(selectionLock) {
+        val slot = startExtraction(urlOrId, false, demand, true, playbackPriority = false)
+        slot.retainPrefetch()
+        Prefetch(slot.extraction) {
+            synchronized(selectionLock) { slot.releasePrefetch() }
         }
     }
 
     private fun startExtraction(urlOrId: String, catalog: Boolean,
                                 demand: PlaybackDemand?,
-                                preparation: Boolean, diagnosticContext: DiagnosticContext? = null): Inflight {
+                                preparation: Boolean, diagnosticContext: DiagnosticContext? = null,
+                                playbackPriority: Boolean = !catalog): Inflight {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val (slot, created) = streamEpochs.withLock(id) {
@@ -85,7 +100,8 @@ class Extractor(
                 existing to false
             } else {
                 val createdSlot = Inflight.create(id, cache, scope, streamEpochs, host,
-                    catalog = catalog, demand = demand, preparation = preparation, diagnosticContext = diagnosticContext)
+                    catalog = catalog, demand = demand, preparation = preparation,
+                    playbackPriority = playbackPriority, diagnosticContext = diagnosticContext)
                 inFlight[key] = createdSlot
                 createdSlot to true
             }
@@ -183,19 +199,31 @@ private class Inflight(
     val epoch: Long,
     val extraction: Extraction,
     val active: AtomicBoolean,
-    private var preparation: Boolean,
+    @Volatile private var preparation: Boolean,
     private val catalog: Boolean,
     private val demandKey: String,
     private val sessionCurrent: () -> Boolean,
     private val diagnosticContext: DiagnosticContext,
 ) {
+    private var prefetchUsers = 0
+    private var selected = false
     fun logJoin(waiter: DiagnosticContext?) {
         if (waiter != null && waiter.traceId != diagnosticContext.traceId) AppLog.detail(AppLog.Category.EXTRACTOR,
             "shared_operation_joined", mapOf("worker_trace_id" to diagnosticContext.traceId,
                 "worker_operation_id" to diagnosticContext.operationId, "preparation" to preparation), waiter)
     }
     fun claim() { preparation = false }
-    fun cancelPreparation() { if (preparation) active.set(false) }
+    fun selectPreparation() { selected = true }
+    fun retainPrefetch() { prefetchUsers++ }
+    fun releasePrefetch() {
+        prefetchUsers--
+        cancelIfUnused()
+    }
+    fun cancelPreparation() {
+        selected = false
+        cancelIfUnused()
+    }
+    private fun cancelIfUnused() { if (preparation && !selected && prefetchUsers == 0) active.set(false) }
     fun matches(id: String, catalog: Boolean, demandKey: String): Boolean =
         this.id == id && this.catalog == catalog && this.demandKey == demandKey &&
             active.get() && !extraction.stream.done && sessionCurrent()

@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.engine
 
 import com.hhst.youtubelite.player.datasource.PlaybackRecovery
+import com.hhst.youtubelite.extractor.MediaRejection
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.EOFException
@@ -12,6 +13,15 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 class PlaybackRecoveryTest {
+    @Test fun errorBodiesDoNotRemainUnclassifiedIoFailures() {
+        val reason = PlaybackRecovery.classify(IOException("load", IOException("MEDIA_ERROR_BODY")))
+        assertNotNull("A media endpoint returned a document, so the source must be replaced", reason)
+        assertFalse(requireNotNull(reason).needsLightRefresh)
+        assertEquals(PlaybackRecovery.Reason.INVALID_MEDIA_RESPONSE, reason)
+        assertEquals(MediaRejection.INVALID_BODY, reason.rejection)
+        assertEquals(reason, reason.afterLightBudget())
+    }
+
     @Test fun localSessionFenceIsNeverConvertedToAServer403() {
         val cause = IOException("MEDIA_SESSION_CHANGED")
         val error = IllegalStateException("wrapper", IOException("load wrapper", cause))

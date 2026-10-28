@@ -107,10 +107,22 @@ class AboutActivity : ComponentActivity() {
                     // clearCache removes HTTP cache only; cookies and WebStorage keep the account.
                     WebView(this@AboutActivity).let { it.clearCache(true); it.destroy() }
                     withContext(Dispatchers.IO) {
+                        val repositories = get<com.hhst.youtubelite.data.media.ContentRepositories>(
+                            com.hhst.youtubelite.data.media.ContentRepositories::class.java)
+                        // Cache owners, cleared individually. The playback SimpleCache,
+                        // downloads, local library, account and queue data are deliberately
+                        // not touched: SimpleCache may be in use and the rest is user data.
+                        com.hhst.youtubelite.core.YoutubeThumbnail.clearMemory()
+                        get<com.hhst.youtubelite.dearrow.DeArrowService>(com.hhst.youtubelite.dearrow.DeArrowService::class.java).clear()
+                        repositories.avatars.clear()
+                        repositories.watch.clearMemory()
+                        repositories.snapshots?.clear()
                         get<MemCache>(MemCache::class.java).clear()
                         val kv = get<MMKV>(MMKV::class.java)
                         kv.allKeys()?.filter { it.startsWith("extractor:metadata:") || it.startsWith("extractor:stream:") || it.startsWith("extractor:segment:") }?.forEach(kv::removeValueForKey)
                         listOf("gallery", "thumbnails").forEach { File(cacheDir, it).deleteRecursively() }
+                        AppLog.event(AppLog.Category.STORAGE, "cache_cleared", mapOf(
+                            "owners" to "image_memory,display_decoration,avatar_directory,page_snapshots,mem_cache,watch_cache,gallery_files"))
                     }
                     getString(R.string.about_cache_cleared)
                 } },

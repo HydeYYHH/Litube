@@ -198,4 +198,18 @@ class PlayerUiTest {
         assertEquals("", PlayerUi.languageLabel(""))
         assertTrue(PlayerUi.languageLabel("en").isNotBlank())
     }
+
+    @Test
+    fun chapterIndexAt_positionBeforeFirstIsNegative() {
+        val chapters = listOf(
+            com.hhst.youtubelite.extractor.Chapter("Intro", 0),
+            com.hhst.youtubelite.extractor.Chapter("Middle", 60),
+            com.hhst.youtubelite.extractor.Chapter("End", 120),
+        )
+        assertEquals(0, PlayerUi.chapterIndexAt(chapters, 0L))
+        assertEquals(0, PlayerUi.chapterIndexAt(chapters, 59_999L))
+        assertEquals(1, PlayerUi.chapterIndexAt(chapters, 60_000L))
+        assertEquals(2, PlayerUi.chapterIndexAt(chapters, 9_999_999L))
+        assertEquals(-1, PlayerUi.chapterIndexAt(emptyList(), 100L))
+    }
 }

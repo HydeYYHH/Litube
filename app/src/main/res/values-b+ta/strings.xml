@@ -65,6 +65,10 @@
     <string name="queue_remove">வரிசையில் இருந்து நீக்கு</string>
     <string name="application_not_found">விண்ணப்பம் கிடைக்கவில்லை</string>
     <string name="segments">பிரிவுகள்</string>
+    <string name="chapters">அத்தியாயங்கள்</string>
+    <string name="no_chapters">அத்தியாயங்கள் இல்லை</string>
+    <string name="skippable_segments">தவிர்க்கக்கூடிய பகுதிகள்</string>
+    <string name="show_more_replies">மேலும் பதில்களைக் காட்டு</string>
     <string name="no_segments">தவிர்க்கக்கூடிய பிரிவுகள் இல்லை</string>
     <string name="subtitles">வசன வரிகள்</string>
     <string name="playback_end_next">அடுத்து விளையாடு</string>

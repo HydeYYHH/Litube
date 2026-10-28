@@ -65,6 +65,10 @@
     <string name="queue_remove">Verwijderen uit wachtrij</string>
     <string name="application_not_found">Applicatie niet gevonden</string>
     <string name="segments">Segmenten</string>
+    <string name="chapters">Hoofdstukken</string>
+    <string name="no_chapters">Geen hoofdstukken</string>
+    <string name="skippable_segments">Overslaanbare segmenten</string>
+    <string name="show_more_replies">Meer reacties weergeven</string>
     <string name="no_segments">Geen segmenten die kunnen worden overgeslagen</string>
     <string name="subtitles">Ondertitels</string>
     <string name="playback_end_next">Speel hierna</string>

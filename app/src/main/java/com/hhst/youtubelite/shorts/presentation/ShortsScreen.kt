@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -39,9 +40,17 @@ import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
-fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier, videoContent: (@Composable (String) -> Unit)? = null) {
+fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier,
+    videoContent: (@Composable (String) -> Unit)? = null,
+    isVideoReady: (String) -> Boolean = { false },
+    playbackControls: (@Composable (String) -> Unit)? = null,
+    onSwipeStart: (() -> Unit)? = null, onSwipeCancel: ((String) -> Unit)? = null) {
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
             ShortsContent.Loading -> ShortsSkeleton()
@@ -49,7 +58,7 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
-            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent, state)
+            is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent, isVideoReady, playbackControls, state, onSwipeStart, onSwipeCancel)
         }
     }
 }
@@ -57,7 +66,7 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
 @Composable
 private fun ShortsSkeleton() {
     val ghost = Color(0xFF272727)
-    Box(Modifier.fillMaxSize().background(Color.Black).testTag("shorts-skeleton")
+    Box(Modifier.fillMaxSize().background(Color.Black).testTag("shorts-skeleton").clearAndSetSemantics {}
         .windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 80.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -77,19 +86,44 @@ private fun ShortsSkeleton() {
 
 @Composable
 private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
-    state: ShortsUiState) {
+    isVideoReady: (String) -> Boolean,
+    playbackControls: (@Composable (String) -> Unit)?,
+    state: ShortsUiState, onSwipeStart: (() -> Unit)?, onSwipeCancel: ((String) -> Unit)?) {
     val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
     val currentAction by rememberUpdatedState(onAction)
-    LaunchedEffect(pagerState, items, (state.content as? ShortsContent.Ready)?.page?.nextKey) {
+    val currentItems by rememberUpdatedState(items)
+    val currentSwipeStart by rememberUpdatedState(onSwipeStart)
+    val currentSwipeCancel by rememberUpdatedState(onSwipeCancel)
+    val currentSelectedId by rememberUpdatedState(state.currentItemId)
+    // Keyed on the pager only: hydration and appends mutate `items`, and a
+    // restart here would replay SelectItem for the settled page.
+    LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            items.getOrNull(page)?.let { currentAction(ShortsAction.SelectItem(it.id)) }
+            currentItems.getOrNull(page)?.let { currentAction(ShortsAction.SelectItem(it.id)) }
             // Prefetch the continuation before the pager runs out of pages.
-            if (page >= items.size - 3) currentAction(ShortsAction.LoadMore)
+            if (page >= currentItems.size - 3) currentAction(ShortsAction.LoadMore)
+        }
+    }
+    // A swipe silences the settled short while it is in progress; one that
+    // settles back onto the short it started on resumes it.
+    LaunchedEffect(pagerState) {
+        var holding = false
+        snapshotFlow { pagerState.isScrollInProgress }.collect { scrolling ->
+            when {
+                scrolling && !holding -> { holding = true; currentSwipeStart?.invoke() }
+                !scrolling && holding -> {
+                    holding = false
+                    val item = currentItems.getOrNull(pagerState.settledPage)
+                    if (item != null && item.id == currentSelectedId) currentSwipeCancel?.invoke(item.id)
+                }
+            }
         }
     }
     Box(Modifier.fillMaxSize()) {
     VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
         ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null,
+            videoReady = page == pagerState.settledPage && isVideoReady(items[page].id),
+            playbackControls = if (page == pagerState.settledPage) playbackControls else null,
             rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
             subscribed = state.subscriptions[items[page].channelId] == true,
             menuVisible = !state.live)
@@ -105,16 +139,19 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
 
 @Composable
 private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
+    videoReady: Boolean = false,
+    playbackControls: (@Composable (String) -> Unit)? = null,
     rating: com.hhst.youtubelite.watch.domain.VideoRating = com.hhst.youtubelite.watch.domain.VideoRating.None,
     subscribed: Boolean = false, menuVisible: Boolean = true) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
-        Image(item.artwork, Modifier.fillMaxSize(), "Play ${item.title}")
         videoContent?.invoke(item.id)
+        if (!videoReady) VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize().testTag("short-cover-${item.id}").semantics { contentDescription = "Play ${item.title}" })
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
+        playbackControls?.invoke(item.id)
         BoxWithConstraints(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        if (menuVisible) AppIconButton(AppIcon.More, "More actions for ${item.title}",
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp), diameter = 32.dp, color = Color.White) {
+        if (menuVisible) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp), diameter = 40.dp, color = Color.White) {
             onAction(ShortsAction.OpenMenu(item.id))
         }
         val railWidth = if (LocalDensity.current.fontScale > 1.5f) 80.dp else 56.dp
@@ -138,25 +175,20 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
                 Row(Modifier.weight(1f, fill = false).clickable(role = Role.Button) {
                     onAction(ShortsAction.OpenChannel(item.channelId))
                 }, verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(32.dp).clip(CircleShape).semantics { contentDescription = "Go to channel ${item.author}" }) {
-                        Artwork(item.artwork, Modifier.fillMaxSize())
+                    Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF272727))
+                        .appDescription(R.string.a11y_go_to_channel, item.author), contentAlignment = Alignment.Center) {
+                        if (item.avatar.isNotBlank()) Artwork(item.avatar, Modifier.fillMaxSize())
+                        else AppText(item.author.take(1).uppercase(), size = 16, line = 20, color = Color.White)
                     }
-                    AppText("@${item.author}", Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
+                    AppText(item.author, Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
                 }
                 AppText(if (subscribed) "Subscribed" else "Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
                     .background(if (subscribed) Color.White.copy(alpha = 0.25f) else Color(0xFF0F0F0F)).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
                     .padding(horizontal = 16.dp).heightIn(min = 40.dp),
                     size = 14, line = 40, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
             }
-            AppText(item.title, Modifier.padding(top = 8.dp).testTag("short-title-${item.id}"),
+            AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(top = 8.dp).testTag("short-title-${item.id}"),
                 size = 14, line = 20, color = Color.White, maxLines = 3)
-            Row(Modifier.padding(top = 8.dp).clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.1f)).padding(end = 8.dp).testTag("short-sound-${item.id}"),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(24.dp).clip(CircleShape)) { Artwork(item.artwork, Modifier.fillMaxSize()) }
-                AppText("${item.author} · Original", size = 12, line = 24,
-                    weight = FontWeight.Medium, color = Color.White, maxLines = 1)
-            }
         }
         }
     }
@@ -165,7 +197,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
 @Composable
 private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit, tinted: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AppIconButton(icon, description, diameter = 32.dp, color = if (tinted) DesignTokens.Red else Color.White, onClick = onClick)
+        AppIconButton(icon, description, diameter = 40.dp, color = if (tinted) DesignTokens.Red else Color.White, onClick = onClick)
         if (label.isNotEmpty()) {
             AppText(label, Modifier.testTag("rail-label-$description"), size = 12, line = 16,
                 weight = FontWeight.Medium, color = Color.White, maxLines = 1)

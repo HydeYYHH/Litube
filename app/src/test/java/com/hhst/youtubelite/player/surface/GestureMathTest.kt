@@ -89,3 +89,40 @@ class GestureMathTest {
 
 
 }
+
+class VelocityTrackerTest {
+
+    @Test
+    fun emptyOrSingleSampleIsZero() {
+        val tracker = GestureMath.VelocityTracker()
+        assertEquals(0f, tracker.velocityY(), 0.001f)
+        tracker.add(0, 10f)
+        assertEquals(0f, tracker.velocityY(), 0.001f)
+    }
+
+    @Test
+    fun steadyMotionReportsSignedVelocity() {
+        val tracker = GestureMath.VelocityTracker()
+        // 500 px upward per second: y decreases (up) at 5 px per 10 ms.
+        for (i in 0..10) tracker.add(i * 10L, 1000f - i * 5f)
+        assertEquals(-500f, tracker.velocityY(), 1f)
+    }
+
+    @Test
+    fun slowHoldBeforeReleaseIsNotAFLing() {
+        val tracker = GestureMath.VelocityTracker()
+        // Fast motion, then a 300 ms stationary hold: the window drops the
+        // old fast samples, so the release reports ~0 instead of a fling.
+        for (i in 0..5) tracker.add(i * 10L, 1000f - i * 20f)
+        for (i in 6..36) tracker.add(i * 10L, 900f)
+        assertEquals(0f, tracker.velocityY(), 1f)
+    }
+
+    @Test
+    fun resetClearsSamples() {
+        val tracker = GestureMath.VelocityTracker()
+        for (i in 0..10) tracker.add(i * 10L, i * 5f)
+        tracker.reset()
+        assertEquals(0f, tracker.velocityY(), 0.001f)
+    }
+}

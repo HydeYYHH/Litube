@@ -15,13 +15,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.hhst.youtubelite.ui.components.YoutubeLinearProgressIndicator as LinearProgressIndicator
+import com.hhst.youtubelite.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier

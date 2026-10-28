@@ -65,6 +65,10 @@
     <string name="queue_remove">Eemalda järjekorrast</string>
     <string name="application_not_found">Rakendust ei leitud</string>
     <string name="segments">Segmendid</string>
+    <string name="chapters">Peatükid</string>
+    <string name="no_chapters">Peatükke pole</string>
+    <string name="skippable_segments">Vahelejätetavad segmendid</string>
+    <string name="show_more_replies">Kuva rohkem vastuseid</string>
     <string name="no_segments">Vahelejäetavaid segmente pole</string>
     <string name="subtitles">Subtiitrid</string>
     <string name="playback_end_next">Mängi järgmisena</string>

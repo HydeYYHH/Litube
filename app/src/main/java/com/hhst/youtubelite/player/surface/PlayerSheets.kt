@@ -14,11 +14,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -38,13 +40,14 @@ import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.ui.components.audioTrackLabel
-import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.components.AppSheetHandle
+import com.hhst.youtubelite.ui.theme.AppStyle
 
-/** Player sheets: More + Queue. */
+/** Player sheets: More + Queue + Chapters. */
 sealed interface PlayerSheet {
     data object More : PlayerSheet
     data object Queue : PlayerSheet
+    data object Chapters : PlayerSheet
 }
 
 /** Dialog menus. */
@@ -61,7 +64,6 @@ sealed interface PlayerAnchorMenu {
     data object Speed : PlayerAnchorMenu
     data object Quality : PlayerAnchorMenu
     data object Subtitles : PlayerAnchorMenu
-    data object Segments : PlayerAnchorMenu
 }
 
 /**
@@ -79,22 +81,22 @@ internal class OptionRow<T>(
 fun PlayerSheetHost(
     sheet: PlayerSheet?,
     state: PlayerUiState,
+    positionState: State<Long>,
     callbacks: PlayerSurfaceCallbacks,
     onDismiss: () -> Unit,
     onOpenDialog: (PlayerDialog) -> Unit,
     onOpenQueue: (() -> Unit)? = null,
-    onSegments: (() -> Unit)? = null,
     onSpeed: (() -> Unit)? = null,
     onQuality: (() -> Unit)? = null,
 ) {
     if (sheet == null) return
     val context = LocalContext.current
     val queueAdded = stringResource(R.string.queue_item_added)
+    val jumpedTemplate = stringResource(R.string.jumped_to_segment)
     PlayerModalSheet(onDismiss = onDismiss, fullscreen = state.fullscreen && !state.mini) {
         when (sheet) {
             PlayerSheet.More -> MoreSheet(
                 onQueue = onOpenQueue,
-                onSegments = onSegments,
                 onLoop = onOpenQueue?.let { { callbacks.onLoop(); onDismiss() } },
                 loopMode = state.loopMode,
                 onSpeed = onSpeed,
@@ -142,10 +144,8 @@ fun PlayerSheetHost(
             PlayerSheet.Queue -> QueueSheet(
                 items = state.queueItems,
                 currentId = state.videoId,
-                enabled = state.queueEnabled,
                 loopMode = state.loopMode,
                 onItem = { callbacks.onQueueItem(it); onDismiss() },
-                onEnabled = callbacks::onQueueEnabled,
                 onClear = callbacks::onQueueClear,
                 onRemove = callbacks::onQueueRemove,
                 onLoop = callbacks::onLoop,
@@ -157,6 +157,22 @@ fun PlayerSheetHost(
                 onDownloadItem = { item ->
                     DownloadEntries.single(item)?.let { DownloadEntries.show(context, it) }
                 },
+            )
+            PlayerSheet.Chapters -> ChaptersSheet(
+                chapters = state.chapters,
+                segments = state.sponsorSegments,
+                positionState = positionState,
+                fallbackThumb = state.videoId?.let { VideoId.thumbnailUrl(it) },
+                onSeek = { startMs, label ->
+                    callbacks.onSeek(startMs)
+                    callbacks.onHint(jumpedTemplate.format(label))
+                    onDismiss()
+                },
+                onPreviewSeek = { startMs, label ->
+                    callbacks.onSeek(startMs)
+                    callbacks.onHint(jumpedTemplate.format(label))
+                },
+                onDismiss = onDismiss,
             )
         }
     }
@@ -179,11 +195,11 @@ internal fun PlayerModalSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = YoutubeStyle.SheetShape,
+        shape = AppStyle.SheetShape,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         dragHandle = {
-            YoutubeSheetHandle()
+            AppSheetHandle()
         },
     ) {
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight), content = content)
@@ -244,7 +260,6 @@ fun PlayerDialogHost(
 @Composable
 private fun MoreSheet(
     onQueue: (() -> Unit)?,
-    onSegments: (() -> Unit)?,
     onLoop: (() -> Unit)?,
     loopMode: LoopMode,
     onSpeed: (() -> Unit)?,
@@ -266,21 +281,29 @@ private fun MoreSheet(
             .padding(bottom = 24.dp),
     ) {
         SheetTitle(stringResource(R.string.more_options))
-        MoreRow(R.drawable.ic_resize, stringResource(R.string.resize_mode), onResize)
-        onQuality?.let { MoreRow(R.drawable.ic_settings, stringResource(R.string.player_info_quality), it) }
-        onSpeed?.let { MoreRow(R.drawable.ic_settings, stringResource(R.string.info_playback_speed), it) }
-        MoreRow(R.drawable.ic_cast, stringResource(R.string.cast), onCast)
-        if (showPip) MoreRow(R.drawable.ic_pip, stringResource(R.string.pip), onPip)
+        onQuality?.let { MoreRow(R.drawable.ic_quality, stringResource(R.string.player_info_quality), it) }
+        onSpeed?.let { MoreRow(R.drawable.ic_playback_speed, stringResource(R.string.info_playback_speed), it) }
         MoreRow(R.drawable.ic_track, stringResource(R.string.audio_track), onAudio)
         MoreRow(R.drawable.ic_subtitles_on, stringResource(R.string.subtitle_style), onSubtitleStyle)
-        MoreRow(R.drawable.ic_info, stringResource(R.string.info), onInfo)
+        MoreRow(R.drawable.ic_resize, stringResource(R.string.resize_mode), onResize)
+        MoreDivider()
         onQueue?.let { MoreRow(R.drawable.ic_queue, stringResource(R.string.queue), it) }
-        onSegments?.let { MoreRow(R.drawable.ic_segment, stringResource(R.string.segments), it) }
-        onLoop?.let { MoreRow(PlayerUi.loopIcon(loopMode), stringResource(PlayerUi.loopLabelRes(loopMode)), it) }
-        MoreRow(R.drawable.ic_download, stringResource(R.string.download), onDownload)
         MoreRow(R.drawable.ic_queue_add, stringResource(R.string.add_to_queue), onQueueAdd)
+        onLoop?.let { MoreRow(PlayerUi.loopIcon(loopMode), stringResource(PlayerUi.loopLabelRes(loopMode)), it) }
+        MoreDivider()
+        MoreRow(R.drawable.ic_cast, stringResource(R.string.cast), onCast)
+        if (showPip) MoreRow(R.drawable.ic_pip, stringResource(R.string.pip), onPip)
+        MoreRow(R.drawable.ic_download, stringResource(R.string.download), onDownload)
         MoreRow(R.drawable.ic_share, stringResource(R.string.share), onShare)
+        MoreDivider()
+        MoreRow(R.drawable.ic_info, stringResource(R.string.info), onInfo)
     }
+}
+
+@Composable
+private fun MoreDivider() {
+    HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
 }
 
 @Composable

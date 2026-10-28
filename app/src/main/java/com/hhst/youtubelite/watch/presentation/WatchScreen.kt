@@ -57,6 +57,10 @@ import com.hhst.youtubelite.saves.presentation.SaveSheetLive
 import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.watch.domain.*
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 fun WatchScreen(
@@ -285,7 +289,7 @@ private fun RelatedFooter(state: WatchUiState, onAction: (WatchAction) -> Unit) 
 
 @Composable
 private fun WatchSkeleton(includeRelated: Boolean) {
-    Column(Modifier.fillMaxWidth().testTag("watch-skeleton")) {
+    Column(Modifier.fillMaxWidth().testTag("watch-skeleton").clearAndSetSemantics {}) {
         Column(Modifier.padding(horizontal = 3.dp)) {
             Column(Modifier.padding(start = 13.dp, end = 13.dp, top = 12.dp, bottom = 5.dp)) {
                 Box(
@@ -378,7 +382,7 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
             Column(
                 Modifier.padding(start = 13.dp, end = 13.dp, top = 12.dp, bottom = 5.dp),
             ) {
-                WatchTitle(video.title)
+                WatchTitle(rememberDeArrowTitle(video.id, video.title))
                 Spacer(Modifier.height(6.dp))
                 WatchMetaRow(video, state, onAction)
                 if (state.descriptionExpanded) {
@@ -447,7 +451,7 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(48.dp).testTag("watch-action-avatar").semantics { contentDescription = "Go to channel ${video.channel}" }
+                Box(Modifier.size(48.dp).testTag("watch-action-avatar").appDescription(R.string.a11y_go_to_channel, video.channel)
                     .clickable(enabled = video.channelId.isNotBlank(), role = Role.Button) { onAction(WatchAction.OpenChannel(video.channelId)) }, contentAlignment = Alignment.Center) {
                     Artwork(video.avatar.orEmpty(), Modifier.size(32.dp).clip(CircleShape))
                 }
@@ -816,10 +820,10 @@ private fun RelatedThumb(
     Box(
         modifier.clip(RoundedCornerShape(radius))
             .mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) }
-            .semantics { contentDescription = "${item.title}, ${item.duration}" }
+            .appDescription(R.string.a11y_title_duration, item.title, item.duration)
             .testTag("watch-thumb-${item.id}"),
     ) {
-        Artwork(item.artwork, Modifier.fillMaxSize())
+        VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
         item.progress?.let { progress ->
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0xFF909090))) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f)).background(DesignTokens.Red))
@@ -847,7 +851,7 @@ private fun RelatedText(
         modifier.mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) },
     ) {
         AppText(
-            item.title,
+            rememberDeArrowTitle(item.id, item.title),
             Modifier.fillMaxWidth().testTag("watch-related-title-${item.id}"),
             size = 14,
             line = 18,
@@ -889,7 +893,7 @@ private fun RelatedDetailsAvatar(item: WatchRelated, onAction: (WatchAction) -> 
         Modifier.size(40.dp).clip(CircleShape)
             .testTag("watch-avatar-${item.id}")
         .clickable(role = Role.Button) { onAction(WatchAction.OpenChannel(item.channelId)) }
-            .semantics { contentDescription = "Go to channel ${item.channel}" },
+            .appDescription(R.string.a11y_go_to_channel, item.channel),
     ) {
         Artwork(item.avatar ?: item.artwork, Modifier.fillMaxSize())
     }
@@ -897,7 +901,7 @@ private fun RelatedDetailsAvatar(item: WatchRelated, onAction: (WatchAction) -> 
 
 @Composable
 private fun RelatedKebab(item: WatchRelated, onAction: (WatchAction) -> Unit) {
-    AppIconButton(AppIcon.More, "More actions for ${item.title}", diameter = 48.dp) {
+    AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title), diameter = 48.dp) {
         onAction(WatchAction.OpenItemMenu(item.id))
     }
 }

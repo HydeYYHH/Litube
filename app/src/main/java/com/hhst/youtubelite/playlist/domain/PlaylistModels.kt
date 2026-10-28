@@ -12,6 +12,8 @@ data class PlaylistSummary(
     val updatedDays: Int?,
     val accent: Long = 0xFF2D4F72,
     val videoCountText: String? = null,
+    /** Device-stored list (Watch later on this device, local collections). */
+    val local: Boolean = false,
 ) {
     val countLabel: String? get() = videoCountText ?: videoCount?.let { "$it videos" }
 }

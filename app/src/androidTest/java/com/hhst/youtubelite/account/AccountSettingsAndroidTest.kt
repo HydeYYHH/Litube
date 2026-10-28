@@ -234,6 +234,65 @@ class SettingsActivityAndroidTest {
     }
 }
 
+/** Writes from outside the screen (Advanced host, backup import) must reach the visible toggles. */
+class SettingsListenerAndroidTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private var scenario: ActivityScenario<SettingsActivity>? = null
+
+    @After fun close() {
+        scenario?.close()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+    }
+
+    private fun launch(page: SettingsPage) {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        scenario = ActivityScenario.launch(SettingsActivity.intent(context, page))
+        compose.waitUntil(15_000) {
+            runCatching { compose.onAllNodesWithTag("settings-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty()
+        }
+    }
+
+    private fun assertToggleState(key: String, enabled: Boolean) {
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithTag("settings-toggle-state-$key", useUnmergedTree = true)
+                    .assertTextEquals(if (enabled) "On" else "Off")
+            }.isSuccess
+        }
+    }
+
+    @Test fun anExternalWriteUpdatesTheVisibleToggleWithoutReentering() {
+        val prefs = GlobalContext.get().get<ExtensionManager>()
+        val key = PreferenceKeys.ENABLE_HIDE_SHORTS
+        val original = prefs.isEnabled(key)
+        try {
+            launch(SettingsPage.General)
+            assertToggleState(key, original)
+            prefs.setEnabled(key, !original)
+            assertToggleState(key, !original)
+        } finally {
+            prefs.setEnabled(key, original)
+        }
+    }
+
+    @Test fun aBulkResetRefreshesEveryVisibleToggle() {
+        val prefs = GlobalContext.get().get<ExtensionManager>()
+        val key = PreferenceKeys.ENABLE_HIDE_SHORTS
+        val snapshot = prefs.allPreferences()
+        val haptics = prefs.hapticStrength()
+        try {
+            prefs.setEnabled(key, !PreferenceKeys.DEFAULTS.getValue(key))
+            launch(SettingsPage.General)
+            assertToggleState(key, !PreferenceKeys.DEFAULTS.getValue(key))
+            prefs.resetToDefault()
+            assertToggleState(key, PreferenceKeys.DEFAULTS.getValue(key))
+        } finally {
+            snapshot.forEach { (k, v) -> prefs.setEnabled(k, v) }
+            prefs.setHapticStrength(haptics)
+        }
+    }
+}
+
 private object ActivityTestSupport {
     private fun live(clazz: Class<out Activity>): List<Activity> {
         val found = mutableListOf<Activity>()

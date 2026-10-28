@@ -107,10 +107,13 @@ class PlaylistViewModel(
                 val page = (state.value.content as? PlaylistContent.Ready)?.page ?: return
                 when (action) {
                     PlaylistAction.PlayAll, PlaylistAction.Shuffle -> {
+                        // An empty list plays nothing: no batch, no queue churn.
+                        if (page.entries.isEmpty()) return
                         overlay(PlaylistOverlay.None)
                         runBatch(PendingBatch.Queue(action == PlaylistAction.Shuffle))
                     }
                     PlaylistAction.Download -> {
+                        if (page.entries.isEmpty()) return
                         overlay(PlaylistOverlay.None)
                         runBatch(PendingBatch.Download)
                     }

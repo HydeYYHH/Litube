@@ -65,6 +65,10 @@
     <string name="queue_remove">Hiqe nga radha</string>
     <string name="application_not_found">Aplikacioni nuk u gjet</string>
     <string name="segments">Segmentet</string>
+    <string name="chapters">Kapituj</string>
+    <string name="no_chapters">Asnjë kapitull</string>
+    <string name="skippable_segments">Segmentet që anashkalohen</string>
+    <string name="show_more_replies">Shfaq më shumë përgjigje</string>
     <string name="no_segments">Nuk ka segmente të anashkalueshme</string>
     <string name="subtitles">Titra</string>
     <string name="playback_end_next">Luaj tjetër</string>

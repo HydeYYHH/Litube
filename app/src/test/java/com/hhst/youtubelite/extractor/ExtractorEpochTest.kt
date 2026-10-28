@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame

@@ -264,18 +264,18 @@ class SearchResultsViewModel(
             .takeIf { it.isNotEmpty() } ?: return
         avatarJob?.cancel()
         avatarJob = viewModelScope.launch {
-            val byChannel = resolved.mapNotNull { row ->
-                directory.avatar(row.channelId)?.let { row.channelId to it }
-            }.toMap()
-            if (byChannel.isEmpty()) return@launch
-            fun <T> List<T>.filled(avatar: (T) -> String?, channelId: (T) -> String, copy: (T, String) -> T) =
-                map { row -> if (avatar(row) == null) byChannel[channelId(row)]?.let { copy(row, it) } ?: row else row }
-            _state.update { state ->
-                val ready = state.content as? SearchContent.Results ?: return@update state
-                state.copy(content = SearchContent.Results(ready.page.copy(
-                    results = ready.page.results.filled({ it.avatar }, { it.channelId }, { row, a -> row.copy(avatar = a) }),
-                    shorts = ready.page.shorts.filled({ it.avatar }, { it.channelId }, { row, a -> row.copy(avatar = a) }),
-                )))
+            directory.resolveAll(resolved.map { it.channelId }) { channelId, avatar ->
+                _state.update { state ->
+                    val ready = state.content as? SearchContent.Results ?: return@update state
+                    state.copy(content = ready.copy(page = ready.page.copy(
+                        results = ready.page.results.map { row ->
+                            if (row.avatar == null && row.channelId == channelId) row.copy(avatar = avatar) else row
+                        },
+                        shorts = ready.page.shorts.map { row ->
+                            if (row.avatar == null && row.channelId == channelId) row.copy(avatar = avatar) else row
+                        },
+                    )))
+                }
             }
         }
     }

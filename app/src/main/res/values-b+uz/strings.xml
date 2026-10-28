@@ -65,6 +65,10 @@
     <string name="queue_remove">Navbatdan olib tashlash</string>
     <string name="application_not_found">Ilova topilmadi</string>
     <string name="segments">Segmentlar</string>
+    <string name="chapters">Boblar</string>
+    <string name="no_chapters">Boblar yoʻq</string>
+    <string name="skippable_segments">Oʻtkazib yuborish mumkin boʻlgan segmentlar</string>
+    <string name="show_more_replies">Ko‘proq javoblarni ko‘rsatish</string>
     <string name="no_segments">Oʻtkazib yuboriladigan segmentlar yoʻq</string>
     <string name="subtitles">Subtitrlar</string>
     <string name="playback_end_next">Keyingisini oʻynang</string>

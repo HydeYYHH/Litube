@@ -11,14 +11,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
-object YoutubeAppearance {
+object AppAppearance {
     var dark by mutableStateOf<Boolean?>(null)
         private set
 
     fun update(value: Boolean?) { dark = value }
 }
 
-object YoutubeStyle {
+object AppStyle {
     val Shapes = Shapes(
         extraSmall = RoundedCornerShape(4.dp), small = RoundedCornerShape(8.dp),
         medium = RoundedCornerShape(12.dp), large = RoundedCornerShape(12.dp),

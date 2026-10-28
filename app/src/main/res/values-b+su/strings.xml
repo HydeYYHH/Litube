@@ -65,6 +65,10 @@
     <string name="queue_remove">Leupaskeun tina antrian</string>
     <string name="application_not_found">Aplikasi teu kapanggih</string>
     <string name="segments">Bagéan</string>
+    <string name="chapters">Bab</string>
+    <string name="no_chapters">Henteu aya bab</string>
+    <string name="skippable_segments">Ségmen anu bisa dilangkung</string>
+    <string name="show_more_replies">Tampilkeun deui balasan</string>
     <string name="no_segments">Henteu aya bagéan anu tiasa dilewati</string>
     <string name="subtitles">Subtitle</string>
     <string name="playback_end_next">Maén salajengna</string>

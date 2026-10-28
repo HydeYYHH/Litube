@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.home.HomeActivity
 import com.hhst.youtubelite.home.data.HomeScenario
-import com.hhst.youtubelite.ui.theme.YoutubeAppearance
+import com.hhst.youtubelite.ui.theme.AppAppearance
 import java.io.File
 import org.junit.After
 import org.junit.Assert.*
@@ -25,17 +25,17 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
  */
 class MediaActionsAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
-    private val appearance = YoutubeAppearance.dark
+    private val appearance = AppAppearance.dark
     private val bunnyTitle = "Big Buck Bunny | A short film by the Blender Foundation"
     private val bunnyDescription = "$bunnyTitle, 9:56"
 
     @After fun restore() {
-        YoutubeAppearance.update(appearance)
+        AppAppearance.update(appearance)
         runShell("settings put system font_scale 1.0")
     }
 
     @Test fun longPressPreservesAllActionsWithoutDefaultAccent() {
-        YoutubeAppearance.update(false)
+        AppAppearance.update(false)
         val home = launchHome()
         compose.onNodeWithContentDescription(bunnyDescription, useUnmergedTree = true).performTouchInput { longClick() }
         compose.onNodeWithTag("media-actions").assertIsDisplayed()
@@ -71,7 +71,7 @@ class MediaActionsAndroidTest {
     }
 
     @Test fun darkPanelAndLargeTextRemainScrollableInAShortWindow() {
-        YoutubeAppearance.update(true)
+        AppAppearance.update(true)
         runShell("settings put system font_scale 2.0")
         val home = launchHome()
         compose.onNodeWithContentDescription(bunnyDescription, useUnmergedTree = true).performTouchInput { longClick() }
@@ -93,6 +93,30 @@ class MediaActionsAndroidTest {
             assertEquals("A local title", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
         }
         home.close()
+    }
+
+    /**
+     * The watch screen hosts the same panel on related-rail thumbnails, and its
+     * activity is a PlaybackActivity: the executor must resolve there too, or
+     * every watch-page panel row would close without running (regression guard).
+     */
+    @Test fun watchHostRunsPanelActionsThroughItsOwnExecutor() {
+        val queue = org.koin.java.KoinJavaComponent.getKoin()
+            .get<com.hhst.youtubelite.player.QueueRepository>()
+        queue.clear()
+        ActivityScenario.launch<com.hhst.youtubelite.watch.WatchActivity>(
+            com.hhst.youtubelite.watch.WatchActivity.intent(
+                ApplicationProvider.getApplicationContext(), "bunny")
+        ).use { watch ->
+            watch.onActivity { host ->
+                val executor = (host as com.hhst.youtubelite.ui.components.MediaActionHost).mediaActionExecutor
+                executor.execute(com.hhst.youtubelite.ui.components.MediaActionItem("dream", "Sintel"),
+                    com.hhst.youtubelite.ui.components.MediaActionKind.PlayNext)
+            }
+        }
+        assertEquals("TLkA0RELQ1g", queue.state.value.items.single().videoId)
+        assertTrue(queue.state.value.enabled)
+        queue.clear()
     }
 
     /** The menu lists every action except Copy title (review decision; the executor keeps it). */

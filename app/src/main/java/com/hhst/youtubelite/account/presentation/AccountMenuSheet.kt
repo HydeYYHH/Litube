@@ -42,6 +42,7 @@ import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.design.MenuSheetLayout
 import com.hhst.youtubelite.ui.design.MenuSheetItem
+import com.hhst.youtubelite.ui.design.appDescription
 
 /** Menu rows below the signed-in account header. */
 val accountMenuActions = AccountMenuAction.entries.filter { it != AccountMenuAction.ViewChannel }
@@ -77,7 +78,7 @@ fun AccountSwitchSheet(
     onDismiss: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onDismiss() }
-        .semantics { contentDescription = "Close menu" })
+        .appDescription(R.string.a11y_close_menu))
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Column(
             Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)

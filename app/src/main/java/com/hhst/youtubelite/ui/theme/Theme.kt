@@ -89,7 +89,7 @@ private val DarkColorScheme = darkColorScheme(
  */
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = YoutubeAppearance.dark ?: isSystemInDarkTheme(),
+    darkTheme: Boolean = AppAppearance.dark ?: isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -109,7 +109,7 @@ fun AppTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
-        shapes = YoutubeStyle.Shapes,
+        shapes = AppStyle.Shapes,
         content = content,
     )
 }

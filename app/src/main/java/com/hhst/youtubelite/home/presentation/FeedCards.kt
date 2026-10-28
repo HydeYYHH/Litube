@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.home.domain.*
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live: Boolean = false, onAction: (HomeAction) -> Unit) {
@@ -62,7 +65,7 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
             .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
             .semanticsLabel("${item.title}, ${item.duration}")) {
-            Artwork(item.artwork, Modifier.fillMaxSize())
+            VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
                 AppText(item.duration, size = 12, line = 16, weight = FontWeight.Medium, color = Color.White)
             }
@@ -77,11 +80,11 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
-                    AppText(item.title, Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
+                    AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
                     AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
                 // Sampled menu anchors: phone right inset 2px, grid +10px overhang, top -6px.
-                AppIconButton(AppIcon.More, "More actions for ${item.title}",
+                AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
                     modifier = Modifier.align(Alignment.TopEnd).offset(x = if (compact) (-2).dp else 10.dp, y = (-6).dp),
                     diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id)) }
             }
@@ -97,7 +100,7 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onActio
             Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-5).dp).background(Color(item.palette.stackColor), RoundedCornerShape(12.dp)))
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp))
                 .mediaActions(MediaActionItem(item.id, item.title, item.authors, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
-                Artwork(item.artwork, Modifier.fillMaxSize())
+                VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
                 Row(Modifier.align(Alignment.BottomEnd).padding(8.dp).height(24.dp).background(Color(item.palette.badgeColor), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     AppIcon(AppIcon.Mix, Modifier.size(12.dp), Color.White)
@@ -108,10 +111,10 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onActio
         Row(Modifier.padding(start = if (compact) 16.dp else 4.dp, top = 12.dp), verticalAlignment = Alignment.Top) {
             Box(Modifier.weight(1f)) {
                 Column(Modifier.padding(end = 40.dp)) {
-                    AppText(item.title, weight = FontWeight.Medium, maxLines = 2, exactLineHeight = 17.5.sp)
+                    AppText(rememberDeArrowTitle(item.id, item.title), weight = FontWeight.Medium, maxLines = 2, exactLineHeight = 17.5.sp)
                     AppText(item.authors, Modifier.padding(top = if (compact) 3.dp else 8.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 2)
                 }
-                AppIconButton(AppIcon.More, "More actions for ${item.title}",
+                AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
                     modifier = Modifier.align(Alignment.TopEnd).offset(y = (-8).dp),
                     diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Mix)) }
             }
@@ -129,7 +132,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             ShortsLogo(Modifier.offset(y = (-1.667).dp))
             AppText("Shorts", Modifier.padding(start = 12.dp).weight(1f), size = 18, line = 26, weight = FontWeight.Bold)
-            if (!live) AppIconButton(AppIcon.More, "Shorts options", diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Shorts)) }
+            if (!live) AppIconButton(AppIcon.More, stringResource(R.string.a11y_shorts_options), diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Shorts)) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             videos.chunked(columns).forEach { row ->
@@ -139,12 +142,12 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean
                             .clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) {
                             onAction(HomeAction.Navigate(HomeNavigationRequest.Shorts(video.id)))
                         }.semanticsLabel(video.title)) {
-                            Artwork(video.artwork, Modifier.fillMaxSize())
+                            VideoArtwork(video.id, video.artwork, Modifier.fillMaxSize())
                             Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
                             if (video.isNew) AppText("New", Modifier.padding(5.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
                                 size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
-                            if (!live) AppIconButton(AppIcon.More, "More actions for ${video.title}", modifier = Modifier.align(Alignment.TopEnd), diameter = 40.dp, color = Color.White) { onAction(HomeAction.OpenMenu(video.id, FeedMenuKind.Short)) }
-                            AppText(video.title, Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
+                            if (!live) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, video.title), modifier = Modifier.align(Alignment.TopEnd), diameter = 40.dp, color = Color.White) { onAction(HomeAction.OpenMenu(video.id, FeedMenuKind.Short)) }
+                            AppText(rememberDeArrowTitle(video.id, video.title), Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
                                 size = 14, line = 20, color = Color.White, maxLines = 2)
                         }
                     }
@@ -165,7 +168,7 @@ private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) 
                 AppText(item.age, size = 14, line = 20, color = DesignTokens.Secondary)
             }
             Box(Modifier.size(width = 44.dp, height = 48.dp)) {
-                if (!live) AppIconButton(AppIcon.More, "Post actions", modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Post)) }
+                if (!live) AppIconButton(AppIcon.More, stringResource(R.string.a11y_post_actions), modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Post)) }
             }
         }
         AppText(item.text, Modifier.padding(12.dp).clickable(role = Role.Button) {
@@ -189,9 +192,9 @@ private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) 
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Like, "Like post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, true, item.channelId))) }
+            AppIconButton(AppIcon.Like, stringResource(R.string.a11y_like_post), diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, true, item.channelId))) }
             AppText(item.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
-            AppIconButton(AppIcon.Dislike, "Dislike post", diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, false, item.channelId))) }
+            AppIconButton(AppIcon.Dislike, stringResource(R.string.a11y_dislike_post), diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, false, item.channelId))) }
             Spacer(Modifier.weight(1f))
             Row(Modifier.clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostComments(item.postId, item.channelId))) }
                 .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

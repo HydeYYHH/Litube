@@ -32,9 +32,16 @@ import org.koin.android.ext.android.inject
 import com.hhst.youtubelite.R
 
 /** Lifecycle and system controls for the retained playback engine. */
-abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
+abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity(),
+    com.hhst.youtubelite.ui.components.MediaActionHost {
     private val prefs: ExtensionManager by inject()
     protected val playerViewModel: PlayerViewModel by inject()
+
+    // Watch-screen panels (related rail long-press) resolve the executor through
+    // the hosting activity; without this the rows would close without executing.
+    override val mediaActionExecutor: com.hhst.youtubelite.ui.components.MediaActionExecutor by lazy {
+        com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this)
+    }
 
     @Volatile
     private var pipEligibilityLocked = false
@@ -116,7 +123,7 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
             .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>().attach {
                 val state = playerViewModel.uiState.value
                 com.hhst.youtubelite.data.media.PlaybackSample(state.videoId, playerViewModel.positionState.value,
-                    state.durationMs, state.isPlaying)
+                    state.durationMs, state.isPlaying, state.discontinuityEpoch)
             }
         PipAutoEnter.register(this)
         ContextCompat.registerReceiver(this, pipActionsReceiver,

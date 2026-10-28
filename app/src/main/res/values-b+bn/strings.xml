@@ -65,6 +65,10 @@
     <string name="queue_remove">সারি থেকে সরান</string>
     <string name="application_not_found">আবেদন পাওয়া যায়নি</string>
     <string name="segments">সেগমেন্ট</string>
+    <string name="chapters">অধ্যায়</string>
+    <string name="no_chapters">কোনো অধ্যায় নেই</string>
+    <string name="skippable_segments">এড়িয়ে যাওয়ার যোগ্য সেগমেন্ট</string>
+    <string name="show_more_replies">আরও উত্তর দেখান</string>
     <string name="no_segments">কোনো এড়িয়ে যাওয়ার যোগ্য সেগমেন্ট নেই</string>
     <string name="subtitles">সাবটাইটেল</string>
     <string name="playback_end_next">পরবর্তী খেলা</string>

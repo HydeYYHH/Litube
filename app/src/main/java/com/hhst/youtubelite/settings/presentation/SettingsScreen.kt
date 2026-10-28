@@ -30,6 +30,8 @@ import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 @Composable
 fun SettingsScreen(
@@ -75,7 +77,7 @@ private val SettingsPage.title: String
 private fun SettingsTopBar(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(DesignTokens.TopBarHeight).testTag("settings-topbar"),
         verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(AppIcon.Back, "Back", diameter = 48.dp, onClick = onBack)
+        AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp, onClick = onBack)
         AppText(title, Modifier.padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold)
     }
 }
@@ -100,14 +102,20 @@ private fun SettingsHome(onNavigate: (SettingsPage) -> Unit, onAbout: () -> Unit
 @Composable
 private fun GeneralSettings(preferences: Map<String, Boolean>, onToggle: (String, Boolean) -> Unit) {
     SettingsGroup("Appearance")
-    SettingsRow("Theme", value = "Light", tag = "settings-row-theme")
-    SettingsRow("Language", value = "English", tag = "settings-row-language")
+    val dark = com.hhst.youtubelite.ui.theme.AppAppearance.dark
+        ?: androidx.compose.foundation.isSystemInDarkTheme()
+    val locale = androidx.core.os.ConfigurationCompat.getLocales(
+        androidx.compose.ui.platform.LocalConfiguration.current)[0] ?: java.util.Locale.getDefault()
+    SettingsRow("Theme", value = if (dark) "Dark" else "Light", tag = "settings-row-theme")
+    SettingsRow("Language", value = locale.getDisplayName(locale), tag = "settings-row-language")
     SettingsGroup("Feed")
     SettingsToggle("Hide Shorts", "Remove Shorts shelves from the feed",
         PreferenceKeys.ENABLE_HIDE_SHORTS, preferences, onToggle)
     SettingsGroup("Privacy")
     SettingsToggle("Private browsing", "Don't send watch progress or save local history",
         PreferenceKeys.PRIVATE_BROWSING, preferences, onToggle)
+    SettingsToggle("Data saver", "Skip prefetching the next Short's media",
+        PreferenceKeys.DATA_SAVER, preferences, onToggle)
 }
 
 @Composable

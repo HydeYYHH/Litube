@@ -46,25 +46,17 @@ class MediaCommentsRepository(private val client: MediaClient) : CommentsReposit
         }, page.nextKey, turnedOff = page.turnedOff, sortFallback = sortFallback)
     }
 
-    override suspend fun replies(target: CommentTarget, thread: CommentThread): List<CommentReply> {
-        val key = thread.replyKey ?: replyKeys["$target:${thread.id}"] ?: return emptyList()
+    /** One replies page per call; the panel walks the continuation explicitly. */
+    override suspend fun repliesPage(target: CommentTarget, thread: CommentThread, cursor: String?): RepliesPage {
+        val key = cursor ?: thread.replyKey ?: replyKeys["$target:${thread.id}"] ?: return RepliesPage(emptyList(), null)
         return client.read { context, http ->
-            val comments = mutableListOf<Comment>()
-            var cursor: String? = key
-            val visited = mutableSetOf<String>()
-            while (cursor != null) {
-                if (!visited.add(cursor) || comments.size >= 1000)
-                    throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "reply_limit"))
-                val page = loadCommentReplies(cursor, context, http).requireValue()
-                comments.addAll(page.comments)
-                cursor = page.nextKey
-            }
-            comments.distinctBy { it.id }.mapNotNull { comment ->
+            val page = loadCommentReplies(key, context, http).requireValue()
+            RepliesPage(page.comments.mapNotNull { comment ->
                 val id = comment.id ?: return@mapNotNull null
                 actionComments["$target:$id"] = context.generation to comment
                 CommentReply(id, comment.author(), comment.published.orEmpty(), comment.text.orEmpty(),
                     comment.likeCount.orEmpty(), comment.authorId.orEmpty(), !comment.deleteKey.isNullOrBlank())
-            }
+            }, page.nextKey)
         }
     }
     override suspend fun perform(request: CommentNavigationRequest) {

@@ -65,6 +65,10 @@
     <string name="queue_remove">Alisin sa pila</string>
     <string name="application_not_found">Hindi nahanap ang application</string>
     <string name="segments">Mga Segment</string>
+    <string name="chapters">Mga kabanata</string>
+    <string name="no_chapters">Walang mga kabanata</string>
+    <string name="skippable_segments">Mga segment na maaaring laktawan</string>
+    <string name="show_more_replies">Magpakita ng higit pang mga tugon</string>
     <string name="no_segments">Walang nalalaktawang segment</string>
     <string name="subtitles">Mga Subtitle</string>
     <string name="playback_end_next">Maglaro sa susunod</string>

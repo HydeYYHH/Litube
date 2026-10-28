@@ -1,4 +1,0 @@
-YouTube Marquee Beta
-Copyright 2017 Google Inc. All Rights Reserved.
-Source: https://fonts.gstatic.com/s/youtubemarqueebeta/v4/Y4GhYbZrVTASt-zIZqrNvxdaLTAjgv2NJyQLaU_CHWxzleibZBhDMypUv8uvJg.woff2
-The bundled font preserves the original variable outlines and font metadata.

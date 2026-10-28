@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.playlist.domain.*
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 @Composable
 fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -47,17 +49,22 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
             val listState = rememberLazyListState()
             val headerScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
             val page = (state.content as? PlaylistContent.Ready)?.page
+            val emptyList = page?.entries?.isEmpty() == true
+            val local = page?.summary?.local == true
+            // A device-stored list has no server artwork to paint behind the toolbar;
+            // an empty one shows the neutral compact header instead of the accent hero.
+            val neutralToolbar = page == null || (local && emptyList)
             Column(Modifier.fillMaxSize().then(if (state.overlay != PlaylistOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-                Row(Modifier.fillMaxWidth().height(48.dp).background(page?.summary?.accent?.let(::Color) ?: DesignTokens.Background)
+                Row(Modifier.fillMaxWidth().height(48.dp).background(if (neutralToolbar) DesignTokens.Background else page?.summary?.accent?.let(::Color) ?: DesignTokens.Background)
                     .testTag("playlist-toolbar"), verticalAlignment = Alignment.CenterVertically) {
-                    val color = if (page != null) Color.White else DesignTokens.Ink
-                    AppIconButton(AppIcon.Back, "Back", color = color, onClick = onBack)
+                    val color = if (neutralToolbar) DesignTokens.Ink else Color.White
+                    AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), color = color, onClick = onBack)
                     Box(Modifier.weight(1f)) {
                         if (headerScrolled) AppText(page?.summary?.title.orEmpty(),
                             size = 20, line = 28, weight = FontWeight.Bold, color = color, maxLines = 1)
                     }
-                    AppIconButton(AppIcon.Search, "Search", color = color) { onAction(PlaylistAction.OpenSearch) }
-                    AppIconButton(AppIcon.More, "More options", color = color) { onAction(PlaylistAction.OpenMenu) }
+                    AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search), color = color) { onAction(PlaylistAction.OpenSearch) }
+                    AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_options), color = color) { onAction(PlaylistAction.OpenMenu) }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (val content = state.content) {
@@ -85,11 +92,18 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                                 contentPadding = PaddingValues(bottom = 16.dp)) {
                                 item(key = "header") {
                                     val w = viewport.value
-                                    PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
+                                    if (local && emptyList) PlaylistCompactHeader(content.page)
+                                    else PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
                                 }
                                 if (content.page.entries.isEmpty()) item {
-                                    AppText("No videos in this playlist yet", Modifier.fillMaxWidth().padding(24.dp).testTag("playlist-empty"),
-                                        color = DesignTokens.Secondary, align = TextAlign.Center)
+                                    // Formal empty state: an honest message, no fake cover or author.
+                                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp).testTag("playlist-empty"),
+                                        horizontalAlignment = Alignment.CenterHorizontally) {
+                                        AppText("No videos in this playlist yet", size = 16, line = 22, weight = FontWeight.Medium,
+                                            align = TextAlign.Center)
+                                        AppText("Videos you add will appear here.", Modifier.padding(top = 6.dp),
+                                            size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
+                                    }
                                 }
                                 items(content.page.entries, key = { it.id }) { entry -> PlaylistVideoRow(entry, onAction) }
                                 item(key = "append") {
@@ -153,7 +167,7 @@ private fun PlaylistHero(
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     PlaylistIdentity(page, width, descriptionExpanded, onAction)
-                    PlaylistButtons(onAction, stretch = false)
+                    PlaylistButtons(onAction, stretch = false, local = page.summary.local, empty = page.entries.isEmpty())
                     Spacer(Modifier.height(8.dp))
                 }
             }
@@ -163,8 +177,19 @@ private fun PlaylistHero(
                     .clip(RoundedCornerShape(8.dp)).clickable { onAction(PlaylistAction.PlayAll) }.testTag("playlist-hero-cover"))
                 Spacer(Modifier.height(16.dp))
                 PlaylistIdentity(page, width, descriptionExpanded, onAction)
-                PlaylistButtons(onAction, stretch = width < 600f)
+                PlaylistButtons(onAction, stretch = width < 600f, local = page.summary.local, empty = page.entries.isEmpty())
             }
+        }
+    }
+}
+
+/** Device-stored empty list: compact neutral title instead of the accent hero. */
+@Composable
+private fun PlaylistCompactHeader(page: PlaylistPage) {
+    Column(Modifier.fillMaxWidth().padding(16.dp).testTag("playlist-hero-local")) {
+        AppText(page.summary.title, size = 24, line = 32, weight = FontWeight.Bold)
+        page.summary.countLabel?.let {
+            AppText(it, Modifier.padding(top = 4.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         }
     }
 }
@@ -182,11 +207,19 @@ private fun PlaylistIdentity(
     val line = if (medium) 20 else 18
     AppText(page.summary.title, Modifier.testTag("playlist-heading"), size = if (large) 36 else 24,
         line = if (large) 50 else 32, weight = FontWeight.Bold, color = Color.White, maxLines = 2)
+    // A device-stored list has no channel to jump to and no artwork-as-avatar:
+    // the owner renders as plain text, never a clickable identity row.
     val owner: @Composable () -> Unit = {
-        Row(Modifier.heightIn(min = 32.dp).clickable { onAction(PlaylistAction.OpenOwner) }, verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.padding(2.dp).size(24.dp).clip(CircleShape)) { PlaylistArtwork(page.summary.artwork, Modifier.fillMaxSize()) }
-            Spacer(Modifier.width(6.dp))
-            AppText(page.summary.owner, size = text, line = line, color = Color.White, maxLines = 1)
+        if (page.summary.local) {
+            Row(Modifier.heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+                AppText(page.summary.owner, size = text, line = line, color = Color.White, maxLines = 1)
+            }
+        } else {
+            Row(Modifier.heightIn(min = 32.dp).clickable { onAction(PlaylistAction.OpenOwner) }, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.padding(2.dp).size(24.dp).clip(CircleShape)) { PlaylistArtwork(page.summary.artwork, Modifier.fillMaxSize()) }
+                Spacer(Modifier.width(6.dp))
+                AppText(page.summary.owner, size = text, line = line, color = Color.White, maxLines = 1)
+            }
         }
     }
     val metadata = listOfNotNull("Playlist", page.summary.countLabel, page.summary.views.takeIf(String::isNotBlank))
@@ -218,22 +251,30 @@ private fun PlaylistIdentity(
 }
 
 @Composable
-private fun PlaylistButtons(onAction: (PlaylistAction) -> Unit, stretch: Boolean) {
+private fun PlaylistButtons(onAction: (PlaylistAction) -> Unit, stretch: Boolean, local: Boolean = false, empty: Boolean = false) {
     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("playlist-actions")) {
         val scroll = LocalDensity.current.fontScale > 1.3f && maxWidth < 400.dp
         Row(Modifier.fillMaxWidth().then(if (scroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.then(if (stretch && !scroll) Modifier.weight(1f) else Modifier).heightIn(min = 40.dp)
-                .clip(CircleShape).background(DesignTokens.Background).clickable(role = Role.Button) { onAction(PlaylistAction.PlayAll) }
-                .padding(horizontal = 16.dp, vertical = 8.dp).testTag("playlist-play-all"),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                AppIcon(AppIcon.Play, color = Color.Black)
-                Spacer(Modifier.width(6.dp))
-                AppText("Play all", weight = FontWeight.Medium, color = Color.Black)
+            if (!empty) {
+                // Foreground and background are an explicit pair: Ink on Background both
+                // follow the theme together (a fixed black on themed background went
+                // black-on-black in dark mode).
+                Row(Modifier.then(if (stretch && !scroll) Modifier.weight(1f) else Modifier).heightIn(min = 40.dp)
+                    .clip(CircleShape).background(DesignTokens.Background).clickable(role = Role.Button) { onAction(PlaylistAction.PlayAll) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp).testTag("playlist-play-all"),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    AppIcon(AppIcon.Play, color = DesignTokens.Ink)
+                    Spacer(Modifier.width(6.dp))
+                    AppText("Play all", weight = FontWeight.Medium, color = DesignTokens.Ink)
+                }
             }
-            AppIconButton(AppIcon.Bookmark, "Save playlist", diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.Save) }
-            AppIconButton(AppIcon.Share, "Share playlist", diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.Share) }
-            AppIconButton(AppIcon.More, "More playlist actions", diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.OpenMenu) }
+            // Saving/sharing a device-stored list has no server to talk to.
+            if (!local) {
+                AppIconButton(AppIcon.Bookmark, stringResource(R.string.a11y_save_playlist), diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.Save) }
+                AppIconButton(AppIcon.Share, stringResource(R.string.a11y_share_playlist), diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.Share) }
+            }
+            AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_playlist_actions), diameter = 40.dp, background = Color.White.copy(alpha = 0.1f), color = Color.White) { onAction(PlaylistAction.OpenMenu) }
         }
     }
 }
@@ -255,14 +296,12 @@ private fun PlaylistVideoRow(entry: PlaylistEntry, onAction: (PlaylistAction) ->
             Column(Modifier.weight(1f).mediaActions(MediaActionItem(entry.videoId, entry.title, entry.channel, entry.artwork)) { onAction(PlaylistAction.OpenVideo(entry.id)) }) {
                 AppText(entry.title, Modifier.fillMaxWidth().padding(end = 24.dp).testTag("playlist-entry-title-${entry.id}"), weight = FontWeight.Medium, maxLines = 2)
                 AppText(entry.channel, Modifier.padding(top = 4.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
-                Row(Modifier.padding(top = 4.dp)) {
-                    AppText(entry.views, Modifier.weight(1f, fill = false), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
-                    AppText("•", Modifier.padding(horizontal = 4.dp), size = 12, line = 18, color = DesignTokens.Secondary)
-                    AppText(entry.age, Modifier.weight(1f, fill = false), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
-                }
+                val metadata = listOf(entry.views, entry.age).filter(String::isNotBlank).joinToString(" • ")
+                if (metadata.isNotEmpty()) AppText(metadata, Modifier.padding(top = 4.dp),
+                    size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
             }
         }
-        AppIconButton(AppIcon.More, "More actions for ${entry.title}", diameter = 40.dp,
+        AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, entry.title), diameter = 40.dp,
             modifier = Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-6).dp).testTag("playlist-entry-menu-${entry.id}")) {
             onAction(PlaylistAction.OpenVideoMenu(entry.id))
         }
@@ -349,7 +388,7 @@ private fun PlaylistSkeleton(width: Float) {
             Box(Modifier.width(108.dp).height(40.dp).background(DesignTokens.Ghost, CircleShape))
         }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("playlist-loading")) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("playlist-loading").clearAndSetSemantics {}) {
         Box(Modifier.fillMaxWidth().height(headerHeight.dp).padding(16.dp)) {
             if (wide) Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 cover()

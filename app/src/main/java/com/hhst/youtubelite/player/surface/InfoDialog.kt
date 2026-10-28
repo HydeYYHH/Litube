@@ -15,12 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import androidx.compose.foundation.text.selection.SelectionContainer
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -240,9 +241,9 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
             )
         },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                details.forEach { (label, value) ->
-                    InfoLine(label = label, value = value, onCopy = { copy("$label: $value") })
+            SelectionContainer {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    details.forEach { (label, value) -> InfoLine(label, value) }
                 }
             }
         },
@@ -262,13 +263,13 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
 }
 
 @Composable
-private fun InfoLine(label: String, value: String, onCopy: () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-        .clickable(onClick = onCopy).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun InfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 32.dp)
+        .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(0.42f).padding(end = 12.dp), fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, Modifier.weight(0.58f), fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurface)
+            lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface)
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 }

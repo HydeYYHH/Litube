@@ -32,8 +32,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue

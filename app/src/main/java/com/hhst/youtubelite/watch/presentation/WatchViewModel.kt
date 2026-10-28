@@ -146,7 +146,7 @@ class WatchViewModel(
     fun onAction(action: WatchAction) {
         val videoId = uiState.value.videoId
         when (action) {
-            WatchAction.Retry -> load()
+            WatchAction.Retry -> load(fresh = true)
             WatchAction.LoadRelated -> loadRelated()
             WatchAction.VoiceSearch -> navigation.trySend(WatchNavigationRequest.VoiceSearch)
             WatchAction.ToggleDescription -> toggleDescription()
@@ -453,7 +453,7 @@ class WatchViewModel(
         }
     }
 
-    private fun load() {
+    private fun load(fresh: Boolean = false) {
         val videoId = uiState.value.videoId
         loadJob?.cancel()
         relatedJob?.cancel()
@@ -462,7 +462,7 @@ class WatchViewModel(
         _state.update { it.copy(content = WatchContent.Loading, verification = null, relatedLoading = false, relatedFailed = false) }
         loadJob = viewModelScope.launch {
             try {
-                val page = repository.watch(videoId)
+                val page = if (fresh) repository.watchFresh(videoId) else repository.watch(videoId)
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = WatchContent.Ready(page)) }
                 updateCounts()

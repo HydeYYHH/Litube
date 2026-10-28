@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.channel.domain.*
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
 
 object ChannelAboutLayout {
     fun docked(width: Float, height: Float) = width >= 931f && width > height
@@ -58,7 +59,7 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             AboutHeading(profile.name, headingSize, headingLine, Modifier.weight(1f).testTag("channel-about-title"))
-            AppIconButton(AppIcon.Close, "Close channel details", diameter = 48.dp) { onAction(ChannelAction.CloseOverlay) }
+            AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_channel_details), diameter = 48.dp) { onAction(ChannelAction.CloseOverlay) }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 12.dp).testTag("channel-about-content")) {
@@ -97,12 +98,10 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
     }
 }
 
-@OptIn(ExperimentalTextApi::class)
 @Composable
 private fun AboutHeading(text: String, size: Int, line: Int, modifier: Modifier = Modifier) {
-    val family = remember(size) { FontFamily(Font(R.font.channel_heading, FontWeight.SemiBold,
-        variationSettings = FontVariation.Settings(FontVariation.Setting("wght", 600f),
-            FontVariation.Setting("wdth", 25f), FontVariation.Setting("opsz", size.toFloat())))) }
+    // Barlow Semi Condensed SemiBold (SIL OFL 1.1): static cut, no variation axes.
+    val family = remember(size) { FontFamily(Font(R.font.barlow_semicondensed, FontWeight.SemiBold)) }
     BasicText(text, modifier, style = DesignTokens.text(size, line, FontWeight.SemiBold).copy(fontFamily = family),
         maxLines = 2, overflow = TextOverflow.Ellipsis)
 }

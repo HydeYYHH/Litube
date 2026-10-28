@@ -65,6 +65,10 @@
     <string name="queue_remove">Susa kulayini</string>
     <string name="application_not_found">Isicelo asitholakali</string>
     <string name="segments">Izigaba</string>
+    <string name="chapters">Izigaba</string>
+    <string name="no_chapters">Azikho izigaba</string>
+    <string name="skippable_segments">Iziqeshana ezingaqoshwa</string>
+    <string name="show_more_replies">Bonisa ezinye izimpendulo</string>
     <string name="no_segments">Awekho amasegimenti aweqekayo</string>
     <string name="subtitles">Imibhalo engezansi</string>
     <string name="playback_end_next">Dlala ngokulandelayo</string>

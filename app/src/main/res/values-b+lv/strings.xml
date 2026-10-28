@@ -65,6 +65,10 @@
     <string name="queue_remove">Noņemt no rindas</string>
     <string name="application_not_found">Pieteikums nav atrasts</string>
     <string name="segments">Segmenti</string>
+    <string name="chapters">Nodaļas</string>
+    <string name="no_chapters">Nav nodaļu</string>
+    <string name="skippable_segments">Izlaistāmie segmenti</string>
+    <string name="show_more_replies">Rādīt vairāk atbilžu</string>
     <string name="no_segments">Nav izlaižamu segmentu</string>
     <string name="subtitles">Subtitri</string>
     <string name="playback_end_next">Spēlēt nākamo</string>

@@ -65,6 +65,10 @@
     <string name="queue_remove">Fjern fra køen</string>
     <string name="application_not_found">Applikationen blev ikke fundet</string>
     <string name="segments">Segmenter</string>
+    <string name="chapters">Kapitler</string>
+    <string name="no_chapters">Ingen kapitler</string>
+    <string name="skippable_segments">Segmenter, der kan springes over</string>
+    <string name="show_more_replies">Vis flere svar</string>
     <string name="no_segments">Ingen segmenter, der kan springes over</string>
     <string name="subtitles">Undertekster</string>
     <string name="playback_end_next">Afspil næste</string>

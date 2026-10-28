@@ -310,9 +310,9 @@ class SearchResultsScreenshotAndroidTest {
         }
         for (w in listOf(390, 600, 1280)) {
             compose.runOnIdle { width = w }
-            val thumb = compose.onNodeWithTag("skeleton-thumb-0").fetchSemanticsNode().boundsInRoot
-            val title = compose.onNodeWithTag("skeleton-title-0").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            val byline = compose.onNodeWithTag("skeleton-byline-0").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val thumb = compose.onNodeWithTag("skeleton-thumb-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val title = compose.onNodeWithTag("skeleton-title-0", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val byline = compose.onNodeWithTag("skeleton-byline-0", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertEquals(300f, title.width, 0.5f)
             assertEquals(16f, title.height, 0.5f)
             assertEquals(120f, byline.width, 0.5f)

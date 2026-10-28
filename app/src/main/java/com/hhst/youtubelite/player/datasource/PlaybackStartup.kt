@@ -39,7 +39,7 @@ import kotlin.math.ceil
  * different initial pick costs one more serial playlist read.
  */
 internal object PlaybackStartup {
-    private const val MAX_START_HEIGHT = 480
+    const val MAX_START_HEIGHT = 480
     const val START_WINDOW_MS = 5_000L
     private const val FRACTION = AdaptiveTrackSelection.DEFAULT_BANDWIDTH_FRACTION
 

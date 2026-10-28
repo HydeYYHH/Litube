@@ -65,6 +65,10 @@
     <string name="queue_remove">క్యూ నుండి తీసివేయి</string>
     <string name="application_not_found">అప్లికేషన్ కనుగొనబడలేదు</string>
     <string name="segments">విభాగాలు</string>
+    <string name="chapters">అధ్యాయాలు</string>
+    <string name="no_chapters">అధ్యాయాలు లేవు</string>
+    <string name="skippable_segments">దాటవేయగల విభాగాలు</string>
+    <string name="show_more_replies">మరిన్ని సమాధానాలను చూపండి</string>
     <string name="no_segments">దాటవేయదగిన విభాగాలు లేవు</string>
     <string name="subtitles">ఉపశీర్షికలు</string>
     <string name="playback_end_next">తర్వాత ఆడండి</string>

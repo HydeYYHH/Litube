@@ -10,10 +10,11 @@ import androidx.compose.ui.res.painterResource
 import com.hhst.youtubelite.R
 
 @Composable
-fun Artwork(asset: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
+fun Artwork(asset: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, fallback: String? = null) {
     if (asset.startsWith("https://") || asset.startsWith("//")) {
         com.hhst.youtubelite.ui.YoutubeThumb(if (asset.startsWith("//")) "https:$asset" else asset,
-            modifier, contentScale = contentScale, placeholderColor = DesignTokens.Surface)
+            modifier, contentScale = contentScale, placeholderColor = DesignTokens.Surface,
+            fallbackUrl = fallback?.let { if (it.startsWith("//")) "https:$it" else it })
         return
     }
     if (asset.isBlank()) {

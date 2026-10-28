@@ -76,7 +76,9 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
             oldPreferences.keys.filter { it.startsWith("skip_") }.forEach { prefs.setEnabled(it, false) }
             prefs.setEnabled(PreferenceKeys.ENABLE_PIP, true)
             prefs.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
-            extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 120), scope))
+            // The swipe/rotate flow runs against live playback; a short stream
+            // ends mid-test on slow renderers and collapses fullscreen first.
+            extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 600), scope))
         }
     }
 

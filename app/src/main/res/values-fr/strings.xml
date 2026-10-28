@@ -65,6 +65,10 @@
     <string name="queue_remove">Retirer de la file</string>
     <string name="application_not_found">Aucune application compatible</string>
     <string name="segments">Segments</string>
+    <string name="chapters">Chapitres</string>
+    <string name="no_chapters">Aucun chapitre</string>
+    <string name="skippable_segments">Segments à sauter</string>
+    <string name="show_more_replies">Afficher plus de réponses</string>
     <string name="no_segments">Aucun segment à passer</string>
     <string name="subtitles">Sous-titres</string>
     <string name="playback_end_next">Lire la suivante</string>

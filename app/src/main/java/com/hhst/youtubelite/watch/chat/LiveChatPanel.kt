@@ -47,9 +47,12 @@ import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.Artwork
 import com.hhst.youtubelite.ui.design.DesignTokens
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import kotlin.math.roundToInt
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 /** Live chat on live watch pages: same dock/bottom-sheet geometry as the comments panel. */
 @Composable
@@ -80,7 +83,7 @@ fun LiveChatPanel(
                 Box(
                     Modifier.fillMaxSize()
                         .clickable(remember { MutableInteractionSource() }, indication = null) { onClose() }
-                        .semantics { contentDescription = "Close live chat" }
+                        .appDescription(R.string.a11y_close_live_chat)
                         .testTag("live-chat-scrim"),
                 )
                 LiveChatSurface(state, onAction, onClose, compact = true, listState = listState,
@@ -116,20 +119,20 @@ private fun LiveChatSurface(
         Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
             AppText("Live chat", Modifier.weight(1f), size = 16, line = 22, weight = FontWeight.Medium)
-            AppIconButton(AppIcon.Close, "Close live chat", Modifier.testTag("live-chat-close"), onClick = onClose)
+            AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_live_chat), Modifier.testTag("live-chat-close"), onClick = onClose)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 LiveChatContent.Loading -> Box(Modifier.fillMaxSize().testTag("live-chat-loading"),
                     contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(28.dp), color = YoutubeStyle.Action, strokeWidth = 3.dp)
+                    CircularProgressIndicator(Modifier.size(28.dp), color = AppStyle.Action, strokeWidth = 3.dp)
                 }
                 LiveChatContent.Failed -> Column(Modifier.fillMaxSize().testTag("live-chat-failed").padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
                     AppText("Couldn't load the chat", size = 14, line = 20, color = DesignTokens.Secondary)
                     Spacer(Modifier.height(8.dp))
                     AppText("Retry", Modifier.clickable { onAction(LiveChatAction.Retry) }.testTag("live-chat-retry").padding(8.dp),
-                        size = 14, line = 20, weight = FontWeight.Medium, color = YoutubeStyle.Action)
+                        size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
                 }
                 is LiveChatContent.Ready -> {
                     if (content.messages.isEmpty()) {
@@ -182,8 +185,8 @@ private fun LiveChatSurface(
                 }
                 Spacer(Modifier.width(8.dp))
                 val canSend = state.draft.isNotBlank() && !state.sending
-                AppIconButton(AppIcon.Send, "Send message", Modifier.testTag("live-chat-send"),
-                    color = if (canSend) YoutubeStyle.Action else DesignTokens.Secondary.copy(alpha = .5f)) {
+                AppIconButton(AppIcon.Send, stringResource(R.string.a11y_send_message), Modifier.testTag("live-chat-send"),
+                    color = if (canSend) AppStyle.Action else DesignTokens.Secondary.copy(alpha = .5f)) {
                     if (canSend) onAction(LiveChatAction.Send)
                 }
             }
@@ -191,7 +194,7 @@ private fun LiveChatSurface(
             AppText("Sign in to join the chat",
                 Modifier.fillMaxWidth().clickable { onAction(LiveChatAction.SignIn) }
                     .testTag("live-chat-signin").padding(16.dp),
-                size = 14, line = 20, weight = FontWeight.Medium, color = YoutubeStyle.Action)
+                size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
         }
     }
 }

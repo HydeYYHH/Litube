@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 import androidx.compose.ui.graphics.Color
+import com.hhst.youtubelite.extractor.Chapter
 import java.util.Locale
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -58,8 +59,9 @@ object PlayerUi {
     const val HINT_TOP_PAD_DP = 4
     const val CAST_BANNER_CLEAR_DP = 44
     /** Bottom-end cards (sponsor skip, zoom reset) above the bottom HUD. */
-    const val SPONSOR_CARD_BOTTOM_DP = 64
     const val ZOOM_RESET_BOTTOM_DP = 80
+    /** Gap between the visible track and a chip sitting above it. */
+    const val TRACK_CHIP_GAP_DP = 8
 
     val SpeedChoices = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
 
@@ -234,6 +236,15 @@ object PlayerUi {
     fun progressFraction(positionMs: Long, durationMs: Long): Float {
         if (durationMs <= 0L) return 0f
         return (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+    }
+
+    /** Index of the chapter holding [positionMs]; -1 before the first chapter. */
+    fun chapterIndexAt(chapters: List<Chapter>, positionMs: Long): Int {
+        var index = -1
+        chapters.forEachIndexed { i, chapter ->
+            if (positionMs >= chapter.startSeconds * 1000L) index = i
+        }
+        return index
     }
 
     fun bufferedFraction(bufferedPositionMs: Long, durationMs: Long): Float =

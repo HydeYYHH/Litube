@@ -65,6 +65,7 @@ internal fun mapStream(load: PlaybackLoad, context: ExtractionContext): Stream {
         dashRequestPlan = dash?.requestPlan
         hlsUrl = hls?.url
         hlsRequestPlan = hls?.requestPlan
+        tracking = answer.details?.tracking
     }
 }
 

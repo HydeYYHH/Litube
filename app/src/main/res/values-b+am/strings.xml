@@ -65,6 +65,10 @@
     <string name="queue_remove">ከሰልፍ አስወግድ</string>
     <string name="application_not_found">ማመልከቻ አልተገኘም።</string>
     <string name="segments">ክፍሎች</string>
+    <string name="chapters">ምዕራፎች</string>
+    <string name="no_chapters">ምዕራፎች የሉም</string>
+    <string name="skippable_segments">ሊዘለሉ የሚችሉ ክፍሎች</string>
+    <string name="show_more_replies">ተጨማሪ መልሶችን አሳይ</string>
     <string name="no_segments">ምንም ሊዘለሉ የሚችሉ ክፍሎች የሉም</string>
     <string name="subtitles">የትርጉም ጽሑፎች</string>
     <string name="playback_end_next">ቀጥሎ ይጫወቱ</string>

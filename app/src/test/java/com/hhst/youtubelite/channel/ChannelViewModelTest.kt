@@ -49,6 +49,35 @@ class ChannelViewModelTest {
         assertEquals(listOf(0, 1, 2, 3), shorts.map { it.order })
     }
 
+    @Test fun playlistsTabAppendsServerPagesAndStopsOnARepeatedCursor() = runTest {
+        val base = FixtureChannelRepository()
+        val playlist = { id: String -> com.hhst.youtubelite.playlist.domain.PlaylistSummary(id, "Playlist $id", "Blender",
+            "blender", null, "", "", null) }
+        val repository = object : ChannelRepository by base {
+            // A deferred playlists tab: the landing page does not carry the rows.
+            override suspend fun channel(channelId: String) = ChannelPage(
+                ChannelProfile(channelId = channelId, name = "Blender", handle = "@blender", avatar = "",
+                    banner = null, subscribers = "30M subscribers", description = "Studio."),
+                emptyList(), playlistsDeferred = true)
+            override suspend fun playlists(channelId: String) =
+                com.hhst.youtubelite.library.domain.PlaylistCollectionPage(listOf(playlist("p1"), playlist("p2")), "pl-2")
+            override suspend fun playlistsNext(channelId: String, cursor: String) =
+                com.hhst.youtubelite.library.domain.PlaylistCollectionPage(listOf(playlist("p3")), "pl-2")
+        }
+        val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
+        advanceUntilIdle()
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
+        advanceUntilIdle()
+        val rows = (vm.uiState.value.playlists as ChannelSection.Ready).value
+        assertEquals(listOf("p1", "p2"), rows.map { it.id })
+        assertEquals("pl-2", vm.uiState.value.playlistsNextKey)
+        vm.onAction(ChannelAction.LoadPlaylistsNext)
+        advanceUntilIdle()
+        // The next page repeats the cursor: the tab ends instead of scrolling forever.
+        assertEquals(listOf("p1", "p2", "p3"), (vm.uiState.value.playlists as ChannelSection.Ready).value.map { it.id })
+        assertNull(vm.uiState.value.playlistsNextKey)
+    }
+
     @Test fun restoredServerSearchLoadsTheSubmittedQueryAndKeepsTheDraft() = runTest {
         val base = FixtureChannelRepository()
         var searched: String? = null
@@ -290,5 +319,58 @@ class ChannelViewModelTest {
         assertEquals(listOf("v1", "v2"), page.videos.map { it.id })
         assertNull(page.videosNextKey)
         assertEquals(com.hhst.youtubelite.home.domain.AppendState.Idle, vm.uiState.value.videosAppend)
+    }
+
+    @Test fun deferredTabsLoadOnDemandWithTabLocalFailures() = runTest {
+        val repository = object : ChannelRepository {
+            var videosFirstReads = 0
+            var playlistsReads = 0
+            var failPlaylists = true
+            override suspend fun channel(channelId: String) = ChannelPage(
+                ChannelProfile(channelId = channelId, name = "Blender", handle = "@blender", avatar = "",
+                    banner = null, subscribers = "30M subscribers", description = "Studio."),
+                emptyList(), videosDeferred = true, playlistsDeferred = true)
+            override suspend fun shorts(channelId: String) = ChannelShortsPage(emptyList())
+            override suspend fun live(channelId: String) = ChannelLivePage()
+            override suspend fun posts(channelId: String) = ChannelPostsPage(emptyList())
+            override suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage {
+                videosFirstReads++
+                return ChannelVideosPage(listOf(ChannelVideo("v9", "Ninth", "9K views", "9 days", "9:00", "")), null)
+            }
+            override suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage {
+                playlistsReads++
+                if (failPlaylists) throw java.io.IOException("playlists offline")
+                return com.hhst.youtubelite.library.domain.PlaylistCollectionPage(
+                    com.hhst.youtubelite.playlist.data.FixturePlaylistRepository.summaries())
+            }
+        }
+        val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
+        advanceUntilIdle()
+        // The header painted without either optional tab read.
+        assertTrue(vm.uiState.value.content is ChannelContent.Ready)
+        assertEquals(0, repository.videosFirstReads)
+        assertEquals(0, repository.playlistsReads)
+        assertEquals(ChannelSection.Loading, vm.uiState.value.videosTab)
+        assertEquals(ChannelSection.Loading, vm.uiState.value.playlists)
+        // The videos tab reads on demand and fills the page.
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
+        advanceUntilIdle()
+        assertEquals(1, repository.videosFirstReads)
+        val page = (vm.uiState.value.content as ChannelContent.Ready).page
+        assertEquals(listOf("v9"), page.videos.map { it.id })
+        assertTrue(vm.uiState.value.videosTab is ChannelSection.Ready)
+        // The playlists tab fails on its own; the page stays up.
+        vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
+        advanceUntilIdle()
+        assertEquals(1, repository.playlistsReads)
+        assertEquals(ChannelSection.Failed, vm.uiState.value.playlists)
+        assertTrue(vm.uiState.value.content is ChannelContent.Ready)
+        // The tab-local retry reloads only the playlists read.
+        repository.failPlaylists = false
+        vm.onAction(ChannelAction.RetrySection(ChannelTab.Playlists))
+        advanceUntilIdle()
+        assertEquals(2, repository.playlistsReads)
+        assertTrue(vm.uiState.value.playlists is ChannelSection.Ready)
+        assertEquals(1, repository.videosFirstReads)
     }
 }

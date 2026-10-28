@@ -25,7 +25,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.hhst.youtubelite.ui.components.YoutubeLinearProgressIndicator as LinearProgressIndicator
+import com.hhst.youtubelite.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable

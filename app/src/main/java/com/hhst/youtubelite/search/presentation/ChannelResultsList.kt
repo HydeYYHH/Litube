@@ -45,8 +45,9 @@ fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAc
                                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                                     Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onAction(SearchAction.OpenChannel(channel.id)) }) {
                                         AppText(channel.name, Modifier.testTag("search-channel-name-${channel.id}"), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.5.sp)
-                                        AppText(channel.handle, size = 12, line = 15, color = Color(0xFF888888), maxLines = 1)
-                                        AppText(channel.subscribers, size = 12, line = 15, color = Color(0xFF888888), maxLines = 1)
+                                        // Blank fields (production mapping may not carry them) render no line at all.
+                                        if (channel.handle.isNotBlank()) AppText(channel.handle, size = 12, line = 15, color = Color(0xFF888888), maxLines = 1)
+                                        if (channel.subscribers.isNotBlank()) AppText(channel.subscribers, size = 12, line = 15, color = Color(0xFF888888), maxLines = 1)
                                     }
                                     if (!compact) {
                                         Spacer(Modifier.height(8.dp))

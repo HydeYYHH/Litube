@@ -26,10 +26,6 @@ class FixtureNotificationsRepository(private val scenario: NotificationsScenario
     }
 }
 
-interface NotificationsRepository {
-    suspend fun notifications(): NotificationsPage
-}
-
 enum class NotificationsScenario(val argument: String) {
     Content("content"), Loading("loading"), Empty("empty"), Error("error");
 

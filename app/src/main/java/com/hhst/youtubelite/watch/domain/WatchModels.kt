@@ -26,6 +26,7 @@ data class WatchVideo(
     val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
     /** Live-chat continuation for live streams; fixtures leave it null so goldens stay put. */
     val chatKey: String? = null,
+    val sessionGeneration: Long? = null,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
@@ -51,6 +52,8 @@ data class RelatedPage(val items: List<WatchRelated>, val nextKey: String?)
 
 interface WatchRepository {
     suspend fun watch(videoId: String): WatchPage
+    /** A read that must bypass any caching layer (explicit user retry). */
+    suspend fun watchFresh(videoId: String): WatchPage = watch(videoId)
     suspend fun next(videoId: String, cursor: String): RelatedPage = RelatedPage(emptyList(), null)
 }
 

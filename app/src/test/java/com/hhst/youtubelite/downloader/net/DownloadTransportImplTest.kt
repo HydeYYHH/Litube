@@ -451,7 +451,7 @@ class DownloadTransportImplTest {
         server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
         val session = com.hhst.youtubelite.extractor.YoutubeWebSession(
             "test", com.hhst.youtubelite.extractor.WebAccount.ANONYMOUS,
-            0, null, null, null, null, "UA", 0, null, "test", com.grack.nanojson.JsonObject(), { "" })
+            0, null, null, null, null, "UA", 0, null, "test", com.google.gson.JsonObject(), { "" })
         val plan = com.hhst.youtubelite.extractor.MediaRequestPlan(session,
             com.hhst.youtubelite.extractor.StreamClient.VISIONOS,
             com.hhst.youtubelite.extractor.MediaProtocol.HTTPS,

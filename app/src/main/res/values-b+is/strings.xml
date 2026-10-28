@@ -65,6 +65,10 @@
     <string name="queue_remove">Fjarlægja úr biðröð</string>
     <string name="application_not_found">Forrit fannst ekki</string>
     <string name="segments">Hlutar</string>
+    <string name="chapters">Kaflar</string>
+    <string name="no_chapters">Engir kaflar</string>
+    <string name="skippable_segments">Sneiðanlegir hlutar</string>
+    <string name="show_more_replies">Sýna fleiri svör</string>
     <string name="no_segments">Engir hlutar sem hægt er að sleppa</string>
     <string name="subtitles">Texti</string>
     <string name="playback_end_next">Spilaðu næst</string>

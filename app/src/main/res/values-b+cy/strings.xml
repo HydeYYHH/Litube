@@ -65,6 +65,10 @@
     <string name="queue_remove">Tynnu o\'r ciw</string>
     <string name="application_not_found">Cais heb ei ganfod</string>
     <string name="segments">Segmentau</string>
+    <string name="chapters">Pennod</string>
+    <string name="no_chapters">Dim pennodau</string>
+    <string name="skippable_segments">Segmentau y gellir eu hepgor</string>
+    <string name="show_more_replies">Dangos mwy o atebion</string>
     <string name="no_segments">Dim segmentau y gellir eu hepgor</string>
     <string name="subtitles">Isdeitlau</string>
     <string name="playback_end_next">Chwarae nesaf</string>

@@ -65,6 +65,10 @@
     <string name="queue_remove">Kuyruktan kaldır</string>
     <string name="application_not_found">Uygulama bulunamadı</string>
     <string name="segments">Bölümler</string>
+    <string name="chapters">Bölümler</string>
+    <string name="no_chapters">Bölüm yok</string>
+    <string name="skippable_segments">Atlanabilir segmentler</string>
+    <string name="show_more_replies">Daha fazla yanıt göster</string>
     <string name="no_segments">Atlanacak bölüm yok</string>
     <string name="subtitles">Altyazılar</string>
     <string name="playback_end_next">Sonrakini oynat</string>

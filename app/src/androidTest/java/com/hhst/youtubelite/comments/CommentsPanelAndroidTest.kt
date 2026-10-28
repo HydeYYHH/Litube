@@ -126,8 +126,8 @@ class CommentsPanelAndroidTest {
         render()
         val panel = bounds("comments-panel")
         assertEquals(390f, panel.width, 0.5f)
-        // Sheet height = viewport 844 − sheet top 267 (48 top bar + rounded 219 player).
-        assertEquals(577f, panel.height, 0.5f)
+        // Sheet height = viewport 844 − sheet top 219 (rounded 16:9 player; the native watch page has no top bar).
+        assertEquals(625f, panel.height, 0.5f)
         assertEquals(bounds("comments-scrim").bottom, panel.bottom, 0.5f)
 
         val handle = bounds("comments-handle-bar")
@@ -202,7 +202,7 @@ class CommentsPanelAndroidTest {
         render()
         val panel = bounds("comments-panel")
         assertEquals(500f, panel.width, 0.5f)
-        assertEquals(752f, panel.height, 0.5f)
+        assertEquals(800f, panel.height, 0.5f)
         assertEquals(20f, textLayout("comments-title").layoutInput.style.fontSize.value, 0.01f)
         assertEquals(28f, textLayout("comments-title").layoutInput.style.lineHeight.value, 0.01f)
         assertEquals(12f, bounds("comments-title").left - panel.left, 0.5f)
@@ -211,9 +211,9 @@ class CommentsPanelAndroidTest {
         assertEquals(68f, bounds("comments-input").left - panel.left, 0.5f)
         assertEquals(488f, bounds("comments-input").right - panel.left, 0.5f)
         assertEquals(480f, bounds("comment-c1-more").right - panel.left, 0.5f)
-        // Rail docked at the right edge of the viewport.
+        // Rail docked at the right edge of the viewport, from the top edge (no top bar).
         assertEquals(bounds("comments-rail").right, panel.right, 0.5f)
-        assertEquals(48f, panel.top - bounds("comments-rail").top, 0.5f)
+        assertEquals(0f, panel.top - bounds("comments-rail").top, 0.5f)
     }
 
     @Test fun expandedRepliesRenderUnderTheCommentAndCollapseAgain() {
@@ -245,7 +245,7 @@ class CommentsPanelAndroidTest {
 
     @Test fun sortMenuSwitchesTheVisibleOrderAndCloses() {
         render()
-        assertEquals(433.375f, bounds("comment-c1").top, 0.5f)
+        assertEquals(385f, bounds("comment-c1").top, 0.5f)
         compose.onNodeWithTag("comments-sort").assertTextEquals("Top")
         compose.onNodeWithTag("comments-sort").performClick()
         assertTrue(hasTag("comments-sort-menu"))
@@ -255,7 +255,7 @@ class CommentsPanelAndroidTest {
         compose.onNodeWithTag("comments-sort").assertTextEquals("Newest")
         assertEquals(CommentSort.Newest, panelSort)
         val newestFirst = FixtureCommentsRepository.sampleThreads(CommentSort.Newest).first().id
-        assertEquals(433.375f, bounds("comment-$newestFirst").top, 0.5f)
+        assertEquals(385f, bounds("comment-$newestFirst").top, 0.5f)
         assertTrue(actions.contains(CommentAction.SelectSort(CommentSort.Newest)))
     }
 

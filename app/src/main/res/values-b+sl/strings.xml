@@ -65,6 +65,10 @@
     <string name="queue_remove">Odstrani iz čakalne vrste</string>
     <string name="application_not_found">Aplikacije ni bilo mogoče najti</string>
     <string name="segments">Segmenti</string>
+    <string name="chapters">Poglavja</string>
+    <string name="no_chapters">Ni poglavij</string>
+    <string name="skippable_segments">Preskočni segmenti</string>
+    <string name="show_more_replies">Prikaži več odgovorov</string>
     <string name="no_segments">Ni preskočljivih segmentov</string>
     <string name="subtitles">Podnapisi</string>
     <string name="playback_end_next">Igraj naprej</string>

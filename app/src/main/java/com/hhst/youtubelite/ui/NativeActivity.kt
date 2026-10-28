@@ -44,7 +44,7 @@ abstract class NativeActivity : ComponentActivity() {
     @Suppress("DEPRECATION")
     override fun onPostResume() {
         super.onPostResume()
-        val dark = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark ?: (
+        val dark = com.hhst.youtubelite.ui.theme.AppAppearance.dark ?: (
             resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {

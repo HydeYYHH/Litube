@@ -73,7 +73,7 @@ class PlaylistScreenAndroidTest {
             assertEquals("cover height at $w", expectedHeight, cover.height, 1f)
         }
         compose.runOnIdle { width = 1280; content = PlaylistContent.Loading }
-        val loadingCover = compose.onNodeWithTag("playlist-loading-cover").fetchSemanticsNode().boundsInRoot
+        val loadingCover = compose.onNodeWithTag("playlist-loading-cover", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(427f, loadingCover.width, 1f)
         assertEquals(240f, loadingCover.height, 1f)
     }
@@ -156,7 +156,8 @@ class PlaylistScreenAndroidTest {
                     when (scene) {
                         "search" -> SearchResultsScreen(SearchUiState("open movie", SearchContent.Results(SearchPage("open movie", emptyList(), FixturePlaylistRepository.summaries())),
                             filters = SearchFilters(type = SearchResultType.Playlists), signedInPreview = false), {}, {})
-                        "channel" -> ChannelScreen(ChannelUiState(content = ChannelContent.Ready(channel), selectedTab = ChannelTab.Playlists), {}, {})
+                        "channel" -> ChannelScreen(ChannelUiState(content = ChannelContent.Ready(channel), selectedTab = ChannelTab.Playlists,
+                            playlists = ChannelSection.Ready(FixturePlaylistRepository.summaries())), {}, {})
                         else -> PlaylistScreen(current, {}, {})
                     }
                 }
@@ -178,7 +179,10 @@ class PlaylistScreenAndroidTest {
                 "unavailable" to PlaylistContent.Unavailable, "empty" to PlaylistContent.Ready((ready() as PlaylistContent.Ready).page.copy(
                     summary = summary.copy(videoCount = 0), entries = emptyList())))) {
                 compose.runOnIdle { scene = "detail"; current = state(content) }
-                compose.onNodeWithTag("playlist-$name").assertIsDisplayed()
+                if (name == "empty") compose.onNodeWithTag("playlist-list")
+                    .performScrollToNode(hasTestTag("playlist-empty"))
+                // playlist-loading clears its subtree semantics; query the unmerged tree.
+                compose.onNodeWithTag("playlist-$name", useUnmergedTree = true).assertIsDisplayed()
                 capture("$name-$w", "playlist-page", output, record, w in listOf(390, 1280))
             }
             for ((name, overlay) in listOf("menu" to PlaylistOverlay.Menu, "video-menu" to PlaylistOverlay.VideoMenu("bunny-1"))) {

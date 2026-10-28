@@ -65,6 +65,10 @@
     <string name="queue_remove">Verwyder uit ry</string>
     <string name="application_not_found">Toepassing nie gevind nie</string>
     <string name="segments">Segmente</string>
+    <string name="chapters">Hoofstukke</string>
+    <string name="no_chapters">Geen hoofstukke</string>
+    <string name="skippable_segments">Oorslaanbare segmente</string>
+    <string name="show_more_replies">Wys meer antwoorde</string>
     <string name="no_segments">Geen oorslaanbare segmente nie</string>
     <string name="subtitles">Onderskrifte</string>
     <string name="playback_end_next">Speel volgende</string>

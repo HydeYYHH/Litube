@@ -20,16 +20,35 @@ class MmkvAuthStore(context: android.content.Context) : AuthStore {
         null, java.io.File(context.noBackupFilesDir, "auth").apply { mkdirs() }.absolutePath)
 
     init {
+        // Migration may only delete a legacy key after its new-location write is
+        // confirmed; a failed encode keeps the legacy copy as the source of truth.
         val legacy = com.tencent.mmkv.MMKV.defaultMMKV()
         val keys = legacy.allKeys().orEmpty().filter { it.startsWith("auth:") }
-        keys.forEach { key -> if (!kv.containsKey(key)) legacy.decodeString(key)?.let { kv.encode(key, it) } }
+        val migrated = mutableListOf<String>()
+        keys.forEach { key ->
+            if (kv.containsKey(key)) {
+                migrated += key
+            } else legacy.decodeString(key)?.let { value ->
+                if (kv.encode(key, value)) migrated += key
+            }
+        }
         kv.sync()
-        keys.forEach(legacy::removeValueForKey)
+        migrated.forEach(legacy::removeValueForKey)
         legacy.sync()
+        if (migrated.size != keys.size) com.hhst.youtubelite.diagnostics.AppLog.event(
+            com.hhst.youtubelite.diagnostics.AppLog.Category.STORAGE, "auth_migration_incomplete",
+            mapOf("legacy" to keys.size, "migrated" to migrated.size))
     }
     override fun read(key: String): String? = kv.decodeString(key, null)
     override fun write(key: String, value: String?) {
-        if (value == null) kv.removeValueForKey(key) else kv.encode(key, value)
+        if (value == null) {
+            kv.removeValueForKey(key)
+            return
+        }
+        // Identical values (e.g. an unchanged access token across refreshes)
+        // must not rewrite the same credential on every request.
+        if (kv.decodeString(key, null) == value) return
+        check(kv.encode(key, value)) { "auth_write_failed" }
     }
 }
 
@@ -111,6 +130,13 @@ object MediaSession {
     internal fun <T> withAnonymousSession(generation: Long, block: () -> T): T = synchronized(lock) {
         val current = session.snapshot()
         if (current.signedIn || current.generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
+        block()
+    }
+
+    /** Device-store access for the explicit device library source: guarded against identity
+     * changes only, so a signed-in user may still read and write on-device collections. */
+    internal fun <T> withUnchangedSession(generation: Long, block: () -> T): T = synchronized(lock) {
+        if (session.snapshot().generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
         block()
     }
 

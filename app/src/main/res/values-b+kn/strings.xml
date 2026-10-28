@@ -65,6 +65,10 @@
     <string name="queue_remove">ಸರದಿಯಿಂದ ತೆಗೆದುಹಾಕಿ</string>
     <string name="application_not_found">ಅಪ್ಲಿಕೇಶನ್ ಕಂಡುಬಂದಿಲ್ಲ</string>
     <string name="segments">ವಿಭಾಗಗಳು</string>
+    <string name="chapters">ಅಧ್ಯಾಯಗಳು</string>
+    <string name="no_chapters">ಅಧ್ಯಾಯಗಳಿಲ್ಲ</string>
+    <string name="skippable_segments">ಬಿಟ್ಟುಹೊಗಬಹುದಾದ ವಿಭಾಗಗಳು</string>
+    <string name="show_more_replies">ಇನ್ನಷ್ಟು ಉತ್ತರಗಳನ್ನು ತೋರಿಸಿ</string>
     <string name="no_segments">ಯಾವುದೇ ಸ್ಕಿಪ್ ಮಾಡಬಹುದಾದ ವಿಭಾಗಗಳಿಲ್ಲ</string>
     <string name="subtitles">ಉಪಶೀರ್ಷಿಕೆಗಳು</string>
     <string name="playback_end_next">ಮುಂದೆ ಆಟವಾಡಿ</string>

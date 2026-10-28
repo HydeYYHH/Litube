@@ -29,6 +29,9 @@ class HomeViewModel(
     private val avatars: com.hhst.youtubelite.data.media.MediaAvatarDirectory? = null,
     private val snapshots: com.hhst.youtubelite.core.ContentSnapshots? = null,
     private val accountKey: () -> String = { "visitor" },
+    /** Identity-scoped anonymous watch-report counter; null in fixtures. */
+    private val reportSignal: (() -> Long)? = null,
+    private val now: () -> Long = System::currentTimeMillis,
     /** Snapshot seeding IO runs here; tests inject the runTest scheduler. */
     private val seedDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
 ) : ViewModel() {
@@ -85,6 +88,10 @@ class HomeViewModel(
     }
 
     private var sessionKey: Long? = null
+    private var lastFeedLoadedAtMs = 0L
+    private var lastSeenReportSignal = -1L
+    /** A progress signal arrived for a request still in flight; consumed once it completes. */
+    private var pendingReportRevision = false
 
     fun updateSession(signedIn: Boolean, key: Long, avatar: String? = null) {
         val changed = sessionKey != null && sessionKey != key
@@ -93,7 +100,42 @@ class HomeViewModel(
         _state.update { it.copy(avatar = avatar) }
         if (changed) {
             overlay(HomeOverlay.None)
+            lastSeenReportSignal = reportSignal?.invoke() ?: -1L
             load(append = false)
+        }
+    }
+
+    /**
+     * Foreground entry refreshes quietly at most once per report signal or staleness
+     * window, on both a feed and an empty home (a real watch may have created the
+     * first recommendations). An existing feed/empty card keeps its rows, query and
+     * scroll; a busy load merges the signal as a pending revision instead of
+     * discarding it — the finished request consumes it.
+     */
+    fun onForeground() {
+        // Adopt the signal even while busy: the finished request re-checks it.
+        val signal = reportSignal?.invoke() ?: -1L
+        if (signal > lastSeenReportSignal) {
+            if (lastSeenReportSignal >= 0) pendingReportRevision = true
+            lastSeenReportSignal = signal
+        }
+        when (val content = _state.value.content) {
+            is HomeContent.Feed -> {
+                if (content.refreshing || loadJob?.isActive == true) return
+                val stale = lastFeedLoadedAtMs > 0 && now() - lastFeedLoadedAtMs >= QUIET_REFRESH_AFTER_MS
+                if (pendingReportRevision || stale) {
+                    pendingReportRevision = false
+                    load(append = false)
+                }
+            }
+            // Staleness alone must not disturb an honest empty state; a real
+            // watch signal may. Loading/Failed keep their own retry paths.
+            is HomeContent.Empty ->
+                if (pendingReportRevision && loadJob?.isActive != true) {
+                    pendingReportRevision = false
+                    load(append = false, keepEmpty = true)
+                }
+            else -> {}
         }
     }
 
@@ -356,22 +398,21 @@ class HomeViewModel(
             .distinctBy { it.channelId }.takeIf { it.isNotEmpty() } ?: return
         avatarJob?.cancel()
         avatarJob = viewModelScope.launch {
-            val resolved = missing.mapNotNull { video ->
-                directory.avatar(video.channelId)?.let { video.channelId to it }
-            }.toMap()
-            if (resolved.isEmpty()) return@launch
-            _state.update { state ->
-                val feed = state.content as? HomeContent.Feed ?: return@update state
-                state.copy(content = feed.copy(page = feed.page.copy(items = feed.page.items.map { item ->
-                    if (item is FeedItem.Video && item.avatar == null) resolved[item.channelId]?.let { item.copy(avatar = it) } ?: item
-                    else item
-                })))
+            directory.resolveAll(missing.map { it.channelId }) { channelId, avatar ->
+                _state.update { state ->
+                    val feed = state.content as? HomeContent.Feed ?: return@update state
+                    state.copy(content = feed.copy(page = feed.page.copy(items = feed.page.items.map { item ->
+                        if (item is FeedItem.Video && item.avatar == null && item.channelId == channelId)
+                            item.copy(avatar = avatar) else item
+                    })))
+                }
             }
         }
     }
 
-    private fun load(append: Boolean) {
+    private fun load(append: Boolean, keepEmpty: Boolean = false) {
         val feed = uiState.value.content as? HomeContent.Feed
+        val empty = uiState.value.content as? HomeContent.Empty
         val next = if (append) feed?.page?.nextKey ?: return else null
         if (append && (feed?.append == AppendState.Loading || feed?.refreshing == true)) return
         loadJob?.cancel()
@@ -381,6 +422,8 @@ class HomeViewModel(
         _state.update { state -> state.copy(verification = null, content = when {
             append && feed != null -> feed.copy(append = AppendState.Loading)
             feed != null -> feed.copy(refreshing = true, append = AppendState.Idle, refreshFailed = false)
+            // A quiet re-check keeps the empty card painted (no Loading flash).
+            keepEmpty && empty != null -> empty.copy(refreshing = true)
             else -> HomeContent.Loading
         }) }
         loadJob = viewModelScope.launch {
@@ -388,15 +431,18 @@ class HomeViewModel(
                 val page = repository.loadHome(filter, next)
                 if (requestGeneration != generation) return@launch
                 liveResultReceived = true
+                if (!append) lastFeedLoadedAtMs = now()
                 val combined = if (append && feed != null) page.copy(items = mergeFeed(feed.page.items, page.items)) else page
                 _state.update { it.copy(content = if (combined.items.isEmpty()) HomeContent.Empty(
                     title = combined.messages.firstOrNull() ?: HomeContent.Empty().title,
                 ) else HomeContent.Feed(combined)) }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    snapshots?.write("home", requestAccount, filter, combined.items.filterIsInstance<FeedItem.Video>())
+                val store = snapshots
+                if (store != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    store.write("home", requestAccount, filter, combined.items.filterIsInstance<FeedItem.Video>())
                 }
                 if (requestGeneration != generation) return@launch
                 fillMissingAvatars(combined.items)
+                consumePendingRevisionAfterLoad()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: com.hhst.youtubelite.data.media.MediaException) {
@@ -414,15 +460,33 @@ class HomeViewModel(
                 } else {
                     _state.update { it.copy(content = if (feed != null) feed.copy(refreshing = false,
                         append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = !append) else HomeContent.Failed) }
+                    consumePendingRevisionAfterLoad()
                 }
             } catch (_: Exception) {
                 if (requestGeneration != generation) return@launch
                 liveResultReceived = true
                 _state.update { it.copy(content = if (feed != null) feed.copy(refreshing = false,
                     append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = !append) else HomeContent.Failed) }
+                consumePendingRevisionAfterLoad()
             }
         }
     }
 
+    /**
+     * A progress signal that arrived while a request was in flight merges as a
+     * pending revision and is consumed here — one quiet re-check, never discarded.
+     * A traffic challenge is excluded: its banner owns the retry.
+     */
+    private fun consumePendingRevisionAfterLoad() {
+        if (!pendingReportRevision) return
+        pendingReportRevision = false
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) { load(append = false, keepEmpty = true) }
+    }
+
     override fun onCleared() { navigation.close() }
+
+    private companion object {
+        /** A feed older than this refreshes quietly when the screen returns to front. */
+        const val QUIET_REFRESH_AFTER_MS = 15 * 60 * 1000L
+    }
 }

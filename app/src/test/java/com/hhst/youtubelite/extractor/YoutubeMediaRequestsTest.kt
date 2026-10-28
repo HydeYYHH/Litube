@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import com.google.gson.Gson
@@ -39,6 +39,7 @@ class YoutubeMediaRequestsTest {
             assertNull(get.getHeader("Authorization"))
             assertNull(get.getHeader("Cookie"))
             assertArrayEquals(byteArrayOf(0x78, 0), post.body.readByteArray())
+            assertEquals("POST", policy.build(url, plan).method)
             assertFalse(policy.build(url, plan).header("User-Agent").orEmpty().contains("ANDROID"))
             client.dispatcher.executorService.shutdown()
         } finally { server.shutdown() }
@@ -114,8 +115,8 @@ class YoutubeMediaRequestsTest {
 
     @Test fun configurationParserHandlesBracesInsideStringsAndMergesSets() {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"EVENT_ID\":\"{value}\"});ytcfg.set({\"SESSION_INDEX\":2});")
-        assertEquals("{value}", config.getString("EVENT_ID"))
-        assertEquals(2, config.getInt("SESSION_INDEX"))
+        assertEquals("{value}", config.text("EVENT_ID"))
+        assertEquals(2, config.raw("SESSION_INDEX")?.toInt())
     }
 
     @Test fun partialResponsesProvePositionAndObjectLength() {
@@ -161,6 +162,37 @@ class YoutubeMediaRequestsTest {
         } finally { server.shutdown() }
     }
 
+    @Test fun rejectedPostResponsesNeverBecomeALearnedCompatibilityMethod() {
+        for (contentType in listOf("text/html; charset=utf-8", "application/json")) {
+            val server = MockWebServer()
+            server.start()
+            val policy = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
+            val plan = MediaRequestPlan(session(), StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.HEADER, true)
+            val client = OkHttpClient.Builder().addInterceptor(policy.interceptor()).build()
+            try {
+                val url = server.url("/videoplayback").toString()
+                server.enqueue(MockResponse().setResponseCode(403))
+                server.enqueue(MockResponse().setHeader("Content-Type", contentType).setBody("error"))
+                val failure = assertThrows(IOException::class.java) {
+                    client.newCall(policy.build(url, plan, 0, 5)).execute()
+                }
+                assertEquals("MEDIA_ERROR_BODY", failure.message)
+                assertEquals("GET", server.takeRequest().method)
+                assertEquals("POST", server.takeRequest().method)
+                assertEquals("GET", policy.build(url, plan, 0, 5).method)
+                server.enqueue(MockResponse().setHeader("Content-Type", "video/mp4").setBody("media"))
+                client.newCall(policy.build(url, plan, 0, 5)).execute().use {
+                    assertEquals("media", requireNotNull(it.body).string())
+                }
+                assertEquals("GET", server.takeRequest().method)
+            } finally {
+                client.connectionPool.evictAll()
+                client.dispatcher.executorService.shutdown()
+                server.shutdown()
+            }
+        }
+    }
+
     @Test fun unrangedPlanKeepsTheWholeBodyWhenAHeaderRangeIsIgnored() {
         val server = MockWebServer()
         server.start()
@@ -202,16 +234,16 @@ class YoutubeMediaRequestsTest {
             "var ytInitialData={\"topbar\":{\"desktopTopbarRenderer\":{\"logo\":{\"topbarLogoRenderer\":{\"iconImage\":{\"iconType\":\"YOUTUBE_PREMIUM_LOGO\"}}}}},\"recommendation\":{\"isLiveContent\":true}};" +
             "window.ytAtN({\"R\":{\"bgChallenge\":{\"message\":\"a } brace\"}}});"
         val config = YoutubeSessionProvider.parseConfig(html)
-        assertFalse(config.getBoolean("_IS_LIVE"))
-        assertTrue(config.getBoolean("IS_PREMIUM"))
-        assertEquals("a } brace", config.getObject("_BG_CHALLENGE").getString("message"))
+        assertFalse(config.flag("_IS_LIVE", false))
+        assertTrue(config.flag("IS_PREMIUM", false))
+        assertEquals("a } brace", config.obj("_BG_CHALLENGE").text("message"))
     }
 
     @Test fun loosePageChallengeKeepsItsOwnEventAndDoesNotEvaluateJavascript() {
         val payload = "{R: '{\"bgChallenge\":{\"program\":\"a } brace\"}}',}" // Serialized R used by page challenges.
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"EVENT_ID\":\"paired-event\"});window.ytAtN($payload);throw Error('never execute');")
-        assertEquals("paired-event", config.getString("EVENT_ID"))
-        assertEquals(payload, config.getString("_BG_CHALLENGE_RAW"))
+        assertEquals("paired-event", config.text("EVENT_ID"))
+        assertEquals(payload, config.text("_BG_CHALLENGE_RAW"))
         assertFalse(config.has("_BG_CHALLENGE"))
     }
 
@@ -265,7 +297,7 @@ class YoutubeMediaRequestsTest {
     @Test fun accountIndexAcceptsThePageStringRepresentation() {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"SESSION_INDEX\":\"2\"});")
         assertEquals(2, YoutubeSessionProvider.accountIndex(config))
-        config["SESSION_INDEX"] = "invalid"
+        config.addProperty("SESSION_INDEX", "invalid")
         assertThrows(IOException::class.java) { YoutubeSessionProvider.accountIndex(config) }
     }
 }

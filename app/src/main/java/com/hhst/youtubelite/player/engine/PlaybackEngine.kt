@@ -51,6 +51,7 @@ import com.hhst.youtubelite.extractor.StreamClient
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 import com.hhst.youtubelite.player.PREF_TTL_MS
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
 import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
@@ -67,6 +68,7 @@ import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
@@ -135,6 +137,7 @@ data class PlaybackSnapshot(
     val subtitleCues: List<String> = emptyList(),
     val error: String? = null,
     val prepared: Boolean = false,
+    val firstFrameRendered: Boolean = false,
     val ended: Boolean = false,
     val videoWidth: Int = 0,
     val videoHeight: Int = 0,
@@ -152,11 +155,14 @@ data class PlaybackSnapshot(
     val sponsorChip: Boolean = false,
     /** True when [sponsorChip] targets a highlight point (chip jumps TO it). */
     val sponsorChipHighlight: Boolean = false,
+    /** Bumped on every user seek; watch reporting re-anchors its interval on change. */
+    val discontinuityEpoch: Long = 0,
     val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
 )
 
 interface PlaybackApi {
     fun preparePlayback(urlOrId: String) { }
+    fun prefetchDemand(videoId: String): PlaybackDemand? = null
     /** Loads a watch source; an attached receiver owns its playback controls. */
     fun play(urlOrId: String)
     /** Re-extract and reload the current video after a failure. */
@@ -225,6 +231,11 @@ interface PlaybackApi {
      * track set: the host should load a new manifest on the receiver.
      */
     var onCastManifestReload: (() -> Unit)?
+    /**
+     * A successful playback response arrived: short-lived reporting endpoints
+     * (watch-time URLs) ride on it and belong to the session owner, not the UI.
+     */
+    var onWatchContext: ((videoId: String, tracking: PlayerTracking?, sessionGeneration: Long) -> Unit)?
     val snapshot: StateFlow<PlaybackSnapshot>
 }
 
@@ -285,6 +296,11 @@ class PlaybackEngine(
     private var playJob: Job? = null
     private var firstMediaReady: CompletableDeferred<Unit>? = null
     private var rebuildJob: Job? = null
+    /** Lifecycle counters for diagnostics and instrumented regression checks. */
+    private val mediaPrepares = AtomicInteger()
+    private val surfaceSwitches = AtomicInteger()
+    val mediaPrepareCount: Int get() = mediaPrepares.get()
+    val surfaceSwitchCount: Int get() = surfaceSwitches.get()
     /**
      * Last explicit play/pause from the user (or a play() load). Not inferred
      * from [Player.isPlaying]: a pause during prepare must survive the later
@@ -292,6 +308,8 @@ class PlaybackEngine(
      */
     @Volatile private var userWantsPlay = false
     private val playbackGeneration = AtomicLong()
+    /** Seek counter feeding [PlaybackSnapshot.discontinuityEpoch]. */
+    private val discontinuityEpoch = AtomicLong()
     /** Generation of the media currently attached to [player]. */
     @Volatile private var attachedGeneration = 0L
     private val refreshCastMutex = Mutex()
@@ -329,6 +347,8 @@ class PlaybackEngine(
     override var onCastError: (() -> Unit)? = null
 
     override var onCastManifestReload: (() -> Unit)? = null
+
+    override var onWatchContext: ((videoId: String, tracking: PlayerTracking?, sessionGeneration: Long) -> Unit)? = null
 
     /** Drives the playback notification service; injected to avoid a hard dep. */
     var notificationController: PlaybackNotificationController? = null
@@ -435,6 +455,8 @@ class PlaybackEngine(
             }
             override fun onRenderedFirstFrame(eventTime: AnalyticsListener.EventTime, output: Any, renderTimeMs: Long) {
                 if (telemetry.context(eventTime) != diagnosticContext || attachedContext != diagnosticContext) return
+                if (attachedGeneration != playbackGeneration.get() || output != videoSurface?.holder?.surface) return
+                _snapshot.value = _snapshot.value.copy(firstFrameRendered = true)
                 if (firstFrameMs == null && loadStartedAt > 0) {
                     firstFrameMs = elapsed() - loadStartedAt
                     performance.stabilize(elapsed())
@@ -500,6 +522,7 @@ class PlaybackEngine(
                 // a sponsor segment opts out of auto-skipping it.
                 if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                     performance.stabilize(elapsed())
+                    discontinuityEpoch.incrementAndGet()
                     if (skipSeekInProgress) {
                         skipSeekInProgress = false
                     } else {
@@ -621,6 +644,7 @@ class PlaybackEngine(
         startPositionMs: Long? = null,
     ) {
         val generation = playbackGeneration.get()
+        val reportingGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
         val context = beginDiagnostics(videoId, generation)
         val preparing = AppLog.operation(AppLog.Category.PLAYER, "prepare", context.child(), mapOf("reextract" to reExtract))
         if (videoId != _snapshot.value.videoId) audioPreference = null
@@ -662,6 +686,9 @@ class PlaybackEngine(
             if (!stillCurrent(generation)) return
             currentStream = stream
             currentMetadata = metadata
+            // Short-lived reporting endpoints travel with this response; hand them
+            // to the session owner while the media identity is still this load.
+            onWatchContext?.invoke(videoId, stream.tracking, reportingGeneration)
             rememberAudio(source.audioFormat)
             adaptiveVideoPool = source.videoFormats
             // Clear just before the new source attaches: the old one keeps its
@@ -681,6 +708,7 @@ class PlaybackEngine(
             attachedContext = context
             player.setMediaSource(source.mediaSource, startMs)
             player.setPlaybackSpeed(speed)
+            mediaPrepares.incrementAndGet()
             player.prepare()
             attachedGeneration = generation
             // System media card / AVRCP read the session player's metadata;
@@ -804,6 +832,8 @@ class PlaybackEngine(
 
     override fun setVideoSurface(surface: SurfaceView?) {
         playerLog("surface_changed", mapOf("attached" to (surface != null), "valid" to surface?.holder?.surface?.isValid))
+        if (surface != null && surface !== videoSurface) surfaceSwitches.incrementAndGet()
+        if (surface !== videoSurface) _snapshot.value = _snapshot.value.copy(firstFrameRendered = false)
         videoSurface = surface
         performance.stabilize(elapsed())
         player.setVideoSurfaceView(surface)
@@ -1436,6 +1466,7 @@ class PlaybackEngine(
                 refreshCastMutex.withLock {
                     val fresh = withTimeoutOrNull(45_000) {
                         withContext(Dispatchers.IO) {
+                            val reportingGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
                             val extracted = extractor.extractFresh(id).stream.await()
                             val url = pickPublishedUrl(extracted, token, itag)
                             val localMeta = currentMetadata
@@ -1447,6 +1478,7 @@ class PlaybackEngine(
                             handler.post {
                                 if (_snapshot.value.videoId == id) {
                                     currentStream = extracted
+                                    onWatchContext?.invoke(id, extracted.tracking, reportingGeneration)
                                     if (source != null) {
                                         rememberAudio(source.audioFormat)
                                         adaptiveVideoPool = source.videoFormats
@@ -1555,13 +1587,14 @@ class PlaybackEngine(
         playerLog("recovery_decision", mapOf("reason" to (reason?.name ?: "unsupported"), "light_attempts" to lightRefreshAttempts, "full_attempts" to reExtractAttempts), critical = false)
         val stream = currentStream
 
-        val failedUri = if (reason == RecoveryReason.HTTP_403) failingUri(error) else null
-        val forbiddenProfile = if (videoId != null) failedUri?.let {
-            extractor.noteMediaForbidden(videoId, it.toString(), diagnosticContext)
+        val rejection = reason?.rejection
+        val failedUri = if (rejection != null) failingUri(error) else null
+        val rejectedProfile = if (videoId != null && rejection != null) failedUri?.let {
+            extractor.noteMediaRejected(videoId, it.toString(), rejection, diagnosticContext)
         } else null
-        if (reason == RecoveryReason.HTTP_403) playerLog("recovery_client_feedback", mapOf(
-            "applied" to (forbiddenProfile != null), "client" to forbiddenProfile?.name,
-            "reason" to if (forbiddenProfile != null) "http_403" else "unknown_or_stale_request_plan"))
+        if (rejection != null) playerLog("recovery_client_feedback", mapOf(
+            "applied" to (rejectedProfile != null), "client" to rejectedProfile?.name,
+            "reason" to if (rejectedProfile != null) rejection.code else "unknown_or_stale_request_plan"))
 
         // Refresh the source once with the current session and tokens. A transport failure
         // is evidence about the connection, so it must not reset tokens or blame a client.
@@ -1590,14 +1623,14 @@ class PlaybackEngine(
             reason = reason.afterLightBudget()
         }
 
-        if (reason == RecoveryReason.HTTP_403 && reExtractAttempts >= 1 && stream != null && metadata != null &&
+        if (reason?.rejection != null && reExtractAttempts >= 1 && stream != null && metadata != null &&
             rescueRejectedVideoPin(failedUri, stream, metadata)) return
 
-        if (reason == RecoveryReason.HTTP_403 && reExtractAttempts >= 1 && !backupAttempted && stream != null && metadata != null) {
+        if (reason?.rejection != null && reExtractAttempts >= 1 && !backupAttempted && stream != null && metadata != null) {
             backupAttempted = true
             // The failed request owns its client. Selected video/audio and the current manifest
             // can belong to different clients, especially after a fresh extraction or prefetch.
-            val profile = forbiddenProfile ?: stream.formats.firstOrNull {
+            val profile = rejectedProfile ?: stream.formats.firstOrNull {
                 it.url == failedUri?.toString()
             }?.requestPlan?.client
             val backup = profile?.let(stream::excluding)
@@ -1626,7 +1659,7 @@ class PlaybackEngine(
         }
 
         // One full session/token refresh, followed by one existing compatible backup.
-        if (reason == RecoveryReason.HTTP_403 &&
+        if (reason?.rejection != null &&
             reExtractAttempts < MAX_REEXTRACT_ATTEMPTS &&
             videoId != null
         ) {
@@ -1678,17 +1711,17 @@ class PlaybackEngine(
         pinnedQuality = null
         clearVideoConstraints()
         _snapshot.value = _snapshot.value.copy(qualityLabel = null)
-        playerLog("recovery_video_pin_released", mapOf("itag" to itag, "height" to height, "reason" to "repeat_http_403"))
+        playerLog("recovery_video_pin_released", mapOf("itag" to itag, "height" to height, "reason" to "repeat_media_rejection"))
         rebuildAtCurrentPosition(stream, metadata, preferredQuality = null, reloadCast = true)
         return true
     }
 
-    /** The 403'd googlevideo URI, or null. */
+    /** The original request URI of a refused media response. */
     private fun failingUri(error: PlaybackException): Uri? {
         val seen = mutableSetOf<Throwable>()
         var cause: Throwable? = error
         while (cause != null && seen.add(cause)) {
-            if (cause is HttpDataSource.InvalidResponseCodeException && cause.responseCode == 403) {
+            if (cause is HttpDataSource.HttpDataSourceException && PlaybackRecovery.classify(cause)?.rejection != null) {
                 return cause.dataSpec.uri
             }
             cause = cause.cause
@@ -1897,6 +1930,8 @@ class PlaybackEngine(
         extractor.preparePlayback(urlOrId, playbackDemand(VideoId.parse(urlOrId)))
     }
 
+    override fun prefetchDemand(videoId: String): PlaybackDemand = playbackDemand(videoId)
+
     private fun rememberedSubtitleKey(): String? {
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
         return cache.get(KEY_SUBTITLE, String::class.java)
@@ -1932,6 +1967,7 @@ class PlaybackEngine(
             sponsorCountdownSec = sponsorSkip.countdownSec,
             sponsorChip = sponsorSkip.chipActive,
             sponsorChipHighlight = sponsorSkip.chipIsHighlight,
+            discontinuityEpoch = discontinuityEpoch.get(),
         )
     }
 

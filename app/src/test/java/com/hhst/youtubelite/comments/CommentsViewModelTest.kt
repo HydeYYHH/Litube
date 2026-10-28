@@ -457,4 +457,20 @@ class CommentsViewModelTest {
             vm.actionNotices.first())
     }
 
+    @Test fun changingSessionDropsTheComposerDraftAndOldRestoreDepth() = runTest {
+        val state = SavedStateHandle()
+        val model = CommentsViewModel(FixtureCommentsRepository(), state, "bunny")
+        advanceUntilIdle()
+        model.onAction(CommentAction.Compose)
+        model.onAction(CommentAction.DraftChanged("Private draft"))
+        assertEquals("Private draft", model.uiState.value.draft)
+        model.refreshSession()
+        assertEquals("", model.uiState.value.draft)
+        assertEquals(CommentsOverlay.None, model.uiState.value.overlay)
+        assertEquals("", state.get<String>("commentsDraft"))
+        assertEquals(0, state.get<Int>("commentsLoadedCount"))
+        advanceUntilIdle()
+        model.dispose()
+    }
+
 }

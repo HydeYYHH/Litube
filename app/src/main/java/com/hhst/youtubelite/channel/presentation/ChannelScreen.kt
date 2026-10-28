@@ -49,7 +49,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,8 +68,14 @@ import com.hhst.youtubelite.channel.domain.ChannelUiState
 import com.hhst.youtubelite.channel.domain.ChannelVideo
 import com.hhst.youtubelite.channel.domain.ChannelOverlay
 import com.hhst.youtubelite.channel.domain.ChannelPlaylistSort
+import com.hhst.youtubelite.channel.domain.ChannelSection
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.hhst.youtubelite.ui.design.*
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 private val SubscribeForeground = Color(0xFFF1F1F1)
 
@@ -107,12 +112,22 @@ fun ChannelScreen(
                 else -> videosState
             }
             var previousTab by rememberSaveable { mutableStateOf(state.selectedTab) }
+            // A tab keeps its exact index/offset once visited; only a FIRST visit
+            // inherits the outgoing tab's header collapse. The channel is fixed per
+            // activity instance, so these sets never leak across channels.
+            val visitedTabs = rememberSaveable(
+                saver = androidx.compose.runtime.saveable.listSaver<MutableList<ChannelTab>, ChannelTab>(
+                    save = { it.toList() }, restore = { it.toMutableList() }),
+            ) { androidx.compose.runtime.mutableStateListOf<ChannelTab>() }
             LaunchedEffect(state.selectedTab, state.content is ChannelContent.Ready) {
                 if (state.content !is ChannelContent.Ready || state.selectedTab == previousTab) return@LaunchedEffect
                 val source = listFor(previousTab)
                 val target = listFor(state.selectedTab)
+                val firstVisit = state.selectedTab !in visitedTabs
+                visitedTabs.add(previousTab)
+                visitedTabs.add(state.selectedTab)
                 previousTab = state.selectedTab
-                if (target.firstVisibleItemIndex == 0) {
+                if (firstVisit && target.firstVisibleItemIndex == 0) {
                     if (source.firstVisibleItemIndex > 0) target.scrollToItem(1)
                     else if (target.firstVisibleItemScrollOffset == 0) {
                         target.scrollToItem(0, source.firstVisibleItemScrollOffset)
@@ -134,7 +149,8 @@ fun ChannelScreen(
                             ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction,
                                 state.searchResults, canPage = state.searchNextKey != null, append = state.searchAppend)
                             ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
-                            ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, onAction)
+                            ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, state.playlists, onAction,
+                                canPage = state.playlistsNextKey != null, append = state.playlistsAppend)
                             ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction,
                                 production = state.production, canPage = state.shortsNextKey != null, append = state.shortsAppend)
                             ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction,
@@ -143,7 +159,7 @@ fun ChannelScreen(
                                 ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction,
                                     production = state.production, canPage = state.postsNextKey != null, append = state.postsAppend)
                             }
-                            else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend)
+                            else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend, state.videosTab)
                         }
                     }
                     state.verification?.let { challenge ->
@@ -167,11 +183,20 @@ fun ChannelScreen(
 
 @Composable
 private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, state: LazyListState,
-    sort: ChannelPlaylistSort, onAction: (ChannelAction) -> Unit) {
+    sort: ChannelPlaylistSort, playlists: ChannelSection<List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>>,
+    onAction: (ChannelAction) -> Unit,
+    canPage: Boolean = false, append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle) {
     val viewport = rememberUpdatedState(width)
     // "Last video added" only exists when the source carries update dates; otherwise the
     // control would present server order as a sort it cannot perform.
-    val canSortByUpdate = page.playlists.any { it.updatedDays != null }
+    val rows = (playlists as? ChannelSection.Ready)?.value.orEmpty()
+    val canSortByUpdate = rows.any { it.updatedDays != null }
+    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
+        val info = state.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
+            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadPlaylistsNext)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("channel-playlists-list"), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ChannelHeader(page, viewport.value, onAction) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Playlists, onAction) }
@@ -185,15 +210,56 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
             }
             Spacer(Modifier.height(12.dp))
         }
-        if (page.playlists.isEmpty()) item {
-            AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+        when (playlists) {
+            is ChannelSection.Ready -> {
+                if (rows.isEmpty()) item {
+                    AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+                }
+                val sorted = if (sort == ChannelPlaylistSort.LastVideo) rows.sortedBy { it.updatedDays ?: Int.MAX_VALUE } else rows
+                items(sorted, key = { it.id }) { playlist ->
+                    com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
+                        { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
+                        if (width >= 931f || width >= 550f && width <= height) 40f else 48f)
+                }
+            }
+            ChannelSection.Empty -> item {
+                AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+            }
+            else -> item { ChannelTabStatus(ChannelTab.Playlists, playlists, onAction) }
         }
-        val playlists = if (sort == ChannelPlaylistSort.LastVideo) page.playlists.sortedBy { it.updatedDays ?: Int.MAX_VALUE } else page.playlists
-        items(playlists, key = { it.id }) { playlist ->
-            com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
-                { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
-                if (width >= 931f || width >= 550f && width <= height) 40f else 48f)
+        if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-playlists-append") {
+            Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-playlists-append"), contentAlignment = Alignment.Center) {
+                when (append) {
+                    com.hhst.youtubelite.home.domain.AppendState.Loading ->
+                        AppText("Loading…", color = DesignTokens.Secondary)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed ->
+                        AppText("Couldn't load more playlists. Tap to retry.",
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadPlaylistsNext) }.padding(8.dp),
+                            color = DesignTokens.Secondary)
+                    else -> Unit
+                }
+            }
         }
+    }
+}
+
+/** A deferred tab's own loading/failure status; the header above stays interactive. */
+@Composable
+private fun ChannelTabStatus(tab: ChannelTab, section: ChannelSection<*>, onAction: (ChannelAction) -> Unit) {
+    val key = tab.name.lowercase()
+    Box(Modifier.fillMaxWidth().height(240.dp).testTag("channel-$key-${if (section is ChannelSection.Failed) "failed" else "loading"}"),
+        contentAlignment = Alignment.Center) {
+        if (section is ChannelSection.Failed) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AppText("Couldn't load this tab.", color = DesignTokens.Secondary)
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(DesignTokens.Surface)
+                    .clickable(role = Role.Button) { onAction(ChannelAction.RetrySection(tab)) }
+                    .testTag("channel-$key-retry").padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    AppText("Retry", weight = FontWeight.Medium)
+                }
+            }
+        } else CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 2.5.dp, color = DesignTokens.Secondary)
     }
 }
 
@@ -210,15 +276,15 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
     Row(Modifier.fillMaxWidth().height(ChannelLayout.ToolbarHeight.dp).background(DesignTokens.Background)
         .testTag("channel-topbar"), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(53.dp), contentAlignment = Alignment.CenterStart) {
-            AppIconButton(AppIcon.Back, "Close the channel page", diameter = 48.dp) { onBack() }
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_close_channel_page), diameter = 48.dp) { onBack() }
         }
         AppText(title, Modifier.weight(1f).testTag("channel-title"), size = 20, line = 28,
             weight = FontWeight.Bold, maxLines = 1)
-        AppIconButton(AppIcon.Search, "Search within this channel", diameter = 48.dp) {
+        AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_within_channel), diameter = 48.dp) {
             onAction(ChannelAction.ChannelSearch)
         }
         // The anonymous channel page offers no section menu; production hides the dead entry.
-        if (!state.production) AppIconButton(AppIcon.More, "More channel options", diameter = 48.dp) {
+        if (!state.production) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_channel_options), diameter = 48.dp) {
             onAction(ChannelAction.OpenSectionMenu)
         }
     }
@@ -320,6 +386,7 @@ private fun ChannelVideosTab(
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
     append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    videosTab: ChannelSection<Unit> = ChannelSection.Ready(Unit),
 ) {
     val viewport = rememberUpdatedState(width)
     val canPage = page.videosNextKey != null
@@ -340,7 +407,10 @@ private fun ChannelVideosTab(
     ) {
         item { ChannelHeader(page, viewport.value, onAction) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Videos, onAction) }
-        if (page.videos.isEmpty()) {
+        if (videosTab !is ChannelSection.Ready) {
+            // A deferred first read reports here; the header above is already usable.
+            item { ChannelTabStatus(ChannelTab.Videos, videosTab, onAction) }
+        } else if (page.videos.isEmpty()) {
             item { ChannelNoVideos() }
         } else {
             val columns = ChannelLayout.gridColumns(viewport.value)
@@ -395,9 +465,9 @@ private fun ChannelVideoRow(
         Box(Modifier.padding(top = 12.dp).size(ChannelLayout.ThumbnailWidth.dp, ChannelLayout.ThumbnailHeight.dp)
             .clip(RoundedCornerShape(ChannelLayout.ThumbnailRadius.dp))
             .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }
-            .semantics { contentDescription = "${video.title}, ${video.duration}" }
+            .appDescription(R.string.a11y_title_duration, video.title, video.duration)
             .testTag("channel-thumb-${video.id}")) {
-            Artwork(video.artwork, Modifier.fillMaxSize())
+            VideoArtwork(video.id, video.artwork, Modifier.fillMaxSize())
             if (video.duration.isNotBlank() || video.live) Box(Modifier.align(Alignment.BottomEnd).padding(ChannelLayout.DurationBadgeInset.dp)
                 .background(if (video.live) DesignTokens.Red else Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -407,7 +477,7 @@ private fun ChannelVideoRow(
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).padding(top = 14.dp)
             .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }) {
-            AppText(video.title, Modifier.fillMaxWidth(), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.sp)
+            AppText(rememberDeArrowTitle(video.id, video.title), Modifier.fillMaxWidth(), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.sp)
             Spacer(Modifier.height(2.dp))
             if (video.age.isNotBlank() && video.views.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -421,7 +491,7 @@ private fun ChannelVideoRow(
                 AppText(listOf(video.views, video.age).filter { it.isNotBlank() }.joinToString(" • "), size = 12, line = 16, maxLines = 1, color = DesignTokens.Secondary)
             }
         }
-        AppIconButton(AppIcon.More, "More actions for ${video.title}", diameter = menuDiameter) {
+        AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, video.title), diameter = menuDiameter) {
             onAction(ChannelAction.OpenItemMenu(video.id))
         }
     }
@@ -544,18 +614,12 @@ private fun ChannelIdentity(page: ChannelPage, width: Float) {
     }
 }
 
-@OptIn(ExperimentalTextApi::class)
 @Composable
 private fun ChannelName(name: String, width: Float) {
     val size = ChannelLayout.nameFontSize(width)
-    val family = remember(size) {
-        FontFamily(Font(R.font.channel_heading, FontWeight.SemiBold,
-            variationSettings = FontVariation.Settings(
-                FontVariation.Setting("wght", 600f),
-                FontVariation.Setting("wdth", 25f),
-                FontVariation.Setting("opsz", size),
-            )))
-    }
+    // Barlow Semi Condensed SemiBold (SIL OFL 1.1) ships as a static cut: no
+    // variation settings, and no width-axis squeeze carried over from the old font.
+    val family = remember(size) { FontFamily(Font(R.font.barlow_semicondensed, FontWeight.SemiBold)) }
     BasicText(name, Modifier.fillMaxWidth().testTag("channel-name"),
         style = DesignTokens.text(size.toInt(), ChannelLayout.nameLineHeight(width).toInt(), FontWeight.SemiBold).copy(fontFamily = family),
         maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -651,7 +715,7 @@ private fun ChannelNoVideos() {
 @Composable
 private fun ChannelSkeleton(width: Float) {
     val bannerHeight = ((width - ChannelLayout.PageInset * 2f) / ChannelLayout.BannerAspect).dp
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("channel-skeleton")) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("channel-skeleton").clearAndSetSemantics {}) {
         Spacer(Modifier.height(ChannelLayout.HeaderTopGap.dp))
         Box(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)
             .fillMaxWidth().height(bannerHeight).background(DesignTokens.Ghost))

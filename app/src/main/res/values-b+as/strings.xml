@@ -65,6 +65,10 @@
     <string name="queue_remove">শাৰীৰ পৰা আঁতৰাওক</string>
     <string name="application_not_found">আবেদন পোৱা নগ\'ল</string>
     <string name="segments">খণ্ডসমূহ</string>
+    <string name="chapters">অধ্যায়সমূহ</string>
+    <string name="no_chapters">কোনো অধ্যায় নাই</string>
+    <string name="skippable_segments">এৰি যাব পৰা খণ্ডসমূহ</string>
+    <string name="show_more_replies">আৰু উত্তৰ দেখুৱাওক</string>
     <string name="no_segments">কোনো এৰিব পৰা খণ্ড নাই</string>
     <string name="subtitles">উপশিৰোনামা</string>
     <string name="playback_end_next">পৰৱৰ্তী খেলা</string>

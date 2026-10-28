@@ -28,13 +28,15 @@ import com.hhst.youtubelite.notifications.domain.NotificationsContent
 import com.hhst.youtubelite.notifications.domain.NotificationItem
 import com.hhst.youtubelite.notifications.domain.NotificationsUiState
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 /** The notifications page: anonymous prompt, empty, loading, error and ready states. */
 @Composable
 fun NotificationsScreen(state: NotificationsUiState, onAction: (NotificationsAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("notifications-screen")) {
         Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("notifications-bar"), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onBack() }
             AppText("Notifications", Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
             Spacer(Modifier.weight(1f))
         }

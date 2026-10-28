@@ -115,6 +115,17 @@ data class Extension(
                     toggle(PreferenceKeys.SPONSOR_COUNTDOWN, R.string.sponsor_countdown),
                 ),
             ),
+            group(
+                id = "dearrow",
+                title = R.string.dearrow,
+                icon = R.drawable.ic_play,
+                children = listOf(
+                    toggle(PreferenceKeys.DEARROW_TITLES, R.string.dearrow_replace_titles,
+                        R.string.dearrow_titles_summary),
+                    toggle(PreferenceKeys.DEARROW_THUMBNAILS, R.string.dearrow_replace_thumbnails,
+                        R.string.dearrow_thumbnails_summary),
+                ),
+            ),
             nav(
                 id = NAV_DATA,
                 title = R.string.settings_backup_restore,

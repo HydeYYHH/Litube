@@ -65,6 +65,10 @@
     <string name="queue_remove">Pašalinti iš eilės</string>
     <string name="application_not_found">Programa nerasta</string>
     <string name="segments">Segmentai</string>
+    <string name="chapters">Skyriai</string>
+    <string name="no_chapters">Skyrių nėra</string>
+    <string name="skippable_segments">Praleidžiami segmentai</string>
+    <string name="show_more_replies">Rodyti daugiau atsakymų</string>
     <string name="no_segments">Nėra praleidžiamų segmentų</string>
     <string name="subtitles">Subtitrai</string>
     <string name="playback_end_next">Žaisti toliau</string>

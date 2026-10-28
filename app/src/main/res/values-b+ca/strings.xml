@@ -65,6 +65,10 @@
     <string name="queue_remove">Eliminar de la cua</string>
     <string name="application_not_found">No s\'ha trobat l\'aplicació</string>
     <string name="segments">Segments</string>
+    <string name="chapters">Capítols</string>
+    <string name="no_chapters">No hi ha capítols</string>
+    <string name="skippable_segments">Segments que es poden ometre</string>
+    <string name="show_more_replies">Mostra més respostes</string>
     <string name="no_segments">No es poden ometre segments</string>
     <string name="subtitles">Subtítols</string>
     <string name="playback_end_next">Juga a continuació</string>

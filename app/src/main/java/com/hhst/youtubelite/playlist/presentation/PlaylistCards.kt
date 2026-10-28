@@ -30,6 +30,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 import com.hhst.youtubelite.search.domain.SearchResultsLayout
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
 
 @Composable
 internal fun PlaylistArtwork(asset: String, modifier: Modifier = Modifier) {
@@ -84,7 +85,7 @@ fun PlaylistSearchList(
                             AppText("${playlist.owner} · Playlist", size = 12, line = 14, color = DesignTokens.Secondary,
                                 modifier = Modifier.clickable { onOwner(playlist.channelId) }, maxLines = 1)
                         }
-                        AppIconButton(AppIcon.More, "More actions for ${playlist.title}", diameter = menuSize,
+                        AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, playlist.title), diameter = menuSize,
                             modifier = Modifier.padding(top = 5.dp)) { onMenu(playlist.id) }
                     }
                 } else {
@@ -107,7 +108,7 @@ fun PlaylistSearchList(
                                 }
                             }
                             Box(Modifier.matchParentSize().wrapContentSize(Alignment.TopEnd, unbounded = true).padding(end = menuInset)) {
-                                AppIconButton(AppIcon.More, "More actions for ${playlist.title}", diameter = menuSize,
+                                AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, playlist.title), diameter = menuSize,
                                     modifier = Modifier.offset(y = (-8).dp)) { onMenu(playlist.id) }
                             }
                         }
@@ -138,7 +139,7 @@ fun ChannelPlaylistRow(playlist: PlaylistSummary, onOpen: () -> Unit, onMenu: ()
                 Spacer(Modifier.height(3.dp))
                 AppText("${playlist.owner} · Playlist", size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
             }
-            AppIconButton(AppIcon.More, "More actions for ${playlist.title}", diameter = menuSize.dp, onClick = onMenu)
+            AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, playlist.title), diameter = menuSize.dp, onClick = onMenu)
         }
     }
 }

@@ -12,7 +12,7 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import com.hhst.youtubelite.extractor.ExtractionContext
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.ExtractionTransport

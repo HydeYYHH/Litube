@@ -65,6 +65,10 @@
     <string name="queue_remove">قطار سے ہٹا دیں۔</string>
     <string name="application_not_found">درخواست نہیں ملی</string>
     <string name="segments">طبقات</string>
+    <string name="chapters">ابواب</string>
+    <string name="no_chapters">کوئی ابواب نہیں</string>
+    <string name="skippable_segments">چھوڑنے کے قابل حصے</string>
+    <string name="show_more_replies">مزید جوابات دکھائیں</string>
     <string name="no_segments">کوئی چھوڑنے کے قابل سیگمنٹ نہیں۔</string>
     <string name="subtitles">ذیلی عنوانات</string>
     <string name="playback_end_next">اگلا کھیلیں</string>

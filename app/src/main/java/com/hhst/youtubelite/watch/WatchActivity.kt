@@ -4,6 +4,7 @@ import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import com.hhst.youtubelite.navigation.openContentLink
 import android.content.Context
 import com.hhst.youtubelite.data.media.MediaSession
+import com.hhst.youtubelite.data.media.toReportingVideo
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -21,13 +22,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -262,9 +266,11 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>()
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    // Only real pages publish: a Loading transition (reload, video switch)
+                    // must not stop the reporting of the still-playing session.
                     watchViewModel.uiState.map { (it.content as? WatchContent.Ready)?.page?.video }
                         .distinctUntilChanged()
-                        .collect { video -> reporting.publish(video) }
+                        .collect { video -> if (video != null) reporting.publish(video.toReportingVideo()) }
                 }
             }
             lifecycleScope.launch {
@@ -353,6 +359,14 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             }
             BackHandler(onBack = back)
             Box(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)) {
+                // The page reports its player slot geometry; the real player
+                // lives in one stable overlay host that interpolates between
+                // that slot and fullscreen, so a mode switch keeps the
+                // composition, the SurfaceView and the prepared media.
+                val playerSlotBounds = remember { mutableStateOf<Rect?>(null) }
+                val panelsCover = state.searchOpen || state.commentsOpen ||
+                    state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
+                    state.overlay is WatchOverlay.Feedback
                 BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
                         state.overlay is WatchOverlay.Save || state.overlay is WatchOverlay.Feedback ||
@@ -366,13 +380,32 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                         ),
                         fullscreen = fullscreen,
                         menuContent = {},
+                        playerSlot = { slotModifier ->
+                            Box(slotModifier.onGloballyPositioned { playerSlotBounds.value = it.boundsInRoot() })
+                        },
                         sidebarCovered = state.commentsOpen && !fullscreen && !state.searchOpen,
                     )
                 }
-                if (fullscreen) {
-                    Box(Modifier.fillMaxSize().background(ComposeColor.Black)) {
-                        WatchPlayer(Modifier.fillMaxSize(), back, pip)
-                    }
+                val miniStore: com.hhst.youtubelite.player.surface.MiniPlayerStore = koinInject()
+                val hostDensity = androidx.compose.ui.platform.LocalDensity.current
+                val slot = playerSlotBounds.value
+                com.hhst.youtubelite.player.surface.MiniPlayerWindow(
+                    screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp,
+                    bottomInsetDp = 0,
+                    store = miniStore,
+                    showStroke = false,
+                    onBackgroundTap = {},
+                    mini = false,
+                    fillsWindow = fullscreen,
+                    fullscreenSwipeEnabled = !pip,
+                    embeddedLeftDp = slot?.let { with(hostDensity) { it.left.toDp().value.toInt() } } ?: 0,
+                    embeddedTopDp = slot?.let { with(hostDensity) { it.top.toDp().value.toInt() } } ?: 0,
+                    embeddedWidthDp = slot?.let { with(hostDensity) { it.width.toDp().value.toInt() } } ?: 0,
+                    embeddedHeightDp = slot?.let { with(hostDensity) { it.height.toDp().value.toInt() } } ?: 0,
+                    onFullscreenSwipe = { target -> playerViewModel.setFullscreenManual(target) },
+                    modifier = Modifier.then(if (panelsCover) Modifier.clearAndSetSemantics {} else Modifier),
+                ) {
+                    WatchPlayer(Modifier.fillMaxSize(), back, pip)
                 }
                 if (state.searchOpen) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     val query = state.draftQuery.trim()

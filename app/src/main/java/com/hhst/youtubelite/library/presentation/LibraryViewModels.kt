@@ -29,8 +29,10 @@ class YouViewModel(
     private val scenario: LibraryScenario,
     private var signedIn: Boolean,
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
+    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
+    private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
+        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -51,7 +53,24 @@ class YouViewModel(
             scenario == LibraryScenario.Loading -> _uiState.update { it.copy(content = LibraryContent.Loading) }
             else -> refresh()
         }
+        sourceStore?.let { store ->
+            viewModelScope.launch { store.source.collect(::onSourceChanged) }
+        }
     }
+
+    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
+    private fun onSourceChanged(value: LibrarySource) {
+        if (_uiState.value.source == value) return
+        ++generation
+        loadJob?.cancel()
+        actionJob?.cancel()
+        saveSheet?.close()
+        showOverlay(LibraryOverlay.None)
+        _uiState.update { it.copy(source = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
+        if (signedIn || repository.supportsLocal) refresh()
+    }
+
+    private fun deviceActive() = repository.supportsLocal && (!signedIn || _uiState.value.source == LibrarySource.Device)
 
 
     private var sessionKey: Long? = null
@@ -66,7 +85,8 @@ class YouViewModel(
         actionJob?.cancel()
         saveSheet?.close()
         showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(signedIn = value, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
+        _uiState.update { it.copy(signedIn = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you")),
+            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -86,6 +106,7 @@ class YouViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
+            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
             LibraryAction.OpenAccountMenu -> showOverlay(LibraryOverlay.Account)
             is LibraryAction.AccountSelected -> {
                 val account = (_uiState.value.content as? LibraryContent.Ready)?.page?.account
@@ -107,8 +128,10 @@ class YouViewModel(
             LibraryAction.OpenNotifications -> navigation.trySend(LibraryNavigationRequest.OpenNotifications)
             LibraryAction.OpenHistory -> navigation.trySend(LibraryNavigationRequest.OpenHistory)
             LibraryAction.OpenPlaylists -> navigation.trySend(LibraryNavigationRequest.OpenPlaylists)
-            LibraryAction.OpenWatchLater -> navigation.trySend(LibraryNavigationRequest.Playlist("WL"))
-            LibraryAction.OpenLiked -> navigation.trySend(LibraryNavigationRequest.Playlist("LL"))
+            LibraryAction.OpenWatchLater -> navigation.trySend(LibraryNavigationRequest.Playlist(
+                if (deviceActive()) com.hhst.youtubelite.data.media.LocalLibraryStore.WATCH_LATER else "WL"))
+            // Liked has no device lane: it stays an account-only exit.
+            LibraryAction.OpenLiked -> if (!deviceActive()) navigation.trySend(LibraryNavigationRequest.Playlist("LL"))
             LibraryAction.OpenDownloads -> navigation.trySend(LibraryNavigationRequest.OpenDownloads)
             is LibraryAction.OpenVideo -> navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
             is LibraryAction.OpenChannel -> navigation.trySend(LibraryNavigationRequest.Channel(action.channelId))
@@ -133,6 +156,8 @@ class YouViewModel(
                 navigation.trySend(LibraryNavigationRequest.Destination(action.tab))
             }
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            LibraryAction.UndoHistoryRemove -> undoHistoryRemove()
+            LibraryAction.DismissUndo -> _uiState.update { it.copy(undo = null) }
             LibraryAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
             is LibraryAction.OpenVerification -> navigation.trySend(LibraryNavigationRequest.OpenVerification(action.challengeUrl))
             // History-page management actions are unreachable from the You page.
@@ -151,13 +176,16 @@ class YouViewModel(
             return
         }
         if (actionJob?.isActive == true) return
+        val request = generation
         actionJob = viewModelScope.launch {
             try {
-                repository.removeFromHistory(token)
+                val removed = repository.removeFromHistory(token)
+                if (request != generation) return@launch
                 _uiState.update { state ->
                     val ready = state.content as? LibraryContent.Ready ?: return@update state
                     state.copy(content = ready.copy(page = ready.page.copy(
-                        history = ready.page.history.filterNot { it.videoId == videoId })))
+                        history = ready.page.history.filterNot { it.videoId == videoId })),
+                        undo = removed)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
@@ -166,6 +194,23 @@ class YouViewModel(
                 notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
             } catch (_: Exception) {
                 notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+            }
+        }
+    }
+
+    /** Undoes the recorded local removal in the store, then reloads the page from it. */
+    private fun undoHistoryRemove() {
+        val removed = _uiState.value.undo ?: return
+        if (actionJob?.isActive == true) return
+        val request = generation
+        _uiState.update { it.copy(undo = null) }
+        actionJob = viewModelScope.launch {
+            try {
+                repository.restoreHistoryEntry(removed)
+                if (request == generation) refresh()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't restore this entry."))
             }
         }
     }
@@ -210,9 +255,11 @@ class HistoryViewModel(
     private val scenario: LibraryScenario,
     private var signedIn: Boolean = true,
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
+    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HistoryUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
-        live = saveRepository != null, confirmClear = savedState.get<Boolean>("confirmClear") == true))
+        live = saveRepository != null, confirmClear = savedState.get<Boolean>("confirmClear") == true,
+        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -233,6 +280,25 @@ class HistoryViewModel(
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = HistoryContent.Loading) }
         } else refresh()
+        sourceStore?.let { store ->
+            viewModelScope.launch { store.source.collect(::onSourceChanged) }
+        }
+    }
+
+    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
+    private fun onSourceChanged(value: LibrarySource) {
+        if (_uiState.value.source == value) return
+        ++generation
+        loadJob?.cancel()
+        appendJob?.cancel()
+        actionJob?.cancel()
+        saveSheet?.close()
+        savedState["confirmClear"] = false
+        showOverlay(LibraryOverlay.None)
+        _uiState.update { it.copy(source = value, confirmClear = false, undo = null,
+            content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+        if (signedIn || repository.supportsLocal) refresh()
     }
 
 
@@ -250,9 +316,10 @@ class HistoryViewModel(
         saveSheet?.close()
         savedState["confirmClear"] = false
         showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(confirmClear = false) }
+        _uiState.update { it.copy(confirmClear = false, undo = null) }
         _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle,
+            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -287,6 +354,7 @@ class HistoryViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
+            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
             is LibraryAction.OpenVideo -> navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
             is LibraryAction.OpenChannel -> navigation.trySend(LibraryNavigationRequest.Channel(action.channelId))
             is LibraryAction.OpenMenu -> showOverlay(LibraryOverlay.Menu(action.videoId))
@@ -305,6 +373,8 @@ class HistoryViewModel(
                 }
             }
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
+            LibraryAction.UndoHistoryRemove -> undoHistoryRemove()
+            LibraryAction.DismissUndo -> _uiState.update { it.copy(undo = null) }
             // Unreachable from the history screen: it has no account menu, tab row or playlist
             // rows. No `else`: a new action must fail to compile here.
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
@@ -392,13 +462,16 @@ class HistoryViewModel(
             return
         }
         if (actionJob?.isActive == true) return
+        val request = generation
         actionJob = viewModelScope.launch {
             try {
-                repository.removeFromHistory(token)
+                val removed = repository.removeFromHistory(token)
+                if (request != generation) return@launch
                 _uiState.update { state ->
                     val ready = state.content as? HistoryContent.Ready ?: return@update state
                     state.copy(content = ready.copy(page = ready.page.copy(
-                        entries = ready.page.entries.filterNot { it.videoId == videoId })))
+                        entries = ready.page.entries.filterNot { it.videoId == videoId })),
+                        undo = removed)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
@@ -407,6 +480,23 @@ class HistoryViewModel(
                 notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
             } catch (_: Exception) {
                 notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+            }
+        }
+    }
+
+    /** Undoes the recorded local removal in the store, then reloads the page from it. */
+    private fun undoHistoryRemove() {
+        val removed = _uiState.value.undo ?: return
+        if (actionJob?.isActive == true) return
+        val request = generation
+        _uiState.update { it.copy(undo = null) }
+        actionJob = viewModelScope.launch {
+            try {
+                repository.restoreHistoryEntry(removed)
+                if (request == generation) refresh()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                notices.trySend(AppNotice.Message("Couldn't restore this entry."))
             }
         }
     }
@@ -426,9 +516,10 @@ class HistoryViewModel(
     private fun refresh() {
         if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
+        appendJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
-            _uiState.update { it.copy(content = HistoryContent.Loading) }
+            _uiState.update { it.copy(content = HistoryContent.Loading, append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
             runCatching { repository.history() }.fold(
                 onSuccess = { page ->
                     if (request != generation) return@fold
@@ -458,8 +549,10 @@ class CollectionViewModel(
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
     private var signedIn: Boolean = true,
+    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(CollectionUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
+    private val _uiState = MutableStateFlow(CollectionUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
+        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -473,6 +566,20 @@ class CollectionViewModel(
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = CollectionContent.Loading) }
         } else refresh()
+        sourceStore?.let { store ->
+            viewModelScope.launch { store.source.collect(::onSourceChanged) }
+        }
+    }
+
+    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
+    private fun onSourceChanged(value: LibrarySource) {
+        if (_uiState.value.source == value) return
+        ++generation
+        loadJob?.cancel()
+        appendJob?.cancel()
+        _uiState.update { it.copy(source = value, content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+        if (signedIn || repository.supportsLocal) refresh()
     }
 
 
@@ -487,7 +594,8 @@ class CollectionViewModel(
         loadJob?.cancel()
         appendJob?.cancel()
         _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle,
+            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -510,6 +618,7 @@ class CollectionViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
+            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
             is LibraryAction.OpenPlaylist -> navigation.trySend(LibraryNavigationRequest.Playlist(action.playlistId))
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
             // Unreachable from the collection screen: it has no account menu, tab row, video
@@ -520,6 +629,7 @@ class CollectionViewModel(
             is LibraryAction.OpenVideo, is LibraryAction.OpenChannel, is LibraryAction.OpenMenu,
             is LibraryAction.MenuSelected, LibraryAction.OpenManageHistory, LibraryAction.PauseHistory,
             LibraryAction.ResumeHistory, LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,
+            LibraryAction.UndoHistoryRemove, LibraryAction.DismissUndo,
             is LibraryAction.Destination, LibraryAction.LoadHistoryNext -> Unit
         }
     }
@@ -567,9 +677,10 @@ class CollectionViewModel(
     private fun refresh() {
         if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
+        appendJob?.cancel()
         val request = ++generation
         loadJob = viewModelScope.launch {
-            _uiState.update { it.copy(content = CollectionContent.Loading) }
+            _uiState.update { it.copy(content = CollectionContent.Loading, append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
             runCatching { repository.playlists() }.fold(
                 onSuccess = { page ->
                     if (request != generation) return@fold

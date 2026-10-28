@@ -65,6 +65,10 @@
     <string name="queue_remove">Eltávolítás a sorból</string>
     <string name="application_not_found">Alkalmazás nem található</string>
     <string name="segments">Szegmensek</string>
+    <string name="chapters">Fejezetek</string>
+    <string name="no_chapters">Nincsenek fejezetek</string>
+    <string name="skippable_segments">Kihagyható szegmensek</string>
+    <string name="show_more_replies">További válaszok megjelenítése</string>
     <string name="no_segments">Nincsenek átugorható szegmensek</string>
     <string name="subtitles">Feliratok</string>
     <string name="playback_end_next">Következő lejátszás</string>

@@ -59,13 +59,13 @@ class YoutubeAnonymousReadAndroidTest {
                 }
                 val html = requireNotNull(page) { "Anonymous page exceeded redirect limit" }
                 val config = YoutubeSessionProvider.parseConfig(html)
-                assertFalse("Page did not remain anonymous", config.getBoolean("LOGGED_IN", false))
-                var js = config.getString("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
+                assertFalse("Page did not remain anonymous", config.flag("LOGGED_IN", false))
+                var js = config.text("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
                     .find(html)?.groupValues?.get(1)?.replace("\\/", "/") ?: error("Anonymous player missing")
                 if (js.startsWith('/')) js = YoutubeSessionProvider.ORIGIN + js
-                config["PLAYER_JS_URL"] = js
-                val visitor = config.getString("VISITOR_DATA") ?:
-                    config.getObject("INNERTUBE_CONTEXT").getObject("client").getString("visitorData")
+                config.addProperty("PLAYER_JS_URL", js)
+                val visitor = config.text("VISITOR_DATA") ?:
+                    config.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData")
                 val session = YoutubeWebSession("anonymous-acceptance-$id", WebAccount.ANONYMOUS,
                     0, null, null, null, visitor, ua, 0, js, "credential-free-watch", config, { "" })
                 val transport = object : ExtractionTransport {

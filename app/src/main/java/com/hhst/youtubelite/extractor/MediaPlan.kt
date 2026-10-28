@@ -8,6 +8,10 @@ enum class MediaProtocol { HTTPS, DASH, HLS }
 /** How a byte window is expressed on the wire. */
 enum class MediaRange { HEADER, QUERY, NONE }
 
+enum class MediaRejection(val code: String) {
+    FORBIDDEN("http_403"), INVALID_BODY("invalid_media_body"),
+}
+
 /**
  * Playback-capable clients, their Innertube identity and request posture.
  * Names match the protocol values used by the player endpoints.

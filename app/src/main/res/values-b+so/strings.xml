@@ -65,6 +65,10 @@
     <string name="queue_remove">Ka saar safka</string>
     <string name="application_not_found">Codsi lama helin</string>
     <string name="segments">Qaybaha</string>
+    <string name="chapters">Cutubyada</string>
+    <string name="no_chapters">Cutubyo majiraan</string>
+    <string name="skippable_segments">Qaybaha la boodhi karo</string>
+    <string name="show_more_replies">Muuji jawaabo kale</string>
     <string name="no_segments">Ma jiraan qaybo la boodi karo</string>
     <string name="subtitles">Qoraal-hoosaadyo</string>
     <string name="playback_end_next">Ciyaar ku xigta</string>

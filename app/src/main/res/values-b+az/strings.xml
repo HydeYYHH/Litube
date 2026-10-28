@@ -65,6 +65,10 @@
     <string name="queue_remove">Növbədən çıxarın</string>
     <string name="application_not_found">Proqram tapılmadı</string>
     <string name="segments">Seqmentlər</string>
+    <string name="chapters">Fəsillər</string>
+    <string name="no_chapters">Fəsil yoxdur</string>
+    <string name="skippable_segments">Ötürülə bilən seqmentlər</string>
+    <string name="show_more_replies">Daha çox cavabı göstər</string>
     <string name="no_segments">Atlana bilən seqmentlər yoxdur</string>
     <string name="subtitles">Altyazılar</string>
     <string name="playback_end_next">Növbəti oynayın</string>

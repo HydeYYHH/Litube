@@ -5,6 +5,71 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LocalLibraryStoreTest {
+    @Test fun anInFlightHistoryWriteCannotOverwriteANewerCollectionEdit() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val first = java.util.concurrent.atomic.AtomicBoolean(true)
+        val backing = MemoryAuthStore()
+        val storage = object : AuthStore {
+            override fun read(key: String) = backing.read(key)
+            override fun write(key: String, value: String?) {
+                if (first.compareAndSet(true, false)) {
+                    entered.countDown()
+                    check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                }
+                backing.write(key, value)
+            }
+        }
+        val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val edits = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val library = LocalLibraryStore(storage, writer = writer)
+            library.record(video("one"))
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            val edit = edits.submit<com.hhst.youtubelite.saves.domain.SaveChoice> {
+                library.create("Films", "", video("two"))
+            }
+            release.countDown()
+            val collection = edit.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            writer.submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            val restored = LocalLibraryStore(storage)
+            assertNotNull(restored.playlist(collection.id))
+            assertEquals("one", restored.history().entries.single().videoId)
+        } finally {
+            release.countDown()
+            writer.shutdownNow()
+            edits.shutdownNow()
+        }
+    }
+
+    @Test fun aDelayedSerializationCannotWriteAnObsoleteRevision() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val first = java.util.concurrent.atomic.AtomicBoolean(true)
+        val gson = com.google.gson.GsonBuilder().registerTypeAdapter(HistoryEntry::class.java,
+            com.google.gson.JsonSerializer<HistoryEntry> { entry, _, _ ->
+                if (first.compareAndSet(true, false)) {
+                    entered.countDown()
+                    check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                }
+                com.google.gson.Gson().toJsonTree(entry)
+            }).create()
+        val storage = MemoryAuthStore()
+        val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val library = LocalLibraryStore(storage, gson, writer)
+            library.record(video("one"))
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            val collection = library.create("Films", "", video("two"))
+            release.countDown()
+            writer.submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            assertNotNull(LocalLibraryStore(storage).playlist(collection.id))
+        } finally {
+            release.countDown()
+            writer.shutdownNow()
+        }
+    }
+
     private fun video(id: String) = HistoryEntry(id, id, "Video $id", "Author", "channel", "image", "1:00", section = "On this device")
     @Test fun historyAndCollectionsPersistIndependentlyAndRemovalDoesNotDeleteSavedVideos() {
         val storage = MemoryAuthStore()
@@ -101,5 +166,116 @@ class LocalLibraryStoreTest {
         val restored = LocalLibraryStore(storage)
         assertEquals("Films", restored.playlists().playlists.single().title)
         assertEquals("one", restored.history().entries.single().videoId)
+    }
+
+    @Test fun aFailedDeferredWriteKeepsTheDirtyRevisionForTheNextFlush() {
+        val inner = MemoryAuthStore()
+        val failures = java.util.concurrent.atomic.AtomicInteger(1)
+        val storage = object : AuthStore {
+            override fun read(key: String) = inner.read(key)
+            override fun write(key: String, value: String?) {
+                if (failures.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) throw java.io.IOException("disk full")
+                inner.write(key, value)
+            }
+        }
+        val library = LocalLibraryStore(storage)
+        library.record(video("one"))
+        // The failed flush must not drop "one": the revision stays dirty.
+        library.record(video("two"))
+        val stored = inner.read("device-library:data")!!
+        assertTrue(stored.contains("\"one\""))
+        assertTrue(stored.contains("\"two\""))
+    }
+    @Test fun corruptPayloadsKeepABoundedRecoveryCopy() {
+        val raw = "{not json at all"
+        val storage = MemoryAuthStore().apply { write("device-library:data", raw) }
+        assertTrue(LocalLibraryStore(storage).history().entries.isEmpty())
+        assertEquals(raw, storage.read("device-library:recovery"))
+    }
+
+    @Test fun removeReturnsAnchorRecordAndRestorePutsTheEntryBackBetweenItsNeighbours() {
+        val library = LocalLibraryStore(MemoryAuthStore())
+        listOf("a", "b", "c", "d").forEach { library.record(video(it)) }
+        assertEquals(listOf("d", "c", "b", "a"), library.history().entries.map { it.videoId })
+        val removed = library.remove("c")!!
+        assertEquals("c", removed.entry.videoId)
+        // Newest-first list: the recorded neighbours are the newer ("d") and
+        // older ("b") entries around the removed slot.
+        assertEquals("d", removed.prevVideoId)
+        assertEquals("b", removed.nextVideoId)
+        assertEquals(1, removed.index)
+        library.restore(removed)
+        assertEquals(listOf("d", "c", "b", "a"), library.history().entries.map { it.videoId })
+    }
+
+    @Test fun restoreKeepsChangesTheUserMadeAfterTheRemoval() {
+        val library = LocalLibraryStore(MemoryAuthStore())
+        listOf("a", "b", "c").forEach { library.record(video(it)) }
+        val removed = library.remove("b")!!
+        // After the removal the user watches a new video and drops "a".
+        library.record(video("new"))
+        library.remove("a")
+        library.restore(removed)
+        // "b" rejoins beside its still-present newer neighbour "c"; the
+        // post-delete record and removal survive untouched.
+        assertEquals(listOf("new", "c", "b"), library.history().entries.map { it.videoId })
+    }
+
+    @Test fun restoreIsANoOpWhenTheVideoIsPresentAgain() {
+        val library = LocalLibraryStore(MemoryAuthStore())
+        listOf("a", "b").forEach { library.record(video(it)) }
+        val removed = library.remove("b")!!
+        library.record(video("b").copy(title = "Re-watched"))
+        library.restore(removed)
+        assertEquals(listOf("b", "a"), library.history().entries.map { it.videoId })
+        assertEquals("Re-watched", library.history().entries.first { it.videoId == "b" }.title)
+    }
+
+    @Test fun restoreFallsBackToTheRecordedIndexWhenBothNeighboursAreGone() {
+        val library = LocalLibraryStore(MemoryAuthStore())
+        listOf("a", "b", "c").forEach { library.record(video(it)) }
+        val removed = library.remove("b")!!
+        // The user then removes both neighbours of the removed entry.
+        library.remove("c")
+        library.remove("a")
+        library.restore(removed)
+        assertEquals(listOf("b"), library.history().entries.map { it.videoId })
+    }
+
+    @Test fun removeOfUnknownVideoReturnsNullAndDoubleRestoreStaysIdempotent() {
+        val library = LocalLibraryStore(MemoryAuthStore())
+        library.record(video("a"))
+        assertNull(library.remove("ghost"))
+        val removed = library.remove("a")!!
+        assertTrue(library.history().entries.isEmpty())
+        library.restore(removed)
+        // The second restore sees the entry back in place and changes nothing.
+        library.restore(removed)
+        assertEquals(listOf("a"), library.history().entries.map { it.videoId })
+    }
+
+    /**
+     * Entries persisted before the removal token existed deserialize with a null
+     * token; the local removal handle is the videoId, so history() normalizes the
+     * token instead of leaving those rows impossible to remove.
+     */
+    @Test fun legacyEntriesWithoutRemoveTokenStayRemovable() {
+        val storage = MemoryAuthStore()
+        val legacyJson = """{"history":[
+            {"id":"new","videoId":"new","title":"Fresh entry","author":"Author","channelId":"channel",
+             "artwork":"image","duration":"1:00","section":"Today","removeToken":"new"},
+            {"id":"old","videoId":"old","title":"Legacy entry","author":"Author","channelId":"channel",
+             "artwork":"image","duration":"1:00","section":"Today"}],
+            "collections":[],"paused":false}"""
+        storage.write("device-library:data", legacyJson)
+        val library = LocalLibraryStore(storage)
+        val entries = library.history().entries.associateBy { it.videoId }
+        assertEquals("old", entries.getValue("old").removeToken)
+        assertEquals("new", entries.getValue("new").removeToken)
+        val removed = library.remove("old")!!
+        assertEquals("new", removed.prevVideoId)
+        assertTrue(library.history().entries.map { it.videoId }.contains("new"))
+        library.restore(removed)
+        assertEquals(listOf("new", "old"), library.history().entries.map { it.videoId })
     }
 }

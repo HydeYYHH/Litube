@@ -65,6 +65,10 @@
     <string name="queue_remove">Удалить из очереди</string>
     <string name="application_not_found">Приложение не найдено</string>
     <string name="segments">Сегменты</string>
+    <string name="chapters">Главы</string>
+    <string name="no_chapters">Нет глав</string>
+    <string name="skippable_segments">Пропускаемые сегменты</string>
+    <string name="show_more_replies">Показать ещё ответы</string>
     <string name="no_segments">Нет сегментов для пропуска</string>
     <string name="subtitles">Субтитры</string>
     <string name="playback_end_next">Следующее видео</string>

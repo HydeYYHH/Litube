@@ -10,9 +10,30 @@ data class ShortItem(
     val views: String,
     val likes: String,
     val comments: String,
+    val avatar: String = "",
 )
 
 data class ShortsPage(val items: List<ShortItem>, val nextKey: String? = null)
+
+/** Fills fields the feed left blank; ids and non-blank feed values win. */
+fun ShortItem.fillFrom(detail: ShortItem): ShortItem = copy(
+    title = title.ifBlank { detail.title },
+    author = author.ifBlank { detail.author },
+    channelId = channelId.ifBlank { detail.channelId },
+    artwork = artwork.ifBlank { detail.artwork },
+    views = views.ifBlank { detail.views },
+    likes = likes.ifBlank { detail.likes },
+    comments = comments.ifBlank { detail.comments },
+    avatar = avatar.ifBlank { detail.avatar },
+)
+
+/** Full per-item metadata from the watch read; feeds reporting and fills thin feed rows. */
+data class ShortDetail(
+    val item: ShortItem,
+    /** Playback-tracking endpoints for watch-time reporting; feeds carry none. */
+    val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
+    val sessionGeneration: Long? = null,
+)
 
 sealed interface ShortsContent {
     data object Loading : ShortsContent
@@ -33,6 +54,8 @@ data class ShortsUiState(
     /** Confirmed viewer state per item/channel, applied only after the server confirms. */
     val ratings: Map<String, com.hhst.youtubelite.watch.domain.VideoRating> = emptyMap(),
     val subscriptions: Map<String, Boolean> = emptyMap(),
+    /** Hydrated per-item metadata (bounded by the ViewModel); keyed by item id. */
+    val details: Map<String, ShortDetail> = emptyMap(),
 )
 
 sealed interface ShortsOverlay {

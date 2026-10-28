@@ -65,6 +65,10 @@
     <string name="queue_remove">Yọ kuro lati isinyi</string>
     <string name="application_not_found">Ohun elo ko ri</string>
     <string name="segments">Awọn apakan</string>
+    <string name="chapters">Chapters</string>
+    <string name="no_chapters">No chapters</string>
+    <string name="skippable_segments">Skippable segments</string>
+    <string name="show_more_replies">Fi awọn idahun siwaju han</string>
     <string name="no_segments">Ko si skippable apa</string>
     <string name="subtitles">Awọn atunkọ</string>
     <string name="playback_end_next">Play tókàn</string>

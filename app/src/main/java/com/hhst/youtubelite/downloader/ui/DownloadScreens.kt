@@ -24,22 +24,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
-import com.hhst.youtubelite.ui.components.YoutubeCheckbox as Checkbox
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppCheckbox as Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.hhst.youtubelite.ui.components.YoutubeLinearProgressIndicator as LinearProgressIndicator
+import com.hhst.youtubelite.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import com.hhst.youtubelite.ui.components.YoutubeRadioButton as RadioButton
+import com.hhst.youtubelite.ui.components.AppRadioButton as RadioButton
 import androidx.compose.material3.Scaffold
-import com.hhst.youtubelite.ui.components.YoutubeSlider as Slider
+import com.hhst.youtubelite.ui.components.AppSlider as Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
+import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue

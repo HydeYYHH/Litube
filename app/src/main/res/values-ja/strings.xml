@@ -65,6 +65,10 @@
     <string name="queue_remove">キューから削除</string>
     <string name="application_not_found">対応するアプリがありません</string>
     <string name="segments">区間</string>
+    <string name="chapters">チャプター</string>
+    <string name="no_chapters">チャプターなし</string>
+    <string name="skippable_segments">スキップ可能なセグメント</string>
+    <string name="show_more_replies">他の返信を表示</string>
     <string name="no_segments">スキップできる区間はありません</string>
     <string name="subtitles">字幕</string>
     <string name="playback_end_next">次を再生</string>

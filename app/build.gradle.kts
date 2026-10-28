@@ -146,7 +146,6 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     implementation(libs.okhttp)
     implementation(libs.gson)
-    implementation(libs.nanojson)
     implementation(libs.mmkv)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.dash)

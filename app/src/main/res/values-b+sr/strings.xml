@@ -65,6 +65,10 @@
     <string name="queue_remove">Уклони из реда</string>
     <string name="application_not_found">Апликација није пронађена</string>
     <string name="segments">Сегменти</string>
+    <string name="chapters">Поглавља</string>
+    <string name="no_chapters">Нема поглавља</string>
+    <string name="skippable_segments">Сегменти који се могу прескочити</string>
+    <string name="show_more_replies">Прикажи више одговора</string>
     <string name="no_segments">Нема сегмената који се могу прескочити</string>
     <string name="subtitles">Титлови</string>
     <string name="playback_end_next">Играј следеће</string>

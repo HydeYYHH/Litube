@@ -17,6 +17,8 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.home.domain.*
+import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.R
 
 @Composable
 internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit,
@@ -60,7 +62,7 @@ private fun FeedMenuAction.icon(): AppIcon = when (this) {
 @Composable
 internal fun MixMenu(onAction: (HomeAction) -> Unit, live: Boolean = false) {
     Box(Modifier.fillMaxSize().background(DesignTokens.Scrim).clickable { onAction(HomeAction.CloseOverlay) }
-        .semantics { contentDescription = "Close menu" })
+        .appDescription(R.string.a11y_close_menu))
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val margin = if (maxWidth >= 330.dp) 40.dp else 0.dp
         val widthLimit = minOf(362.dp, (maxWidth - margin * 2).coerceAtLeast(0.dp))

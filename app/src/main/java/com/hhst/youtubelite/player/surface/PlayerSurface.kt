@@ -4,6 +4,8 @@ import android.view.Gravity
 import android.view.SurfaceView
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -101,14 +103,22 @@ fun PlayerSurface(
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
     var topBarHeightPx by remember { mutableIntStateOf(0) }
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
+    // Distance from the player bottom to the visible track, measured from the
+    // laid-out chrome. The sponsor cards and the subtitle safe area all anchor
+    // to it instead of to a hardcoded bar height.
+    var trackClearancePx by remember { mutableIntStateOf(0) }
+    // Visual height of the visible skip card (the 48 dp touch box extends
+    // invisibly and must not push subtitles further up).
+    var skipCardPx by remember { mutableIntStateOf(0) }
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
     val fullscreenSwipe = LocalFullscreenSwipeHandle.current
     val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
-    // The stable local host resizes the same view between embedded and mini.
-    // Fullscreen and system PiP keep their separate window geometries.
+    // A host-managed surface (embedded/fullscreen interpolation, mini dock)
+    // resizes the same view; only system PiP swaps to a separate geometry.
     val surfaceId = when {
         pip -> "pip"
+        managedByHost -> "local"
         state.fullscreen -> "fullscreen"
         else -> "local"
     }
@@ -233,8 +243,6 @@ fun PlayerSurface(
         val compactChrome = PlayerUi.compactChrome(maxWidth.value - chromeLeft - chromeRight,
             density.fontScale, state.casting || state.castDevices.isNotEmpty())
         val chromeSizing = PlayerUi.chromeSizing(maxWidth.value - chromeLeft - chromeRight, maxHeight.value)
-        val compactBottom = compactBottomControls(state, maxWidth.value - chromeLeft - chromeRight,
-            chromeSizing.textSp) && maxHeight < 280.dp
         val centerHeightDp = maxHeight.value - with(density) { (topBarHeightPx + bottomBarHeightPx).toDp().value }
         val showChromeAuthor = maxHeight >= 280.dp || density.fontScale < 1.3f
         Box(
@@ -341,6 +349,26 @@ fun PlayerSurface(
                     ),
             ) {
                 val showChrome = state.controlsVisible && !state.locked && !pip
+                // Skip cards sit one gap above the track while the chrome shows
+                // and drop near the player edge when it hides; the shift
+                // animates with the chrome fade.
+                val trackClearanceDp = with(density) { trackClearancePx.toDp() }
+                val skipCardDp = with(density) { skipCardPx.toDp() }
+                val skipCardsVisible = !pip && !state.locked &&
+                    (state.sponsorCountdownSec != null || state.sponsorChip)
+                val chipBandBottom by animateDpAsState(
+                    if (showChrome) trackClearanceDp + PlayerUi.TRACK_CHIP_GAP_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                    tween(250),
+                    label = "chipBandBottom",
+                )
+                // Subtitles clear the visible bounds of the controls row and of
+                // any skip card, from measurements — not a flat reserve. The 48 dp
+                // touch minimum around each card extends invisibly and must not
+                // push captions further up.
+                val subtitleBottomClearDp = maxOf(
+                    if (showChrome) trackClearanceDp.value else PlayerUi.SUBTITLE_CLEAR_DP.dp.value,
+                    if (skipCardsVisible) chipBandBottom.value + skipCardDp.value + PlayerUi.TRACK_CHIP_GAP_DP else 0f,
+                )
                 AnimatedVisibility(
                     visible = showChrome,
                     enter = fadeIn(),
@@ -355,7 +383,6 @@ fun PlayerSurface(
                                 menu = menu,
                                 onBack = callbacks::onBack,
                                 onQueue = { sheet = PlayerSheet.Queue },
-                                onSegments = { menu = PlayerAnchorMenu.Segments },
                                 onLoop = callbacks::onLoop,
                                 onMore = { sheet = PlayerSheet.More },
                                 onSubtitle = { menu = PlayerAnchorMenu.Subtitles },
@@ -364,7 +391,6 @@ fun PlayerSurface(
                                 onDismissMenu = { menu = null },
                                 callbacks = callbacks,
                                 showAuthor = showChromeAuthor,
-                                compactBottom = compactBottom,
                                 sizing = chromeSizing,
                                 modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { topBarHeightPx = it.height },
                             )
@@ -375,12 +401,14 @@ fun PlayerSurface(
                                 menu = menu,
                                 onSeek = callbacks::onSeek,
                                 onFullscreen = callbacks::onFullscreenToggle,
-                                onSpeed = { menu = PlayerAnchorMenu.Speed },
-                                onQuality = { menu = PlayerAnchorMenu.Quality },
+                                chapters = state.chapters,
+                                hasSegments = state.sponsorSegments.isNotEmpty(),
+                                onOpenChapters = { sheet = PlayerSheet.Chapters },
                                 onDismissMenu = { menu = null },
                                 callbacks = callbacks,
-                                compact = compactBottom,
+                                compact = compactChrome,
                                 sizing = chromeSizing,
+                                onTrackAnchor = { trackClearancePx = it },
                                 modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomBarHeightPx = it.height },
                             )
                         }
@@ -388,12 +416,15 @@ fun PlayerSurface(
                 }
 
                 Box(Modifier.fillMaxSize().then(sidePad)) {
+                    val countdown = state.sponsorCountdownSec
+                    // Skip cards and subtitles share the measured track anchor;
+                    // subtitles lift above the cards' visible bounds so neither
+                    // covers the other.
                     SubtitleCuesLayer(
                         cuesState = subtitleCuesState,
                         showChrome = showChrome,
                         style = state.subtitleStyle,
-                        chromeBottomClearDp = maxOf(PlayerUi.SUBTITLE_CHROME_CLEAR_DP.toFloat(),
-                            with(density) { bottomBarHeightPx.toDp().value } + 8f),
+                        bottomClearDp = subtitleBottomClearDp,
                     )
 
                     AnimatedVisibility(
@@ -429,24 +460,25 @@ fun PlayerSurface(
                             ),
                     )
 
-                    val countdown = state.sponsorCountdownSec
-                    if (!pip && countdown != null) {
+                    if (!pip && !state.locked && countdown != null) {
                         SponsorCountdownCard(
                             seconds = countdown,
                             onSkipNow = callbacks::onSponsorSkipNow,
                             onCancel = callbacks::onSponsorSkipCancel,
+                            onVisualHeight = { skipCardPx = it },
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = if (showChrome) maxOf(PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp, with(density) { bottomBarHeightPx.toDp() } + 8.dp) else 12.dp),
+                                .padding(end = hudEnd.dp, bottom = chipBandBottom),
                         )
                     }
-                    if (!pip && state.sponsorChip) {
+                    if (!pip && !state.locked && state.sponsorChip) {
                         SponsorSkipChip(
                             highlight = state.sponsorChipHighlight,
                             onSkip = callbacks::onSponsorChipSkip,
+                            onVisualHeight = { skipCardPx = it },
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = if (showChrome) maxOf(PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp, with(density) { bottomBarHeightPx.toDp() } + 8.dp) else 12.dp),
+                                .padding(end = hudEnd.dp, bottom = chipBandBottom),
                         )
                     }
 
@@ -520,13 +552,13 @@ fun PlayerSurface(
         PlayerSheetHost(
             sheet = sheet,
             state = state,
+            positionState = positionState,
             callbacks = callbacks,
             onDismiss = { sheet = null },
             onOpenDialog = { dialog = it },
             onOpenQueue = if (compactChrome) { { sheet = PlayerSheet.Queue } } else null,
-            onSegments = if (compactChrome) { { sheet = null; menu = PlayerAnchorMenu.Segments } } else null,
-            onSpeed = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Speed } } else null,
-            onQuality = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Quality } } else null,
+            onSpeed = { sheet = null; menu = PlayerAnchorMenu.Speed },
+            onQuality = { sheet = null; menu = PlayerAnchorMenu.Quality },
         )
         PlayerDialogHost(
             dialog = dialog,
@@ -549,7 +581,7 @@ private fun SubtitleCuesLayer(
     cuesState: State<List<String>>,
     showChrome: Boolean,
     style: SubtitleStyle,
-    chromeBottomClearDp: Float,
+    bottomClearDp: Float,
 ) {
     val cues = cuesState.value
     if (cues.isEmpty()) return
@@ -558,7 +590,7 @@ private fun SubtitleCuesLayer(
             .fillMaxSize()
             .padding(
                 top = if (showChrome) PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
-                bottom = if (showChrome) chromeBottomClearDp.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                bottom = bottomClearDp.dp,
             ),
     ) {
         SubtitleOverlay(
@@ -612,6 +644,8 @@ private class ForwardingGestures(
     override fun onGestureEnd() { fullscreenSwipe?.end?.invoke(false); c.onGestureEnd() }
     override fun onFullscreenSwipeProgress(distancePx: Float) { fullscreenSwipe?.drag?.invoke(distancePx) }
     override fun onFullscreenSwipeCancel() { fullscreenSwipe?.end?.invoke(false) }
+    override fun onFullscreenSwipeRelease(distancePx: Float, velocityPxPerSec: Float): Boolean =
+        fullscreenSwipe?.release?.invoke(distancePx, velocityPxPerSec) ?: false
     override fun onFullscreenSwipe(up: Boolean) {
         if (up != fullscreen) {
             fullscreenSwipe?.end?.invoke(true)

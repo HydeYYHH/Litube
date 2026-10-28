@@ -65,6 +65,10 @@
     <string name="queue_remove">Ta bort från kön</string>
     <string name="application_not_found">Applikationen hittades inte</string>
     <string name="segments">Segment</string>
+    <string name="chapters">Kapitel</string>
+    <string name="no_chapters">Inga kapitel</string>
+    <string name="skippable_segments">Segment som kan hoppas över</string>
+    <string name="show_more_replies">Visa fler svar</string>
     <string name="no_segments">Inga överhoppningsbara segment</string>
     <string name="subtitles">Undertexter</string>
     <string name="playback_end_next">Spela nästa</string>

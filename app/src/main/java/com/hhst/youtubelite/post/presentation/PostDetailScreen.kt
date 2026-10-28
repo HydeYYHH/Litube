@@ -39,6 +39,9 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
 import com.hhst.youtubelite.ui.design.BrowseNavigationBar
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 @Composable
 fun PostDetailScreen(
@@ -120,7 +123,7 @@ private fun PostDetailTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(53.dp), contentAlignment = Alignment.CenterStart) {
-            AppIconButton(AppIcon.Back, "Close post", diameter = 48.dp) { onBack() }
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_close_post), diameter = 48.dp) { onBack() }
         }
         AppText(
             title,
@@ -155,7 +158,7 @@ private fun PostDetailContentColumn(
                 Box(
                     Modifier.size(width = 48.dp, height = 40.dp)
                         .clickable(role = Role.Button) { onAction(PostDetailAction.OpenChannel) }
-                        .semantics { contentDescription = "Go to channel ${post.author.name}" },
+                        .appDescription(R.string.a11y_go_to_channel, post.author.name),
                     contentAlignment = Alignment.TopStart,
                 ) {
                     Box(Modifier.size(40.dp).clip(CircleShape)) {

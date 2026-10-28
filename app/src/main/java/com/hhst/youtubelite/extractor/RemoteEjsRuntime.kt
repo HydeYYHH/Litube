@@ -20,7 +20,7 @@ import android.os.RemoteException
 import android.webkit.WebView
 import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome

@@ -45,15 +45,6 @@ class FixtureSubscriptionsRepository(private val scenario: SubscriptionsScenario
     }
 }
 
-interface SubscriptionsRepository {
-    /** Filters the backend can actually serve; fixture builds serve everything. */
-    val supportedFilters: Set<SubscriptionsFilter> get() = SubscriptionsFilter.entries.toSet()
-    suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String? = null): SubscriptionsPage
-
-    /** Independent channel read so a guide failure cannot erase the feed. */
-    suspend fun subscribedChannels(): List<SubscribedChannel> = emptyList()
-}
-
 enum class SubscriptionsFilter(val chip: SubscriptionsChip) {
     All(SubscriptionsChip.All), Today(SubscriptionsChip.Today), ContinueWatching(SubscriptionsChip.ContinueWatching),
     Unwatched(SubscriptionsChip.Unwatched), Live(SubscriptionsChip.Live), Posts(SubscriptionsChip.Posts);

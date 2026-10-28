@@ -6,7 +6,9 @@ import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 import kotlinx.coroutines.delay
 
 /** All artwork and metadata are packaged locally. This class has no network dependency. */
-class FixtureLibraryRepository(private val scenario: LibraryScenario = LibraryScenario.Content) : LibraryRepository {
+class FixtureLibraryRepository(private val scenario: LibraryScenario = LibraryScenario.Content,
+    override val supportsLocal: Boolean = false,
+    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : LibraryRepository {
     // The error models a transient outage: the first load fails and Retry recovers.
     private var failedOnce = false
 
@@ -20,6 +22,9 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
     override suspend fun you(): YouPage {
         delay(140)
         guard()
+        // The device source presents the device header even in fixtures, mirroring the live route.
+        if (supportsLocal && source() == com.hhst.youtubelite.library.domain.LibrarySource.Device)
+            return YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), historyEntries(), playlists().playlists)
         return YouPage(profile(), historyEntries(), playlists().playlists)
     }
 
@@ -57,26 +62,6 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
             FixturePlaylistRepository.summaries()[1],
         )
     }
-}
-
-interface LibraryRepository {
-    val supportsLocal: Boolean get() = false
-    suspend fun you(): YouPage
-    suspend fun history(): HistoryPage
-    suspend fun playlists(): PlaylistCollectionPage
-
-    /** Further history entries after [cursor]; the fixture history is finite. */
-    suspend fun historyNext(cursor: String): HistoryPage = HistoryPage(emptyList())
-
-    /** Further playlist rows after [cursor]; the fixture collection is finite. */
-    suspend fun playlistsNext(cursor: String): PlaylistCollectionPage = PlaylistCollectionPage(emptyList())
-
-    /** Live-only removal write; fixtures never reach it because the menu stays a typed exit there. */
-    suspend fun removeFromHistory(feedbackToken: String): Unit = throw UnsupportedOperationException("remove_from_history_unsupported")
-
-    /** Live-only history management writes; the manage sheet only exists in production. */
-    suspend fun setHistoryPaused(paused: Boolean): Unit = throw UnsupportedOperationException("history_pause_unsupported")
-    suspend fun clearHistory(): Unit = throw UnsupportedOperationException("history_clear_unsupported")
 }
 
 enum class LibraryScenario(val argument: String) {

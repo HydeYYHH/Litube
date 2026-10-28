@@ -56,29 +56,28 @@ class ShortsScreenshotAndroidTest {
         fun bounds(description: String) =
             compose.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
         val more = bounds("More actions for A whole world in a single frame")
-        assertEquals(350f, more.left, 0.5f)
+        assertEquals(342f, more.left, 0.5f)
         assertEquals(8f, more.top, 0.5f)
-        assertEquals(32f, more.width, 0.5f)
-        assertEquals(32f, more.height, 0.5f)
+        assertEquals(40f, more.width, 0.5f)
+        assertEquals(40f, more.height, 0.5f)
         val like = bounds("Like A whole world in a single frame")
         val comments = bounds("Comments for A whole world in a single frame")
         val share = bounds("Share A whole world in a single frame")
-        for ((b, top) in listOf(like to 600f, comments to 660f, share to 720f)) {
-            assertEquals(342f, b.left, 0.5f)
+        for ((b, top) in listOf(like to 576f, comments to 644f, share to 712f)) {
+            assertEquals(338f, b.left, 0.5f)
             assertEquals(top, b.top, 0.5f)
-            assertEquals(32f, b.height, 0.5f)
+            assertEquals(40f, b.height, 0.5f)
         }
         compose.onNodeWithText("Subscribe").assertIsDisplayed()
         val channel = compose.onNodeWithTag("short-channel-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, channel.left, 0.5f)
-        assertEquals(728f, channel.top, 0.5f)
+        assertEquals(760f, channel.top, 0.5f)
         val title = compose.onNodeWithTag("short-title-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, title.left, 0.5f)
-        assertEquals(776f, title.top, 0.5f)
-        val sound = compose.onNodeWithTag("short-sound-short-1").fetchSemanticsNode().boundsInRoot
-        assertEquals(16f, sound.left, 0.5f)
-        assertEquals(804f, sound.top, 0.5f)
-        assertEquals(24f, sound.height, 0.5f)
+        assertEquals(808f, title.top, 0.5f)
+        // The fabricated "author · Original" sound pill is gone; nothing may
+        // resurrect it as attribution without a real source entry point.
+        compose.onNodeWithTag("short-sound-short-1", useUnmergedTree = true).assertDoesNotExist()
         compose.runOnIdle { width = 844; height = 390 }
         capture("shorts-390-landscape", output, record, goldens)
         compose.runOnIdle { width = 390; height = 844; scale = 2f }

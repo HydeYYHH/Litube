@@ -24,7 +24,7 @@ import com.hhst.youtubelite.extractor.StreamClient
 import com.hhst.youtubelite.extractor.WebAccount
 import com.hhst.youtubelite.extractor.YoutubeWebSession
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -52,9 +52,56 @@ class PlaybackLoadErrorAndroidTest {
     )
 
     @Test fun expiredRequestsAndSessionFencesImmediatelyReachSourceRecovery() {
-        for (error in listOf(status(403), IOException("MEDIA_SESSION_CHANGED"),
+        for (error in listOf(status(403), IOException("MEDIA_ERROR_BODY"), IOException("MEDIA_SESSION_CHANGED"),
             IOException("MEDIA_OBJECT_CHANGED"), IOException("MEDIA_URL_EXPIRED"))) {
             assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(info(IOException("wrapper", error))))
+        }
+    }
+
+    @Test fun productionSourcesRejectErrorDocumentsWithoutRequestRetries() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        for (kind in listOf("hls", "dash", "progressive")) for (type in listOf("text/html", "application/json")) {
+            val server = MockWebServer()
+            server.enqueue(MockResponse().setHeader("Content-Type", type).setBody("error"))
+            server.start()
+            var player: ExoPlayer? = null
+            val plans = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
+            val http = OkHttpClient()
+            try {
+                val session = YoutubeWebSession("document-fixture", WebAccount.ANONYMOUS, 0, null,
+                    null, null, "visitor", "fixture-UA", 0, null, "fixture", JsonObject(), { "" })
+                val protocol = when (kind) { "hls" -> MediaProtocol.HLS; "dash" -> MediaProtocol.DASH; else -> MediaProtocol.HTTPS }
+                val plan = MediaRequestPlan(session, StreamClient.WEB, protocol, MediaRange.NONE)
+                val url = server.url("/media").toString()
+                val stream = Stream().apply {
+                    when (kind) {
+                        "hls" -> { hlsUrl = url; hlsRequestPlan = plan }
+                        "dash" -> { dashUrl = url; dashRequestPlan = plan }
+                        else -> formats = listOf(Format(url = url, height = 360, mimeType = "video/mp4",
+                            codec = "avc1.42001e,mp4a.40.2", itag = 18, requestPlan = plan))
+                    }
+                }
+                val metadata = Metadata().apply { id = "errorDoc001"; duration = 60 }
+                val source = MediaSourceResolver(PlayerDataSource.create(instrumentation.targetContext, http, plans))
+                    .resolve(stream, metadata).mediaSource
+                val done = CountDownLatch(1)
+                val failure = AtomicReference<PlaybackException>()
+                instrumentation.runOnMainSync {
+                    player = ExoPlayer.Builder(instrumentation.targetContext).build().apply {
+                        addListener(object : Player.Listener {
+                            override fun onPlayerError(error: PlaybackException) { failure.set(error); done.countDown() }
+                        })
+                        setMediaSource(source); prepare()
+                    }
+                }
+                assertTrue("$kind $type kept retrying an error document", done.await(5, TimeUnit.SECONDS))
+                assertEquals(PlaybackRecovery.Reason.INVALID_MEDIA_RESPONSE, PlaybackRecovery.classify(failure.get()))
+                assertEquals("$kind $type repeated the refused request", 1, server.requestCount)
+            } finally {
+                instrumentation.runOnMainSync { player?.release() }
+                http.connectionPool.evictAll(); http.dispatcher.executorService.shutdown()
+                server.shutdown()
+            }
         }
     }
 

@@ -65,6 +65,10 @@
     <string name="queue_remove">ដកចេញពីជួរ</string>
     <string name="application_not_found">រកមិនឃើញកម្មវិធី</string>
     <string name="segments">ចម្រៀក</string>
+    <string name="chapters">ជំពូក</string>
+    <string name="no_chapters">គ្មានជំពូក</string>
+    <string name="skippable_segments">ផ្នែកដែលអាចរំលងបាន</string>
+    <string name="show_more_replies">បង្ហាញចម្លើយបន្ថែមទៀត</string>
     <string name="no_segments">គ្មានផ្នែកដែលអាចរំលងបាន។</string>
     <string name="subtitles">ចំណងជើងរង</string>
     <string name="playback_end_next">លេងបន្ទាប់</string>

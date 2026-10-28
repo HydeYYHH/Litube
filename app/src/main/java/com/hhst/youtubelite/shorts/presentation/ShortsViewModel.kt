@@ -26,6 +26,7 @@ class ShortsViewModel(
     private val scenario: ShortsScenario,
     private val startItemId: String?,
     private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
+    private val preloader: com.hhst.youtubelite.shorts.data.ShortsMediaPreloader? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ShortsUiState(
         startItemId = startItemId,
@@ -40,6 +41,19 @@ class ShortsViewModel(
     private var appendJob: Job? = null
     private val consumedCursors = mutableSetOf<String>()
     private var actionJob: Job? = null
+    private var hydrateJob: Job? = null
+
+    /** Per-item hydration bookkeeping; only terminal states stop further reads. */
+    private sealed interface Hydration {
+        data object Running : Hydration
+        data object Done : Hydration
+        /** The read succeeded but the server has no detail for the item. */
+        data object Missing : Hydration
+        data class Failed(val attempts: Int) : Hydration
+    }
+    private val hydration = object : LinkedHashMap<String, Hydration>(16, 0.75f, false) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Hydration>?): Boolean = size > MAX_HYDRATION_STATES
+    }
     private var generation = 0
     private var sessionGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
 
@@ -48,6 +62,7 @@ class ShortsViewModel(
         if (generation == sessionGeneration) return
         sessionGeneration = generation
         overlay(ShortsOverlay.None)
+        preloader?.cancel()
         savedState["currentItem"] = startItemId
         _uiState.update { it.copy(currentItemId = startItemId) }
         refresh()
@@ -72,6 +87,7 @@ class ShortsViewModel(
             is ShortsAction.SelectItem -> {
                 savedState["currentItem"] = action.itemId
                 _uiState.update { it.copy(currentItemId = action.itemId) }
+                hydrateAround(action.itemId)
             }
             is ShortsAction.Subscribe -> {
                 val actions = videoActions
@@ -125,8 +141,69 @@ class ShortsViewModel(
         }
     }
 
+    /**
+     * Hydrates the settled item and, at most, the next one. A swipe cancels the
+     * previous round mid-flight; playback never waits on these reads.
+     */
+    private fun hydrateAround(itemId: String) {
+        hydrateJob?.cancel()
+        val request = generation
+        val items = (_uiState.value.content as? ShortsContent.Ready)?.page?.items.orEmpty()
+        val index = items.indexOfFirst { it.id == itemId }
+        val next = items.getOrNull(index + 1)?.id.takeIf { index >= 0 }
+        preloader?.preload(next)
+        hydrateJob = viewModelScope.launch {
+            hydrateOne(itemId, request)
+            if (request != generation) return@launch
+            next ?: return@launch
+            hydrateOne(next, request)
+        }
+    }
+
+    private suspend fun hydrateOne(itemId: String, request: Int) {
+        val items = (_uiState.value.content as? ShortsContent.Ready)?.page?.items ?: return
+        if (items.none { it.id == itemId }) return
+        val previousAttempts = (hydration[itemId] as? Hydration.Failed)?.attempts ?: 0
+        when (val existing = hydration[itemId]) {
+            is Hydration.Running, Hydration.Missing -> return
+            Hydration.Done -> if (itemId in _uiState.value.details) return
+            is Hydration.Failed -> if (existing.attempts >= MAX_HYDRATION_ATTEMPTS) return
+            null -> Unit
+        }
+        hydration[itemId] = Hydration.Running
+        val detail = try {
+            repository.hydrate(itemId)
+        } catch (cancelled: CancellationException) {
+            // A cancelled read must stay retryable, never a terminal state.
+            hydration.remove(itemId)
+            throw cancelled
+        } catch (_: Exception) {
+            hydration[itemId] = Hydration.Failed(previousAttempts + 1)
+            return
+        }
+        if (detail == null) {
+            hydration[itemId] = Hydration.Missing
+            return
+        }
+        if (request != generation) return
+        hydration[itemId] = Hydration.Done
+        _uiState.update { state ->
+            val ready = state.content as? ShortsContent.Ready ?: return@update state
+            state.copy(
+                content = ready.copy(page = ready.page.copy(items = ready.page.items.map {
+                    if (it.id == itemId) it.fillFrom(detail.item) else it
+                })),
+                details = (state.details + (itemId to detail)).entries.toList().takeLast(MAX_DETAILS)
+                    .associateTo(LinkedHashMap()) { it.key to it.value },
+            )
+        }
+    }
+
     private companion object {
         const val UNCONFIRMED = "The server did not confirm this change. Please refresh before trying again."
+        const val MAX_DETAILS = 24
+        const val MAX_HYDRATION_STATES = 96
+        const val MAX_HYDRATION_ATTEMPTS = 2
     }
 
     private fun overlay(next: ShortsOverlay) {
@@ -171,10 +248,13 @@ class ShortsViewModel(
         loadJob?.cancel()
         appendJob?.cancel()
         actionJob?.cancel()
+        hydrateJob?.cancel()
+        hydration.clear()
         consumedCursors.clear()
+        preloader?.cancel()
         val request = ++generation
         _uiState.update { it.copy(content = ShortsContent.Loading, appendLoading = false, appendFailed = false,
-            ratings = emptyMap(), subscriptions = emptyMap()) }
+            ratings = emptyMap(), subscriptions = emptyMap(), details = emptyMap()) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.shorts()
@@ -186,5 +266,10 @@ class ShortsViewModel(
                 if (request == generation) _uiState.update { it.copy(content = ShortsContent.Failed) }
             }
         }
+    }
+
+    override fun onCleared() {
+        preloader?.cancel()
+        super.onCleared()
     }
 }

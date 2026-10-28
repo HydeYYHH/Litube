@@ -35,6 +35,13 @@ interface GestureCallbacks {
     fun onFullscreenSwipe(up: Boolean) {}
     fun onFullscreenSwipeProgress(distancePx: Float) {}
     fun onFullscreenSwipeCancel() {}
+    /**
+     * Vertical center-zone drag released. Returns true when a host consumed
+     * the release (an interpolating window decides commit/cancel from the
+     * shared travel progress and [velocityPxPerSec]); false falls back to the
+     * fixed-fraction toggle in the tracker.
+     */
+    fun onFullscreenSwipeRelease(distancePx: Float, velocityPxPerSec: Float): Boolean = false
     /** Finger up: overlays (edge sliders) clear. */
     fun onGestureEnd() {}
     /** Fullscreen pinch: multiplicative scale factor for this event. */
@@ -131,6 +138,8 @@ private suspend fun AwaitPointerEventScope.trackDrag(
     var lastSpan = 0f
     var lastCx = 0f
     var lastCy = 0f
+    val velocity = GestureMath.VelocityTracker()
+    velocity.add(startTime, startInWindow.y)
 
     try {
     while (true) {
@@ -207,6 +216,7 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         totalDy = inWindow.y - startInWindow.y
         val stepDy = inWindow.y - lastYInWindow
         lastYInWindow = inWindow.y
+        velocity.add(change.uptimeMillis, inWindow.y)
         val slop = viewConfiguration.touchSlop
 
         if (longPressActive && max(abs(totalDx), abs(totalDy)) > slop) {
@@ -263,9 +273,18 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         // into a fullscreen toggle, but a vertical feed still switches video.
         dragMode == GestureMath.DragMode.NONE && rawMode == GestureMath.DragMode.NONE &&
             (verticalFeed || zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) &&
-            abs(totalDy) > height * GestureMath.FULLSCREEN_SWIPE_MIN_FRACTION &&
-            abs(totalDy) > abs(totalDx) ->
-            callbacks.onFullscreenSwipe(up = totalDy < 0)
+            abs(totalDy) > abs(totalDx) -> {
+            if (verticalFeed) {
+                if (abs(totalDy) > height * GestureMath.FULLSCREEN_SWIPE_MIN_FRACTION) {
+                    callbacks.onFullscreenSwipe(up = totalDy < 0)
+                }
+            } else if (!callbacks.onFullscreenSwipeRelease(totalDy, velocity.velocityY())) {
+                // No interpolating host: keep the fixed-fraction toggle.
+                if (abs(totalDy) > height * GestureMath.FULLSCREEN_SWIPE_MIN_FRACTION) {
+                    callbacks.onFullscreenSwipe(up = totalDy < 0)
+                }
+            }
+        }
     }
     } finally {
         if (longPressActive) callbacks.onLongPressEnd()

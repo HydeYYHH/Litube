@@ -32,6 +32,11 @@ class ActivityMediaActionExecutor(private val activity: Activity) : MediaActionE
         val url = VideoShare.urlFor(item.id) ?: return
         val id = url.substringAfterLast('/')
         when (action) {
+            MediaActionKind.PlayNext -> {
+                val player = getKoin().get<PlayerViewModel>()
+                player.onQueueAddNext(QueueItem(id, title = item.title, author = item.author))
+                Toast.makeText(activity, R.string.play_next_queued, Toast.LENGTH_SHORT).show()
+            }
             MediaActionKind.Queue -> {
                 val player = getKoin().get<PlayerViewModel>()
                 val already = player.queueContains(id)

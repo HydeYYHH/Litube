@@ -9,7 +9,6 @@ import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.rule.GrantPermissionRule
 import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.downloader.core.DownloadShareOnce
@@ -27,7 +26,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
@@ -46,12 +44,13 @@ class DownloadPipAutoEnterAndroidTest {
     private val instrumentation: Instrumentation
         get() = InstrumentationRegistry.getInstrumentation()
 
-    @get:Rule
-    val notifications: GrantPermissionRule =
-        GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
-
     @Before
     fun reset() {
+        // POST_NOTIFICATIONS exists from API 33; granting it on older platforms fails.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            instrumentation.uiAutomation.grantRuntimePermission(
+                instrumentation.targetContext.packageName, Manifest.permission.POST_NOTIFICATIONS)
+        }
         assumeTrue(
             "PictureInPictureParams.setAutoEnterEnabled is API 31+",
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,

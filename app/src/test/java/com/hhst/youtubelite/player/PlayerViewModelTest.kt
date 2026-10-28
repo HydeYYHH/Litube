@@ -273,6 +273,48 @@ class PlayerViewModelTest {
         assertTrue(engine.snapshot.value.ended)
     }
 
+    @Test fun shortReentryPreservesManualPauseAndAvoidsReload() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId, 9_000)
+        engine.pause()
+        viewModel.onShortsStopped()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(9_000L, engine.snapshot.value.positionMs)
+        assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun shortsBackgroundPlaybackHonorsThePreference() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
+        viewModel.onShortsStopped()
+        assertTrue(engine.snapshot.value.isPlaying)
+        preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
+        viewModel.onShortsStopped()
+        assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun endingAnInactiveHoldPreservesSpeedAndStoppingRestoresAnActiveHoldOnce() {
+        bindViewModel()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        engine.setSpeed(1.5f)
+        viewModel.onSpeedHoldEnd()
+        assertEquals(1.5f, engine.snapshot.value.speed)
+        viewModel.onSpeedHoldStart()
+        assertEquals(2f, engine.snapshot.value.speed)
+        viewModel.onShortsStopped()
+        assertEquals(1.5f, engine.snapshot.value.speed)
+        viewModel.onSpeedHoldEnd()
+        assertEquals(1.5f, engine.snapshot.value.speed)
+    }
+
     @Test fun pipDismissalStopsLocalPlaybackWithEitherBackgroundPreference() {
         bindViewModel()
         for (enabled in listOf(false, true)) {
@@ -327,6 +369,7 @@ class PlayerViewModelTest {
                 prepared = true,
                 error = null,
                 isPlaying = true,
+                userWantsPlay = true,
                 ended = false,
             )
         }
@@ -334,6 +377,7 @@ class PlayerViewModelTest {
         override var onEnded: (() -> Unit)? = null
         override var onCastError: (() -> Unit)? = null
         override var onCastManifestReload: (() -> Unit)? = null
+        override var onWatchContext: ((videoId: String, tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking?, sessionGeneration: Long) -> Unit)? = null
 
         override fun play(urlOrId: String) {
             playCalls += urlOrId
@@ -348,8 +392,8 @@ class PlayerViewModelTest {
         override fun stop() { stopCalls++; _snapshot.value = PlaybackSnapshot() }
         override fun setVideoSurface(surface: SurfaceView?) = Unit
         override fun playOrPause() = Unit
-        override fun play() = Unit
-        override fun pause() { _snapshot.value = _snapshot.value.copy(isPlaying = false) }
+        override fun play() { _snapshot.value = _snapshot.value.copy(isPlaying = true, userWantsPlay = true) }
+        override fun pause() { _snapshot.value = _snapshot.value.copy(isPlaying = false, userWantsPlay = false) }
         override fun cancelPending(pausePlayback: Boolean) {
             if (pausePlayback) _snapshot.value = _snapshot.value.copy(isPlaying = false)
         }
@@ -361,7 +405,7 @@ class PlayerViewModelTest {
         override fun markReceiverIdentity(videoId: String, title: String, author: String?) = Unit
         override fun seekTo(positionMs: Long) { _snapshot.value = _snapshot.value.copy(positionMs = positionMs, ended = false) }
         override fun seekRelative(offsetMs: Long) = Unit
-        override fun setSpeed(speed: Float) = Unit
+        override fun setSpeed(speed: Float) { _snapshot.value = _snapshot.value.copy(speed = speed) }
         override fun setSpeedHold(active: Boolean) = Unit
         override fun setLoopMode(mode: LoopMode) { _snapshot.value = _snapshot.value.copy(loopMode = mode) }
         override fun setQuality(label: String?) = Unit

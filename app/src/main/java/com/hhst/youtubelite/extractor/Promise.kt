@@ -59,18 +59,17 @@ class Promise<T>(
                 work(this@Promise)
             } catch (t: Throwable) {
                 failure.compareAndSet(null, t)
-            } finally {
-                elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
-                val listeners: List<() -> Unit>
-                synchronized(doneLock) {
-                    done = true
-                    listeners = doneListeners.toList()
-                    doneListeners.clear()
-                }
-                // Awaiters observe settled flags before receiving the completion signal.
-                failure.get()?.let(deferred::completeExceptionally) ?: deferred.complete(value)
-                listeners.forEach { listener -> runCatching { listener() } }
             }
+        }.invokeOnCompletion { cause ->
+            if (cause != null) failure.compareAndSet(null, cause)
+            elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+            val listeners = synchronized(doneLock) {
+                done = true
+                doneListeners.toList().also { doneListeners.clear() }
+            }
+            // Awaiters observe settled flags before receiving the completion signal.
+            failure.get()?.let(deferred::completeExceptionally) ?: deferred.complete(value)
+            listeners.forEach { listener -> runCatching { listener() } }
         }
     }
 

@@ -29,7 +29,7 @@ import com.hhst.youtubelite.ui.design.*
 
 /** The long-press actions, typed so no array index decides what runs. */
 enum class MediaActionKind(val label: String) {
-    Queue("Add to queue"), Download("Download"), OpenWith("Open with"),
+    PlayNext("Play next"), Queue("Add to queue"), Download("Download"), OpenWith("Open with"),
     Share("Share"), CopyLink("Copy link"), CopyTitle("Copy title"),
 }
 
@@ -101,6 +101,7 @@ fun MediaActionsDialog(item: MediaActionItem, onDismiss: () -> Unit) {
                             .testTag("media-action-${kind.name}"),
                             verticalAlignment = Alignment.CenterVertically) {
                             when (kind) {
+                                MediaActionKind.PlayNext -> Icon(painterResource(R.drawable.ic_play_next), null, modifier = Modifier.size(24.dp))
                                 MediaActionKind.Queue -> AppIcon(AppIcon.QueueAdd, Modifier.size(24.dp), color = DesignTokens.Ink)
                                 MediaActionKind.Download -> AppIcon(AppIcon.Download, Modifier.size(24.dp), color = DesignTokens.Ink)
                                 MediaActionKind.OpenWith -> AppIcon(AppIcon.OpenWith, Modifier.size(24.dp), color = DesignTokens.Ink)

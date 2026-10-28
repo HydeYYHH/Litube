@@ -65,6 +65,10 @@
     <string name="queue_remove">Alih keluar dari baris gilir</string>
     <string name="application_not_found">Permohonan tidak ditemui</string>
     <string name="segments">Segmen</string>
+    <string name="chapters">Bab</string>
+    <string name="no_chapters">Tiada bab</string>
+    <string name="skippable_segments">Segmen yang boleh dilangkau</string>
+    <string name="show_more_replies">Tunjukkan lebih banyak balasan</string>
     <string name="no_segments">Tiada segmen boleh langkau</string>
     <string name="subtitles">Sarikata</string>
     <string name="playback_end_next">Main seterusnya</string>

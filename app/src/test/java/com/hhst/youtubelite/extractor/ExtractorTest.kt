@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody

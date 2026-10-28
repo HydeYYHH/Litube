@@ -65,6 +65,10 @@
     <string name="queue_remove">Kuhaa gikan sa pila</string>
     <string name="application_not_found">Aplikasyon wala makit-an</string>
     <string name="segments">Mga bahin</string>
+    <string name="chapters">Mga kapitulo</string>
+    <string name="no_chapters">Walay mga kapitulo</string>
+    <string name="skippable_segments">Mga segment nga malaktawan</string>
+    <string name="show_more_replies">Ipakita ang dugang mga tubag</string>
     <string name="no_segments">Walay malaktawan nga mga bahin</string>
     <string name="subtitles">Mga subtitle</string>
     <string name="playback_end_next">Duwa sunod</string>

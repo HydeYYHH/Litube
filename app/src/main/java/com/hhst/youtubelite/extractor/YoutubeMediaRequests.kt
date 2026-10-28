@@ -109,21 +109,24 @@ class YoutubeMediaRequests(
         }
         val started = System.nanoTime()
         var response = exchange(request)
+        var compatibilityPost = false
         if (response.code == 403 && request.method == "GET" && plan.allowPostFallback && request.url.encodedPath.startsWith("/videoplayback")) {
             response.close()
             response = exchange(request.newBuilder().post(byteArrayOf(0x78, 0).toRequestBody()).build())
-            if (response.isSuccessful) synchronized(this) { post.add(normalized(initial.url.toString())) }
+            compatibilityPost = true
             diagnostics.event("media", plan.client.name, "GET_POST_COMPATIBILITY", (System.nanoTime() - started) / 1_000_000, response.code)
         }
         if (!current(plan.session)) { response.close(); throw sessionChanged() }
         diagnostics.event("media", plan.client.name, plan.protocol.name, (System.nanoTime() - started) / 1_000_000, response.code)
         val mediaType = response.header("Content-Type").orEmpty().lowercase()
         if (response.isSuccessful && (mediaType.startsWith("text/html") || mediaType.startsWith("application/json"))) {
+            diagnostics.event("media", plan.client.name, "INVALID_BODY", (System.nanoTime() - started) / 1_000_000, response.code)
             response.close(); throw IOException("MEDIA_ERROR_BODY")
         }
         if (!response.isSuccessful) return@Interceptor response
         val window = try { window(response, plan) } catch (failure: IOException) { response.close(); throw failure }
         val body = response.body ?: return@Interceptor response
+        if (compatibilityPost) synchronized(this) { post.add(normalized(initial.url.toString())) }
         val changed = AtomicBoolean()
         val abort = cancellation.scheduleAtFixedRate({
             if (!current(plan.session)) { sessionChanged(); changed.set(true); chain.call().cancel() }

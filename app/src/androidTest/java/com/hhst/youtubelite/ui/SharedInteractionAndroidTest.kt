@@ -25,11 +25,11 @@ import org.junit.After
 
 class SharedInteractionAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val appearance = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark
-    @After fun restore() { com.hhst.youtubelite.ui.theme.YoutubeAppearance.update(appearance) }
+    private val appearance = com.hhst.youtubelite.ui.theme.AppAppearance.dark
+    @After fun restore() { com.hhst.youtubelite.ui.theme.AppAppearance.update(appearance) }
 
     @Test fun darkSelectedControlsAndSearchStayReadable() {
-        com.hhst.youtubelite.ui.theme.YoutubeAppearance.update(true)
+        com.hhst.youtubelite.ui.theme.AppAppearance.update(true)
         var screen by mutableIntStateOf(0)
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
@@ -63,6 +63,9 @@ class SharedInteractionAndroidTest {
     }
 
     @Test fun dismissalMovesTheSheetAndFadesBeforeRemovingIt() {
+        // With "remove animations" (animator scale 0) the sheet closes instantly;
+        // the mid-flight assertions only apply to the animated path.
+        val motion = readMotionScale(compose.activity.contentResolver)
         var dismissed = 0
         compose.setContent {
             AppTheme {
@@ -75,14 +78,16 @@ class SharedInteractionAndroidTest {
         val initialTop = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot.top
         val initialPixel = compose.onRoot().captureToImage().asAndroidBitmap().getPixel(10, 10)
         compose.mainClock.autoAdvance = false
-        compose.onNodeWithContentDescription("Close menu").performClick()
+        compose.onNodeWithContentDescription(compose.activity.getString(com.hhst.youtubelite.R.string.a11y_close_menu)).performClick()
         compose.mainClock.advanceTimeBy(80)
         compose.waitForIdle()
-        assertEquals(0, dismissed)
-        compose.onNodeWithTag("share-row").assertIsNotEnabled()
-        assertTrue(compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot.top > initialTop + 1)
-        val halfway = compose.onRoot().captureToImage().asAndroidBitmap().getPixel(10, 10)
-        assertTrue(android.graphics.Color.red(halfway) > android.graphics.Color.red(initialPixel))
+        assertEquals(if (motion > 0f) 0 else 1, dismissed)
+        if (motion > 0f) {
+            compose.onNodeWithTag("share-row").assertIsNotEnabled()
+            assertTrue(compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot.top > initialTop + 1)
+            val halfway = compose.onRoot().captureToImage().asAndroidBitmap().getPixel(10, 10)
+            assertTrue(android.graphics.Color.red(halfway) > android.graphics.Color.red(initialPixel))
+        }
         compose.mainClock.advanceTimeBy(240)
         compose.runOnIdle { assertEquals(1, dismissed) }
         compose.mainClock.autoAdvance = true

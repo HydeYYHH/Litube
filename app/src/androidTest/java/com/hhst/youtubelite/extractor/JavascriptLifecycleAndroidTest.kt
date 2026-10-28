@@ -11,7 +11,7 @@ import android.webkit.WebView
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import androidx.test.platform.app.InstrumentationRegistry
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
 import org.junit.Assume.assumeTrue

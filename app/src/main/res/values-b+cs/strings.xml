@@ -65,6 +65,10 @@
     <string name="queue_remove">Odebrat z fronty</string>
     <string name="application_not_found">Aplikace nenalezena</string>
     <string name="segments">Segmenty</string>
+    <string name="chapters">Kapitoly</string>
+    <string name="no_chapters">Žádné kapitoly</string>
+    <string name="skippable_segments">Přeskakující segmenty</string>
+    <string name="show_more_replies">Zobrazit další odpovědi</string>
     <string name="no_segments">Žádné přeskočitelné segmenty</string>
     <string name="subtitles">Titulky</string>
     <string name="playback_end_next">Přehrát dál</string>

@@ -1,7 +1,6 @@
 package com.hhst.youtubelite.extractor
 
 import android.content.Context
-import com.grack.nanojson.JsonWriter
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Executors
 import java.net.SocketException
@@ -19,8 +18,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import android.webkit.CookieManager
-import com.grack.nanojson.JsonObject
-import com.grack.nanojson.JsonParser as NanoParser
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import com.hhst.youtubelite.core.Constants
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -131,14 +131,14 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             val parseStarted = System.nanoTime()
             val parsed = parseConfig(html)
             diagnostics?.event("page-parse", "WEB", "configuration", (System.nanoTime() - parseStarted) / 1_000_000, 200)
-            if (requested?.getBoolean("LOGGED_IN", false) == true && (!parsed.getBoolean("LOGGED_IN", false)
+            if (requested?.flag("LOGGED_IN", false) == true && (!parsed.flag("LOGGED_IN", false)
                     || accountIndex(parsed) != index
-                    || requested.getString("DATASYNC_ID", "").let { it.isNotBlank() && it != parsed.getString("DATASYNC_ID", "") })) {
+                    || requested.text("DATASYNC_ID", "").let { it.isNotBlank() && it != parsed.text("DATASYNC_ID", "") })) {
                 throw IOException("SESSION_ACCOUNT_PAGE_MISMATCH")
             }
-            val js = parsed.getString("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
+            val js = parsed.text("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
                 .find(html)?.groupValues?.get(1)?.replace("\\/", "/")
-            if (js != null) parsed["PLAYER_JS_URL"] = if (js.startsWith('/')) ORIGIN + js else js
+            if (js != null) parsed.addProperty("PLAYER_JS_URL", if (js.startsWith('/')) ORIGIN + js else js)
             synchronized(lock) {
                 if (generation != capturedGeneration || scopeHint() != nextIdentity) throw IOException("SESSION_CHANGED_OR_CANCELLED")
                 if (configAt != 0L && configurationIdentity(config) != configurationIdentity(parsed)) {
@@ -151,20 +151,20 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         }
         synchronized(lock) {
         if (pageIdentity != identity || generation != capturedGeneration || scopeHint() != nextIdentity) throw IOException("SESSION_PAGE_MISMATCH")
-        val sync = config.getString("DATASYNC_ID", "")
+        val sync = config.text("DATASYNC_ID", "")
         val syncParts = sync.split("||")
         val secondary = syncParts.getOrNull(1)?.isNotBlank() == true
-        val delegated = config.getString("DELEGATED_SESSION_ID") ?: syncParts.firstOrNull()?.takeIf { secondary }
-        val user = config.getString("USER_SESSION_ID") ?: (if (secondary) syncParts[1] else syncParts.firstOrNull())?.takeIf { it.isNotBlank() }
-        val visitor = config.getString("VISITOR_DATA") ?: config.getObject("INNERTUBE_CONTEXT").getObject("client").getString("visitorData")
-        val loggedIn = config.getBoolean("LOGGED_IN", cookies.contains("LOGIN_INFO=") || cookies.contains("SAPISID="))
+        val delegated = config.text("DELEGATED_SESSION_ID") ?: syncParts.firstOrNull()?.takeIf { secondary }
+        val user = config.text("USER_SESSION_ID") ?: (if (secondary) syncParts[1] else syncParts.firstOrNull())?.takeIf { it.isNotBlank() }
+        val visitor = config.text("VISITOR_DATA") ?: config.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData")
+        val loggedIn = config.flag("LOGGED_IN", cookies.contains("LOGIN_INFO=") || cookies.contains("SAPISID="))
         val account = if (!loggedIn) WebAccount.ANONYMOUS
-            else if (config.getBoolean("IS_PREMIUM", false)) WebAccount.PREMIUM
+            else if (config.flag("IS_PREMIUM", false)) WebAccount.PREMIUM
             else WebAccount.AUTHENTICATED
         val scope = digest("$identity:$generation:$visitor:$sync:${accountIndex(config)}")
         YoutubeWebSession(scope, account, accountIndex(config), delegated, user,
             sync.takeIf { it.isNotBlank() }, visitor, ua,
-            capturedRoute, config.getString("PLAYER_JS_URL"), if (fetchPage) configSource else "config-cache:$configSource", config,
+            capturedRoute, config.text("PLAYER_JS_URL"), if (fetchPage) configSource else "config-cache:$configSource", config,
             SessionCredentials { origin -> domainCookies[origin].orEmpty() })
         }
     }
@@ -260,8 +260,8 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
 
     private fun currentKey(): String {
-        val visitor = config.getString("VISITOR_DATA") ?: config.getObject("INNERTUBE_CONTEXT").getObject("client").getString("visitorData")
-        return digest("$identity:$generation:$visitor:${config.getString("DATASYNC_ID", "")}:${accountIndex(config)}")
+        val visitor = config.text("VISITOR_DATA") ?: config.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData")
+        return digest("$identity:$generation:$visitor:${config.text("DATASYNC_ID", "")}:${accountIndex(config)}")
     }
 
     /** Origin and document generation are checked by BrowserPlayerResponses before this call. */
@@ -271,13 +271,13 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
 
     private fun storeBrowserConfig(value: JsonObject, documentGeneration: Long, document: () -> Long): Boolean = synchronized(lock) {
         val filtered = JsonObject()
-        CONFIG_FIELDS.forEach { name -> value[name]?.let { filtered[name] = it } }
-        if (filtered.getObject("INNERTUBE_CONTEXT").getObject("client").isEmpty()) return@synchronized false
-        filtered.getString("PLAYER_JS_URL")?.let { filtered["PLAYER_JS_URL"] = when {
+        CONFIG_FIELDS.forEach { name -> value.get(name)?.let { filtered.add(name, it) } }
+        if (filtered.obj("INNERTUBE_CONTEXT").obj("client").size() == 0) return@synchronized false
+        filtered.text("PLAYER_JS_URL")?.let { filtered.addProperty("PLAYER_JS_URL", when {
             it.startsWith("//") -> "https:$it"
             it.startsWith('/') -> ORIGIN + it
             else -> it
-        } }
+        }) }
         val hint = scopeHint()
         val old = browserConfig
         val previous = old?.takeIf { it.scope == hint }?.value ?: config
@@ -286,7 +286,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             generation++
             configAt = 0
         }
-        val copied = NanoParser.`object`().from(JsonWriter.string(filtered))
+        val copied = filtered.deepCopy()
         val stored = BrowserConfig(copied, hint, documentGeneration, document, System.currentTimeMillis())
         browserConfig = if (old?.generation != documentGeneration) {
             stored.copy(capturedAt = System.currentTimeMillis())
@@ -316,11 +316,11 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             .url(url).header("User-Agent", ua).header("Cookie", cookies[pageOrigin(url)].orEmpty()).build()
 
         internal fun configurationIdentity(value: JsonObject) = listOf(accountIndex(value),
-            value.getString("DELEGATED_SESSION_ID", ""), value.getString("USER_SESSION_ID", ""),
-            value.getString("PLAYER_JS_URL", ""), value.getObject("INNERTUBE_CONTEXT").getObject("client").getString("clientVersion", ""),
-            value.getString("DATASYNC_ID", ""), value.getString("VISITOR_DATA") ?: value.getObject("INNERTUBE_CONTEXT").getObject("client").getString("visitorData"), value.getBoolean("LOGGED_IN", false), value.getBoolean("IS_PREMIUM", false),
-            value.getObject("EXPERIMENT_FLAGS"), value.getObject("EXPERIMENTS_FORCED_FLAGS"),
-            value.getObject("WEB_PLAYER_CONTEXT_CONFIGS").values.map { (it as? JsonObject)?.getString("serializedExperimentFlags", "") }.sortedBy { it.orEmpty() }).toString()
+            value.text("DELEGATED_SESSION_ID", ""), value.text("USER_SESSION_ID", ""),
+            value.text("PLAYER_JS_URL", ""), value.obj("INNERTUBE_CONTEXT").obj("client").text("clientVersion", ""),
+            value.text("DATASYNC_ID", ""), value.text("VISITOR_DATA") ?: value.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData"), value.flag("LOGGED_IN", false), value.flag("IS_PREMIUM", false),
+            value.obj("EXPERIMENT_FLAGS"), value.obj("EXPERIMENTS_FORCED_FLAGS"),
+            value.obj("WEB_PLAYER_CONTEXT_CONFIGS").entrySet().map { (it.value as? JsonObject)?.text("serializedExperimentFlags", "") }.sortedBy { it.orEmpty() }).toString()
         const val ORIGIN = "https://www.youtube.com"
 
         /**
@@ -342,34 +342,40 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         internal fun digest(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.toByteArray()).hexString()
 
-        internal fun accountIndex(config: JsonObject): Int = config["SESSION_INDEX"]?.let {
-            it.toString().toIntOrNull()?.takeIf { index -> index >= 0 } ?: throw IOException("SESSION_ACCOUNT_INDEX_INVALID")
-        } ?: 0
+        internal fun accountIndex(config: JsonObject): Int = config.get("SESSION_INDEX")
+            ?.takeUnless { it.isJsonNull }?.let {
+                (it as? JsonPrimitive)?.asString?.toIntOrNull()?.takeIf { index -> index >= 0 }
+                    ?: throw IOException("SESSION_ACCOUNT_INDEX_INVALID")
+            } ?: 0
 
         internal fun parseConfig(html: String): JsonObject {
             val result = JsonObject()
-            jsonObjects(html, Regex("ytcfg\\.set\\(\\s*\\{")).forEach(result::putAll)
+            jsonObjects(html, Regex("ytcfg\\.set\\(\\s*\\{")).forEach { source ->
+                source.entrySet().forEach { result.add(it.key, it.value) }
+            }
             val player = jsonObjects(html, Regex("ytInitialPlayerResponse\\s*=\\s*\\{")).firstOrNull()
             if (player != null) {
-                result["_IS_LIVE"] = player.getObject("videoDetails").getBoolean("isLiveContent", false)
-                player.getObject("videoDetails").getString("videoId")?.let { result["_VIDEO_ID"] = it }
+                result.addProperty("_IS_LIVE", player.obj("videoDetails").flag("isLiveContent", false))
+                player.obj("videoDetails").text("videoId")?.let { result.addProperty("_VIDEO_ID", it) }
             }
             val initial = jsonObjects(html, Regex("ytInitialData\\s*=\\s*\\{")).firstOrNull()
-            val logo = initial?.getObject("topbar")?.getObject("desktopTopbarRenderer")?.getObject("logo")?.getObject("topbarLogoRenderer")
-            if (logo != null && (logo.getObject("iconImage").getString("iconType") == "YOUTUBE_PREMIUM_LOGO"
-                    || logo.getString("tooltip", "").contains("Premium", true))) result["IS_PREMIUM"] = true
+            val logo = initial?.obj("topbar")?.obj("desktopTopbarRenderer")?.obj("logo")?.obj("topbarLogoRenderer")
+            if (logo != null && (logo.obj("iconImage").text("iconType") == "YOUTUBE_PREMIUM_LOGO"
+                    || logo.text("tooltip", "").contains("Premium", true))) result.addProperty("IS_PREMIUM", true)
             val rawChallenge = objectPayloads(html, Regex("window\\.ytAtN\\(\\s*\\{")).firstOrNull()
             if (rawChallenge != null && rawChallenge.length <= 256 * 1024) {
-                val challenge = runCatching { NanoParser.`object`().from(rawChallenge) }.getOrNull()
-                    ?.getObject("R")?.getObject("bgChallenge")
-                if (challenge != null && challenge.isNotEmpty()) result["_BG_CHALLENGE"] = challenge
-                else result["_BG_CHALLENGE_RAW"] = rawChallenge
+                val challenge = runCatching { JsonParser.parseString(rawChallenge).asJsonObject }.getOrNull()
+                    ?.obj("R")?.obj("bgChallenge")
+                if (challenge != null && challenge.size() > 0) result.add("_BG_CHALLENGE", challenge)
+                else result.addProperty("_BG_CHALLENGE_RAW", rawChallenge)
             }
-            return JsonObject(result.filterKeys { it in CONFIG_FIELDS })
+            val filtered = JsonObject()
+            result.entrySet().filter { it.key in CONFIG_FIELDS }.forEach { filtered.add(it.key, it.value) }
+            return filtered
         }
 
         private fun jsonObjects(html: String, marker: Regex): Sequence<JsonObject> = objectPayloads(html, marker)
-            .mapNotNull { runCatching { NanoParser.`object`().from(it) }.getOrNull() }
+            .mapNotNull { runCatching { JsonParser.parseString(it).asJsonObject }.getOrNull() }
 
         // Only capture the argument, without evaluating page code. BgUtils parses
         // the loose JSON challenge in its isolated, network-disabled runtime.

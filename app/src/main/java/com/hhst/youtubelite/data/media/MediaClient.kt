@@ -2,13 +2,14 @@ package com.hhst.youtubelite.data.media
 
 import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -25,7 +26,11 @@ class MediaClient(
 ) {
     private val http = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
-    suspend fun <T> read(block: (RequestContext, HttpClient) -> T): T = suspendCancellableCoroutine { continuation ->
+    suspend fun <T> read(block: (RequestContext, HttpClient) -> T): T = pendingReads.withPermit {
+        execute(block)
+    }
+
+    private suspend fun <T> execute(block: (RequestContext, HttpClient) -> T): T = suspendCancellableCoroutine { continuation ->
         val cancelled = AtomicBoolean(false)
         val calls = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Call, Boolean>())
         val future = workers.submit {
@@ -73,12 +78,18 @@ class MediaClient(
             cancelled.set(true)
             calls.forEach(Call::cancel)
             future.cancel(true)
+            workers.remove(future as Runnable)
         }
     }
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
-        val workers = Executors.newFixedThreadPool(4) { task -> Thread(task, "media-read").apply { isDaemon = true } }
+
+        // Admission suspends callers before submission; no blocking work falls back to them.
+        val pendingReads = Semaphore(20)
+        val workers = java.util.concurrent.ThreadPoolExecutor(4, 4, 30L, java.util.concurrent.TimeUnit.SECONDS,
+            java.util.concurrent.LinkedBlockingQueue(),
+            { task -> Thread(task, "media-read").apply { isDaemon = true } })
     }
 }
 

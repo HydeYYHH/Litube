@@ -18,8 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
-import com.hhst.youtubelite.ui.components.YoutubeCheckbox as Checkbox
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppCheckbox as Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,11 +27,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import com.hhst.youtubelite.ui.components.YoutubeRadioButton as RadioButton
+import com.hhst.youtubelite.ui.components.AppRadioButton as RadioButton
 import androidx.compose.material3.SheetState
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
+import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
-import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
+import com.hhst.youtubelite.ui.components.AppSheetHandle
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadConfig
@@ -196,17 +196,12 @@ fun SingleVideoConfirmSheet(
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = DownloadTokens.PageInset)) {
             val scroll = if (embedded) Modifier else Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
             Column(Modifier.fillMaxWidth().then(scroll)) {
-                if (landscape) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                        DownloadThumbnail(thumbnailUrl, Modifier.weight(1f).padding(end = 12.dp))
-                        Column(Modifier.weight(1.4f)) { SheetIdentity(catalogTitle, catalogAuthor) }
-                    }
-                } else {
-                    DownloadThumbnail(thumbnailUrl, Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(14.dp))
-                    SheetIdentity(catalogTitle, catalogAuthor)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    DownloadThumbnail(thumbnailUrl, Modifier.width(if (landscape) 120.dp else 104.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) { SheetIdentity(catalogTitle, catalogAuthor) }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(8.dp))
                 MediaToggle(audioOnly) { audioOnly = it; attachmentsOnly = false }
                 if (catalogState == null) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +253,7 @@ fun SingleVideoConfirmSheet(
     }
     if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { YoutubeSheetHandle() },
+        dragHandle = { AppSheetHandle() },
         tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
     picker?.let { kind ->
         val options = when (kind) { "quality" -> qualityOptions; "audio" -> audioOptions; else -> subOptions }
@@ -285,7 +280,7 @@ fun SingleVideoConfirmSheet(
 @Composable
 private fun SelectionRow(name: String, selected: String, enabled: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
-        .heightIn(min = 56.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        .heightIn(min = DownloadTokens.MinTouch).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(name, Modifier.weight(1f), fontWeight = FontWeight.Normal)
         Text(selected, Modifier.weight(1.2f), maxLines = 2, overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
@@ -332,8 +327,8 @@ private fun SheetIdentity(title: String, author: String) {
         maxLines = DownloadTokens.TITLE_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
         fontWeight = FontWeight.Medium,
-        fontSize = SettingsTokens.TitleSize.sp,
-        lineHeight = SettingsTokens.TitleLine.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
         color = MaterialTheme.colorScheme.onSurface,
     )
     if (author.isNotBlank()) {
@@ -641,7 +636,7 @@ fun BatchConfirmSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            dragHandle = { YoutubeSheetHandle() },
+            dragHandle = { AppSheetHandle() },
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner),
         ) {

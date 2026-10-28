@@ -3,6 +3,16 @@ package com.hhst.youtubelite.data.media
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -70,4 +80,92 @@ class MediaAvatarDirectoryTest {
         assertEquals(0, calls.size)
         directory.dispose()
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancelledWaitersDoNotKeepCompletedRequestsPastExpiry() = runTest {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var reads = 0
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
+            reads++
+            if (reads == 1) {
+                started.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+            }
+            Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200).message("OK").body(channelBody.toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        val owner = SupervisorJob()
+        var now = 0L
+        val directory = MediaAvatarDirectory(client, { now }, CoroutineScope(owner + StandardTestDispatcher(testScheduler)))
+        try {
+            val waiter = launch { directory.avatar("UCabc") }
+            runCurrent()
+            check(started.await(5, TimeUnit.SECONDS))
+            val request = owner.children.single()
+            waiter.cancelAndJoin()
+            release.countDown()
+            request.join()
+            now = 60 * 60 * 1000L
+            assertEquals("https://yt3/avatar.png", directory.avatar("UCabc"))
+            assertEquals(2, reads)
+        } finally {
+            release.countDown()
+            directory.dispose()
+        }
+    }
+    @Test fun saturatedRequestsWaitWithoutDroppingAvatars() = runBlocking {
+        val started = CountDownLatch(3)
+        val release = CountDownLatch(1)
+        val active = java.util.concurrent.atomic.AtomicInteger()
+        val peak = java.util.concurrent.atomic.AtomicInteger()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
+            peak.accumulateAndGet(active.incrementAndGet(), ::maxOf)
+            calls.incrementAndGet()
+            started.countDown()
+            try {
+                check(release.await(5, TimeUnit.SECONDS))
+                Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200).message("OK").body(channelBody.toResponseBody("application/json".toMediaType())).build()
+            } finally { active.decrementAndGet() }
+        }.build())
+        val directory = MediaAvatarDirectory(client)
+        try {
+            val results = (1..70).map { id -> async { directory.avatar("UC$id") } }
+            check(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { started.await(5, TimeUnit.SECONDS) })
+            release.countDown()
+            assertEquals(List(70) { "https://yt3/avatar.png" }, results.awaitAll())
+            assertEquals(70, calls.get())
+            org.junit.Assert.assertTrue(peak.get() <= 3)
+        } finally { release.countDown(); directory.dispose() }
+    }
+
+    @Test fun completedAvatarsPublishBeforeASlowPeer() = runBlocking {
+        val release = CountDownLatch(1)
+        val fast = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val published = mutableListOf<String>()
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
+            val body = okio.Buffer().also { chain.request().body?.writeTo(it) }.readUtf8()
+            if (body.contains("UCslow")) check(release.await(5, TimeUnit.SECONDS))
+            Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200).message("OK").body(channelBody.toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        val directory = MediaAvatarDirectory(client)
+        try {
+            val load = launch {
+                directory.resolveAll(listOf("UCslow", "UCfast")) { id, _ ->
+                    published += id
+                    if (id == "UCfast") fast.complete(Unit)
+                }
+            }
+            kotlinx.coroutines.withTimeout(4_000) { fast.await() }
+            assertEquals(listOf("UCfast"), published)
+            org.junit.Assert.assertFalse(load.isCompleted)
+            release.countDown()
+            load.join()
+            assertEquals(setOf("UCfast", "UCslow"), published.toSet())
+        } finally { release.countDown(); directory.dispose() }
+    }
+
 }

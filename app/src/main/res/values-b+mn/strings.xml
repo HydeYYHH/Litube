@@ -65,6 +65,10 @@
     <string name="queue_remove">Дараалалаас хасах</string>
     <string name="application_not_found">Програм олдсонгүй</string>
     <string name="segments">Сегментүүд</string>
+    <string name="chapters">Бүлгүүд</string>
+    <string name="no_chapters">Бүлэг байхгүй</string>
+    <string name="skippable_segments">Алгасах боломжтой хэсгүүд</string>
+    <string name="show_more_replies">Илүү олон хариулт харуулах</string>
     <string name="no_segments">Алгасах сегмент байхгүй</string>
     <string name="subtitles">Хадмал орчуулга</string>
     <string name="playback_end_next">Дараа нь тогло</string>

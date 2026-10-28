@@ -65,6 +65,10 @@
     <string name="queue_remove">કતારમાંથી દૂર કરો</string>
     <string name="application_not_found">અરજી મળી નથી</string>
     <string name="segments">સેગમેન્ટ્સ</string>
+    <string name="chapters">પ્રકરણો</string>
+    <string name="no_chapters">કોઈ પ્રકરણો નથી</string>
+    <string name="skippable_segments">છોડી શકાય એવા સેગમેન્ટ</string>
+    <string name="show_more_replies">વધુ જવાબો બતાવો</string>
     <string name="no_segments">કોઈ છોડવા યોગ્ય સેગમેન્ટ્સ નથી</string>
     <string name="subtitles">સબટાઈટલ</string>
     <string name="playback_end_next">આગળ રમો</string>

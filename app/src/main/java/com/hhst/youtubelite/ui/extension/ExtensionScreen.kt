@@ -24,17 +24,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import com.hhst.youtubelite.ui.components.YoutubeSlider as Slider
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
+import com.hhst.youtubelite.ui.components.AppSlider as Slider
+import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,7 +70,7 @@ private val CollapseSpec = tween<IntSize>(
     easing = FastOutSlowInEasing,
 )
 
-/** Expandable extension settings. */
+/** Advanced settings page: expandable groups of player, gesture and capture switches. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExtensionScreen(
@@ -247,7 +247,7 @@ private fun GroupBlock(
     }
 }
 
-/** Shared group/nav header row: icon slot, label, trailing chevron. */
+/** Shared group/nav header row: label, trailing chevron. Rows carry no decorative icon. */
 @Composable
 private fun SectionRow(
     node: Extension,
@@ -262,20 +262,9 @@ private fun SectionRow(
             .fillMaxWidth()
             .heightIn(min = SettingsTokens.RowHeight)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = startPad),
+            .padding(start = startPad + SettingsTokens.PageInset, end = SettingsTokens.PageInset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (node.icon != 0) {
-            Box(Modifier.size(SettingsTokens.IconSlot), contentAlignment = Alignment.Center) { Icon(
-                painter = painterResource(node.icon),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(SettingsTokens.IconSize),
-            ) }
-            Spacer(Modifier.width(SettingsTokens.LabelGap))
-        } else {
-            Spacer(Modifier.width(SettingsTokens.PageInset))
-        }
         Text(
             text = stringResource(node.title),
             style = MaterialTheme.typography.bodyMedium,

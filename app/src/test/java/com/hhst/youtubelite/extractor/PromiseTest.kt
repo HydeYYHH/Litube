@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
@@ -12,6 +15,22 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class PromiseTest {
+    @Test fun anAlreadyCancelledOwnerSettlesThePromiseWithoutStartingWork() = runBlocking<Unit> {
+        val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        owner.cancel()
+        val work = AtomicInteger()
+        val listeners = AtomicInteger()
+        val promise = Promise(Unit, owner, autostart = false) { work.incrementAndGet() }
+        promise.whenDone { listeners.incrementAndGet() }
+        val result = runCatching { withTimeout(1_000) { promise.await() } }
+        assertTrue(result.exceptionOrNull() is CancellationException)
+        assertFalse(result.exceptionOrNull() is kotlinx.coroutines.TimeoutCancellationException)
+        assertTrue(promise.done)
+        assertFalse(promise.success)
+        assertEquals(0, work.get())
+        assertEquals(1, listeners.get())
+    }
+
     @Test fun unusedOptionalWorkStaysIdleAndConcurrentWaitersShareIt() = runBlocking {
         val calls = AtomicInteger()
         val entered = CountDownLatch(1)

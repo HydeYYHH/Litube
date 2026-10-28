@@ -8,6 +8,7 @@ import android.view.Choreographer
 import android.view.KeyEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -52,7 +53,7 @@ class FullscreenSheetAndroidTest {
         compose.setContent { AppTheme {
             PlayerWindowEffects(compose.activity, host, fullscreen, 1920, 1080)
             val state = PlayerUiState(fullscreen = fullscreen, visible = true)
-            PlayerSheetHost(sheet, state, callbacks, { sheet = null }, { dialog = it })
+            PlayerSheetHost(sheet, state, remember { mutableStateOf(0L) }, callbacks, { sheet = null }, { dialog = it })
             PlayerDialogHost(dialog, state, callbacks, { dialog = null })
         } }
         fun hidden(): Boolean {

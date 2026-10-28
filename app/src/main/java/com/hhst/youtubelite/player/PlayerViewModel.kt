@@ -72,6 +72,9 @@ data class PlayerUiState(
     val author: String? = null,
     val isLive: Boolean = false,
     val videoId: String? = null,
+    /** Media is attached; the first video frame may still be pending. */
+    val prepared: Boolean = false,
+    val firstFrameRendered: Boolean = false,
     val url: String? = null,
     val loopMode: LoopMode = LoopMode.QUEUE_NEXT,
     val qualityLabel: String? = null,
@@ -118,6 +121,8 @@ data class PlayerUiState(
     val sponsorChip: Boolean = false,
     /** True when [sponsorChip] targets a highlight point (chip jumps TO it). */
     val sponsorChipHighlight: Boolean = false,
+    /** Seek counter from the engine; watch reporting re-anchors its interval on change. */
+    val discontinuityEpoch: Long = 0,
     val casting: Boolean = false,
     val castingDeviceName: String? = null,
     val castLinkUrl: String? = null,
@@ -149,6 +154,8 @@ class PlayerViewModel(
     private val appContext: Context? = null,
     private val haptics: HapticsController? = null,
     private val nextVideo: (suspend (String) -> String?)? = null,
+    /** Session-owned watch reporting; armed with endpoints from playback responses. */
+    private val reporting: com.hhst.youtubelite.data.media.PlaybackWatchReporting? = null,
 ) : ViewModel(), PlayerPlaybackActions {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -267,6 +274,9 @@ class PlayerViewModel(
         viewModelScope.launch {
             engine.snapshot.collect { s -> mergeSnapshot(s) }
         }
+        // Playback responses carry short-lived watch-reporting endpoints; the
+        // session owner consumes them directly, keyed by the loaded media identity.
+        engine.onWatchContext = { videoId, tracking, generation -> reporting?.armTracking(videoId, tracking, generation) }
         viewModelScope.launch {
             queue.state.collect { q ->
                 val nav = queueNavAvailability()
@@ -363,6 +373,8 @@ class PlayerViewModel(
                 author = s.author,
                 isLive = s.isLive,
                 videoId = s.videoId,
+                prepared = s.prepared,
+                firstFrameRendered = s.firstFrameRendered,
                 url = s.url,
                 loopMode = s.loopMode,
                 qualityLabel = s.qualityLabel,
@@ -399,6 +411,7 @@ class PlayerViewModel(
                 sponsorCountdownSec = s.sponsorCountdownSec,
                 sponsorChip = s.sponsorChip,
                 sponsorChipHighlight = s.sponsorChipHighlight,
+                discontinuityEpoch = s.discontinuityEpoch,
             )
         }
         maybeSyncQueue(s)
@@ -424,6 +437,8 @@ class PlayerViewModel(
     }
 
     @Volatile private var inShorts = false
+    /** Play intent captured when a swipe hold pauses the settled short. */
+    private var shortsHoldWasPlaying = false
 
     fun onBrowseOpened() {
         if (!_uiState.value.visible || _uiState.value.mini) return
@@ -450,7 +465,10 @@ class PlayerViewModel(
     fun setVideoVisible(visible: Boolean) = engine.setVideoVisible(visible)
 
     fun onShortsOpened() {
-        if (inShorts) return
+        if (inShorts) {
+            engine.setVideoVisible(true)
+            return
+        }
         inShorts = true
         playbackRequestSeq++
         engine.cancelPending(pausePlayback = !_uiState.value.casting)
@@ -460,14 +478,24 @@ class PlayerViewModel(
         _uiState.update { it.copy(visible = false, mini = false, fullscreen = false, locked = false) }
     }
 
-    fun onShortsClosed() { inShorts = false }
+    fun onShortsClosed() {
+        onSpeedHoldEnd()
+        inShorts = false
+    }
+
+    fun onShortsStopped() {
+        onSpeedHoldEnd()
+        engine.setVideoVisible(false)
+        if (!prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) engine.pause()
+    }
 
     fun openShort(videoId: String) {
         val id = VideoId.parse(videoId) ?: return
         inShorts = true
-        if (engine.snapshot.value.videoId == id && engine.snapshot.value.prepared) {
+        val current = engine.snapshot.value
+        if (current.videoId == id && (current.prepared || current.error == null && _uiState.value.visible)) {
             _uiState.update { it.copy(visible = true, mini = false, fullscreen = false) }
-            engine.play()
+            engine.setVideoVisible(true)
         } else startPlayback(VideoId.watchUrl(id), keepMini = false)
     }
 
@@ -475,6 +503,27 @@ class PlayerViewModel(
         engine.pauseLocal()
         _uiState.update { it.copy(visible = false, fullscreen = false, mini = false) }
         inShorts = false
+    }
+
+    /** A swipe started: silence the settled short without leaving the Shorts session. */
+    fun holdShortsForSwipe() {
+        if (!inShorts) return
+        shortsHoldWasPlaying = engine.snapshot.value.userWantsPlay
+        onSpeedHoldEnd()
+        engine.pause()
+    }
+
+    /**
+     * A swipe cancelled back to the short it started on. Only the short the
+     * engine still owns resumes; a newer target that already claimed playback
+     * keeps it. A short the user had paused stays paused.
+     */
+    fun resumeShortsAfterSwipe(videoId: String) {
+        if (!inShorts) return
+        val expected = VideoId.parse(videoId)
+        if (expected == null || engine.snapshot.value.videoId != expected) return
+        if (shortsHoldWasPlaying) engine.play()
+        shortsHoldWasPlaying = false
     }
 
     fun onLeaveWatch() {
@@ -670,8 +719,9 @@ class PlayerViewModel(
     }
 
     override fun onSpeedHoldEnd() {
+        val previousSpeed = speedBeforeHold ?: return
         engine.setSpeedHold(false)
-        engine.setSpeed(speedBeforeHold ?: 1f)
+        engine.setSpeed(previousSpeed)
         speedBeforeHold = null
         _gestureState.value = null
     }
@@ -791,6 +841,14 @@ class PlayerViewModel(
         setFullscreen(next)
     }
 
+    /** Fullscreen set by a committed swipe: same semantics as the toggle button. */
+    fun setFullscreenManual(fullscreen: Boolean) {
+        if (_uiState.value.fullscreen == fullscreen) return
+        autoEnteredFullscreen = false
+        if (!fullscreen) suppressAutoEnter = true
+        setFullscreen(fullscreen)
+    }
+
     /**
      * Physical device tilt (OrientationEventListener). Landscape + system
      * auto-rotate enters; only an auto-entered session leaves on portrait.
@@ -869,6 +927,14 @@ class PlayerViewModel(
         playlistItems = emptyList()
         if (!queue.state.value.enabled) queue.setEnabled(true)
         queue.add(item)
+    }
+
+    /** "Play next" — same manual population path, but positioned after the playing entry. */
+    override fun onQueueAddNext(item: QueueItem) {
+        playlistActive = false
+        playlistItems = emptyList()
+        if (!queue.state.value.enabled) queue.setEnabled(true)
+        queue.addNext(item)
     }
 
     /** True when [videoId] is already in the manual queue (dedupe feedback for menus). */

@@ -65,6 +65,10 @@
     <string name="queue_remove">Αφαίρεση από την ουρά</string>
     <string name="application_not_found">Η εφαρμογή δεν βρέθηκε</string>
     <string name="segments">Τμήματα</string>
+    <string name="chapters">Κεφάλαια</string>
+    <string name="no_chapters">Χωρίς κεφάλαια</string>
+    <string name="skippable_segments">Τμήματα με δυνατότητα παράλειψης</string>
+    <string name="show_more_replies">Εμφάνιση περισσότερων απαντήσεων</string>
     <string name="no_segments">Δεν υπάρχουν τμήματα με δυνατότητα παράβλεψης</string>
     <string name="subtitles">Υπότιτλοι</string>
     <string name="playback_end_next">Παίξτε στη συνέχεια</string>

@@ -2,6 +2,7 @@
 package com.hhst.youtubelite.player.datasource
 
 import androidx.media3.datasource.HttpDataSource
+import com.hhst.youtubelite.extractor.MediaRejection
 import java.io.IOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -9,8 +10,10 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 internal object PlaybackRecovery {
-    enum class Reason(val needsLightRefresh: Boolean) {
-        HTTP_403(false), URL_STALE(true), SESSION_CHANGED(true), TRANSPORT_FAILED(true);
+    enum class Reason(val needsLightRefresh: Boolean, val rejection: MediaRejection? = null) {
+        HTTP_403(false, MediaRejection.FORBIDDEN),
+        INVALID_MEDIA_RESPONSE(false, MediaRejection.INVALID_BODY),
+        URL_STALE(true), SESSION_CHANGED(true), TRANSPORT_FAILED(true);
         fun afterLightBudget(): Reason = if (this == URL_STALE) HTTP_403 else this
     }
     fun classify(error: Throwable): Reason? {
@@ -18,6 +21,7 @@ internal object PlaybackRecovery {
         var transportFailure = false
         while (cause != null && seen.add(cause)) {
             if (cause is IOException && cause.message == "MEDIA_SESSION_CHANGED") return Reason.SESSION_CHANGED
+            if (cause is IOException && cause.message == "MEDIA_ERROR_BODY") return Reason.INVALID_MEDIA_RESPONSE
             if (cause is IOException && cause.message in setOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return Reason.URL_STALE
             when (cause) {
                 is HttpDataSource.InvalidResponseCodeException -> if (cause.responseCode == 403) return Reason.HTTP_403

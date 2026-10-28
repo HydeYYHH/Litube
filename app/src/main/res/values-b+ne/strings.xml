@@ -65,6 +65,10 @@
     <string name="queue_remove">लाइनबाट हटाउनुहोस्</string>
     <string name="application_not_found">आवेदन फेला परेन</string>
     <string name="segments">खण्डहरू</string>
+    <string name="chapters">अध्यायहरू</string>
+    <string name="no_chapters">कुनै अध्याय छैन</string>
+    <string name="skippable_segments">छोड्न मिल्ने सेगमेन्टहरू</string>
+    <string name="show_more_replies">थप जवाफहरू देखाउनुहोस्</string>
     <string name="no_segments">छोड्न मिल्ने खण्डहरू छैनन्</string>
     <string name="subtitles">उपशीर्षकहरू</string>
     <string name="playback_end_next">अर्को खेल्नुहोस्</string>

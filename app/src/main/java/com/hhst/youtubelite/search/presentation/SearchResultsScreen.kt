@@ -44,6 +44,10 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.search.domain.*
 import com.hhst.youtubelite.ui.design.*
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 fun SearchResultsScreen(
@@ -211,7 +215,7 @@ private fun SearchTopBar(query: String, onAction: (SearchAction) -> Unit, onBack
     Row(Modifier.fillMaxWidth().height(barHeight).background(DesignTokens.Background)
         .testTag("search-topbar"), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(53.dp), contentAlignment = Alignment.CenterStart) {
-            AppIconButton(AppIcon.Back, "Back", onClick = onBack)
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = onBack)
         }
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(fieldHeight)
@@ -222,15 +226,15 @@ private fun SearchTopBar(query: String, onAction: (SearchAction) -> Unit, onBack
                     AppText(query, Modifier.padding(start = 12.dp).testTag("search-query-label"),
                         size = 15, line = 22, maxLines = 1)
                 }
-                AppIconButton(AppIcon.Filter, "Search filters", diameter = 48.dp) { onAction(SearchAction.OpenFilters) }
+                AppIconButton(AppIcon.Filter, stringResource(R.string.a11y_search_filters), diameter = 48.dp) { onAction(SearchAction.OpenFilters) }
             }
         }
         Spacer(Modifier.width(12.dp))
         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-            AppIconButton(AppIcon.Voice, "Search with your voice",
+            AppIconButton(AppIcon.Voice, stringResource(R.string.a11y_voice_search),
                 modifier = Modifier.wrapContentSize(unbounded = true), diameter = 40.dp) { onAction(SearchAction.VoiceSearch) }
         }
-        AppIconButton(AppIcon.More, "More options", diameter = 48.dp) { onAction(SearchAction.OpenPageMenu) }
+        AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_options), diameter = 48.dp) { onAction(SearchAction.OpenPageMenu) }
     }
 }
 
@@ -343,8 +347,8 @@ private fun ResultThumbnail(
 ) {
     Box(modifier.testTag("search-thumb-${result.id}").clip(RoundedCornerShape(radius))
         .mediaActions(MediaActionItem(result.id, result.title, result.channel, result.artwork)) { onAction(SearchAction.OpenResult(result.id)) }
-        .semantics { contentDescription = "${result.title}, ${result.duration}" }) {
-        Artwork(result.artwork, Modifier.fillMaxSize())
+        .appDescription(R.string.a11y_title_duration, result.title, result.duration)) {
+        VideoArtwork(result.id, result.artwork, Modifier.fillMaxSize())
         result.progress?.let { progress ->
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0xFF909090))) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f)).background(DesignTokens.Red))
@@ -363,15 +367,17 @@ private fun ResultText(result: SearchResult, modifier: Modifier, onAction: (Sear
     Column(modifier.testTag("search-text-${result.id}").clickable(role = Role.Button) {
         onAction(SearchAction.OpenResult(result.id))
     }) {
-        AppText(result.title, Modifier.fillMaxWidth().testTag("search-title-${result.id}"),
+        AppText(rememberDeArrowTitle(result.id, result.title), Modifier.fillMaxWidth().testTag("search-title-${result.id}"),
             size = 14, line = 18, weight = FontWeight.Normal, maxLines = 2, exactLineHeight = 17.5.sp)
         Spacer(Modifier.height(3.dp))
+        // Only non-empty fields join: a missing view count or date must not
+        // leave orphan separators ("ROSÉ • •"). All fields blank renders nothing.
+        val byline = listOf(result.channel, result.views, result.age).filter(String::isNotBlank)
         Row(Modifier.fillMaxWidth().testTag("search-byline-${result.id}")) {
-            BylineItem(result.channel)
-            BylineSeparator()
-            BylineItem(result.views)
-            BylineSeparator()
-            BylineItem(result.age)
+            byline.forEachIndexed { index, part ->
+                if (index > 0) BylineSeparator()
+                BylineItem(part)
+            }
         }
         result.badge?.let { badge ->
             Spacer(Modifier.height(4.dp))
@@ -398,14 +404,14 @@ private fun BylineSeparator() {
 private fun ChannelAvatar(result: SearchResult, modifier: Modifier, onAction: (SearchAction) -> Unit) {
     Box(modifier.size(40.dp).clip(CircleShape).testTag("search-channel-${result.id}")
         .clickable(role = Role.Button) { onAction(SearchAction.OpenChannel(result.channelId)) }
-        .semantics { contentDescription = "Go to channel ${result.channel}" }) {
+        .appDescription(R.string.a11y_go_to_channel, result.channel)) {
         Artwork(result.avatar ?: result.artwork, Modifier.fillMaxSize())
     }
 }
 
 @Composable
 private fun ResultMenu(result: SearchResult, size: Dp, onAction: (SearchAction) -> Unit) {
-    AppIconButton(AppIcon.More, "More actions for ${result.title}", diameter = size) {
+    AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, result.title), diameter = size) {
         onAction(SearchAction.OpenItemMenu(result.id))
     }
 }
@@ -420,7 +426,7 @@ private fun SearchSkeleton(width: Float, height: Float) {
     val viewport = rememberUpdatedState(width to height)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
-            Modifier.widthIn(max = SearchResultsLayout.ColumnMaxWidth.dp).fillMaxSize().testTag("search-skeleton"),
+            Modifier.widthIn(max = SearchResultsLayout.ColumnMaxWidth.dp).fillMaxSize().testTag("search-skeleton").clearAndSetSemantics {},
             contentPadding = PaddingValues(
                 start = 0.dp, end = 0.dp,
                 top = SearchResultsLayout.listTopInset(width).dp, bottom = 24.dp,

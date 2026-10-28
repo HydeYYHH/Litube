@@ -51,6 +51,8 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
 import com.hhst.youtubelite.ui.design.MenuSheetLayout
+import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.R
 
 /** Server-driven state for the live save sheet; null [choices] means the list is still loading. */
 class SaveSheetLive(
@@ -159,7 +161,7 @@ fun NewPlaylistSheet(
     }
     Box(
         Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onDismiss() }
-            .semantics { contentDescription = "Close new playlist" },
+            .appDescription(R.string.a11y_close_new_playlist),
     )
     BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
         Column(

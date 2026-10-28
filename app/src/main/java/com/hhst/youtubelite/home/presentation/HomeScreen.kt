@@ -46,6 +46,8 @@ import com.hhst.youtubelite.saves.domain.SavePlaylist
 import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
 import com.hhst.youtubelite.saves.presentation.SaveSheetLive
 import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
 
 /** Stateless rendering boundary; local state is limited to saved scroll/focus state. */
 @Composable
@@ -214,11 +216,11 @@ private fun HomeTopBar(onAction: (HomeAction) -> Unit) {
     Row(Modifier.fillMaxWidth().height(DesignTokens.TopBarHeight).testTag("home-topbar"), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(117.dp).fillMaxHeight().clickable(role = Role.Button) {
             onAction(HomeAction.Navigate(HomeNavigationRequest.Destination(HomeDestination.Home)))
-        }.semantics { contentDescription = "Litube Home" }, contentAlignment = Alignment.CenterStart) {
+        }.appDescription(R.string.a11y_litube_home), contentAlignment = Alignment.CenterStart) {
             LitubeBrand(Modifier.padding(start = 12.dp))
         }
         Spacer(Modifier.weight(1f))
-        AppIconButton(AppIcon.Search, "Search YouTube") { onAction(HomeAction.OpenSearch) }
+        AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(HomeAction.OpenSearch) }
     }
 }
 
@@ -267,7 +269,7 @@ private fun ChipStrip(selected: String, chips: List<String>, onAction: (HomeActi
             Box(Modifier.padding(end = 12.dp).size(width = 48.dp, height = 32.dp + extraHeight)
                 .clip(RoundedCornerShape(2.dp)).background(DesignTokens.Surface)
                 .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Explore)) }
-                .semantics { contentDescription = "Explore" }, contentAlignment = Alignment.Center) {
+                .appDescription(R.string.a11y_explore), contentAlignment = Alignment.Center) {
                 AppIcon(AppIcon.Explore)
             }
         }
@@ -290,13 +292,13 @@ private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Bool
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 23.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppIconButton(AppIcon.Explore, "Explore", diameter = 40.dp, background = DesignTokens.Surface) { onAction(HomeAction.Navigate(HomeNavigationRequest.Explore)) }
+                AppIconButton(AppIcon.Explore, stringResource(R.string.a11y_explore), diameter = 40.dp, background = DesignTokens.Surface) { onAction(HomeAction.Navigate(HomeNavigationRequest.Explore)) }
                 Box(Modifier.weight(1f).height(40.dp).clip(CircleShape).background(DesignTokens.Surface)
                     .clickable(role = Role.Button) { onAction(HomeAction.OpenSearch) }
-                    .semantics { contentDescription = "Search YouTube" }.padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-                    AppText("Search YouTube", size = 16, line = 22, color = Color(0xFF909090))
+                    .appDescription(R.string.a11y_search_youtube).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
+                    AppText(stringResource(R.string.a11y_search_youtube), size = 16, line = 22, color = Color(0xFF909090))
                 }
-                AppIconButton(AppIcon.Voice, "Search with your voice", diameter = 40.dp, background = DesignTokens.Surface) { onAction(HomeAction.Navigate(HomeNavigationRequest.VoiceSearch)) }
+                AppIconButton(AppIcon.Voice, stringResource(R.string.a11y_voice_search), diameter = 40.dp, background = DesignTokens.Surface) { onAction(HomeAction.Navigate(HomeNavigationRequest.VoiceSearch)) }
             }
             Spacer(Modifier.height(48.dp))
         } else Spacer(Modifier.height(12.dp))
@@ -304,9 +306,14 @@ private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Bool
             .messageCardShadow()
             .background(DesignTokens.Background, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
-            AppText(content.title, size = 24, line = 32, weight = FontWeight.Black, align = TextAlign.Center)
+            AppText(content.title.ifBlank { stringResource(R.string.home_empty_title) }, size = 24, line = 32, weight = FontWeight.Black, align = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
-            AppText(content.message, size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
+            AppText(content.message.ifBlank { stringResource(R.string.home_empty_message) }, size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
+            // Quiet re-check after a real watch: honest progress, no layout flash.
+            if (content.refreshing) {
+                Spacer(Modifier.height(14.dp))
+                com.hhst.youtubelite.ui.components.AppLinearProgressIndicator(Modifier.fillMaxWidth())
+            }
         }
         Spacer(Modifier.height(32.dp))
     }
@@ -340,16 +347,21 @@ private fun RetryRow(label: String, retry: () -> Unit) {
 
 @Composable
 private fun HomeSkeleton(width: Float) {
-    LazyVerticalGrid(SkeletonCells(HomeLayout.columns(width)), Modifier.fillMaxSize().testTag("home-skeleton"),
+    LazyVerticalGrid(SkeletonCells(HomeLayout.columns(width)), Modifier.fillMaxSize().testTag("home-skeleton").clearAndSetSemantics {},
         contentPadding = PaddingValues(horizontal = HomeLayout.outerPadding(width).dp, vertical = if (width < 528) 0.dp else 16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(40.dp)) {
         items(12) { index ->
+            // Mirrors the real card: thumbnail, then the avatar circle with title and metadata bars.
             Column(Modifier.testTag("skeleton-card-$index")) {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (width < 528) 0.dp else 12.dp)).background(DesignTokens.Ghost).testTag("skeleton-thumb-$index"))
-                Column(Modifier.padding(start = if (width < 528) 12.dp else 0.dp, top = 12.dp, end = if (width < 528) 12.dp else 0.dp)) {
-                    Box(Modifier.widthIn(max = 300.dp).fillMaxWidth().height(16.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
-                    Spacer(Modifier.height(8.dp))
-                    Box(Modifier.width(120.dp).height(16.dp).background(DesignTokens.Ghost, RoundedCornerShape(2.dp)))
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp)).background(DesignTokens.Ghost).testTag("skeleton-thumb-$index"))
+                Row(Modifier.padding(start = if (width < 528) 12.dp else 0.dp, top = 8.dp, end = if (width < 528) 12.dp else 0.dp)) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(DesignTokens.Ghost).testTag("skeleton-avatar-$index"))
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Box(Modifier.widthIn(max = 300.dp).fillMaxWidth().height(16.dp).background(DesignTokens.Ghost, RoundedCornerShape(8.dp)))
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.width(120.dp).height(16.dp).background(DesignTokens.Ghost, RoundedCornerShape(8.dp)))
+                    }
                 }
             }
         }
@@ -371,7 +383,7 @@ internal fun LoadingSpinner() {
         initialValue = 0f, targetValue = 360f,
         animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing)), label = "rotation",
     )
-    androidx.compose.foundation.Canvas(Modifier.size(32.dp).semantics { contentDescription = "Loading" }) {
+    androidx.compose.foundation.Canvas(Modifier.size(32.dp).appDescription(R.string.a11y_loading)) {
         val stroke = 2.dp.toPx()
         val style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
         drawCircle(Color(0xFFEEEEEE), radius = size.minDimension / 2 - stroke / 2, style = style)

@@ -65,6 +65,10 @@
     <string name="queue_remove">Eliminar da cola</string>
     <string name="application_not_found">Non se atopou a aplicación</string>
     <string name="segments">Segmentos</string>
+    <string name="chapters">Capítulos</string>
+    <string name="no_chapters">Non hai capítulos</string>
+    <string name="skippable_segments">Segmentos que se poden omitir</string>
+    <string name="show_more_replies">Mostrar máis respostas</string>
     <string name="no_segments">Non hai segmentos saltables</string>
     <string name="subtitles">Subtítulos</string>
     <string name="playback_end_next">Xoga a continuación</string>

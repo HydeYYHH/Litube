@@ -65,6 +65,10 @@
     <string name="queue_remove">Quitar de la cola</string>
     <string name="application_not_found">No se encontró ninguna app</string>
     <string name="segments">Segmentos</string>
+    <string name="chapters">Capítulos</string>
+    <string name="no_chapters">No hay capítulos</string>
+    <string name="skippable_segments">Segmentos omitibles</string>
+    <string name="show_more_replies">Mostrar más respuestas</string>
     <string name="no_segments">No hay segmentos para saltar</string>
     <string name="subtitles">Subtítulos</string>
     <string name="playback_end_next">Reproducir siguiente</string>

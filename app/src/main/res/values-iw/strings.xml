@@ -65,6 +65,10 @@
     <string name="queue_remove">הסר מהתור</string>
     <string name="application_not_found">האפליקציה לא נמצאה</string>
     <string name="segments">פלחים</string>
+    <string name="chapters">פרקים</string>
+    <string name="no_chapters">אין פרקים</string>
+    <string name="skippable_segments">קטעים שניתן לדלג עליהם</string>
+    <string name="show_more_replies">הצגת תשובות נוספות</string>
     <string name="no_segments">אין קטעים שניתן לדלג עליהם</string>
     <string name="subtitles">כתוביות</string>
     <string name="playback_end_next">הפעל הבא</string>

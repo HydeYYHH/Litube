@@ -75,11 +75,14 @@ class ChannelViewModel(
         sectionGenerations.keys.toList().forEach { sectionGenerations[it] = sectionGenerations.getValue(it) + 1 }
         _state.update { it.copy(subscribePending = false, shorts = ChannelSection.Loading,
             live = ChannelSection.Loading, posts = ChannelSection.Loading,
+            videosTab = ChannelSection.Loading, playlists = ChannelSection.Loading,
             shortsNextKey = null, liveNextKey = null, postsNextKey = null, searchNextKey = null,
+            playlistsNextKey = null,
             shortsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
             liveAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
             postsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
             searchAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
+            playlistsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle,
             videosAppend = com.hhst.youtubelite.home.domain.AppendState.Idle) }
         setOverlay(ChannelOverlay.None)
         load()
@@ -167,6 +170,7 @@ class ChannelViewModel(
             ChannelAction.LoadShortsNext -> loadSectionNext(ChannelTab.Shorts)
             ChannelAction.LoadLiveNext -> loadSectionNext(ChannelTab.Live)
             ChannelAction.LoadPostsNext -> loadSectionNext(ChannelTab.Posts)
+            ChannelAction.LoadPlaylistsNext -> loadSectionNext(ChannelTab.Playlists)
             ChannelAction.LoadSearchNext -> loadSearchNext()
             is ChannelAction.OpenLink -> navigation.trySend(ChannelNavigationRequest.OpenLink(action.url))
             ChannelAction.OpenFullDescription -> {
@@ -234,23 +238,28 @@ class ChannelViewModel(
             _state.update { it.copy(selectedTab = tab) }
         }
         when (tab) {
-            ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts -> ensureSectionLoaded(tab)
+            ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts,
+            ChannelTab.Videos, ChannelTab.Playlists -> ensureSectionLoaded(tab)
             else -> Unit
         }
     }
 
     private fun ensureSectionLoaded(tab: ChannelTab) {
+        val page = (_state.value.content as? ChannelContent.Ready)?.page
         val section = when (tab) {
             ChannelTab.Shorts -> _state.value.shorts
             ChannelTab.Live -> _state.value.live
             ChannelTab.Posts -> _state.value.posts
+            // An inline videos tab is already populated; only a deferred one reads on demand.
+            ChannelTab.Videos -> if (page?.videosDeferred == true) _state.value.videosTab else return
+            ChannelTab.Playlists -> _state.value.playlists
             else -> return
         }
         if (section is ChannelSection.Loading && sectionJobs[tab]?.isActive != true) loadSection(tab)
     }
 
     private fun loadSection(tab: ChannelTab) {
-        if (tab !in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts)) return
+        if (tab !in listOf(ChannelTab.Shorts, ChannelTab.Live, ChannelTab.Posts, ChannelTab.Videos, ChannelTab.Playlists)) return
         sectionJobs[tab]?.cancel()
         val current = (sectionGenerations[tab] ?: 0) + 1
         sectionGenerations[tab] = current
@@ -282,6 +291,25 @@ class ChannelViewModel(
                                 postsNextKey = posts.nextKey, postsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle)
                         }
                     }
+                    ChannelTab.Videos -> {
+                        val page = repository.videos(uiState.value.channelId, null)
+                        if (current != sectionGenerations[tab]) return@launch
+                        _state.update { state ->
+                            val content = state.content as? ChannelContent.Ready ?: return@update state
+                            state.copy(content = content.copy(page = content.page.copy(
+                                videos = page.videos, videosNextKey = page.nextKey, videosDeferred = false)),
+                                videosTab = ChannelSection.Ready(Unit),
+                                videosAppend = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                        }
+                    }
+                    ChannelTab.Playlists -> {
+                        val page = repository.playlists(uiState.value.channelId)
+                        if (current != sectionGenerations[tab]) return@launch
+                        _state.update {
+                            it.copy(playlists = if (page.playlists.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(page.playlists),
+                                playlistsNextKey = page.nextKey, playlistsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                        }
+                    }
                     else -> Unit
                 }
             } catch (cancelled: CancellationException) {
@@ -292,6 +320,8 @@ class ChannelViewModel(
                         when (tab) {
                             ChannelTab.Shorts -> it.copy(shorts = ChannelSection.Failed)
                             ChannelTab.Live -> it.copy(live = ChannelSection.Failed)
+                            ChannelTab.Videos -> it.copy(videosTab = ChannelSection.Failed)
+                            ChannelTab.Playlists -> it.copy(playlists = ChannelSection.Failed)
                             else -> it.copy(posts = ChannelSection.Failed)
                         }
                     }
@@ -327,11 +357,13 @@ class ChannelViewModel(
             ChannelTab.Shorts -> state.shortsNextKey
             ChannelTab.Live -> state.liveNextKey
             ChannelTab.Posts -> state.postsNextKey
+            ChannelTab.Playlists -> state.playlistsNextKey
             else -> return
         } ?: return
         val append = when (tab) {
             ChannelTab.Shorts -> state.shortsAppend
             ChannelTab.Live -> state.liveAppend
+            ChannelTab.Playlists -> state.playlistsAppend
             else -> state.postsAppend
         }
         if (append == com.hhst.youtubelite.home.domain.AppendState.Loading) return
@@ -343,6 +375,7 @@ class ChannelViewModel(
             when (tab) {
                 ChannelTab.Shorts -> it.copy(shortsAppend = loading)
                 ChannelTab.Live -> it.copy(liveAppend = loading)
+                ChannelTab.Playlists -> it.copy(playlistsAppend = loading)
                 else -> it.copy(postsAppend = loading)
             }
         }
@@ -356,6 +389,10 @@ class ChannelViewModel(
                     ChannelTab.Live -> {
                         val page = repository.liveNext(state.channelId, cursor)
                         Pair(page.all, page.nextKey)
+                    }
+                    ChannelTab.Playlists -> {
+                        val page = repository.playlistsNext(state.channelId, cursor)
+                        Pair(page.playlists, page.nextKey)
                     }
                     else -> {
                         val page = repository.postsNext(state.channelId, cursor)
@@ -393,6 +430,14 @@ class ChannelViewModel(
                                 nextKey = appended.second.takeUnless { c -> c == cursor })),
                                 liveAppend = com.hhst.youtubelite.home.domain.AppendState.Idle)
                         }
+                        ChannelTab.Playlists -> {
+                            val ready = it.playlists as? ChannelSection.Ready ?: return@update it
+                            @Suppress("UNCHECKED_CAST")
+                            val added = appended.first as List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>
+                            it.copy(playlists = ChannelSection.Ready((ready.value + added).distinctBy { p -> p.id }),
+                                playlistsNextKey = appended.second.takeUnless { c -> c == cursor },
+                                playlistsAppend = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                        }
                         else -> {
                             val ready = it.posts as? ChannelSection.Ready ?: return@update it
                             @Suppress("UNCHECKED_CAST")
@@ -409,6 +454,7 @@ class ChannelViewModel(
                     when (tab) {
                         ChannelTab.Shorts -> it.copy(shortsAppend = com.hhst.youtubelite.home.domain.AppendState.Failed)
                         ChannelTab.Live -> it.copy(liveAppend = com.hhst.youtubelite.home.domain.AppendState.Failed)
+                        ChannelTab.Playlists -> it.copy(playlistsAppend = com.hhst.youtubelite.home.domain.AppendState.Failed)
                         else -> it.copy(postsAppend = com.hhst.youtubelite.home.domain.AppendState.Failed)
                     }
                 }
@@ -470,6 +516,8 @@ class ChannelViewModel(
             when (tab) {
                 ChannelTab.Shorts -> it.copy(shorts = ChannelSection.Loading)
                 ChannelTab.Live -> it.copy(live = ChannelSection.Loading)
+                ChannelTab.Videos -> it.copy(videosTab = ChannelSection.Loading)
+                ChannelTab.Playlists -> it.copy(playlists = ChannelSection.Loading)
                 else -> it.copy(posts = ChannelSection.Loading)
             }
         }
@@ -508,7 +556,10 @@ class ChannelViewModel(
             try {
                 val page = repository.channel(uiState.value.channelId)
                 if (requestGeneration != generation) return@launch
-                _state.update { it.copy(content = ChannelContent.Ready(page)) }
+                _state.update { it.copy(content = ChannelContent.Ready(page),
+                    videosTab = if (page.videosDeferred) ChannelSection.Loading else ChannelSection.Ready(Unit),
+                    playlists = if (page.playlistsDeferred) ChannelSection.Loading
+                        else if (page.playlists.isEmpty()) ChannelSection.Empty else ChannelSection.Ready(page.playlists)) }
                 ensureSectionLoaded(_state.value.selectedTab)
             } catch (cancelled: CancellationException) {
                 throw cancelled

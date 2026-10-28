@@ -65,6 +65,10 @@
     <string name="queue_remove">Выдаліць з чаргі</string>
     <string name="application_not_found">Прыкладанне не знойдзена</string>
     <string name="segments">Сегменты</string>
+    <string name="chapters">Раздзелы</string>
+    <string name="no_chapters">Няма раздзелаў</string>
+    <string name="skippable_segments">Сегменты, якія можна прапусціць</string>
+    <string name="show_more_replies">Паказаць больш адказаў</string>
     <string name="no_segments">Няма сегментаў, якія можна прапусціць</string>
     <string name="subtitles">Субтытры</string>
     <string name="playback_end_next">Гуляць далей</string>

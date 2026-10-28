@@ -65,6 +65,10 @@
     <string name="queue_remove">إزالة من قائمة الانتظار</string>
     <string name="application_not_found">لم يتم العثور على تطبيق</string>
     <string name="segments">المقاطع</string>
+    <string name="chapters">فصول</string>
+    <string name="no_chapters">لا توجد فصول</string>
+    <string name="skippable_segments">مقاطع قابلة للتخطي</string>
+    <string name="show_more_replies">عرض المزيد من الردود</string>
     <string name="no_segments">لا توجد مقاطع للتخطي</string>
     <string name="subtitles">الترجمة</string>
     <string name="playback_end_next">تشغيل التالي</string>

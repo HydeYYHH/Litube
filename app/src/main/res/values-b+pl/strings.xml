@@ -65,6 +65,10 @@
     <string name="queue_remove">Usuń z kolejki</string>
     <string name="application_not_found">Nie znaleziono aplikacji</string>
     <string name="segments">Segmenty</string>
+    <string name="chapters">Rozdziały</string>
+    <string name="no_chapters">Brak rozdziałów</string>
+    <string name="skippable_segments">Segmenty do pominięcia</string>
+    <string name="show_more_replies">Pokaż więcej odpowiedzi</string>
     <string name="no_segments">Brak segmentów możliwych do pominięcia</string>
     <string name="subtitles">Napisy</string>
     <string name="playback_end_next">Zagraj dalej</string>

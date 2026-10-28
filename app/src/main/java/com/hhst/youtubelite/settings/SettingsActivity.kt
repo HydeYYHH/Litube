@@ -54,8 +54,14 @@ class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
                         notifications = NotificationManagerCompat.from(context).areNotificationsEnabled()
                     }
                 }
+                // The Advanced host and backup imports write through the same manager; follow it.
+                val preferenceListener: (String) -> Unit = { preferences = extensionManager.allPreferences() }
+                extensionManager.addOnChangedListener(preferenceListener)
                 lifecycleOwner.lifecycle.addObserver(observer)
-                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                    extensionManager.removeOnChangedListener(preferenceListener)
+                }
             }
             val current = SettingsPage.parse(page)
             BackHandler(enabled = current != SettingsPage.Home) { page = SettingsPage.Home.argument }
@@ -65,8 +71,8 @@ class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
                 notificationsEnabled = notifications,
                 onNavigate = { page = it.argument },
                 onToggle = { key, enabled ->
+                    // The change listener above refreshes the map; this writes, never mirrors.
                     extensionManager.setEnabled(key, enabled)
-                    preferences = extensionManager.allPreferences()
                 },
                 onAbout = { startActivity(Intent(this@SettingsActivity, AboutActivity::class.java)) },
                 onAdvanced = { startActivity(Intent(this@SettingsActivity, PlaybackSettingsActivity::class.java)) },

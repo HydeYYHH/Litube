@@ -65,6 +65,10 @@
     <string name="queue_remove">Hapus dari antrian</string>
     <string name="application_not_found">Aplikasi tidak ditemukan</string>
     <string name="segments">Segmen</string>
+    <string name="chapters">Bab</string>
+    <string name="no_chapters">Tidak ada bab</string>
+    <string name="skippable_segments">Segmen yang dapat dilewati</string>
+    <string name="show_more_replies">Tampilkan lebih banyak balasan</string>
     <string name="no_segments">Tidak ada segmen yang dapat dilewati</string>
     <string name="subtitles">Terjemahan</string>
     <string name="playback_end_next">Mainkan berikutnya</string>

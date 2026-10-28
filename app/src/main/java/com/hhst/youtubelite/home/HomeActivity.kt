@@ -64,7 +64,11 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 require(modelClass == HomeViewModel::class.java)
                 return HomeViewModel(if (fixtures) FixtureHomeRepository(scenario) else sources.home, extras.createSavedStateHandle(), scenario, loadOnStart = !fixtures, if (fixtures) null else sources.saves, if (fixtures) null else sources.avatars,
                     if (fixtures) null else sources.snapshots,
-                    { com.hhst.youtubelite.data.media.MediaSession.snapshot().accountId ?: "visitor" }) as T
+                    { com.hhst.youtubelite.data.media.MediaSession.snapshot().accountId ?: "visitor" },
+                    reportSignal = if (fixtures) null else {
+                        { org.koin.java.KoinJavaComponent.getKoin()
+                            .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>().anonymousReportSignal.value }
+                    }) as T
             }
         })[HomeViewModel::class.java]
         if (fixtures && intent.hasExtra(EXTRA_SIGNED_IN)) homeViewModel.setSignedInPreview(intent.getBooleanExtra(EXTRA_SIGNED_IN, false))
@@ -137,6 +141,8 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
             val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
             homeViewModel.updateSession(session.signedIn, session.generation,
                 com.hhst.youtubelite.data.media.MediaSession.selectedAccount()?.photo)
+            // A watch-report signal or a stale feed triggers one quiet refresh.
+            homeViewModel.onForeground()
         }
         val preferences = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         homeViewModel.setHideShorts(preferences.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_HIDE_SHORTS))

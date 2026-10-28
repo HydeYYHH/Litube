@@ -65,6 +65,10 @@
     <string name="queue_remove">Wepụ n\'ahịrị</string>
     <string name="application_not_found">Achọtaghị ngwa</string>
     <string name="segments">Akụkụ</string>
+    <string name="chapters">Chapters</string>
+    <string name="no_chapters">No chapters</string>
+    <string name="skippable_segments">Skippable segments</string>
+    <string name="show_more_replies">Gosi ndị ọzọ nzaghachi</string>
     <string name="no_segments">Enweghị akụkụ a na-agbagharị</string>
     <string name="subtitles">Ndepụta Okwu</string>
     <string name="playback_end_next">Gwuo na-esote</string>

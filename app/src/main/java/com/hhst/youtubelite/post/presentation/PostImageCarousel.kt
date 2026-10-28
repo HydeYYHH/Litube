@@ -31,6 +31,8 @@ import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.Artwork
 import com.hhst.youtubelite.ui.design.DesignTokens
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.R
 
 /**
  * Measured post carousel: each photo is the available width minus 48 dp, square, with a 12 dp
@@ -68,9 +70,7 @@ fun PostImageCarousel(
                         .clip(RoundedCornerShape(PostLayout.ImageRadius.dp))
                         .clickable(role = Role.Button) { onOpen(index) }
                         .testTag("post-image-$index")
-                        .semantics {
-                            contentDescription = "Post image ${index + 1} of ${images.size}"
-                        },
+                        .appDescription(R.string.a11y_post_image_index, index + 1, images.size),
                 ) {
                     Artwork(images[index], Modifier.matchParentSize())
                 }
@@ -86,9 +86,7 @@ fun PostImageCarousel(
                         .background(androidx.compose.ui.graphics.Color(0xFF0F0F0F), RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .testTag("post-image-counter")
-                        .semantics {
-                            contentDescription = "Image ${pagerState.currentPage + 1} of ${images.size}"
-                        },
+                        .appDescription(R.string.a11y_image_index, pagerState.currentPage + 1, images.size),
                     contentAlignment = Alignment.Center,
                 ) {
                     AppText(

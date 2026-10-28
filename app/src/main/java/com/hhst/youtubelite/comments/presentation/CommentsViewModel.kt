@@ -16,6 +16,9 @@ import com.hhst.youtubelite.comments.domain.CommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentsUiState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +91,13 @@ class CommentsViewModel(
     private var pageJob: Job? = null
     private var generation = 0
     private val replyJobs = mutableMapOf<String, Job>()
+    /** Cursors requested in the current load cycle; a repeat means the server loops. */
+    private val consumedCursors = mutableSetOf<String>()
+    /** Threads whose first replies page was requested in this load cycle. */
+    private val repliesStarted = mutableSetOf<String>()
+    private val replyCursors = mutableMapOf<String, MutableSet<String>>()
+    /** The first read was cancelled while the panel was closed; the next open restarts it. */
+    private var firstLoadCancelled = false
 
     init {
         when (val content = this.target) {
@@ -119,6 +129,7 @@ class CommentsViewModel(
         savedState[KEY_EXPANDED] = arrayListOf<String>()
         savedState[KEY_SORT] = CommentSort.Top.name
         savedState[KEY_DRAFT] = ""
+        savedState[KEY_LOADED] = 0
         _state.value = CommentsUiState(videoId = id, target = target,
             supportedMenuActions = actions?.supportedMenuActions ?: CommentMenuAction.entries.toSet())
         persistOverlay(CommentsOverlay.None)
@@ -127,14 +138,21 @@ class CommentsViewModel(
 
     fun refreshSession() {
         actionJob?.cancel()
-        _state.update { it.copy(actionPending = false) }
+        savedState[KEY_DRAFT] = ""
+        savedState[KEY_LOADED] = 0
+        overlay(CommentsOverlay.None)
+        _state.update { it.copy(actionPending = false, draft = "") }
         load()
     }
 
     fun onAction(action: CommentAction) {
         if (_state.value.actionPending && action != CommentAction.Retry) return
         when (action) {
-            CommentAction.Retry -> load()
+            // With a loaded list, Retry re-fetches only the page that failed.
+            CommentAction.Retry -> {
+                val content = _state.value.content
+                if (content is CommentsContent.Ready && content.loadMoreFailed) loadMore() else load()
+            }
             CommentAction.LoadMore -> loadMore()
             is CommentAction.SelectSort -> {
                 overlay(CommentsOverlay.None)
@@ -148,6 +166,7 @@ class CommentsViewModel(
             }
             is CommentAction.MenuAction -> selectMenuAction(action.action)
             is CommentAction.ToggleReplies -> toggleReplies(action.commentId)
+            is CommentAction.LoadMoreReplies -> loadMoreReplies(action.commentId)
             CommentAction.Compose -> openComposer(null, null, editing = false)
             is CommentAction.DraftChanged -> {
                 if (_state.value.overlay !is CommentsOverlay.Composer || _state.value.actionPending) return
@@ -377,18 +396,55 @@ class CommentsViewModel(
         requestReplies(commentId, next)
     }
 
+    /** Expansion auto-fetches only the first replies page; further pages are explicit. */
     private fun requestReplies(commentId: String, next: Set<String> = _state.value.expanded) {
         val thread = findThread(commentId) ?: return
-        if (commentId !in next || thread.replyKey == null || thread.replies.isNotEmpty() || replyJobs[commentId]?.isActive == true) return
+        if (commentId !in next || replyJobs[commentId]?.isActive == true) return
+        if (thread.repliesFailed) {
+            // Retry exactly the page that failed, not the whole thread.
+            fetchReplies(commentId, thread.repliesNextCursor)
+            return
+        }
+        if (thread.replies.isNotEmpty() || commentId in repliesStarted || thread.replyKey == null) return
+        repliesStarted += commentId
+        fetchReplies(commentId, null)
+    }
+
+    private fun loadMoreReplies(commentId: String) {
+        val thread = findThread(commentId) ?: return
+        if (commentId !in _state.value.expanded) return
+        val cursor = thread.repliesNextCursor ?: return
+        if (replyJobs[commentId]?.isActive == true) return
+        fetchReplies(commentId, cursor)
+    }
+
+    private fun fetchReplies(commentId: String, cursor: String?) {
+        val thread = findThread(commentId) ?: return
         val requestGeneration = generation
         updateThread(commentId) { it.copy(repliesLoading = true, repliesFailed = false) }
         replyJobs[commentId] = viewModelScope.launch {
-            try {
-                val replies = repository.replies(target, thread)
-                if (requestGeneration == generation) updateThread(commentId) { it.copy(replies = replies, repliesLoading = false) }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
-                if (requestGeneration == generation) updateThread(commentId) { it.copy(repliesLoading = false, repliesFailed = true) }
+            val page = try {
+                repository.repliesPage(target, thread, cursor)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (requestGeneration == generation) {
+                    updateThread(commentId) { it.copy(repliesLoading = false, repliesFailed = true) }
+                }
+                return@launch
+            }
+            currentCoroutineContext().ensureActive()
+            if (requestGeneration != generation) return@launch
+            // A repeated or self-pointing cursor ends the thread instead of looping.
+            val visited = replyCursors.getOrPut(commentId) { mutableSetOf() }
+            val nextCursor = page.nextCursor?.takeUnless { it == cursor || !visited.add(it) }
+            updateThread(commentId) { current ->
+                current.copy(
+                    replies = (current.replies + page.replies).distinctBy { it.id },
+                    repliesNextCursor = nextCursor,
+                    repliesLoading = false,
+                    repliesFailed = false,
+                )
             }
         }
     }
@@ -403,84 +459,85 @@ class CommentsViewModel(
     private fun load() {
         replyJobs.values.forEach(Job::cancel)
         replyJobs.clear()
+        repliesStarted.clear()
+        replyCursors.clear()
+        consumedCursors.clear()
         loadJob?.cancel()
         pageJob?.cancel()
         val requestGeneration = ++generation
         val requestedSort = _state.value.sort
-        val targetCount = savedState.get<Int>(KEY_LOADED) ?: 0
+        firstLoadCancelled = false
+        // Read the restore target before the first page overwrites it with its own size.
+        val restoreTarget = savedState.get<Int>(KEY_LOADED) ?: 0
         _state.update { it.copy(content = CommentsContent.Loading) }
         loadJob = viewModelScope.launch {
-            var threads = emptyList<CommentThread>()
-            var cursor: String? = null
-            var total = ""
-            val page = try {
-                var page = repository.comments(target, requestedSort, cursor = null)
-                total = page.total
-                threads = page.threads
-                cursor = page.nextCursor
-                val visited = mutableSetOf<String>()
-                while (!page.turnedOff && threads.size < targetCount && cursor != null && visited.add(cursor)) {
-                    page = repository.comments(target, requestedSort, cursor)
-                    threads = (threads + page.threads).distinctBy { it.id }
-                    cursor = page.nextCursor
-                }
-                page
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                if (requestGeneration != generation) return@launch
-                _state.update {
-                    it.copy(total = total, content = if (threads.isEmpty()) CommentsContent.Failed
-                    else CommentsContent.Ready(threads, cursor, loadMoreFailed = true))
-                }
-                return@launch
+            // The first page publishes as soon as it lands; restoring deeper
+            // pages after a recreation walks forward one page at a time, each
+            // published as it arrives, never blocking the first paint.
+            if (!fetchPage(null, requestedSort, requestGeneration, firstPage = true)) return@launch
+            while (requestGeneration == generation) {
+                val ready = _state.value.content as? CommentsContent.Ready ?: break
+                if (ready.threads.size >= restoreTarget) break
+                val cursor = ready.nextCursor ?: break
+                if (!fetchPage(cursor, requestedSort, requestGeneration, firstPage = false)) break
             }
-            if (requestGeneration != generation) return@launch
-            if (page.sortFallback && requestedSort == CommentSort.Newest) {
-                savedState[KEY_SORT] = CommentSort.Top.name
-                _state.update { it.copy(sort = CommentSort.Top) }
-                notices.send(AppNotice.Message("Newest comments aren't offered here. Showing top comments."))
-            }
-            val content = when {
-                page.turnedOff -> CommentsContent.Disabled
-                threads.isEmpty() -> CommentsContent.Empty
-                else -> CommentsContent.Ready(threads, cursor)
-            }
-            savedState[KEY_LOADED] = threads.size
-            _state.update { it.copy(content = content, total = if (content == CommentsContent.Empty) "0" else total) }
-            _state.value.expanded.forEach { requestReplies(it) }
         }
     }
 
-    private fun loadMore() {
-        val ready = _state.value.content as? CommentsContent.Ready ?: return
-        if (ready.loadingMore || ready.nextCursor == null) return
-        val requestGeneration = generation
-        val requestedSort = _state.value.sort
-        _state.update { it.copy(content = ready.copy(loadingMore = true, loadMoreFailed = false)) }
-        pageJob = viewModelScope.launch {
-            val page = try {
-                repository.comments(target, requestedSort, ready.nextCursor)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                if (requestGeneration != generation) return@launch
-                _state.update { state ->
-                    val current = state.content as? CommentsContent.Ready ?: return@update state
-                    state.copy(content = current.copy(loadingMore = false, loadMoreFailed = true))
-                }
-                return@launch
+    /**
+     * Fetches one page and publishes it. Returns false when the caller's walk
+     * must stop: a failure (state already carries it) or a stale generation.
+     */
+    private suspend fun fetchPage(cursor: String?, sort: CommentSort, requestGeneration: Int, firstPage: Boolean): Boolean {
+        if (requestGeneration != generation) return false
+        if (cursor != null && cursor in consumedCursors) {
+            // A→B→A cursor loop: close the list instead of refetching forever.
+            _state.update { state ->
+                (state.content as? CommentsContent.Ready)?.let { state.copy(content = it.copy(nextCursor = null)) } ?: state
             }
-            if (requestGeneration != generation) return@launch
+            return false
+        }
+        val page = try {
+            repository.comments(target, sort, cursor)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (requestGeneration != generation) return false
+            _state.update { state ->
+                val ready = state.content as? CommentsContent.Ready
+                if (ready != null) state.copy(content = ready.copy(loadingMore = false, loadMoreFailed = true))
+                else state.copy(content = CommentsContent.Failed)
+            }
+            return false
+        }
+        currentCoroutineContext().ensureActive()
+        if (requestGeneration != generation) return false
+        cursor?.let(consumedCursors::add)
+        if (firstPage && page.sortFallback && sort == CommentSort.Newest) {
+            savedState[KEY_SORT] = CommentSort.Top.name
+            _state.update { it.copy(sort = CommentSort.Top) }
+            notices.send(AppNotice.Message("Newest comments aren't offered here. Showing top comments."))
+        }
+        if (firstPage) {
+            val content = when {
+                page.turnedOff -> CommentsContent.Disabled
+                page.threads.isEmpty() -> CommentsContent.Empty
+                else -> CommentsContent.Ready(page.threads.distinctBy { it.id }, page.nextCursor)
+            }
+            savedState[KEY_LOADED] = page.threads.size
+            _state.update { it.copy(content = content, total = if (content == CommentsContent.Empty) "0" else page.total) }
+            _state.value.expanded.forEach { requestReplies(it) }
+        } else {
+            val ready = _state.value.content as? CommentsContent.Ready ?: return false
+            val threads = (ready.threads + page.threads).distinctBy { it.id }
+            savedState[KEY_LOADED] = threads.size
             _state.update { state ->
                 val current = state.content as? CommentsContent.Ready ?: return@update state
-                val threads = (current.threads + page.threads).distinctBy { it.id }
-                savedState[KEY_LOADED] = threads.size
                 state.copy(
                     total = page.total.ifBlank { state.total },
                     content = current.copy(
                         threads = threads,
-                        nextCursor = page.nextCursor.takeUnless { it == ready.nextCursor },
+                        nextCursor = page.nextCursor?.takeUnless { it in consumedCursors },
                         loadingMore = false,
                         loadMoreFailed = false,
                     ),
@@ -488,9 +545,54 @@ class CommentsViewModel(
             }
             _state.value.expanded.forEach { requestReplies(it) }
         }
+        return true
     }
 
-    override fun onCleared() { navigation.close(); notices.close() }
+    private fun loadMore() {
+        val ready = _state.value.content as? CommentsContent.Ready ?: return
+        if (ready.loadingMore || ready.nextCursor == null || loadJob?.isActive == true || pageJob?.isActive == true) return
+        val requestGeneration = generation
+        val requestedSort = _state.value.sort
+        _state.update { it.copy(content = ready.copy(loadingMore = true, loadMoreFailed = false)) }
+        pageJob = viewModelScope.launch {
+            fetchPage(ready.nextCursor, requestedSort, requestGeneration, firstPage = false)
+        }
+    }
+
+    /** Panel closed or the target switched: in-flight reads stop; loaded content stays. */
+    fun cancelTransient() {
+        val inFlightReplies = replyJobs.filterValues { it.isActive }.keys.toSet()
+        loadJob?.cancel()
+        pageJob?.cancel()
+        replyJobs.values.forEach(Job::cancel)
+        replyJobs.clear()
+        repliesStarted -= inFlightReplies
+        _state.update { state ->
+            val ready = state.content as? CommentsContent.Ready ?: return@update state
+            state.copy(
+                content = ready.copy(loadingMore = false, threads = ready.threads.map {
+                    if (it.repliesLoading) it.copy(repliesLoading = false) else it
+                }),
+            )
+        }
+        if (_state.value.content == CommentsContent.Loading) firstLoadCancelled = true
+    }
+
+    /** The panel opened for an existing model: restarts a cancelled first read. */
+    fun ensureLoaded() {
+        if (firstLoadCancelled && loadJob?.isActive != true && _state.value.content == CommentsContent.Loading) {
+            load()
+        }
+    }
+
+    fun dispose() {
+        cancelTransient()
+        viewModelScope.cancel()
+        navigation.close()
+        notices.close()
+    }
+
+    override fun onCleared() = dispose()
 
     private companion object {
         const val KEY_VIDEO = "commentsVideoId"

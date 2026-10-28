@@ -65,6 +65,10 @@
     <string name="queue_remove">Mbusak saka antrian</string>
     <string name="application_not_found">Aplikasi ora ditemokake</string>
     <string name="segments">Segmen</string>
+    <string name="chapters">Bab</string>
+    <string name="no_chapters">Ora ana bab</string>
+    <string name="skippable_segments">Segmen sing bisa dilewati</string>
+    <string name="show_more_replies">Tampilake luwih akeh wangsulan</string>
     <string name="no_segments">Ora ana segmen sing bisa dilewati</string>
     <string name="subtitles">Subtitle</string>
     <string name="playback_end_next">Puter sabanjuré</string>

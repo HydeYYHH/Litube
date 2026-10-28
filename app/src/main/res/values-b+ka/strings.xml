@@ -65,6 +65,10 @@
     <string name="queue_remove">რიგიდან ამოღება</string>
     <string name="application_not_found">აპლიკაცია ვერ მოიძებნა</string>
     <string name="segments">სეგმენტები</string>
+    <string name="chapters">თავები</string>
+    <string name="no_chapters">თავები არ არის</string>
+    <string name="skippable_segments">გამოტოვებადი სეგმენტები</string>
+    <string name="show_more_replies">მეტი პასუხის ჩვენება</string>
     <string name="no_segments">არ არის გამოტოვებული სეგმენტები</string>
     <string name="subtitles">სუბტიტრები</string>
     <string name="playback_end_next">ითამაშეთ შემდეგი</string>

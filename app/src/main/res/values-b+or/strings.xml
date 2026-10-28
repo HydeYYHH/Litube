@@ -65,6 +65,10 @@
     <string name="queue_remove">ଧାଡିରୁ ହଟାନ୍ତୁ</string>
     <string name="application_not_found">ଆପ୍ ମିଳିଲା ନାହିଁ</string>
     <string name="segments">ବିଭାଗଗୁଡିକ</string>
+    <string name="chapters">ଅଧ୍ୟାୟଗୁଡ଼ିକ</string>
+    <string name="no_chapters">କୌଣସି ଅଧ୍ୟାୟ ନାହିଁ</string>
+    <string name="skippable_segments">ଏଡ଼ାଇ ହେଉଥିବା ଖଣ୍ଡଗୁଡ଼ିକ</string>
+    <string name="show_more_replies">ଅଧିକ ଉତ୍ତର ଦେଖାନ୍ତୁ</string>
     <string name="no_segments">ଛାଡ଼ିପାରିବା ଭଳି କୌଣସି ଅଂଶ ନାହିଁ</string>
     <string name="subtitles">ସବ୍ଟାଇଟଲ୍</string>
     <string name="playback_end_next">ପରବର୍ତ୍ତୀ ଭିଡିଓ ଚଲାନ୍ତୁ</string>

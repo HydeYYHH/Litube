@@ -65,6 +65,10 @@
     <string name="queue_remove">Кезектен алып салуу</string>
     <string name="application_not_found">Тиркеме табылган жок</string>
     <string name="segments">Сегменттер</string>
+    <string name="chapters">Бөлүмдөр</string>
+    <string name="no_chapters">Бөлүмдөр жок</string>
+    <string name="skippable_segments">Өткөрүп жиберсе болучу сегменттер</string>
+    <string name="show_more_replies">Дагы жоопторду көрсөтүү</string>
     <string name="no_segments">Өткөрүлүүчү сегменттер жок</string>
     <string name="subtitles">Субтитрлер</string>
     <string name="playback_end_next">Кийинки ойнотуу</string>

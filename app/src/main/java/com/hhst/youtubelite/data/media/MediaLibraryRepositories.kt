@@ -13,22 +13,25 @@ import com.hhst.youtubelite.shorts.domain.*
 import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import kotlinx.coroutines.async
 
-class MediaLibraryRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : LibraryRepository {
+class MediaLibraryRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
+    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : LibraryRepository {
     override val supportsLocal get() = local != null
+    private fun useDevice() = useDeviceLibrary(local, source)
     private suspend fun <T> device(block: (LocalLibraryStore) -> T): T {
-        val generation = MediaSession.snapshot().generation
+        val operation = LibraryOperation(local, source)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            MediaSession.withAnonymousSession(generation) { block(requireNotNull(local)) }
+            operation.local { block(requireNotNull(local)) }
         }
     }
     override suspend fun you(): YouPage = kotlinx.coroutines.coroutineScope {
-        if (!MediaSession.signedIn() && local != null) return@coroutineScope device {
+        val operation = LibraryOperation(local, source)
+        if (useDevice()) return@coroutineScope device {
             YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), it.history().entries, it.playlists().playlists)
         }
         // The account is the primary read; history and playlists are optional shelves that
         // fail on their own so one rejected read cannot blank a usable page.
         val account = async {
-            client.read { context, http ->
+            remote { context, http ->
                 val accounts = loadAccounts(context, http).requireValue()
                 val profile = accounts.firstOrNull { it.id == context.accountId && !it.disabled }
                     ?: accounts.firstOrNull { it.selected && !it.disabled }
@@ -40,16 +43,18 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
         val playlists = async { try { Result.success(playlists()) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) } }
         val historyResult = history.await()
         val playlistResult = playlists.await()
-        YouPage(account.await(),
+        val profile = account.await()
+        operation.check()
+        YouPage(profile,
             historyResult.getOrDefault(HistoryPage(emptyList())).entries,
             playlistResult.getOrDefault(PlaylistCollectionPage(emptyList())).playlists,
             historyFailed = historyResult.isFailure,
             playlistsFailed = playlistResult.isFailure)
     }
-    override suspend fun history(): HistoryPage = if (!MediaSession.signedIn() && local != null) device { it.history() } else client.read { context, http ->
+    override suspend fun history(): HistoryPage = if (useDevice()) device { it.history() } else remote { context, http ->
         historyPage(context, http, null)
     }
-    override suspend fun historyNext(cursor: String): HistoryPage = client.read { context, http ->
+    override suspend fun historyNext(cursor: String): HistoryPage = if (useDevice()) HistoryPage(emptyList()) else remote { context, http ->
         historyPage(context, http, cursor)
     }
     private fun historyPage(context: RequestContext, http: HttpClient, continuation: String?): HistoryPage {
@@ -58,21 +63,26 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
             it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), it.duration.orEmpty(), it.progressPercent?.div(100f), "History",
             removeToken = it.actions.firstNotNullOfOrNull { action -> action.feedbackToken() }) }, page.nextKey)
     }
-    override suspend fun removeFromHistory(feedbackToken: String) {
-        if (!MediaSession.signedIn() && local != null) return device { it.remove(feedbackToken) }
+    override suspend fun removeFromHistory(feedbackToken: String): RemovedHistoryEntry? {
+        if (useDevice()) return device { it.remove(feedbackToken) }
         historyWrite { context, http -> removeWatchHistory(feedbackToken, context, http).requireValue() }
+        return null
+    }
+
+    override suspend fun restoreHistoryEntry(removed: RemovedHistoryEntry) {
+        device { it.restore(removed) }
     }
     override suspend fun setHistoryPaused(paused: Boolean) {
-        if (!MediaSession.signedIn() && local != null) return device { it.pause(paused) }
+        if (useDevice()) return device { it.pause(paused) }
         historyWrite { context, http -> setWatchHistory(!paused, context, http).requireValue() }
     }
     override suspend fun clearHistory() {
-        if (!MediaSession.signedIn() && local != null) return device { it.clear() }
+        if (useDevice()) return device { it.clear() }
         historyWrite { context, http -> clearWatchHistory(context, http).requireValue() }
     }
     private suspend fun historyWrite(block: (RequestContext, HttpClient) -> ActionReply) {
         try {
-            client.read { context, http ->
+            remote { context, http ->
                 if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
                 if (!block(context, http).confirmed)
                     throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
@@ -82,14 +92,23 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
             throw error
         }
     }
-    override suspend fun playlists(): PlaylistCollectionPage = if (!MediaSession.signedIn() && local != null) device { it.playlists() } else client.read { context, http ->
+    override suspend fun playlists(): PlaylistCollectionPage = if (useDevice()) device { it.playlists() } else remote { context, http ->
         val page = loadLibrary(LibrarySection.PLAYLISTS, context, http = http).requireValue()
         PlaylistCollectionPage(page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.nextKey)
     }
-    override suspend fun playlistsNext(cursor: String): PlaylistCollectionPage = client.read { context, http ->
+    override suspend fun playlistsNext(cursor: String): PlaylistCollectionPage = if (useDevice()) PlaylistCollectionPage(emptyList()) else remote { context, http ->
         val page = loadLibrary(LibrarySection.PLAYLISTS, context, cursor, http = http).requireValue()
         PlaylistCollectionPage(page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.nextKey)
     }
+    private suspend fun <T> remote(block: (RequestContext, HttpClient) -> T): T {
+        val operation = LibraryOperation(local, source)
+        if (operation.device) throw kotlinx.coroutines.CancellationException("Library source changed")
+        return client.read { context, http ->
+            operation.check()
+            block(context, operation.transport(http)).also { operation.check() }
+        }
+    }
+
 }
 
 class MediaSubscriptionsRepository(private val client: MediaClient) : SubscriptionsRepository {
@@ -127,13 +146,33 @@ class MediaNotificationsRepository(private val client: MediaClient) : Notificati
 
 class MediaExploreRepository(private val client: MediaClient) : ExploreRepository {
     override suspend fun explore(category: ExploreCategory) = client.read { context, http ->
-        val page = loadHome(HomeSection.valueOf(category.name.uppercase()), context, http = http).requireValue()
+        loadHome(section(category), context, http = http).requireValue().toExplorePage(category)
+    }
+
+    override suspend fun exploreNext(category: ExploreCategory, key: String) = client.read { context, http ->
+        loadHome(section(category), context, key, http).requireValue().toExplorePage(category)
+    }
+
+    override suspend fun exploreShelf(category: ExploreCategory, key: String) = client.read { context, http ->
+        // A shelf continuation answers with that shelf's next items; the server answers
+        // a spent shelf with a bookkeeping-only envelope, which parses as an empty page.
+        val page = loadHome(section(category), context, key, http).requireValue()
+        val items = (page.groups.singleOrNull()?.items ?: page.items)
+            .filter { it.kind == "video" }.map(MediaItem::feedVideo)
+        ExploreSection(null, items, page.nextKey)
+    }
+
+    private fun section(category: ExploreCategory) = HomeSection.valueOf(category.name.uppercase())
+
+    private fun BrowsePage.toExplorePage(category: ExploreCategory): ExplorePage {
         // Shelves stay carousels; the flat list keeps the fallback grid useful.
-        val sections = page.groups.mapNotNull { group ->
+        val sections = groups.mapNotNull { group ->
             val videos = group.items.filter { it.kind == "video" }.map(MediaItem::feedVideo)
-            ExploreSection(group.title, videos).takeIf { videos.isNotEmpty() }
+            ExploreSection(group.title, videos, group.nextKey).takeIf { videos.isNotEmpty() }
         }
-        ExplorePage(category, sections.flatMap { it.videos }.ifEmpty { page.items.filter { it.kind == "video" }.map(MediaItem::feedVideo) }, sections)
+        return ExplorePage(category,
+            sections.flatMap { it.videos }.ifEmpty { items.filter { it.kind == "video" }.map(MediaItem::feedVideo) },
+            sections, nextKey)
     }
 }
 
@@ -146,7 +185,7 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
         if (startId != null) {
             val video = loadWatch(startId, context, http = http).requireValue()
             val seed = ShortItem(startId, video.title.orEmpty(), video.author.orEmpty(), video.channelId.orEmpty(),
-                "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "")
+                "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "", video.authorThumbnail.orEmpty())
             ShortsPage(listOf(seed), INITIAL_CURSOR)
         } else {
             shortsPage(context, http, null)
@@ -157,10 +196,26 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
         shortsPage(context, http, cursor.takeUnless { it == INITIAL_CURSOR })
     }
 
+    /** One watch read per item; the ViewModel bounds and cancels these. */
+    override suspend fun hydrate(itemId: String): ShortDetail? = client.read { context, http ->
+        val page = loadWatch(itemId, context, http = http).value ?: return@read null
+        val details = loadPlayerDetails(itemId, context, http).value
+        val title = page.title ?: details?.title ?: return@read null
+        ShortDetail(
+            ShortItem(itemId, title, page.author ?: details?.author.orEmpty(),
+                page.channelId ?: details?.channelId.orEmpty(), details?.thumbnail.orEmpty(),
+                page.viewCount ?: details?.viewCount?.let {
+                    java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
+                }.orEmpty(), "", page.commentCount.orEmpty(), page.authorThumbnail.orEmpty()),
+            details?.tracking,
+            context.generation,
+        )
+    }
+
     private fun shortsPage(context: RequestContext, http: HttpClient, cursor: String?): ShortsPage {
         val page = pageFor(cursor, context, http)
         return ShortsPage(page.items.filter { it.kind in setOf("video", "short") }.map {
-            ShortItem(it.id, it.title.orEmpty(), it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), "", "", "")
+            ShortItem(it.id, it.title.orEmpty(), it.author.orEmpty(), it.channelId.orEmpty(), it.thumbnail.orEmpty(), "", "", "", it.authorThumbnail.orEmpty())
         }, page.nextKey)
     }
 
@@ -168,7 +223,7 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
         if (channelId == null) return loadHome(HomeSection.SHORTS, context, cursor, http).requireValue()
         return if (cursor != null) loadChannel(channelId, context, continuation = cursor, http = http).requireValue().page
         else {
-            val channel = loadChannel(channelId!!, context, http = http).requireValue()
+            val channel = loadChannel(channelId, context, http = http).requireValue()
             val tab = channel.page.tabs.firstOrNull { it.title.equals("Shorts", true) }
             if (tab == null) channel.page.copy(items = emptyList()) else loadChannel(channelId, context, tab.params, http = http).requireValue().page
         }

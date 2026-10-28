@@ -48,12 +48,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun YoutubeTopAppBar(
+fun AppTopAppBar(
     title: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     navigationIcon: @Composable () -> Unit = {},
@@ -67,18 +67,18 @@ fun YoutubeTopAppBar(
     actions = actions, expandedHeight = expandedHeight, colors = colors)
 
 @Composable
-fun YoutubeTextButton(
+fun AppTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-    colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = YoutubeStyle.Action),
+    colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = AppStyle.Action),
     content: @Composable RowScope.() -> Unit,
 ) = TextButton(onClick = onClick, modifier = modifier, enabled = enabled,
     colors = colors, shape = CircleShape, contentPadding = contentPadding, content = content)
 
 @Composable
-fun YoutubeAlertDialog(
+fun AppAlertDialog(
     onDismissRequest: () -> Unit,
     confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier,
@@ -86,7 +86,7 @@ fun YoutubeAlertDialog(
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
-    shape: Shape = YoutubeStyle.MenuShape,
+    shape: Shape = AppStyle.MenuShape,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     tonalElevation: Dp = 0.dp,
     titleContentColor: Color = MaterialTheme.colorScheme.onSurface,
@@ -100,39 +100,39 @@ fun YoutubeAlertDialog(
     titleContentColor = titleContentColor, textContentColor = textContentColor, properties = properties)
 
 @Composable
-fun YoutubeRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) =
+fun AppRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) =
     RadioButton(selected, onClick, modifier,
-        colors = RadioButtonDefaults.colors(selectedColor = YoutubeStyle.Action,
+        colors = RadioButtonDefaults.colors(selectedColor = AppStyle.Action,
             unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant))
 
 @Composable
-fun YoutubeCheckbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
+fun AppCheckbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier, enabled: Boolean = true) =
     Checkbox(checked, onCheckedChange, modifier, enabled,
-        colors = CheckboxDefaults.colors(checkedColor = YoutubeStyle.Action,
+        colors = CheckboxDefaults.colors(checkedColor = AppStyle.Action,
             uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant, checkmarkColor = Color.White))
 
 @Composable
-fun YoutubeLinearProgressIndicator(modifier: Modifier = Modifier, color: Color = YoutubeStyle.Action,
+fun AppLinearProgressIndicator(modifier: Modifier = Modifier, color: Color = AppStyle.Action,
     trackColor: Color = MaterialTheme.colorScheme.outlineVariant) =
     LinearProgressIndicator(modifier = modifier.height(2.dp), color = color, trackColor = trackColor,
         strokeCap = StrokeCap.Butt, gapSize = 0.dp)
 
 @Composable
-fun YoutubeLinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier,
-    color: Color = YoutubeStyle.Action, trackColor: Color = MaterialTheme.colorScheme.outlineVariant) =
+fun AppLinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier,
+    color: Color = AppStyle.Action, trackColor: Color = MaterialTheme.colorScheme.outlineVariant) =
     LinearProgressIndicator(progress = progress, modifier = modifier.height(2.dp), color = color,
         trackColor = trackColor, strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {})
 
 /** Web-sized pill and thumb, with an independent 48 dp touch area. */
 @Composable
-fun YoutubeSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
+fun AppSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
     // With system animations off the thumb snaps instead of gliding.
     val fraction by animateFloatAsState(if (checked) 1f else 0f,
         animationSpec = if (com.hhst.youtubelite.ui.design.LocalMotionScale.current > 0f) spring() else snap(), label = "switch")
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val track = (if (checked) YoutubeStyle.Action else MaterialTheme.colorScheme.onSurfaceVariant)
+    val track = (if (checked) AppStyle.Action else MaterialTheme.colorScheme.onSurfaceVariant)
         .copy(alpha = if (enabled) 1f else .38f)
     Box(modifier.size(48.dp).then(if (onCheckedChange == null) Modifier else
         Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch,
@@ -149,11 +149,11 @@ fun YoutubeSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
 /** Thin track and round thumb. Gestures and accessibility remain on the platform control. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun YoutubeSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier,
+fun AppSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0, onValueChangeFinished: (() -> Unit)? = null,
-    colors: SliderColors = SliderDefaults.colors(thumbColor = YoutubeStyle.Action,
-        activeTrackColor = YoutubeStyle.Action, inactiveTrackColor = MaterialTheme.colorScheme.outline)) {
+    colors: SliderColors = SliderDefaults.colors(thumbColor = AppStyle.Action,
+        activeTrackColor = AppStyle.Action, inactiveTrackColor = MaterialTheme.colorScheme.outline)) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val opacity = if (enabled) 1f else .38f
     Slider(value, onValueChange, modifier, enabled, valueRange = valueRange, steps = steps,
@@ -172,7 +172,7 @@ fun YoutubeSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifi
 }
 
 @Composable
-fun YoutubeSheetHandle(modifier: Modifier = Modifier) {
+fun AppSheetHandle(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(32.dp, 4.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .5f), RoundedCornerShape(2.dp)))
     }

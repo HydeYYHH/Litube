@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import com.hhst.youtubelite.R
 
 /** One action in a bottom sheet. */
 data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null)
@@ -100,7 +101,7 @@ fun MenuBottomSheet(
     val motion = LocalMotionScale.current
 
     LaunchedEffect(Unit) {
-        if (motion > 0f) progress.animateTo(1f, tween(scaledMotion(MenuMotion.enterMs, motion), easing = FastOutSlowInEasing))
+        if (motion > 0f) progress.animateTo(1f, tween(motionDuration(MenuMotion.enterMs, motion), easing = FastOutSlowInEasing))
         else progress.snapTo(1f)
     }
     fun finish() {
@@ -108,7 +109,7 @@ fun MenuBottomSheet(
         closing = true
         settleJob?.cancel()
         scope.launch {
-            if (motion > 0f) progress.animateTo(0f, tween(scaledMotion(MenuMotion.exitMs, motion), easing = FastOutSlowInEasing))
+            if (motion > 0f) progress.animateTo(0f, tween(motionDuration(MenuMotion.exitMs, motion), easing = FastOutSlowInEasing))
             else progress.snapTo(0f)
             onDismiss()
         }
@@ -124,7 +125,7 @@ fun MenuBottomSheet(
     Box(
         modifier.fillMaxSize().graphicsLayer { alpha = progress.value }
             .background(DesignTokens.MenuScrim).clickable { finish() }
-            .semantics { contentDescription = "Close menu" },
+            .appDescription(R.string.a11y_close_menu),
     )
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Column(

@@ -65,6 +65,10 @@
     <string name="queue_remove">ເອົາອອກຈາກຄິວ</string>
     <string name="application_not_found">ບໍ່ພົບແອັບພລິເຄຊັນ</string>
     <string name="segments">ສ່ວນ</string>
+    <string name="chapters">ບົດ</string>
+    <string name="no_chapters">ບໍ່ມີບົດ</string>
+    <string name="skippable_segments">ສ່ວນທີ່ຂ້າມໄດ້</string>
+    <string name="show_more_replies">ສະແດງຄຳຕອບເພີ່ມເຕີມ</string>
     <string name="no_segments">ບໍ່ມີພາກສ່ວນທີ່ຂ້າມໄດ້</string>
     <string name="subtitles">ຄໍາບັນຍາຍ</string>
     <string name="playback_end_next">ຫຼິ້ນຕໍ່ໄປ</string>

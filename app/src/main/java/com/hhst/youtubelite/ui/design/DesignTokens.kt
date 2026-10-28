@@ -21,10 +21,12 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.*
 import com.hhst.youtubelite.R
+import androidx.annotation.StringRes
 import kotlin.math.ceil
 
 object DesignTokens {
@@ -74,11 +77,16 @@ object DesignTokens {
 /** The one theme entry: follows the appearance setting and shares the color palette. */
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    val darkTheme = com.hhst.youtubelite.ui.theme.YoutubeAppearance.dark ?: androidx.compose.foundation.isSystemInDarkTheme()
+    val darkTheme = com.hhst.youtubelite.ui.theme.AppAppearance.dark ?: androidx.compose.foundation.isSystemInDarkTheme()
     val context = LocalContext.current
-    val motion = remember { readMotionScale(context.contentResolver) }
+    // Re-read on every resume: the system animator scale may change while the process lives.
+    val motion = remember { mutableStateOf(readMotionScale(context.contentResolver)) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        motion.value = readMotionScale(context.contentResolver)
+        onPauseOrDispose { }
+    }
     CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppPalette else LightAppPalette,
-        LocalMotionScale provides motion) {
+        LocalMotionScale provides motion.value) {
         com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = darkTheme) { content() }
     }
 }
@@ -146,6 +154,13 @@ fun ShortsLogo(modifier: Modifier = Modifier) {
     }
 }
 
+/** Localized content description for plain tap targets; keeps a11y labels out of code strings. */
+@Composable
+fun Modifier.appDescription(@StringRes id: Int, vararg args: Any): Modifier {
+    val description = stringResource(id, *args)
+    return semantics { contentDescription = description }
+}
+
 @Composable
 fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignTokens.Ink) {
     val paths = remember(icon) { icon.paths.map { raw ->
@@ -159,6 +174,7 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
         }
         path
     } }
+    val mirrored = icon.mirrorsInRtl && LocalLayoutDirection.current == LayoutDirection.Rtl
     Spacer(modifier.size(24.dp).drawWithCache {
         // Cache at the displayed pixel size so vector edges retain anti-aliasing on every renderer.
         val bitmap = android.graphics.Bitmap.createBitmap(ceil(size.width).toInt().coerceAtLeast(1),
@@ -167,7 +183,9 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
         val canvas = android.graphics.Canvas(bitmap).apply { scale(size.width / 24f, size.height / 24f) }
         paths.forEach { canvas.drawPath(it, paint) }
         val raster = bitmap.asImageBitmap()
-        onDrawBehind { drawImage(raster) }
+        onDrawBehind {
+            if (mirrored) scale(scaleX = -1f, scaleY = 1f) { drawImage(raster) } else drawImage(raster)
+        }
     })
 }
 
@@ -190,7 +208,7 @@ fun AppIconButton(
 
 @Composable
 fun LitubeMark(modifier: Modifier = Modifier) {
-    Image(painterResource(R.drawable.ic_litube_mark), contentDescription = "Litube", modifier = modifier)
+    Image(painterResource(R.drawable.ic_litube_mark), contentDescription = stringResource(R.string.a11y_litube), modifier = modifier)
 }
 
 @Composable

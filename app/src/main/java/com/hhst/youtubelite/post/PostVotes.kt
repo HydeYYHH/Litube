@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.post
 
+import com.hhst.youtubelite.R
+
 /**
  * Production route for post like/dislike taps. Anonymous post pages expose no vote endpoints
  * at all — the web itself answers these buttons with a sign-in route (checklist B9 probe,
@@ -10,6 +12,6 @@ fun openPostVoteRoute(activity: android.app.Activity) {
     if (!com.hhst.youtubelite.data.media.MediaSession.signedIn()) {
         com.hhst.youtubelite.account.SignInFlow.open(activity)
     } else {
-        android.widget.Toast.makeText(activity, "Voting on posts isn't available yet.", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(activity, R.string.post_voting_unavailable, android.widget.Toast.LENGTH_LONG).show()
     }
 }

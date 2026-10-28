@@ -76,12 +76,12 @@ class YoutubeExtractionHost(
     override fun deferredClients(videoId: String): Set<StreamClient> =
         clientOrder.refusedFor(videoId, sessions.scopeHint())
 
-    override fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext?): StreamClient? {
+    override fun noteMediaRejected(videoId: String, url: String, reason: MediaRejection, diagnosticContext: DiagnosticContext?): StreamClient? {
         val plan = runCatching { plans.plan(url) }.getOrNull() ?: return null
         if (!sessions.isMediaCurrent(plan.session)) return null
         clientOrder.mediaForbidden(videoId, sessions.scopeHint(), plan.client)
         AppLog.event(AppLog.Category.EXTRACTOR,
-            "client_media_forbidden", mapOf("client" to plan.client.name, "reason" to "http_403",
+            "client_media_rejected", mapOf("client" to plan.client.name, "reason" to reason.code,
                 "defer_ms" to 30_000), context = diagnosticContext)
         return plan.client
     }

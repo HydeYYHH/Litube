@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
@@ -64,6 +65,12 @@ fun PlayerTimeBar(
             .semantics {
                 contentDescription = timeBarDescription
                 progressBarRangeInfo = ProgressBarRangeInfo(announcedFraction, 0f..1f)
+                // TalkBack and switch access adjust the bar through SetProgress; the
+                // seek lands directly, the drag preview stays a pointer-only path.
+                if (durationMs > 0) setProgress { target ->
+                    onSeek((target.coerceIn(0f, 1f) * durationMs).toLong())
+                    true
+                }
             }
             .pointerInput(durationMs) {
                 if (durationMs <= 0L) return@pointerInput

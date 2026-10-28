@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -28,6 +29,8 @@ import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.ui.components.MainNavigationBar
 import com.hhst.youtubelite.ui.components.MainTab
 import com.hhst.youtubelite.ui.design.*
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 
 @Composable
 fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier: Modifier = Modifier) {
@@ -48,12 +51,18 @@ fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier
                     is LibraryContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "you-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
-                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, onAction)
+                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, state.source, state.sourceSelectable, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, accountAvatar(state)) { tab ->
                 onAction(LibraryAction.Destination(tab))
             }
+        }
+        state.undo?.let { removed ->
+            HistoryUndoBanner(removed,
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp),
+                onUndo = { onAction(LibraryAction.UndoHistoryRemove) },
+                onDismiss = { onAction(LibraryAction.DismissUndo) })
         }
     }
 }
@@ -74,14 +83,15 @@ private fun YouTopBar(signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
             com.hhst.youtubelite.ui.design.LitubeBrand(Modifier.padding(start = 12.dp))
         }
         Spacer(Modifier.weight(1f))
-        if (signedIn) AppIconButton(AppIcon.Bell, "Notifications") { onAction(LibraryAction.OpenNotifications) }
-        AppIconButton(AppIcon.Search, "Search YouTube") { onAction(LibraryAction.OpenSearch) }
-        if (!signedIn) AppIconButton(AppIcon.More, "More") { onAction(LibraryAction.OpenAccountMenu) }
+        if (signedIn) AppIconButton(AppIcon.Bell, stringResource(R.string.a11y_notifications)) { onAction(LibraryAction.OpenNotifications) }
+        AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(LibraryAction.OpenSearch) }
+        if (!signedIn) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more)) { onAction(LibraryAction.OpenAccountMenu) }
     }
 }
 
 @Composable
-private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
+private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, signedIn: Boolean,
+    source: LibrarySource, sourceSelectable: Boolean, onAction: (LibraryAction) -> Unit) {
     val page = content.page
     LazyColumn(Modifier.fillMaxSize().testTag("you-library"), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
         item(key = "account") {
@@ -95,12 +105,15 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
                 }
             }
         }
+        if (sourceSelectable) item(key = "source") {
+            LibrarySourceRow(source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "you")
+        }
         item(key = "rows") {
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 LibraryRowItem(LibraryRow.History, AppIcon.Clock) { onAction(LibraryAction.OpenHistory) }
                 LibraryRowItem(LibraryRow.Playlists, AppIcon.Playlist) { onAction(LibraryAction.OpenPlaylists) }
                 LibraryRowItem(LibraryRow.WatchLater, AppIcon.Bookmark) { onAction(LibraryAction.OpenWatchLater) }
-                if (signedIn) LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
+                if (signedIn && source == LibrarySource.Account) LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
                 LibraryRowItem(LibraryRow.Downloads, AppIcon.Download) { onAction(LibraryAction.OpenDownloads) }
             }
         }
@@ -134,6 +147,45 @@ private fun ShelfRetry(message: String, onRetry: () -> Unit) {
     }
 }
 
+/**
+ * Transient prompt after a device-history removal: undo restores that one
+ * entry, dismiss drops the record. Anchor-based restore happens in the store,
+ * so entries the user changed after the delete are never overwritten.
+ */
+@Composable
+fun HistoryUndoBanner(removed: RemovedHistoryEntry, modifier: Modifier = Modifier,
+                      onUndo: () -> Unit, onDismiss: () -> Unit) {
+    Surface(modifier.testTag("history-undo"), shape = RoundedCornerShape(8.dp),
+        color = DesignTokens.Ink, shadowElevation = 4.dp) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            AppText(stringResource(R.string.history_entry_removed), Modifier.weight(1f),
+                size = 14, line = 20, color = DesignTokens.Background)
+            PillButton(stringResource(R.string.undo), onUndo)
+            AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_undo),
+                modifier = Modifier.testTag("history-undo-dismiss"), color = DesignTokens.Background) { onDismiss() }
+        }
+    }
+}
+
+/** The signed-in device/account storage switch; rendered only when there is a choice to make. */
+@Composable
+private fun LibrarySourceRow(selected: LibrarySource, onAction: (LibraryAction) -> Unit, modifier: Modifier = Modifier, tagPrefix: String = "library") {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DesignTokens.Surface).testTag("$tagPrefix-source")) {
+        LibrarySource.entries.forEach { option ->
+            val active = option == selected
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                .background(if (active) DesignTokens.Ink else DesignTokens.Surface)
+                .clickable(role = Role.Button) { onAction(LibraryAction.SourceSelected(option)) }
+                .testTag("$tagPrefix-source-${option.name.lowercase()}")
+                .padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                AppText(option.label, size = 13, line = 18, weight = FontWeight.Medium,
+                    color = if (active) DesignTokens.Background else DesignTokens.Ink)
+            }
+        }
+    }
+}
+
 @Composable
 private fun ShelfHeader(label: String, onSeeAll: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -152,9 +204,10 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
         LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
-            AppIconButton(AppIcon.More, "History settings", diameter = 48.dp,
+            AppIconButton(AppIcon.More, stringResource(R.string.a11y_history_settings), diameter = 48.dp,
                 modifier = Modifier.testTag("history-manage")) { onAction(LibraryAction.OpenManageHistory) }
         }))
+        if (state.sourceSelectable) LibrarySourceRow(state.source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "history")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 HistoryContent.Loading -> LibrarySkeleton("history-skeleton")
@@ -183,10 +236,8 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
                     }
                     LazyColumn(Modifier.fillMaxSize().testTag("history-list"), state = listState,
                         contentPadding = PaddingValues(top = if (wide) 16.dp else 8.dp, bottom = 24.dp)) {
-                        item(key = "history-heading") {
-                            AppText("History", Modifier.padding(start = 16.dp, end = 16.dp, bottom = if (wide) 12.dp else 8.dp),
-                                size = if (wide) 36 else 32, line = if (wide) 50 else 44, weight = FontWeight.Bold)
-                        }
+                        // The top bar already reads "History"; the body adds only the
+                        // section groups, not a second large title.
                         grouped.forEach { (section, entries) ->
                             item(key = "section-$section") {
                                 AppText(section, Modifier.padding(start = 12.dp, end = 12.dp,
@@ -207,6 +258,12 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
             }
         }
         }
+        state.undo?.let { removed ->
+            HistoryUndoBanner(removed,
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 12.dp),
+                onUndo = { onAction(LibraryAction.UndoHistoryRemove) },
+                onDismiss = { onAction(LibraryAction.DismissUndo) })
+        }
     }
 }
 
@@ -217,6 +274,7 @@ fun CollectionScreen(state: CollectionUiState,
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen")) {
         LibrarySubPageBar("Playlists", onBack, onAction)
+        if (state.sourceSelectable) LibrarySourceRow(state.source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "playlists")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 CollectionContent.Loading -> LibrarySkeleton("playlists-skeleton")
@@ -296,10 +354,10 @@ internal fun LibraryAppendRow(append: com.hhst.youtubelite.home.domain.AppendSta
 @Composable
 internal fun LibrarySubPageBar(title: String, onBack: () -> Unit, onAction: (LibraryAction) -> Unit,
     trailing: (@Composable () -> Unit)? = null) {    Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("library-subpage-bar"), verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
+        AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onBack() }
         AppText(title, Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
 
-        AppIconButton(AppIcon.Search, "Search YouTube") { onAction(LibraryAction.OpenSearch) }
+        AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(LibraryAction.OpenSearch) }
         trailing?.invoke()
     }
 }

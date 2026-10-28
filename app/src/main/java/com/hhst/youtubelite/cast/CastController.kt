@@ -55,7 +55,9 @@ class CastController(
         { host, port, listener -> CastV2Session.forDefaultMediaReceiver(host, port, listener) },
 ) {
     private val main = Handler(Looper.getMainLooper())
-    private val io: ExecutorService = Executors.newCachedThreadPool { r -> Thread(r, "CastSidx").apply { isDaemon = true } }
+    // Fixed pool: cast-side fetches are few and user-scoped, so threads stay
+    // bounded instead of growing with a cached pool.
+    private val io: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "CastSidx").apply { isDaemon = true } }
     private val listeningIo = MoreExecutors.listeningDecorator(io)
     private val _state = MutableStateFlow(CastUiState())
     val state: StateFlow<CastUiState> = _state.asStateFlow()

@@ -16,7 +16,7 @@ class MediaWatchRepository(private val client: MediaClient) : WatchRepository {
     override suspend fun watch(videoId: String): AppWatchPage = client.read { context, http ->
         val page = loadWatch(videoId, context, http = http).requireValue()
         val details = loadPlayerDetails(videoId, context, http).value
-        page.toAppWatchPage(videoId, details)
+        page.toAppWatchPage(videoId, details, context.generation)
     }
     override suspend fun next(videoId: String, cursor: String): RelatedPage = client.read { context, http ->
         val page = loadWatch(videoId, context, continuation = cursor, http = http).requireValue()
@@ -24,7 +24,7 @@ class MediaWatchRepository(private val client: MediaClient) : WatchRepository {
     }
 }
 
-internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?): AppWatchPage {
+internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?, generation: Long? = null): AppWatchPage {
     fun String?.present() = this?.takeIf { it.isNotBlank() }
     val title = title.present() ?: details?.title.present()
         ?: throw MediaException(RequestError(RequestFailure.PARSE, "missing_video_details"))
@@ -36,7 +36,7 @@ internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?): 
         description.present() ?: details?.description.orEmpty(), details?.liveContent == true,
         rating = when (rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
         subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading,
-        tracking = details?.tracking, chatKey = chatKey),
+        tracking = details?.tracking, chatKey = chatKey, sessionGeneration = generation),
         related.filter { it.kind == "video" }.map(MediaItem::watchRelated), nextKey)
 
 }
@@ -45,11 +45,12 @@ private fun MediaItem.watchRelated() = WatchRelated(id, title.orEmpty(), author.
     channelId.orEmpty(), viewCount.orEmpty(), published.orEmpty(), duration.orEmpty(), thumbnail.orEmpty(),
     if (live) "LIVE" else null, progressPercent?.div(100f), authorThumbnail.orEmpty())
 
-class MediaPlaylistRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : PlaylistRepository {
+class MediaPlaylistRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
+    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : PlaylistRepository {
     // First page only: painting requires just the head, so the page paints immediately and
     // appends from [playlistNext] instead of draining every continuation before first paint.
     override suspend fun playlist(id: String): AppPlaylistPage? {
-        if (id.startsWith("local:") || id == "WL" && !MediaSession.signedIn()) return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (id.startsWith("local:") || id == "WL" && useDeviceLibrary(local, source)) return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             local?.playlist(if (id == "WL") LocalLibraryStore.WATCH_LATER else id)
         }
         return client.read { context, http ->
@@ -83,15 +84,15 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
     override suspend fun channel(channelId: String): AppChannelPage = client.read { context, http ->
         val resolved = resolveChannel(channelId, context, http)
         val page = loadChannel(resolved, context, http = http).requireValue()
-        val playlistsTab = page.page.tabs.firstOrNull { it.title.equals("Playlists", true) }
-        val playlists = if (playlistsTab?.params == null) page.page.items.filter { it.kind == "playlist" } else
-            loadChannel(resolved, context, playlistsTab.params, http = http).requireValue().page.items.filter { it.kind == "playlist" }
+        // Optional tabs stay out of the first paint: the playlists tab and an unselected
+        // videos tab load on demand, so their latency or failure never blocks the header.
         val videosTab = page.page.tabs.firstOrNull { it.title.equals("Videos", true) }
-        val videosPage = if (videosTab != null && !videosTab.selected) loadChannel(resolved, context, videosTab.params, http = http).requireValue() else page
+        val videosInline = videosTab == null || videosTab.selected
         AppChannelPage(ChannelProfile(resolved, page.title.orEmpty(), page.handle.orEmpty(), page.thumbnail.orEmpty(), page.banner,
             page.subscriberCount.orEmpty(), page.description.orEmpty(), videoCount = page.videoCount.orEmpty(),
             canonicalUrl = "https://www.youtube.com/channel/$resolved", subscribed = page.subscribed),
-            videosPage.page.items.filter { it.kind == "video" }.map { it.channelVideo() }, playlists.map(MediaItem::playlistSummary),
+            if (videosInline) page.page.items.filter { it.kind == "video" }.map { it.channelVideo() } else emptyList(),
+            emptyList(),
             page.page.groups.mapNotNull { group ->
                 val videos = group.items.filter { it.kind == "video" }.map { it.channelVideo() }
                 if (videos.isEmpty()) null else ChannelHomeShelf(group.title.orEmpty(), videos = videos)
@@ -99,7 +100,26 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
                 page.page.items.filter { it.kind == "video" }.map { it.channelVideo() }.takeIf { it.isNotEmpty() }
                     ?.let { listOf(ChannelHomeShelf("", videos = it)) }.orEmpty()
             },
-            videosNextKey = videosPage.page.nextKey)
+            videosNextKey = if (videosInline) page.page.nextKey else null,
+            videosDeferred = !videosInline,
+            playlistsDeferred = page.page.tabs.any { it.title.equals("Playlists", true) })
+    }
+
+    override suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.read { context, http ->
+        val resolved = resolveChannel(channelId, context, http)
+        val first = loadChannel(resolved, context, http = http).requireValue()
+        val tab = first.page.tabs.firstOrNull { it.title.equals("Playlists", true) }
+        val page = if (tab?.params == null || tab.selected) first
+            else loadChannel(tab.browseId ?: resolved, context, tab.params, http = http).requireValue()
+        com.hhst.youtubelite.library.domain.PlaylistCollectionPage(
+            page.page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.page.nextKey)
+    }
+
+    override suspend fun playlistsNext(channelId: String, cursor: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.read { context, http ->
+        val resolved = resolveChannel(channelId, context, http)
+        val page = loadChannel(resolved, context, continuation = cursor, http = http).requireValue()
+        com.hhst.youtubelite.library.domain.PlaylistCollectionPage(
+            page.page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.page.nextKey)
     }
 
     override val serverSearch: Boolean get() = true

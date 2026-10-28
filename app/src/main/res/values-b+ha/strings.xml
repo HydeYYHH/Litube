@@ -65,6 +65,10 @@
     <string name="queue_remove">Cire daga jerin gwano</string>
     <string name="application_not_found">Ba a sami aikace-aikacen ba</string>
     <string name="segments">Yankuna</string>
+    <string name="chapters">Babi</string>
+    <string name="no_chapters">Babu babi</string>
+    <string name="skippable_segments">sassan da za a iya tsallakewa</string>
+    <string name="show_more_replies">Nuna ƙarin amsoshi</string>
     <string name="no_segments">Babu sassan da za a iya tsallakewa</string>
     <string name="subtitles">Rubutun fassara</string>
     <string name="playback_end_next">Yi wasa na gaba</string>

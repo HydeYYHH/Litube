@@ -65,6 +65,10 @@
     <string name="queue_remove">कतार से हटाएँ</string>
     <string name="application_not_found">ऐप नहीं मिला</string>
     <string name="segments">हिस्से</string>
+    <string name="chapters">अध्याय</string>
+    <string name="no_chapters">कोई अध्याय नहीं</string>
+    <string name="skippable_segments">छोड़े जा सकने वाले सेगमेंट</string>
+    <string name="show_more_replies">और जवाब दिखाएं</string>
     <string name="no_segments">छोड़ने लायक कोई हिस्सा नहीं</string>
     <string name="subtitles">सबटाइटल</string>
     <string name="playback_end_next">अगला चलाएँ</string>

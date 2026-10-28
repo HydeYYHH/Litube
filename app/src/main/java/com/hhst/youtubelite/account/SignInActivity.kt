@@ -2,6 +2,7 @@ package com.hhst.youtubelite.account
 
 import android.content.Intent
 import android.os.Bundle
+import com.hhst.youtubelite.R
 import androidx.activity.compose.BackHandler
 import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.compose.foundation.background
@@ -44,11 +45,11 @@ import com.hhst.youtubelite.account.domain.SignInUiState
 import com.hhst.youtubelite.account.presentation.SignInViewModel
 import com.hhst.youtubelite.data.media.ContentRepositories
 import com.hhst.youtubelite.data.media.MmkvAuthStore
-import com.hhst.youtubelite.ui.components.YoutubeTextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.theme.AppStyle
 
 /**
  * Displays a device code while the account is confirmed in a browser.
@@ -90,7 +91,7 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
             BackHandler { finish() }
             Column(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                 .windowInsetsPadding(WindowInsets.safeDrawing).testTag("signin-screen")) {
-                YoutubeTopAppBar(title = { AppText("Sign in", size = 18, line = 24, weight = FontWeight.Medium) })
+                AppTopAppBar(title = { AppText("Sign in", size = 18, line = 24, weight = FontWeight.Medium) })
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), contentAlignment = Alignment.TopCenter) {
                     when (val current = state) {
                         SignInUiState.Loading -> StatusBlock("Contacting YouTube…", tag = "signin-loading")
@@ -109,7 +110,7 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
         Column(Modifier.fillMaxWidth().padding(top = 96.dp).testTag(tag),
             horizontalAlignment = Alignment.CenterHorizontally) {
             if (spinner) {
-                CircularProgressIndicator(Modifier.size(32.dp), color = YoutubeStyle.Action, strokeWidth = 3.dp)
+                CircularProgressIndicator(Modifier.size(32.dp), color = AppStyle.Action, strokeWidth = 3.dp)
                 Spacer(Modifier.height(16.dp))
             }
             AppText(text, size = 15, line = 22, color = DesignTokens.Secondary)
@@ -122,8 +123,8 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
             horizontalAlignment = Alignment.CenterHorizontally) {
             AppText(message, size = 15, line = 22, color = DesignTokens.Ink)
             Spacer(Modifier.height(16.dp))
-            YoutubeTextButton(onClick = onRetry, modifier = Modifier.testTag("signin-retry")) {
-                AppText("Try again", size = 14, line = 20, weight = FontWeight.Medium, color = YoutubeStyle.Action)
+            AppTextButton(onClick = onRetry, modifier = Modifier.testTag("signin-retry")) {
+                AppText("Try again", size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
             }
         }
     }
@@ -137,7 +138,7 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
             StepRow(1, "Open ${state.verificationUrl.toUri().host ?: state.verificationUrl} on your phone or computer")
             Spacer(Modifier.height(8.dp))
             Button(onClick = { openBrowser(state.verificationUrl) },
-                shape = CircleShape, colors = ButtonDefaults.buttonColors(containerColor = YoutubeStyle.Action),
+                shape = CircleShape, colors = ButtonDefaults.buttonColors(containerColor = AppStyle.Action),
                 modifier = Modifier.testTag("signin-open")) {
                 AppText("Open in browser", size = 14, line = 20, weight = FontWeight.Medium,
                     color = androidx.compose.ui.graphics.Color.White)
@@ -149,14 +150,14 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 AppText(state.userCode, size = 28, line = 34, weight = FontWeight.Bold,
                     modifier = Modifier.testTag("signin-code"))
-                YoutubeTextButton(onClick = { clipboard.setText(AnnotatedString(state.userCode)) },
+                AppTextButton(onClick = { clipboard.setText(AnnotatedString(state.userCode)) },
                     modifier = Modifier.testTag("signin-copy")) {
-                    AppText("Copy code", size = 14, line = 20, weight = FontWeight.Medium, color = YoutubeStyle.Action)
+                    AppText("Copy code", size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
                 }
             }
             Spacer(Modifier.height(24.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = YoutubeStyle.Action, strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(18.dp), color = AppStyle.Action, strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
                 StepRow(3, "This page continues on its own once you confirm.")
             }
@@ -191,7 +192,7 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
             Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(it)
         }
         if (intent == null || runCatching { startActivity(intent) }.isFailure) {
-            android.widget.Toast.makeText(this, "No browser is available. Open the address on another device.",
+            android.widget.Toast.makeText(this, R.string.sign_in_no_browser,
                 android.widget.Toast.LENGTH_LONG).show()
         }
     }

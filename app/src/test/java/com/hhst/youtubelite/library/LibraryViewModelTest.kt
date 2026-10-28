@@ -245,12 +245,21 @@ class LibraryViewModelTest {
         val removed = ArrayList<String>()
         var paused: Boolean? = null
         var cleared = 0
+        /** When set, removals report a device-lane undo record. */
+        var removalRecord: com.hhst.youtubelite.library.domain.RemovedHistoryEntry? = null
+        var restored: com.hhst.youtubelite.library.domain.RemovedHistoryEntry? = null
         override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), entries, FixtureLibraryRepository.collections())
         override suspend fun history() = HistoryPage(entries)
         override suspend fun playlists() = PlaylistCollectionPage(FixtureLibraryRepository.collections())
-        override suspend fun removeFromHistory(feedbackToken: String) {
+        override suspend fun removeFromHistory(feedbackToken: String): com.hhst.youtubelite.library.domain.RemovedHistoryEntry? {
             removeError?.let { throw it }
             removed += feedbackToken
+            entries = entries.filterNot { it.removeToken == feedbackToken }
+            return removalRecord
+        }
+        override suspend fun restoreHistoryEntry(removed: com.hhst.youtubelite.library.domain.RemovedHistoryEntry) {
+            restored = removed
+            entries = listOf(removed.entry) + entries
         }
         override suspend fun setHistoryPaused(paused: Boolean) {
             removeError?.let { throw it }
@@ -304,6 +313,36 @@ class LibraryViewModelTest {
         val entries = (vm.uiState.value.content as HistoryContent.Ready).page.entries
         assertEquals(listOf("b"), entries.map { it.videoId })
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    @Test fun deviceLaneRemovalSurfacesUndoAndRestoreReloadsTheStore() = runTest {
+        val entry = historyEntry("a", "tokA")
+        val repository = LiveLibraryRepository(listOf(entry, historyEntry("b", "tokB"))).apply {
+            removalRecord = com.hhst.youtubelite.library.domain.RemovedHistoryEntry(entry, null, "b", 0)
+        }
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content, saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.OpenMenu("a"))
+        vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
+        advanceUntilIdle()
+        // The record from the device lane becomes the pending undo prompt.
+        assertEquals("tokA", vm.uiState.value.undo?.entry?.removeToken)
+        vm.onAction(LibraryAction.UndoHistoryRemove)
+        advanceUntilIdle()
+        assertEquals("tokA", repository.restored?.entry?.removeToken)
+        assertNull(vm.uiState.value.undo)
+        // The page reloads from the store, which has the entry back at the head.
+        val reloaded = (vm.uiState.value.content as HistoryContent.Ready).page.entries
+        assertEquals(listOf("a", "b"), reloaded.map { it.videoId })
+        // Dismiss clears a later prompt without touching the store.
+        vm.onAction(LibraryAction.OpenMenu("b"))
+        vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.DismissUndo)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.undo)
+        // Dismiss never triggered a restore: only the earlier tokA restore ran.
+        assertEquals("tokA", repository.restored?.entry?.removeToken)
     }
 
     @Test fun unconfirmedRemovalKeepsTheEntryAndNotifies() = runTest {
@@ -418,4 +457,174 @@ class LibraryViewModelTest {
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
+    // --- Batch E: device/account library source selection ---
+
+    private fun sourcedRepository(store: com.hhst.youtubelite.data.media.LibrarySourceStore) = object : LibraryRepository {
+        override val supportsLocal get() = true
+        val youReads = ArrayList<LibrarySource>()
+        override suspend fun you(): YouPage {
+            youReads += store.current()
+            return if (store.current() == LibrarySource.Device)
+                YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), emptyList(), emptyList())
+            else YouPage(FixtureLibraryRepository.profile(), emptyList(), FixtureLibraryRepository.collections())
+        }
+        override suspend fun history() = HistoryPage(emptyList())
+        override suspend fun playlists() = PlaylistCollectionPage(emptyList())
+    }
+
+    private class PagedHistoryRepository : LibraryRepository {
+        override val supportsLocal get() = true
+        var firstReads = 0
+        override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), emptyList(), emptyList())
+        override suspend fun history(): HistoryPage {
+            firstReads++
+            return HistoryPage(listOf(HistoryEntry("h1", "h1", "One", "A", "c", "a", "1:00", section = "Today")), nextKey = "k1")
+        }
+        override suspend fun historyNext(cursor: String) =
+            HistoryPage(listOf(HistoryEntry("h2", "h2", "Two", "A", "c", "a", "1:00", section = "Today")))
+        override suspend fun playlists() = PlaylistCollectionPage(emptyList())
+    }
+
+    @Test fun watchLaterExitFollowsTheSelectedSource() = runTest {
+        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
+        val vm = YouViewModel(sourcedRepository(store), SavedStateHandle(), LibraryScenario.Content, true, sourceStore = store)
+        val requests = mutableListOf<LibraryNavigationRequest>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.navigationRequests.collect { requests += it } }
+        advanceUntilIdle()
+        assertEquals("Litube Studio", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        assertTrue(vm.uiState.value.sourceSelectable)
+        vm.onAction(LibraryAction.OpenWatchLater)
+        vm.onAction(LibraryAction.OpenLiked)
+        advanceUntilIdle()
+        assertEquals(listOf(LibraryNavigationRequest.Playlist("WL"), LibraryNavigationRequest.Playlist("LL")), requests)
+
+        vm.onAction(LibraryAction.SourceSelected(LibrarySource.Device))
+        advanceUntilIdle()
+        // The page reloaded against the device storage and the header says so.
+        assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        assertEquals(LibrarySource.Device, vm.uiState.value.source)
+        vm.onAction(LibraryAction.OpenWatchLater)
+        // Liked has no device lane: it emits nothing under the device source.
+        vm.onAction(LibraryAction.OpenLiked)
+        advanceUntilIdle()
+        assertEquals(listOf(LibraryNavigationRequest.Playlist("WL"), LibraryNavigationRequest.Playlist("LL"),
+            LibraryNavigationRequest.Playlist(com.hhst.youtubelite.data.media.LocalLibraryStore.WATCH_LATER)), requests)
+    }
+
+    @Test fun sourceSwitchReloadsHistoryAndDropsTheAccountCursor() = runTest {
+        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
+        val repository = PagedHistoryRepository()
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content, signedIn = true, saveRepository = null, sourceStore = store)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.LoadHistoryNext)
+        advanceUntilIdle()
+        var page = (vm.uiState.value.content as HistoryContent.Ready).page
+        assertEquals(listOf("h1", "h2"), page.entries.map { it.id })
+        assertNull(page.nextKey)
+
+        vm.onAction(LibraryAction.SourceSelected(LibrarySource.Device))
+        advanceUntilIdle()
+        // The appended page and its spent cursor left with the account scope; page one re-read.
+        page = (vm.uiState.value.content as HistoryContent.Ready).page
+        assertEquals(listOf("h1"), page.entries.map { it.id })
+        assertEquals("k1", page.nextKey)
+        assertEquals(2, repository.firstReads)
+        assertEquals(AppendState.Idle, vm.uiState.value.append)
+    }
+
+    @Test fun signOutKeepsTheDevicePageAndHidesTheSwitch() = runTest {
+        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
+        store.select(LibrarySource.Device)
+        val vm = YouViewModel(sourcedRepository(store), SavedStateHandle(), LibraryScenario.Content, true, sourceStore = store)
+        advanceUntilIdle()
+        assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        vm.updateSession(false, 7)
+        advanceUntilIdle()
+        // Device data backs the signed-out page too; the choice itself stays for next sign-in.
+        assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        assertFalse(vm.uiState.value.sourceSelectable)
+        assertEquals(LibrarySource.Device, store.current())
+    }
+
+    @Test fun historyRefreshResetsAndCancelsAnInterruptedAppend() = runTest {
+        val pending = kotlinx.coroutines.CompletableDeferred<HistoryPage>()
+        val repository = object : LibraryRepository by FixtureLibraryRepository() {
+            override suspend fun history() = HistoryPage(listOf(historyEntry("a", "token")), "next")
+            override suspend fun historyNext(cursor: String) = pending.await()
+        }
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.LoadHistoryNext)
+        runCurrent()
+        assertEquals(AppendState.Loading, vm.uiState.value.append)
+        vm.onAction(LibraryAction.Retry)
+        advanceUntilIdle()
+        assertEquals(AppendState.Idle, vm.uiState.value.append)
+        pending.complete(HistoryPage(emptyList()))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is HistoryContent.Ready)
+        assertEquals("next", (vm.uiState.value.content as HistoryContent.Ready).page.nextKey)
+    }
+
+    @Test fun collectionRefreshResetsAndCancelsAnInterruptedAppend() = runTest {
+        val pending = kotlinx.coroutines.CompletableDeferred<PlaylistCollectionPage>()
+        val repository = object : LibraryRepository by FixtureLibraryRepository() {
+            override suspend fun playlists() = PlaylistCollectionPage(FixtureLibraryRepository.collections(), "next")
+            override suspend fun playlistsNext(cursor: String) = pending.await()
+        }
+        val vm = CollectionViewModel(repository, SavedStateHandle(), LibraryScenario.Content)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.LoadCollectionNext)
+        runCurrent()
+        assertEquals(AppendState.Loading, vm.uiState.value.append)
+        vm.onAction(LibraryAction.Retry)
+        advanceUntilIdle()
+        assertEquals(AppendState.Idle, vm.uiState.value.append)
+        pending.complete(PlaylistCollectionPage(emptyList()))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is CollectionContent.Ready)
+    }
+
+    @Test fun historyUndoIsDiscardedWhenTheLibrarySourceChanges() = runTest {
+        val entry = historyEntry("a", "token")
+        val live = LiveLibraryRepository(listOf(entry, historyEntry("b", "other"))).apply {
+            removalRecord = RemovedHistoryEntry(entry, null, "b", 0)
+        }
+        val repository = object : LibraryRepository by live { override val supportsLocal = true }
+        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
+        store.select(LibrarySource.Device)
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content,
+            saveRepository = FakeSaveRepository(), sourceStore = store)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.OpenMenu("a"))
+        vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.undo)
+        store.select(LibrarySource.Account)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.UndoHistoryRemove)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.undo)
+        assertNull(live.restored)
+    }
+
+    @Test fun youPageUndoIsDiscardedWhenTheAccountChanges() = runTest {
+        val entry = historyEntry("a", "token")
+        val repository = LiveLibraryRepository(listOf(entry, historyEntry("b", "other"))).apply {
+            removalRecord = RemovedHistoryEntry(entry, null, "b", 0)
+        }
+        val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, true, FakeSaveRepository())
+        vm.updateSession(true, 1)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.OpenMenu("a"))
+        vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
+        advanceUntilIdle()
+        assertNotNull(vm.uiState.value.undo)
+        vm.updateSession(true, 2)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.UndoHistoryRemove)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.undo)
+        assertNull(repository.restored)
+    }
 }

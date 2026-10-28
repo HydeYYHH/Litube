@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,12 +52,23 @@ import org.koin.compose.koinInject
 
 private val SnapEasing = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
 
+/** Fullscreen swipe: the window travels 40% of its height for a full pass. */
+private const val SWIPE_TRAVEL_FRACTION = 0.4f
+
+/** Commit once the finger covered this fraction of the travel. */
+private const val SWIPE_COMMIT_PROGRESS = 0.35f
+
+/** Or commit on a decisive fling toward the target mode, whatever the distance. */
+private const val SWIPE_FLING_DP_PER_SEC = 400f
+
 internal val LocalMiniPlayerHandle = compositionLocalOf<MiniPlayerHandle?> { null }
 internal val LocalFullscreenSwipeHandle = compositionLocalOf<FullscreenSwipeHandle?> { null }
 
 internal class FullscreenSwipeHandle {
     var drag: (Float) -> Unit = {}
     var end: (Boolean) -> Unit = {}
+    /** Finger released mid-swipe: distance and vertical velocity (px/s, y-down). True when this host consumed it. */
+    var release: (Float, Float) -> Boolean = { _, _ -> false }
 }
 
 internal class MiniPlayerHandle {
@@ -92,6 +104,8 @@ fun MiniPlayerWindow(
     embeddedLeftDp: Int = 0,
     embeddedWidthDp: Int = screenWidthDp,
     topInsetDp: Int = 0,
+    /** A committed fullscreen swipe reports its target mode here. */
+    onFullscreenSwipe: (Boolean) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val haptics: HapticsController = koinInject()
@@ -229,7 +243,12 @@ fun MiniPlayerWindow(
 
     val handle = remember { MiniPlayerHandle() }
     val fullscreenSwipe = remember { FullscreenSwipeHandle() }
+    val currentOnFullscreenSwipe by rememberUpdatedState(onFullscreenSwipe)
     SideEffect {
+        // One travel distance for both the drag interpolation and the release
+        // commit: 40% of the window height. Commit needs 35% of that travel or
+        // a decisive fling in the swipe direction.
+        fun swipeTravelPx() = (parentSize.height * SWIPE_TRAVEL_FRACTION).coerceAtLeast(1f)
         fullscreenSwipe.drag = fun(distance) {
             if (mini || !fullscreenSwipeEnabled || dismissing || parentSize.width <= 0 || parentSize.height <= 0) return
             if (!swiping) {
@@ -240,17 +259,32 @@ fun MiniPlayerWindow(
                 awaitingFullscreen = null
             }
             val progress = ((if (swipeStartedFullscreen) distance else -distance) /
-                (parentSize.height * 0.4f).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                swipeTravelPx()).coerceIn(0f, 1f)
             viewport = if (swipeStartedFullscreen) lerp(fullscreenBounds, embeddedBounds, progress)
                 else lerp(embeddedBounds, fullscreenBounds, progress)
+        }
+        fullscreenSwipe.release = release@{ distance, velocityPxPerSec ->
+            if (mini || !fullscreenSwipeEnabled || dismissing) return@release false
+            if (!swiping) return@release true
+            val progress = (if (swipeStartedFullscreen) distance else -distance) / swipeTravelPx()
+            val fling = kotlin.math.abs(velocityPxPerSec) >= SWIPE_FLING_DP_PER_SEC * density.density &&
+                (velocityPxPerSec < 0f) != swipeStartedFullscreen
+            val commit = progress >= SWIPE_COMMIT_PROGRESS || (progress > 0f && fling)
+            awaitingFullscreen = if (commit) !swipeStartedFullscreen else null
+            transitionRunning = true
+            swiping = false
+            // A move and cancellation in one frame still need a settling animation.
+            swipeRelease++
+            if (commit) currentOnFullscreenSwipe(!swipeStartedFullscreen)
+            true
         }
         fullscreenSwipe.end = { committed ->
             if (swiping) {
                 awaitingFullscreen = if (committed) !swipeStartedFullscreen else null
                 transitionRunning = true
                 swiping = false
-                // A move and cancellation in one frame still need a settling animation.
                 swipeRelease++
+                if (committed) currentOnFullscreenSwipe(!swipeStartedFullscreen)
             }
         }
         // A plain tap also fires begin(): cancelling the snap here would

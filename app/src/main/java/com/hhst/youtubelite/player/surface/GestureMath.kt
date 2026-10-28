@@ -26,6 +26,44 @@ object GestureMath {
     const val FULLSCREEN_SWIPE_MIN_FRACTION = 0.08f
 
     /**
+     * Minimal vertical velocity estimate (px/s, sign follows y-down). Only the
+     * samples inside [windowMs] before the last point count, so a slow hold
+     * before release cannot masquerade as a fling.
+     */
+    class VelocityTracker(private val windowMs: Long = 100L) {
+        private val times = LongArray(16)
+        private val offsets = FloatArray(16)
+        private var count = 0
+
+        fun reset() {
+            count = 0
+        }
+
+        fun add(timeMs: Long, y: Float) {
+            if (count == times.size) {
+                val drop = count / 2
+                System.arraycopy(times, drop, times, 0, count - drop)
+                System.arraycopy(offsets, drop, offsets, 0, count - drop)
+                count -= drop
+            }
+            times[count] = timeMs
+            offsets[count] = y
+            count++
+        }
+
+        /** Signed px/s over the trailing window; 0 when no movement is sampled. */
+        fun velocityY(): Float {
+            if (count < 2) return 0f
+            val lastTime = times[count - 1]
+            var first = count - 1
+            while (first > 0 && lastTime - times[first - 1] <= windowMs) first--
+            val dt = lastTime - times[first]
+            if (dt <= 0L) return 0f
+            return (offsets[count - 1] - offsets[first]) * 1000f / dt
+        }
+    }
+
+    /**
      * Suppresses the tap that follows a zoom or long-press release. The tap
      * detector and the drag tracker are sibling pointerInput handlers and the
      * tap side sees the up event first, so a stationary hold cannot cancel it

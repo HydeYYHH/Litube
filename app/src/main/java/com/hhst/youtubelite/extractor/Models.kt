@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.extractor
 
 import com.google.gson.annotations.SerializedName
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 
 /** Caption track from the player response. */
 data class Subtitle(
@@ -111,6 +112,8 @@ class Stream {
     @Transient var dashRequestPlan: MediaRequestPlan? = null
     @Transient var hlsRequestPlan: MediaRequestPlan? = null
     @Transient var manifests: List<Manifest> = emptyList()
+    /** Playback stats endpoints from the same successful player response; never persisted. */
+    @Transient var tracking: PlayerTracking? = null
 
     fun copyFrom(other: Stream) {
         formats = other.formats
@@ -120,6 +123,7 @@ class Stream {
         dashRequestPlan = other.dashRequestPlan
         hlsRequestPlan = other.hlsRequestPlan
         manifests = other.manifests
+        tracking = other.tracking
     }
 
     /** Keep the complete source context for an already extracted fallback, without another API call. */

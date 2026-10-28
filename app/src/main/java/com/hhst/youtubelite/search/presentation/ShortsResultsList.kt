@@ -29,6 +29,8 @@ import com.hhst.youtubelite.search.domain.SearchAction
 import com.hhst.youtubelite.search.domain.SearchResult
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 /**
  * The Shorts filter results: a two-column 9:16 grid that reuses the shorts
@@ -47,17 +49,20 @@ fun ShortsResultsList(shorts: List<SearchResult>, state: androidx.compose.founda
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(shorts, key = { it.id }) { short ->
+                val displayTitle = rememberDeArrowTitle(short.id, short.title)
                 Column(Modifier.testTag("search-short-result-${short.id}")
                     .clickable(role = Role.Button) { onAction(SearchAction.OpenResult(short.id)) }) {
                     Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(8.dp))
-                        .semantics { contentDescription = short.title }) {
-                        com.hhst.youtubelite.ui.design.Artwork(short.artwork, modifier = Modifier.fillMaxSize())
+                        .semantics { contentDescription = displayTitle }) {
+                        VideoArtwork(short.id, short.artwork, Modifier.fillMaxSize())
                         Box(Modifier.matchParentSize().background(
                             Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
-                        AppText(short.title, Modifier.align(Alignment.BottomStart).padding(8.dp),
+                        AppText(displayTitle, Modifier.align(Alignment.BottomStart).padding(8.dp),
                             size = 14, line = 20, color = Color.White, maxLines = 2)
                     }
-                    AppText("${short.views} · ${short.duration}", Modifier.padding(top = 6.dp),
+                    // Only non-empty fields join: no orphan separators on missing data.
+                    AppText(listOf(short.views, short.duration).filter(String::isNotBlank)
+                        .joinToString(" · "), Modifier.padding(top = 6.dp),
                         size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
             }

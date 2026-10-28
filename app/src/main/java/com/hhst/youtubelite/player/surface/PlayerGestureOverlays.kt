@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -31,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -290,39 +293,51 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
     }
 }
 
-/** Sponsor pre-skip countdown card: "N s" tap-to-skip body with a cancel chip. */
+/**
+ * Sponsor pre-skip countdown card: "N s" tap-to-skip body with a cancel chip.
+ * The 48 dp touch minimum wraps the box invisibly; [onVisualHeight] reports
+ * the drawn card height so subtitles clear the visible bounds only.
+ */
 @Composable
 fun SponsorCountdownCard(
     seconds: Int,
     onSkipNow: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    onVisualHeight: (Int) -> Unit = {},
 ) {
     // Presence is gated by the caller (countdown != null): the composable
-    // simply leaves the tree when the card hides.
-    Row(
-        modifier = modifier
-            .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
-            .clickable(onClick = onSkipNow)
-            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.sponsor_skip_in, seconds),
-            color = Color.White,
-            fontSize = 13.sp,
-        )
-        Text(
-            text = stringResource(R.string.cancel),
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
+    // simply leaves the tree when the card hides. The tag sits on the
+    // wrapping box so tests read the full touch layout, not the centered
+    // visual.
+    Box(modifier.testTag("player-sponsor-countdown").minimumInteractiveComponentSize(),
+        contentAlignment = Alignment.Center) {
+        Row(
             modifier = Modifier
-                .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
-                .clickable(onClick = onCancel)
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-        )
+                .testTag("player-sponsor-visual")
+                .onSizeChanged { onVisualHeight(it.height) }
+                .background(PlayerUi.HintBg, RoundedCornerShape(10.dp))
+                .clickable(onClick = onSkipNow)
+                .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.sponsor_skip_in, seconds),
+                color = Color.White,
+                fontSize = 13.sp,
+            )
+            Text(
+                text = stringResource(R.string.cancel),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                    .clickable(onClick = onCancel)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+        }
     }
 }
 
@@ -332,26 +347,33 @@ fun SponsorSkipChip(
     highlight: Boolean,
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
+    onVisualHeight: (Int) -> Unit = {},
 ) {
-    Row(
-        modifier = modifier
-            .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
-            .clickable(onClick = onSkip)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = stringResource(if (highlight) R.string.jump else R.string.sponsor_skip_chip),
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_next),
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(14.dp),
-        )
+    // The tag wraps the touch layout (48 dp minimum), not the centered visual.
+    Box(modifier.testTag("player-sponsor-chip").minimumInteractiveComponentSize(),
+        contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .testTag("player-sponsor-visual")
+                .onSizeChanged { onVisualHeight(it.height) }
+                .background(PlayerUi.HintBg, RoundedCornerShape(10.dp))
+                .clickable(onClick = onSkip)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(if (highlight) R.string.jump else R.string.sponsor_skip_chip),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_next),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        }
     }
 }

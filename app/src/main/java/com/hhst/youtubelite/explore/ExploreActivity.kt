@@ -35,6 +35,7 @@ import com.hhst.youtubelite.explore.domain.ExploreCategory
 import com.hhst.youtubelite.explore.domain.ExploreContent
 import com.hhst.youtubelite.explore.domain.ExploreNavigationRequest
 import com.hhst.youtubelite.explore.presentation.ExploreScreen
+import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +48,8 @@ import kotlinx.coroutines.launch
 
 class ExploreViewModel(private val repository: ExploreRepository, private val scenario: ExploreScenario,
     private val savedState: androidx.lifecycle.SavedStateHandle = androidx.lifecycle.SavedStateHandle(),
+    /** Shared per-channel avatar completion; null in fixtures. */
+    private val avatars: com.hhst.youtubelite.data.media.MediaAvatarDirectory? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(com.hhst.youtubelite.explore.domain.ExploreUiState(category =
         ExploreCategory.entries.firstOrNull { it.name == savedState.get<String>("category") } ?: ExploreCategory.Music))
@@ -57,11 +60,24 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
     private var loadJob: kotlinx.coroutines.Job? = null
     private var generation = 0
     private var sessionGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
+    /** Consecutive page appends that added nothing; bounded so empty cursors cannot loop. */
+    private var emptyAppends = 0
+
+    /** Loaded category content survives tab switches; identity changes drop it. */
+    private val pages = java.util.EnumMap<ExploreCategory, com.hhst.youtubelite.explore.domain.ExploreContent>(ExploreCategory::class.java)
+    private var appendJob: kotlinx.coroutines.Job? = null
+    private val consumedPages = mutableMapOf<ExploreCategory, MutableSet<String>>()
+    private val consumedShelves = mutableMapOf<Pair<ExploreCategory, Int>, MutableSet<String>>()
+    /** Live shelf appends by shelf position; a full load or a tab switch cancels them. */
+    private val shelfJobs = mutableMapOf<Int, kotlinx.coroutines.Job>()
 
     /** Identity-scoped sections re-read after an account switch. */
     fun updateSession(generation: Long) {
         if (generation == sessionGeneration) return
         sessionGeneration = generation
+        pages.clear()
+        consumedPages.clear()
+        consumedShelves.clear()
         load(_uiState.value.category)
     }
 
@@ -75,10 +91,24 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         when (action) {
             ExploreAction.Retry -> load(_uiState.value.category)
             is ExploreAction.SelectCategory -> {
+                if (action.category == _uiState.value.category) return // reselecting never reloads
                 savedState["category"] = action.category.name
+                val current = _uiState.value
+                // Retain the outgoing page with appends reset: their reads die with the switch.
+                pages[current.category] = (current.content as? ExploreContent.Ready)?.let {
+                    it.copy(append = AppendState.Idle,
+                        page = it.page.copy(sections = it.page.sections.map { section -> section.copy(append = AppendState.Idle) }))
+                } ?: current.content
+                loadJob?.cancel()
+                generation++
+                cancelAppends()
                 _uiState.update { it.copy(category = action.category) }
-                load(action.category)
+                val retained = pages[action.category]
+                if (retained is ExploreContent.Ready) _uiState.update { it.copy(content = retained) }
+                else load(action.category)
             }
+            ExploreAction.LoadMore -> loadMore()
+            is ExploreAction.LoadShelf -> loadShelf(action.index)
             is ExploreAction.OpenVideo -> navigation.trySend(ExploreNavigationRequest.Watch(action.videoId))
             is ExploreAction.OpenChannel -> navigation.trySend(ExploreNavigationRequest.Channel(action.channelId))
             ExploreAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
@@ -86,13 +116,30 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         }
     }
 
+    private fun cancelAppends() {
+        appendJob?.cancel()
+        appendJob = null
+        shelfJobs.values.forEach { it.cancel() }
+        shelfJobs.clear()
+    }
+
     private fun load(category: ExploreCategory) {
         loadJob?.cancel()
+        cancelAppends()
         val request = ++generation
+        emptyAppends = 0
+        consumedPages.remove(category)
+        consumedShelves.keys.removeAll { it.first == category }
         _uiState.update { it.copy(content = ExploreContent.Loading) }
         loadJob = viewModelScope.launch {
             runCatching { repository.explore(category) }.fold(
-                onSuccess = { page -> if (request == generation) _uiState.update { it.copy(content = ExploreContent.Ready(page)) } },
+                onSuccess = { page ->
+                    if (request != generation) return@fold
+                    val content = ExploreContent.Ready(page)
+                    pages[category] = content
+                    _uiState.update { it.copy(content = content) }
+                    fillMissingAvatars(page.videos + page.sections.flatMap { it.videos })
+                },
                 onFailure = { failure -> if (failure is kotlinx.coroutines.CancellationException) throw failure
                     if (request != generation) return@fold
                     val challenge = (failure as? com.hhst.youtubelite.data.media.MediaException)
@@ -100,6 +147,141 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
                     _uiState.update { it.copy(content = ExploreContent.Failed, verification = challenge ?: it.verification) } },
             )
         }
+    }
+
+    /** One in-flight page append per category; a cursor that repeats itself ends the list. */
+    private fun loadMore() {
+        val ready = _uiState.value.content as? ExploreContent.Ready ?: return
+        val key = ready.page.nextKey ?: return
+        if (ready.append == AppendState.Loading || appendJob?.isActive == true) return
+        val category = _uiState.value.category
+        val request = generation
+        _uiState.update { it.copy(content = ready.copy(append = AppendState.Loading)) }
+        appendJob = viewModelScope.launch {
+            runCatching { repository.exploreNext(category, key) }.fold(
+                onSuccess = { page ->
+                    if (request != generation) return@fold
+                    consumedPages.getOrPut(category) { mutableSetOf() }.add(key)
+                    val current = (_uiState.value.content as? ExploreContent.Ready)
+                        ?.takeIf { _uiState.value.category == category && it.page.nextKey == key } ?: return@fold
+                    val merged = mergePage(current, page, key)
+                    pages[category] = merged
+                    _uiState.update { it.copy(content = merged) }
+                    fillMissingAvatars(page.videos + page.sections.flatMap { it.videos })
+                },
+                onFailure = { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    if (request != generation) return@fold
+                    val current = (_uiState.value.content as? ExploreContent.Ready)
+                        ?.takeIf { _uiState.value.category == category && it.page.nextKey == key } ?: return@fold
+                    _uiState.update { it.copy(content = current.copy(append = AppendState.Failed)) }
+                },
+            )
+        }
+    }
+
+    private fun mergePage(current: ExploreContent.Ready, page: com.hhst.youtubelite.explore.domain.ExplorePage,
+        key: String): ExploreContent.Ready {
+        val looped = page.nextKey == key || page.nextKey in consumedPages[_uiState.value.category].orEmpty()
+        val sections = current.page.sections.toMutableList()
+        for (section in page.sections) {
+            val index = sections.indexOfFirst {
+                it.title == section.title && it.videos.firstOrNull()?.id == section.videos.firstOrNull()?.id
+            }
+            if (index < 0) sections += section
+            else {
+                val previous = sections[index]
+                sections[index] = previous.copy(
+                    videos = (previous.videos + section.videos).distinctBy { it.id },
+                    nextKey = section.nextKey ?: previous.nextKey,
+                )
+            }
+        }
+        val videos = (current.page.videos + page.videos).distinctBy { it.id }
+        // A cursor that keeps advancing without producing items is bounded: after
+        // two consecutive empty pages the list ends instead of scrolling forever.
+        val added = videos.size != current.page.videos.size || sections.size != current.page.sections.size ||
+            sections.zip(current.page.sections).any { (a, b) -> a.videos.size != b.videos.size }
+        emptyAppends = if (added) 0 else emptyAppends + 1
+        val stopOnEmpty = emptyAppends >= MAX_EMPTY_APPENDS
+        return current.copy(page = current.page.copy(videos = videos, sections = sections,
+            nextKey = if (looped || stopOnEmpty) null else page.nextKey), append = AppendState.Idle)
+    }
+
+    /** Shelf appends are scoped to the shelf's position plus the cursor that launched them. */
+    private fun loadShelf(index: Int) {
+        val ready = _uiState.value.content as? ExploreContent.Ready ?: return
+        val section = ready.page.sections.getOrNull(index) ?: return
+        val key = section.nextKey ?: return
+        if (section.append == AppendState.Loading || shelfJobs[index]?.isActive == true) return
+        val category = _uiState.value.category
+        val request = generation
+        updateShelf(index, key) { it.copy(append = AppendState.Loading) }
+        shelfJobs[index] = viewModelScope.launch {
+            runCatching { repository.exploreShelf(category, key) }.fold(
+                onSuccess = { result ->
+                    if (request != generation || category != _uiState.value.category) return@fold
+                    val visited = consumedShelves.getOrPut(category to index) { mutableSetOf() }
+                    visited.add(key)
+                    updateShelf(index, key) {
+                        val looped = result.nextKey == key || result.nextKey in visited
+                        it.copy(videos = (it.videos + result.videos).distinctBy { video -> video.id },
+                            nextKey = if (looped) null else result.nextKey,
+                            append = AppendState.Idle)
+                    }
+                    fillMissingAvatars(result.videos)
+                },
+                onFailure = { failure ->
+                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                    if (request == generation && category == _uiState.value.category)
+                        updateShelf(index, key) { it.copy(append = AppendState.Failed) }
+                },
+            )
+            if (request == generation) shelfJobs.remove(index)
+        }
+    }
+
+    /** Applies [edit] only while the shelf still owns the cursor that launched the read. */
+    private fun updateShelf(index: Int, key: String, edit: (com.hhst.youtubelite.explore.domain.ExploreSection) -> com.hhst.youtubelite.explore.domain.ExploreSection) {
+        val ready = _uiState.value.content as? ExploreContent.Ready ?: return
+        val section = ready.page.sections.getOrNull(index) ?: return
+        if (section.nextKey != key) return // the shelf moved on; the result is late
+        val sections = ready.page.sections.toMutableList()
+        sections[index] = edit(section)
+        _uiState.update { it.copy(content = ready.copy(page = ready.page.copy(sections = sections))) }
+    }
+
+    /**
+     * One coalesced directory read per channel (concurrency is capped inside the
+     * directory); a real-missing channel keeps its null and the card's stable
+     * placeholder, never a perpetual loading state.
+     */
+    private fun fillMissingAvatars(items: List<com.hhst.youtubelite.home.domain.FeedItem.Video>) {
+        val directory = avatars ?: return
+        val missing = items.filter { it.avatar == null && it.channelId.isNotBlank() }
+            .distinctBy { it.channelId }.takeIf { it.isNotEmpty() } ?: return
+        val requestSession = sessionGeneration
+        viewModelScope.launch {
+            directory.resolveAll(missing.map { it.channelId }) { channelId, avatar ->
+                if (requestSession != sessionGeneration) return@resolveAll
+                fun patchContent(value: ExploreContent): ExploreContent {
+                    val content = value as? ExploreContent.Ready ?: return value
+                    fun patch(videos: List<com.hhst.youtubelite.home.domain.FeedItem.Video>) = videos.map { item ->
+                        if (item.avatar == null && item.channelId == channelId) item.copy(avatar = avatar) else item
+                    }
+                    val page = content.page
+                    return content.copy(page = page.copy(
+                        videos = patch(page.videos),
+                        sections = page.sections.map { section -> section.copy(videos = patch(section.videos)) }))
+                }
+                pages.replaceAll { _, content -> patchContent(content) }
+                _uiState.update { it.copy(content = patchContent(it.content)) }
+            }
+        }
+    }
+
+    private companion object {
+        const val MAX_EMPTY_APPENDS = 2
     }
 }
 
@@ -144,7 +326,8 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 require(modelClass == ExploreViewModel::class.java)
                 val handle = extras.createSavedStateHandle()
                 if (!handle.contains("category")) handle["category"] = category.name
-                return ExploreViewModel(if (fixtures) FixtureExploreRepository(scenario) else sources.explore, scenario, handle) as T
+                return ExploreViewModel(if (fixtures) FixtureExploreRepository(scenario) else sources.explore, scenario, handle,
+                    if (fixtures) null else sources.avatars) as T
             }
         })[ExploreViewModel::class.java]
         lifecycleScope.launch {

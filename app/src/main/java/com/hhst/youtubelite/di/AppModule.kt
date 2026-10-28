@@ -101,7 +101,14 @@ val appModule = module {
     single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots"), get()) }
     single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get()) }
     // Session-owned watch progress reporting; activities publish metadata and attach playback.
-    single { com.hhst.youtubelite.data.media.PlaybackWatchReporting(get(), { get<com.hhst.youtubelite.data.media.ContentRepositories>().localLibrary }) }
+    single {
+        com.hhst.youtubelite.data.media.PlaybackWatchReporting(get(), { get<com.hhst.youtubelite.data.media.ContentRepositories>().localLibrary }).also { reporting ->
+            get<com.hhst.youtubelite.extension.ExtensionManager>().addOnChangedListener { key ->
+                if (key == com.hhst.youtubelite.extension.PreferenceKeys.PRIVATE_BROWSING || key == "*")
+                    reporting.onPrivacyChanged()
+            }
+        }
+    }
     single {
         DiagnosticNetwork.install(OkHttpClient.Builder())
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -219,7 +226,13 @@ val appModule = module {
             startupVideoSupport = PlaybackStartup.videoSupport(androidContext()))
     }
     single { SponsorBlockManager(get(), get()) }
+    single { com.hhst.youtubelite.dearrow.DeArrowService(get(), get()) }
     single { QueueRepository(get()) }
+    single {
+        com.hhst.youtubelite.shorts.data.ShortsMediaPreloader(
+            androidContext(), get(), get<PlayerDataSource>(), get<com.hhst.youtubelite.extension.ExtensionManager>(),
+            demandFor = { id -> get<PlaybackApi>().prefetchDemand(id) })
+    }
     single<PlaybackApi> {
         PlaybackEngine(
             context = androidContext(),
@@ -255,6 +268,7 @@ val appModule = module {
             nextVideo = { id -> if (com.hhst.youtubelite.data.media.ContentSource.fixtures) null
                 else get<com.hhst.youtubelite.data.media.ContentRepositories>().watch.watch(id).related
                 .firstOrNull { it.id != id }?.id },
+            reporting = get(),
         )
     }
     viewModel { ExtensionViewModel(manager = get(), pipSupported = PipSupport.isSupported(androidContext())) }

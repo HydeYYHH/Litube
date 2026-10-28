@@ -5,7 +5,7 @@ class AdaptiveClientOrder(private val clock: () -> Long = System::currentTimeMil
     private data class Refused(val videoId: String, val identity: String, val client: StreamClient)
     private val refused = LinkedHashMap<Refused, Long>()
 
-    /** A real media 403 defers this client for this video only; it stays eligible as the terminal pool. */
+    /** A refused media response defers this client for this video only; it remains a last resort. */
     @Synchronized
     fun mediaForbidden(videoId: String, identity: String, client: StreamClient) {
         refused.entries.removeAll { it.value <= clock() }

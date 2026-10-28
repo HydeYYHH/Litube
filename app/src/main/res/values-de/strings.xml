@@ -65,6 +65,10 @@
     <string name="queue_remove">Aus Warteschlange entfernen</string>
     <string name="application_not_found">Keine passende App gefunden</string>
     <string name="segments">Abschnitte</string>
+    <string name="chapters">Kapitel</string>
+    <string name="no_chapters">Keine Kapitel</string>
+    <string name="skippable_segments">Überspringbare Abschnitte</string>
+    <string name="show_more_replies">Weitere Antworten anzeigen</string>
     <string name="no_segments">Keine überspringbaren Abschnitte</string>
     <string name="subtitles">Untertitel</string>
     <string name="playback_end_next">Nächstes Video</string>

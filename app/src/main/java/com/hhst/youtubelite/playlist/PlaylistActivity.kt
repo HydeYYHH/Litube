@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import com.hhst.youtubelite.R
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -59,7 +60,8 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
             com.hhst.youtubelite.downloader.core.BatchSnapshot(
                 com.hhst.youtubelite.downloader.core.BatchSource.PLAYLIST, page.summary.title, items))
         if (result is com.hhst.youtubelite.downloader.ui.DownloadUiStart.Rejected)
-            android.widget.Toast.makeText(this, "This playlist is too large to download at once", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(this, R.string.playlist_too_large_to_download,
+                android.widget.Toast.LENGTH_LONG).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

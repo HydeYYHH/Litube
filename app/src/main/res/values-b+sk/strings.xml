@@ -65,6 +65,10 @@
     <string name="queue_remove">Odstrániť z radu</string>
     <string name="application_not_found">Aplikácia sa nenašla</string>
     <string name="segments">Segmenty</string>
+    <string name="chapters">Kapitoly</string>
+    <string name="no_chapters">Žiadne kapitoly</string>
+    <string name="skippable_segments">Preskočiteľné segmenty</string>
+    <string name="show_more_replies">Zobraziť ďalšie odpovede</string>
     <string name="no_segments">Žiadne preskočiteľné segmenty</string>
     <string name="subtitles">Titulky</string>
     <string name="playback_end_next">Prehrať ďalej</string>

@@ -11,6 +11,21 @@ import org.junit.Test
 class NativePlaybackHostAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
 
+    @Test fun firstFrameReadinessBelongsToTheAttachedSurface() {
+        OfflineWatchFixture().use { fixture ->
+            fixture.launch { compose.waitForIdle() }
+            fixture.await { fixture.engine.snapshot.value.firstFrameRendered }
+            val surface = requireNotNull(fixture.surface())
+            fixture.instrumentation.runOnMainSync {
+                fixture.model.detachSurface(surface)
+                assertFalse(fixture.engine.snapshot.value.firstFrameRendered)
+                fixture.model.attachSurface(surface)
+            }
+            fixture.await { fixture.engine.snapshot.value.firstFrameRendered }
+            assertEquals(fixture.id, fixture.engine.snapshot.value.videoId)
+        }
+    }
+
     @Test fun commentOverlayKeepsThePlayingSurfaceAndMiniRestoresTheSameVideo() {
         OfflineWatchFixture().use { fixture ->
             fixture.launch { compose.waitForIdle() }

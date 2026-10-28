@@ -2,58 +2,79 @@ package com.hhst.youtubelite.explore.presentation
 
 import com.hhst.youtubelite.ui.components.mediaActions
 import com.hhst.youtubelite.ui.components.MediaActionItem
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.hhst.youtubelite.R
 import com.hhst.youtubelite.explore.domain.ExploreAction
 import com.hhst.youtubelite.explore.domain.ExploreCategory
 import com.hhst.youtubelite.explore.domain.ExploreContent
+import com.hhst.youtubelite.explore.domain.ExploreSection
 import com.hhst.youtubelite.explore.domain.ExploreUiState
+import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.home.domain.FeedItem
+import com.hhst.youtubelite.home.presentation.PillButton
 import com.hhst.youtubelite.library.presentation.LibraryError
-import com.hhst.youtubelite.library.presentation.LibrarySkeleton
 import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.design.VerificationCard
+import com.hhst.youtubelite.ui.design.appDescription
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
+import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("explore-screen")) {
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("explore-screen")) {
         val width = maxWidth.value
+        // Scroll positions are retained per category (and per shelf) across tab switches
+        // AND configuration rebuilds (saved via savers, not plain remember).
+        val columnStates = rememberSaveable(saver = columnStatesSaver) { mutableStateMapOf<ExploreCategory, LazyListState>() }
+        val gridStates = rememberSaveable(saver = gridStatesSaver) { mutableStateMapOf<ExploreCategory, LazyGridState>() }
+        val shelfStates = rememberSaveable(saver = shelfStatesSaver) { mutableStateMapOf<String, LazyListState>() }
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("explore-topbar"), verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(AppIcon.Back, "Back", diameter = 48.dp) { onBack() }
+                AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onBack() }
                 AppText("Explore", Modifier.padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
             CategoryChips(state.category, onAction)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val content = state.content) {
-                    ExploreContent.Loading -> LibrarySkeleton("explore-skeleton")
+                    ExploreContent.Loading -> ExploreSkeleton(width)
                     ExploreContent.Failed -> if (state.verification != null) VerificationCard(
                         state.verification,
                         onVerify = { onAction(ExploreAction.OpenVerification(state.verification!!.challengeUrl)) },
@@ -61,8 +82,69 @@ fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBa
                         modifier = Modifier.testTag("explore-verification"),
                     ) else LibraryError("explore-error") { onAction(ExploreAction.Retry) }
                     is ExploreContent.Ready -> if (content.page.sections.isNotEmpty())
-                        SectionedContainer(content.page.sections, onAction)
-                    else CategoryContainer(content.page.videos, width, onAction)
+                        SectionedContainer(state.category, content, width,
+                            columnStates.getOrPut(state.category) { LazyListState() },
+                            { index -> shelfStates.getOrPut("${state.category.name}:$index") { LazyListState() } },
+                            onAction)
+                    else CategoryContainer(content, width,
+                        gridStates.getOrPut(state.category) { LazyGridState() }, onAction)
+                }
+            }
+        }
+    }
+}
+
+/** Lazy scroll states are not parcelable; their positions are. */
+private val columnStatesSaver: Saver<androidx.compose.runtime.snapshots.SnapshotStateMap<ExploreCategory, LazyListState>, Any> = mapSaver(
+    save = { states -> states.entries.associate { (category, state) ->
+        category.name to listOf(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) } },
+    restore = { saved -> mutableStateMapOf<ExploreCategory, LazyListState>().apply {
+        saved.forEach { (name, pos) -> val p = pos as List<Int>
+            put(ExploreCategory.valueOf(name), LazyListState(p[0], p[1])) } } },
+)
+
+private val gridStatesSaver: Saver<androidx.compose.runtime.snapshots.SnapshotStateMap<ExploreCategory, LazyGridState>, Any> = mapSaver(
+    save = { states -> states.entries.associate { (category, state) ->
+        category.name to listOf(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) } },
+    restore = { saved -> mutableStateMapOf<ExploreCategory, LazyGridState>().apply {
+        saved.forEach { (name, pos) -> val p = pos as List<Int>
+            put(ExploreCategory.valueOf(name), LazyGridState(p[0], p[1])) } } },
+)
+
+private val shelfStatesSaver: Saver<androidx.compose.runtime.snapshots.SnapshotStateMap<String, LazyListState>, Any> = mapSaver(
+    save = { states -> states.entries.associate { (key, state) ->
+        key to listOf(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) } },
+    restore = { saved -> mutableStateMapOf<String, LazyListState>().apply {
+        saved.forEach { (key, pos) -> val p = pos as List<Int>
+            put(key, LazyListState(p[0], p[1])) } } },
+)
+
+/**
+ * First-load placeholder matching the page geometry: shelved rounded cards on a
+ * lazy row (a plain Row squeezes trailing fixed-width cards to zero on narrow
+ * screens). No duplicate chip row — the real category chips render above.
+ */
+@Composable
+private fun ExploreSkeleton(width: Float) {
+    val cardWidth = (width * 0.8f).coerceAtMost(300f).dp
+    Column(Modifier.fillMaxSize().testTag("explore-skeleton").clearAndSetSemantics {}) {
+        repeat(2) {
+            Box(Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp).width(160.dp).height(20.dp)
+                .clip(RoundedCornerShape(10.dp)).background(DesignTokens.Ghost))
+            LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp)) {
+                items(3) {
+                    Column {
+                        Box(Modifier.width(cardWidth).aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp)).background(DesignTokens.Ghost))
+                        Row(Modifier.padding(top = 8.dp)) {
+                            Box(Modifier.size(36.dp).clip(CircleShape).background(DesignTokens.Ghost))
+                            Spacer(Modifier.width(8.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(Modifier.width(180.dp).height(14.dp).clip(RoundedCornerShape(7.dp)).background(DesignTokens.Ghost))
+                                Box(Modifier.width(120.dp).height(12.dp).clip(RoundedCornerShape(6.dp)).background(DesignTokens.Ghost))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -76,7 +158,7 @@ private fun CategoryChips(selected: ExploreCategory, onAction: (ExploreAction) -
         listItems(ExploreCategory.entries) { category ->
             Box(Modifier.clip(RoundedCornerShape(8.dp))
                 .background(if (category == selected) DesignTokens.Ink else DesignTokens.Surface)
-                .clickable(role = Role.Tab) { onAction(ExploreAction.SelectCategory(category)) }
+                .selectable(category == selected, role = Role.Tab) { onAction(ExploreAction.SelectCategory(category)) }
                 .testTag("explore-chip-${category.name}")
                 .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                 AppText(category.label, size = 14, line = 20, weight = FontWeight.Medium,
@@ -86,14 +168,18 @@ private fun CategoryChips(selected: ExploreCategory, onAction: (ExploreAction) -
     }
 }
 
-/** Server shelves render as titled horizontal carousels. */
+/** Server shelves render as titled horizontal carousels with a shared page tail below. */
 @Composable
-private fun SectionedContainer(sections: List<com.hhst.youtubelite.explore.domain.ExploreSection>, onAction: (ExploreAction) -> Unit) {
-    androidx.compose.foundation.lazy.LazyColumn(
+private fun SectionedContainer(category: ExploreCategory, content: ExploreContent.Ready, width: Float,
+    columnState: LazyListState, shelfState: (Int) -> LazyListState, onAction: (ExploreAction) -> Unit) {
+    // Carousel cards track the window: at a 240dp split they stay inside the viewport.
+    val cardWidth = (width * 0.8f).coerceAtMost(300f).dp
+    LazyColumn(
         Modifier.fillMaxSize().testTag("explore-sections"),
+        state = columnState,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        sections.forEachIndexed { index, section ->
+        content.page.sections.forEachIndexed { index, section ->
             item(key = "section-$index", contentType = "section-header") {
                 Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, bottom = 8.dp).testTag("explore-section-${index}-title")) {
                     AppText(section.title ?: "Explore", size = 18, line = 24, weight = FontWeight.Bold)
@@ -102,22 +188,66 @@ private fun SectionedContainer(sections: List<com.hhst.youtubelite.explore.domai
             item(key = "carousel-$index", contentType = "carousel") {
                 LazyRow(
                     Modifier.fillMaxWidth().testTag("explore-carousel-$index"),
+                    state = shelfState(index),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                 ) {
                     listItems(section.videos, key = { it.id }, contentType = { "video" }) { item ->
-                        Box(Modifier.width(300.dp)) {
+                        Box(Modifier.width(cardWidth)) {
                             ExploreVideoCard(item, compact = false, onAction = onAction)
+                        }
+                    }
+                    if (section.nextKey != null || section.append != AppendState.Idle) {
+                        item(key = "shelf-more-$index", contentType = "shelf-tail") {
+                            ShelfTail(index, section.append, Modifier.width(96.dp).height(cardWidth * 9f / 16f), onAction)
                         }
                     }
                 }
             }
         }
+        item(key = "page-tail", contentType = "page-tail") {
+            PageTail(content.append, content.page.nextKey != null, onAction)
+        }
+    }
+}
+
+/** The shelf's trailing tile: idle triggers the append once visible, failed offers retry. */
+@Composable
+private fun ShelfTail(index: Int, append: AppendState, modifier: Modifier, onAction: (ExploreAction) -> Unit) {
+    Box(modifier.testTag("explore-shelf-$index-tail"), contentAlignment = Alignment.Center) {
+        when (append) {
+            AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
+            AppendState.Failed -> Box(Modifier.clip(RoundedCornerShape(8.dp)).background(DesignTokens.Surface)
+                .clickable(role = Role.Button) { onAction(ExploreAction.LoadShelf(index)) }
+                .testTag("explore-shelf-$index-retry").padding(horizontal = 16.dp, vertical = 10.dp)) {
+                AppText("Retry", size = 12, line = 16, weight = FontWeight.Medium)
+            }
+            AppendState.Idle -> {
+                LaunchedEffect(index) { onAction(ExploreAction.LoadShelf(index)) }
+                CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
+            }
+        }
+    }
+}
+
+/** The page tail below the content: idle triggers the append once visible, failed offers retry. */
+@Composable
+private fun PageTail(append: AppendState, hasMore: Boolean, onAction: (ExploreAction) -> Unit) {
+    if (!hasMore && append == AppendState.Idle) return
+    Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+        when (append) {
+            AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp).testTag("explore-tail-loading"),
+                color = DesignTokens.Secondary, strokeWidth = 2.dp)
+            AppendState.Failed -> Box(Modifier.testTag("explore-tail-retry")) {
+                PillButton("Retry") { onAction(ExploreAction.LoadMore) }
+            }
+            AppendState.Idle -> LaunchedEffect(Unit) { onAction(ExploreAction.LoadMore) }
+        }
     }
 }
 
 @Composable
-private fun CategoryContainer(videos: List<FeedItem.Video>, width: Float, onAction: (ExploreAction) -> Unit) {
+private fun CategoryContainer(content: ExploreContent.Ready, width: Float, gridState: LazyGridState, onAction: (ExploreAction) -> Unit) {
     val columns = when {
         width < 528f -> 1
         width < 994f -> 2
@@ -128,6 +258,7 @@ private fun CategoryContainer(videos: List<FeedItem.Video>, width: Float, onActi
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = Modifier.fillMaxSize().testTag("explore-list"),
+        state = gridState,
         contentPadding = PaddingValues(
             start = if (compact) 0.dp else 16.dp,
             end = if (compact) 0.dp else 16.dp,
@@ -135,37 +266,54 @@ private fun CategoryContainer(videos: List<FeedItem.Video>, width: Float, onActi
         ),
         horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
     ) {
-        gridItems(videos, key = { it.id }, contentType = { "video" }) { item ->
+        gridItems(content.page.videos, key = { it.id }, contentType = { "video" }) { item ->
             Box(Modifier.padding(bottom = if (compact) 0.dp else 16.dp)) {
                 ExploreVideoCard(item, compact, onAction)
             }
+        }
+        item(key = "page-tail", span = { GridItemSpan(maxLineSpan) }, contentType = "page-tail") {
+            PageTail(content.append, content.page.nextKey != null, onAction)
         }
     }
 }
 
 @Composable
 private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (ExploreAction) -> Unit) {
+    val badge = if (item.live) "LIVE" else item.duration
     Column(Modifier.fillMaxWidth().testTag("explore-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
             .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(ExploreAction.OpenVideo(item.id)) }
-            .semantics { contentDescription = "${item.title}, ${item.duration}" }) {
-            Artwork(item.artwork, Modifier.fillMaxSize())
-            Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
-                .background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 1.dp)) {
-                AppText(item.duration, size = 12, line = 16, weight = FontWeight.Medium, color = Color.White)
+            .semantics { contentDescription = listOf(item.title, badge).filter(String::isNotBlank).joinToString(", ") }) {
+            VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
+            // No empty pills: the badge only renders with a duration or a live stream.
+            if (badge.isNotBlank()) {
+                Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                    .background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)) {
+                    AppText(badge, size = 12, line = 16, weight = FontWeight.Medium, color = Color.White)
+                }
             }
         }
         Row(Modifier.padding(start = if (compact) 12.dp else 0.dp, top = 8.dp, end = if (compact) 12.dp else 16.dp), verticalAlignment = Alignment.Top) {
-            Box(Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) {
-                onAction(ExploreAction.OpenChannel(item.channelId))
-            }.semantics { contentDescription = "Go to channel ${item.author}" }) {
-                Artwork(item.artwork, Modifier.fillMaxSize())
+            // The author avatar, never the video still; a blank channel id goes nowhere.
+            // A missing avatar shows a stable letter placeholder, not perpetual loading.
+            Box(Modifier.size(36.dp).clip(CircleShape)
+                .then(if (item.channelId.isNotBlank()) Modifier.clickable(role = Role.Button) {
+                    onAction(ExploreAction.OpenChannel(item.channelId))
+                }.appDescription(R.string.a11y_go_to_channel, item.author) else Modifier)) {
+                val avatar = item.avatar
+                if (avatar.isNullOrBlank()) {
+                    Box(Modifier.fillMaxSize().background(DesignTokens.Surface), contentAlignment = Alignment.Center) {
+                        AppText(item.author.trim().take(1).uppercase(), size = 14, line = 18,
+                            weight = FontWeight.Medium, color = DesignTokens.Secondary)
+                    }
+                } else Artwork(avatar, Modifier.fillMaxSize())
             }
             Spacer(Modifier.width(8.dp))
             Column {
-                AppText(item.title, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
-                AppText("${item.author} · ${item.metadata}", Modifier.padding(top = 2.dp), size = 12, line = 18,
+                AppText(rememberDeArrowTitle(item.id, item.title), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
+                AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "),
+                    Modifier.padding(top = 2.dp), size = 12, line = 18,
                     color = DesignTokens.Secondary, maxLines = 1)
             }
         }
