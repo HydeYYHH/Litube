@@ -19,8 +19,14 @@ data class AudioTrackChoice(
 object AudioTrackIdentity {
     private val originalLabel = Regex("\\boriginal\\b|原始|原聲|原声|オリジナル|오리지널", RegexOption.IGNORE_CASE)
 
-    fun isOriginal(format: Format): Boolean = format.audioTrackOriginal ||
-        format.audioTrackType.equals("original", ignoreCase = true)
+    fun isOriginal(format: Format): Boolean {
+        if (format.audioTrackType.equals("dubbed", ignoreCase = true)) return false
+        if (format.audioTrackName?.contains("doblado", ignoreCase = true) == true) return false
+        if (format.audioTrackName?.contains("dubbed", ignoreCase = true) == true) return false
+        return format.audioTrackOriginal ||
+            format.audioTrackType.equals("original", ignoreCase = true) ||
+            (format.audioTrackName != null && format.audioTrackName.contains(originalLabel))
+    }
 
     /** HLS may declare Original only in NAME, rather than its DEFAULT flag. */
     fun originalRenditionKey(entries: List<Pair<String?, String?>>, formats: List<Format> = emptyList()): String? {

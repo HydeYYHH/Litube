@@ -616,9 +616,19 @@ private class ForwardingGestures(
     override fun onFullscreenSwipeProgress(distancePx: Float) { fullscreenSwipe?.drag?.invoke(distancePx) }
     override fun onFullscreenSwipeCancel() { fullscreenSwipe?.end?.invoke(false) }
     override fun onFullscreenSwipe(up: Boolean) {
-        if (up != fullscreen) {
-            fullscreenSwipe?.end?.invoke(true)
-            c.onFullscreenToggle()
+        if (up) {
+            if (!fullscreen) {
+                fullscreenSwipe?.end?.invoke(true)
+                c.onFullscreenToggle()
+            }
+        } else {
+            if (fullscreen) {
+                fullscreenSwipe?.end?.invoke(true)
+                c.onFullscreenToggle()
+            } else {
+                fullscreenSwipe?.end?.invoke(true)
+                c.onMiniEnter()
+            }
         }
     }
     override fun onZoomScale(factor: Float) = zoom.applyScale(factor)

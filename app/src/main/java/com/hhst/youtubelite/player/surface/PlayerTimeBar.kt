@@ -46,6 +46,7 @@ fun PlayerTimeBar(
     segments: List<SponsorBlockManager.Segment>,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    isLive: Boolean = false,
     /** Target-time preview while dragging: non-null shows, null clears. */
     onPreview: (Long?) -> Unit = {},
     /** Drag released (gesture overlay hides even when the seek is a no-op). */
@@ -54,7 +55,7 @@ fun PlayerTimeBar(
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
     val timeBarDescription = stringResource(R.string.player_time_bar)
-    val announcedFraction = PlayerUi.progressFraction(positionState.value, durationMs)
+    val announcedFraction = if (isLive) 1f else PlayerUi.progressFraction(positionState.value, durationMs)
 
     Canvas(
         modifier = modifier
@@ -65,7 +66,7 @@ fun PlayerTimeBar(
                 progressBarRangeInfo = ProgressBarRangeInfo(announcedFraction, 0f..1f)
             }
             .pointerInput(durationMs) {
-                if (durationMs <= 0L) return@pointerInput
+                if (durationMs <= 0L && !isLive) return@pointerInput
                 awaitEachGesture {
                     try {
                         val down = awaitFirstDown()
@@ -101,8 +102,10 @@ fun PlayerTimeBar(
         // Snapshot reads here are draw-scoped: a position tick invalidates
         // only this draw, not the surrounding composition.
         val positionMs = positionState.value
-        val played = if (dragging) dragFraction else PlayerUi.progressFraction(positionMs, durationMs)
-        val buffered = PlayerUi.bufferedFraction(bufferedPositionState.value, durationMs)
+        val played = if (dragging) dragFraction
+            else if (isLive) 1f
+            else PlayerUi.progressFraction(positionMs, durationMs)
+        val buffered = if (isLive) 1f else PlayerUi.bufferedFraction(bufferedPositionState.value, durationMs)
 
         val thickness = PlayerUi.TIME_BAR_THICKNESS_DP.dp.toPx()
         val centerY = size.height / 2f
