@@ -121,7 +121,8 @@ class YoutubeMediaRequests(
         val mediaType = response.header("Content-Type").orEmpty().lowercase()
         if (response.isSuccessful && (mediaType.startsWith("text/html") || mediaType.startsWith("application/json"))) {
             diagnostics.event("media", plan.client.name, "INVALID_BODY", (System.nanoTime() - started) / 1_000_000, response.code)
-            response.close(); throw IOException("MEDIA_ERROR_BODY")
+            val failure = InvalidMediaResponseException(response.code, mediaType.substringBefore(';').take(80), response.request.method, plan.client)
+            response.close(); throw failure
         }
         if (!response.isSuccessful) return@Interceptor response
         val window = try { window(response, plan) } catch (failure: IOException) { response.close(); throw failure }

@@ -41,6 +41,7 @@ internal fun ShortPlaybackControls(
     loading: Boolean = false,
     error: String? = null,
     onRetry: () -> Unit = {},
+    onDetails: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val toggle by rememberUpdatedState(onToggle)
@@ -109,7 +110,7 @@ internal fun ShortPlaybackControls(
                     .padding(horizontal = 16.dp, vertical = 8.dp).testTag("short-speed-hold"))
         } else if (error != null) {
             com.hhst.youtubelite.player.surface.ErrorOverlay(
-                message = error, onRetry = onRetry, modifier = Modifier.align(Alignment.Center))
+                message = error, onRetry = onRetry, onDetails = onDetails, modifier = Modifier.align(Alignment.Center))
         } else if (loading) {
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp,
                 modifier = Modifier.align(Alignment.Center).size(24.dp).testTag("short-buffering"))

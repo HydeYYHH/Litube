@@ -177,6 +177,11 @@ class YoutubeMediaRequestsTest {
                     client.newCall(policy.build(url, plan, 0, 5)).execute()
                 }
                 assertEquals("MEDIA_ERROR_BODY", failure.message)
+                val responseFailure = failure as InvalidMediaResponseException
+                assertEquals(200, responseFailure.statusCode)
+                assertEquals(contentType.substringBefore(';'), responseFailure.contentType)
+                assertEquals("POST", responseFailure.method)
+                assertEquals(StreamClient.WEB, responseFailure.client)
                 assertEquals("GET", server.takeRequest().method)
                 assertEquals("POST", server.takeRequest().method)
                 assertEquals("GET", policy.build(url, plan, 0, 5).method)

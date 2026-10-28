@@ -145,9 +145,16 @@ class MediaResponseRecoveryAndroidTest {
             instrumentation.runOnMainSync {
                 if (persistent) {
                     assertNotNull(engine.snapshot.value.error)
+                    val report = requireNotNull(engine.snapshot.value.failureReport)
+                    assertEquals(engine.snapshot.value.videoId, report.videoId)
+                    assertTrue(report.text.contains("MEDIA_ERROR_BODY"))
+                    assertTrue(report.text.contains("full_refreshes: 1"))
+                    assertTrue(report.text.contains("http_status: 200"))
+                    assertTrue(report.text.contains("content_type: application/json"))
                     assertFalse(engine.snapshot.value.prepared)
                 } else {
                     assertNull(engine.snapshot.value.error)
+                    assertNull(engine.snapshot.value.failureReport)
                     assertTrue("Recovery lost the requested position", requireNotNull(player).currentPosition >= 5_000)
                     assertEquals(!pause, engine.snapshot.value.userWantsPlay)
                     assertEquals(!pause, requireNotNull(player).isPlaying)

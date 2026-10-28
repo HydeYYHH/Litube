@@ -248,6 +248,7 @@ class ShortsActivity : ComponentActivity() {
                             loading = !playerState.prepared || playerState.loading,
                             error = playerState.error,
                             onRetry = playerViewModel::onRetry,
+                            onDetails = if (playerState.failureReport == null) null else playerViewModel::onErrorDetails,
                             onToggle = playerViewModel::onPlayPause,
                             onHoldStart = playerViewModel::onSpeedHoldStart,
                             onHoldEnd = playerViewModel::onSpeedHoldEnd,

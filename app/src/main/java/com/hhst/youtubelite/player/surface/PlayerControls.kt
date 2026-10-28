@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -617,6 +619,7 @@ fun ErrorOverlay(
     message: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onDetails: (() -> Unit)? = null,
 ) {
     val title = stringResource(R.string.player_error)
     Column(
@@ -647,6 +650,9 @@ fun ErrorOverlay(
                 color = PlayerUi.YtRed,
                 fontWeight = FontWeight.Medium,
             )
+        }
+        if (onDetails != null) TextButton(onClick = onDetails, modifier = Modifier.testTag("playback-error-details")) {
+            Text(stringResource(R.string.info), color = Color.White)
         }
     }
 }

@@ -71,7 +71,9 @@ object YoutubeThumbnail {
 
     @WorkerThread
     fun fetch(url: String?, maxDim: Int = MAX_DECODE_DIM): Bitmap? =
-        try { runBlocking { await(url, maxDim) } } catch (_: CancellationException) { null }
+        try { runBlocking { await(url, maxDim) } }
+        catch (_: CancellationException) { null }
+        catch (_: InterruptedException) { Thread.currentThread().interrupt(); null }
 
     suspend fun await(url: String?, maxDim: Int = MAX_DECODE_DIM): Bitmap? {
         if (url.isNullOrBlank() || !isAllowed(url)) return null

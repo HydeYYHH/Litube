@@ -27,7 +27,7 @@ import org.junit.Assert.assertTrue
 import org.koin.core.context.GlobalContext
 
 /** Runs the production player against a local HLS fixture. */
-internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
+internal class OfflineWatchFixture(val id: String = "menuTest001", private val refuseMedia: Boolean = false) : Closeable {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val app = instrumentation.targetContext
     val engine = GlobalContext.get().get<PlaybackApi>() as PlaybackEngine
@@ -43,7 +43,9 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
     private val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
     private val video = instrumentation.context.assets.open("player/quality-recovery/360.ts").use { it.readBytes() }
     private val server = object : NanoHTTPD("127.0.0.1", 0) {
-        override fun serve(session: IHTTPSession): Response = when (session.uri) {
+        override fun serve(session: IHTTPSession): Response = if (refuseMedia) {
+            newFixedLengthResponse(Response.Status.FORBIDDEN, "text/plain", "Unavailable")
+        } else when (session.uri) {
             "/audio.ts", "/video.ts" -> {
                 val bytes = if (session.uri == "/audio.ts") audio else video
                 newFixedLengthResponse(Response.Status.OK, "video/mp2t", bytes.inputStream(), bytes.size.toLong())
@@ -82,12 +84,13 @@ internal class OfflineWatchFixture(val id: String = "menuTest001") : Closeable {
         }
     }
 
-    fun launch(settleUi: () -> Unit = {}) {
+    fun launch(expectFailure: Boolean = false, settleUi: () -> Unit = {}) {
         scenario = ActivityScenario.launch(WatchActivity.intent(app, id))
         scenario!!.onActivity { activity = it }
         instrumentation.runOnMainSync { model.openVideo(id) }
         settleUi()
-        await { model.uiState.value.visible && engine.snapshot.value.isPlaying && surface() != null }
+        await { model.uiState.value.visible &&
+            if (expectFailure) engine.snapshot.value.error != null else engine.snapshot.value.isPlaying && surface() != null }
     }
 
     fun await(condition: () -> Boolean) {

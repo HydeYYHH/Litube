@@ -118,6 +118,8 @@ object AppLog {
     fun statistics(): Map<String, Any> = recorder?.statistics().orEmpty() +
         mapOf("dropped" to dropped.get() + queue.dropped, "write_failures" to writeFailures.get(), "queued_bytes" to queue.bytes,
             "snapshot_truncated_bytes" to (storage?.snapshotTruncatedBytes ?: 0))
+    fun recent(context: DiagnosticContext?): List<DiagnosticEvent> = if (context == null) emptyList() else
+        recorder?.recent().orEmpty().filter { it.context?.traceId == context.traceId }.takeLast(32)
     private fun enqueue(records: List<DiagnosticEvent>, priority: Boolean) {
         synchronized(enqueueLock) {
             records.chunked(64).forEach { queue.offer(it, priority) }

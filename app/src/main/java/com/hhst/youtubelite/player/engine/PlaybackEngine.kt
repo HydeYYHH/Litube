@@ -40,6 +40,11 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.PageKind
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.PlaybackFailureReport
+import com.hhst.youtubelite.diagnostics.AndroidDiagnosticState
+import com.hhst.youtubelite.diagnostics.DiagnosticRedaction
+import com.hhst.youtubelite.BuildConfig
+import android.os.Build
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Chapter
@@ -51,6 +56,7 @@ import com.hhst.youtubelite.extractor.StreamClient
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.VideoId
+import com.hhst.youtubelite.extractor.InvalidMediaResponseException
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 import com.hhst.youtubelite.player.PREF_TTL_MS
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
@@ -136,6 +142,7 @@ data class PlaybackSnapshot(
     val sponsorSegments: List<SponsorBlockManager.Segment> = emptyList(),
     val subtitleCues: List<String> = emptyList(),
     val error: String? = null,
+    val failureReport: PlaybackFailureReport? = null,
     val prepared: Boolean = false,
     val firstFrameRendered: Boolean = false,
     val ended: Boolean = false,
@@ -361,6 +368,8 @@ class PlaybackEngine(
     private var videoDecoderName: String? = null
     private var audioDecoderName: String? = null
     @Volatile private var diagnosticContext: DiagnosticContext? = null
+    private var attemptContext: DiagnosticContext? = null
+    private val recoveryHistory = ArrayDeque<Map<String, Any?>>()
     @Volatile private var attachedContext: DiagnosticContext? = null
     private var playbackOperation: DiagnosticOperation? = null
     private val progressWatchdog = DiagnosticProgressWatchdog(10_000, { state, duration ->
@@ -371,7 +380,9 @@ class PlaybackEngine(
         loadStartedAt = elapsed(); firstFrameMs = null; videoDecoderName = null; audioDecoderName = null
         performance.reset(loadStartedAt)
         playbackOperation?.finish(DiagnosticOutcome.SUPERSEDED, "source_replaced")
-        val context = DiagnosticContext(videoId = videoId, generation = generation)
+        val attempt = attemptContext?.takeIf { it.videoId == videoId }
+            ?: DiagnosticContext(videoId = videoId).also { attemptContext = it }
+        val context = attempt.child().copy(generation = generation)
         diagnosticContext = context
         playbackOperation = AppLog.operation(AppLog.Category.PLAYER, "playback", context)
         return context
@@ -598,6 +609,8 @@ class PlaybackEngine(
             return
         }
         persistPosition()
+        attemptContext = DiagnosticContext(videoId = videoId)
+        recoveryHistory.clear()
         playbackGeneration.incrementAndGet()
         playJob?.cancel()
         rebuildJob?.cancel()
@@ -617,6 +630,8 @@ class PlaybackEngine(
 
     override fun retry() {
         val videoId = _snapshot.value.videoId ?: return
+        attemptContext = DiagnosticContext(videoId = videoId)
+        recoveryHistory.clear()
         val position = player.currentPosition.takeIf {
             currentMetadata?.id == videoId && attachedGeneration == playbackGeneration.get()
         }
@@ -781,6 +796,7 @@ class PlaybackEngine(
                 if (diagnosticContext === context) playbackOperation?.finish(DiagnosticOutcome.CANCELLED, "load_cancelled")
                 throw t
             }
+            if (!stillCurrent(generation)) return
             preparing.finish(DiagnosticOutcome.FAILURE, "prepare_failed", t)
             if (diagnosticContext === context) playbackOperation?.finish(DiagnosticOutcome.FAILURE, "prepare_failed")
             // The previous media stays attached on failure. Pausing it prevents
@@ -788,9 +804,11 @@ class PlaybackEngine(
             // A failed local load does not pause the receiver; the active Cast
             // session keeps playing.
             player.pause()
+            val report = failureReport(t, "prepare")
             _snapshot.value = _snapshot.value.copy(
                 isBuffering = false,
-                error = playbackFailed(t),
+                error = report.summary,
+                failureReport = report,
             )
         } finally { preparing.finish(DiagnosticOutcome.SUPERSEDED, "generation_replaced") }
     }
@@ -813,6 +831,8 @@ class PlaybackEngine(
         pinnedQuality = null
         _snapshot.value = PlaybackSnapshot()
         diagnosticContext = null; attachedContext = null
+        attemptContext = null
+        recoveryHistory.clear()
         attachCastPlayer(null)
         notificationController?.onStopped()
     }
@@ -1584,6 +1604,9 @@ class PlaybackEngine(
             return
         }
         var reason = recoveryReason(error)
+        val causes = generateSequence<Throwable>(error) { it.cause }.take(8).toList()
+        val failedRequest = causes.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()
+        val invalidResponse = causes.filterIsInstance<InvalidMediaResponseException>().firstOrNull()
         playerLog("recovery_decision", mapOf("reason" to (reason?.name ?: "unsupported"), "light_attempts" to lightRefreshAttempts, "full_attempts" to reExtractAttempts), critical = false)
         val stream = currentStream
 
@@ -1595,6 +1618,14 @@ class PlaybackEngine(
         if (rejection != null) playerLog("recovery_client_feedback", mapOf(
             "applied" to (rejectedProfile != null), "client" to rejectedProfile?.name,
             "reason" to if (rejectedProfile != null) rejection.code else "unknown_or_stale_request_plan"))
+        recoveryHistory.addLast(mapOf(
+            "reason" to reason?.name, "error_name" to error.errorCodeName, "client" to (rejectedProfile ?: invalidResponse?.client)?.name,
+            "http_status" to (causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: invalidResponse?.statusCode),
+            "content_type" to invalidResponse?.contentType, "transport_method" to invalidResponse?.method,
+            "cause" to causes.lastOrNull()?.let { DiagnosticRedaction.text("${it.javaClass.name}: ${it.message.orEmpty()}").take(512) },
+            "request" to failedRequest?.let { DiagnosticRedaction.resource(it.dataSpec.uri.toString()) },
+        ))
+        while (recoveryHistory.size > 6) recoveryHistory.removeFirst()
 
         // Refresh the source once with the current session and tokens. A transport failure
         // is evidence about the connection, so it must not reset tokens or blame a client.
@@ -1681,12 +1712,14 @@ class PlaybackEngine(
             return
         }
 
+        val report = failureReport(error, "playback")
         _snapshot.value = _snapshot.value.copy(
             isBuffering = false,
             // play()/playOrPause() check this to reload instead of issuing a
             // no-op playWhenReady against an idle-with-error player.
             prepared = false,
-            error = playbackFailed(error),
+            error = report.summary,
+            failureReport = report,
         )
         playbackOperation?.finish(DiagnosticOutcome.FAILURE, reason?.name ?: "playback_error")
     }
@@ -1839,6 +1872,7 @@ class PlaybackEngine(
                     subtitleKey = subtitleKey,
                     isBuffering = false,
                     error = null,
+                    failureReport = null,
                     videoFormat = source.videoFormat,
                     audioFormat = source.audioFormat,
                 )
@@ -1849,9 +1883,11 @@ class PlaybackEngine(
                 }
             } catch (t: Throwable) {
                 if (t is CancellationException) { rebuilding.finish(DiagnosticOutcome.CANCELLED, "rebuild_cancelled"); throw t }
+                if (!stillCurrent(generation)) return@launch
                 rebuilding.finish(DiagnosticOutcome.FAILURE, "rebuild_failed", t)
                 if (diagnosticContext == context) playbackOperation?.finish(DiagnosticOutcome.FAILURE, "rebuild_failed", t)
-                _snapshot.value = _snapshot.value.copy(isBuffering = false, error = playbackFailed(t))
+                val report = failureReport(t, "rebuild")
+                _snapshot.value = _snapshot.value.copy(isBuffering = false, error = report.summary, failureReport = report)
             } finally { rebuilding.finish(DiagnosticOutcome.SUPERSEDED, "generation_replaced") }
         }
     }
@@ -2015,6 +2051,54 @@ class PlaybackEngine(
         val liveUnavailable = generateSequence(t) { it.cause }.take(12)
             .any { it.message == "LIVE_STREAM_SOURCE_UNAVAILABLE" }
         return appContext.getString(if (liveUnavailable) R.string.player_live_unavailable else R.string.player_error)
+    }
+
+    private fun failureReport(error: Throwable, phase: String): PlaybackFailureReport {
+        val state = _snapshot.value
+        val stream = currentStream.takeIf { currentMetadata?.id == state.videoId }
+        val causes = generateSequence(error) { it.cause }.take(8).toList()
+        val request = causes.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()
+        val response = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+        val invalidResponse = causes.filterIsInstance<InvalidMediaResponseException>().firstOrNull()
+        val plan = stream?.hlsRequestPlan ?: stream?.dashRequestPlan ?: stream?.formats?.firstNotNullOfOrNull { it.requestPlan }
+        fun format(value: Format?) = value?.let {
+            mapOf("itag" to it.itag, "mime" to it.mimeType, "codec" to it.codec,
+                "height" to it.height, "bitrate" to it.bitrate, "client" to it.requestPlan?.client?.name)
+        }
+        val fields = linkedMapOf<String, Any?>(
+            "position_ms" to player.currentPosition, "duration_ms" to state.durationMs,
+            "buffered_ms" to player.bufferedPosition, "prepared" to state.prepared,
+            "first_frame" to state.firstFrameRendered, "play_when_ready" to userWantsPlay,
+            "live" to state.isLive, "quality" to state.qualityLabel, "active_quality" to state.activeQuality,
+            "video" to format(state.videoFormat), "audio" to format(state.audioFormat),
+            "video_decoder" to state.diagnostics.videoDecoder, "audio_decoder" to state.diagnostics.audioDecoder,
+            "video_codec" to state.diagnostics.videoCodec, "audio_codec" to state.diagnostics.audioCodec,
+            "video_width" to state.diagnostics.width, "video_height" to state.diagnostics.height,
+            "video_bitrate" to state.diagnostics.videoBitrate, "audio_bitrate" to state.diagnostics.audioBitrate,
+            "account_state" to plan?.session?.account?.name, "configuration_source" to plan?.session?.configurationSource,
+            "network_generation" to plan?.session?.networkGeneration,
+            "hls_client" to stream?.hlsRequestPlan?.client?.name, "dash_client" to stream?.dashRequestPlan?.client?.name,
+            "format_count" to stream?.formats?.size, "light_refreshes" to lightRefreshAttempts,
+            "full_refreshes" to reExtractAttempts, "backup_attempted" to backupAttempted,
+            "pin_released" to videoPinRescued, "muxed_fallback" to muxedFallbackActive,
+            "recovery_history" to recoveryHistory.toList(),
+            "error_code" to (error as? PlaybackException)?.errorCode,
+            "error_name" to (error as? PlaybackException)?.errorCodeName,
+            "http_status" to (response?.responseCode ?: invalidResponse?.statusCode),
+            "content_type" to (response?.headerFields?.entries?.firstOrNull { it.key.equals("content-type", true) }?.value?.firstOrNull() ?: invalidResponse?.contentType),
+            "transport_method" to invalidResponse?.method, "failed_client" to invalidResponse?.client?.name,
+            "request_method" to request?.dataSpec?.httpMethodString,
+            "request_position" to request?.dataSpec?.position, "request_length" to request?.dataSpec?.length,
+        )
+        request?.let { fields["request"] = DiagnosticRedaction.resource(it.dataSpec.uri.toString()) }
+        val report = PlaybackFailureReport.create(playbackFailed(error), error, phase, diagnosticContext,
+            mapOf("app_version" to BuildConfig.VERSION_NAME, "build_id" to BuildConfig.DIAGNOSTIC_BUILD_ID,
+                "build_type" to BuildConfig.BUILD_TYPE, "android_sdk" to Build.VERSION.SDK_INT,
+                "android_release" to Build.VERSION.RELEASE, "manufacturer" to Build.MANUFACTURER,
+                "model" to Build.MODEL, "network" to AndroidDiagnosticState.networkSnapshot()),
+            fields, AppLog.recent(diagnosticContext))
+        playerLog("terminal_failure", mapOf("report_id" to report.id, "phase" to phase), error)
+        return report
     }
 
     companion object {

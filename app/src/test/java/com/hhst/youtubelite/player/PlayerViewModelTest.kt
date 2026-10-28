@@ -73,6 +73,30 @@ class PlayerViewModelTest {
         assertFalse(viewModel.uiState.value.mini)
     }
 
+    @Test fun dismissedFailureStaysClosedUntilAnotherFailureAndCanBeReopened() {
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        val report = com.hhst.youtubelite.diagnostics.PlaybackFailureReport("first", watchId, "Failed", "diagnostics")
+        engine.fail(report)
+        assertTrue(viewModel.uiState.value.failureDialogVisible)
+        viewModel.dismissPlaybackFailure()
+        engine.fail(report)
+        assertFalse(viewModel.uiState.value.failureDialogVisible)
+        assertEquals(report, viewModel.uiState.value.failureReport)
+        val loads = engine.playCalls.size
+        viewModel.openShort(watchId)
+        assertEquals(loads, engine.playCalls.size)
+        assertFalse(viewModel.uiState.value.failureDialogVisible)
+        viewModel.onErrorDetails()
+        assertTrue(viewModel.uiState.value.failureDialogVisible)
+        viewModel.dismissPlaybackFailure()
+        engine.fail(report.copy(id = "second"))
+        assertTrue(viewModel.uiState.value.failureDialogVisible)
+        engine.settle(watchId)
+        assertNull(viewModel.uiState.value.failureReport)
+        assertFalse(viewModel.uiState.value.failureDialogVisible)
+    }
+
     @Test fun nativeAutoplayUsesTheServiceOncePerPlayback() {
         var calls = 0
         bindViewModel { calls++; "bbbbbbbbbbb" }
@@ -356,6 +380,11 @@ class PlayerViewModelTest {
         val playCalls = mutableListOf<String>()
         var stopCalls = 0
 
+        fun fail(report: com.hhst.youtubelite.diagnostics.PlaybackFailureReport) {
+            _snapshot.value = _snapshot.value.copy(error = report.summary, failureReport = report,
+                positionMs = _snapshot.value.positionMs + 1, prepared = false, isPlaying = false)
+        }
+
         fun finish() {
             _snapshot.value = _snapshot.value.copy(ended = true, isPlaying = false)
             onEnded?.invoke()
@@ -368,6 +397,7 @@ class PlayerViewModelTest {
                 positionMs = positionMs,
                 prepared = true,
                 error = null,
+                failureReport = null,
                 isPlaying = true,
                 userWantsPlay = true,
                 ended = false,

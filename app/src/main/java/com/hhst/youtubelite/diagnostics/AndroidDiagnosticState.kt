@@ -23,6 +23,7 @@ object AndroidDiagnosticState {
     @Volatile private var networkAvailable: Boolean? = null
     @Volatile private var foreground = false
     @Volatile private var networkState = emptyMap<String, Any?>()
+    fun networkSnapshot(): Map<String, Any?> = networkState
     fun install(app: Application) {
         var started = 0
         app.registerActivityLifecycleCallbacks(@Suppress("UNUSED_PARAMETER") object : Application.ActivityLifecycleCallbacks {

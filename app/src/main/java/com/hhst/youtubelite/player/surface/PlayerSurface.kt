@@ -101,6 +101,9 @@ fun PlayerSurface(
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var dialog by remember { mutableStateOf<PlayerDialog?>(null) }
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
+    LaunchedEffect(state.failureReport?.id) {
+        if (state.failureReport != null) { sheet = null; dialog = null; menu = null }
+    }
     var topBarHeightPx by remember { mutableIntStateOf(0) }
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
     // Distance from the player bottom to the visible track, measured from the
@@ -499,6 +502,7 @@ fun PlayerSurface(
                     if (state.error != null && !state.locked && !pip) {
                         ErrorOverlay(
                             message = state.error,
+                            onDetails = if (state.failureReport == null) null else callbacks::onErrorDetails,
                             onRetry = callbacks::onRetry,
                             modifier = Modifier.align(Alignment.Center),
                         )

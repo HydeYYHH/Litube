@@ -44,6 +44,7 @@ interface PlayerPlaybackActions {
     /** Video action panel "Play next": after the playing entry, moving an existing entry. */
     fun onQueueAddNext(item: QueueItem)
     fun onRetry()
+    fun onErrorDetails() {}
     fun onCastStop()
     fun onCastDevice(id: String)
     fun onShareCastLink()

@@ -86,6 +86,13 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
     LaunchedEffect(playerViewModel) { playerViewModel.initializeCast() }
     com.hhst.youtubelite.ui.theme.AppTheme {
         Box(modifier.background(Color.Black)) {
+            val resumed by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
+            if (playerState.failureDialogVisible && playerState.failureReport != null &&
+                resumed.isAtLeast(Lifecycle.State.RESUMED) &&
+                !(android.os.Build.VERSION.SDK_INT >= 24 && activity?.isInPictureInPictureMode == true)) {
+                com.hhst.youtubelite.player.surface.PlaybackFailureDialog(
+                    requireNotNull(playerState.failureReport), playerViewModel::dismissPlaybackFailure, playerViewModel::onRetry)
+            }
             PlayerSurface(
                 state = playerState,
                 callbacks = callbacks,

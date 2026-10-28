@@ -84,6 +84,8 @@ data class PlayerUiState(
     val audioTracks: List<AudioTrackChoice> = emptyList(),
     val audioTrackKey: String? = null,
     val error: String? = null,
+    val failureReport: com.hhst.youtubelite.diagnostics.PlaybackFailureReport? = null,
+    val failureDialogVisible: Boolean = false,
     /** True while the time bar is being dragged; keeps chrome from auto-hiding. */
     val scrubbing: Boolean = false,
     /** Queue navigation availability for prev/next buttons. */
@@ -386,6 +388,9 @@ class PlayerViewModel(
                 audioTracks = s.audioTracks,
                 audioTrackKey = s.audioTrackKey,
                 error = s.error,
+                failureReport = s.failureReport,
+                failureDialogVisible = s.failureReport != null &&
+                    (it.failureReport?.id != s.failureReport.id || it.failureDialogVisible),
                 hasNext = nav.next,
                 hasPrevious = nav.previous,
                 sponsorSegments = s.sponsorSegments,
@@ -493,7 +498,7 @@ class PlayerViewModel(
         val id = VideoId.parse(videoId) ?: return
         inShorts = true
         val current = engine.snapshot.value
-        if (current.videoId == id && (current.prepared || current.error == null && _uiState.value.visible)) {
+        if (current.videoId == id && (current.prepared || _uiState.value.visible)) {
             _uiState.update { it.copy(visible = true, mini = false, fullscreen = false) }
             engine.setVideoVisible(true)
         } else startPlayback(VideoId.watchUrl(id), keepMini = false)
@@ -584,6 +589,8 @@ class PlayerViewModel(
                 visible = true,
                 mini = if (keepMini) it.mini else false,
                 error = null,
+                failureReport = null,
+                failureDialogVisible = false,
                 locked = false,
                 url = url,
                 videoId = id ?: it.videoId,
@@ -911,6 +918,12 @@ class PlayerViewModel(
     }
 
     override fun onRetry() = engine.retry()
+    override fun onErrorDetails() {
+        _uiState.update { it.copy(failureDialogVisible = it.failureReport != null) }
+    }
+    fun dismissPlaybackFailure() {
+        _uiState.update { it.copy(failureDialogVisible = false) }
+    }
 
     override fun onQueueEnabled(enabled: Boolean) {
         playlistActive = false
