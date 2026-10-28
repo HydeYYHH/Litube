@@ -5,12 +5,10 @@ import com.hhst.youtubelite.diagnostics.*
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.ChunkIndex
-import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.MoreExecutors
 import com.hhst.youtubelite.cast.protocol.CastV2Discovery
 import com.hhst.youtubelite.cast.protocol.CastV2Session
@@ -22,12 +20,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import okhttp3.OkHttpClient
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
 data class CastDevice(
@@ -59,6 +53,7 @@ class CastController(
     // bounded instead of growing with a cached pool.
     private val io: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "CastSidx").apply { isDaemon = true } }
     private val listeningIo = MoreExecutors.listeningDecorator(io)
+    private val indices = CastIndexLoader<ChunkIndex>(listeningIo)
     private val _state = MutableStateFlow(CastUiState())
     val state: StateFlow<CastUiState> = _state.asStateFlow()
     @Volatile private var proxy: LocalStreamProxy? = null
@@ -178,6 +173,7 @@ class CastController(
         return true
     }
     fun stopCasting(): Long {
+        indices.cancel()
         val position = castPlayer?.currentPosition ?: 0L
         chromecastActive = false
         configureGen.incrementAndGet()
@@ -279,12 +275,7 @@ class CastController(
         proxyConfiguredVideoId = source.videoId
     }
 
-    /**
-     * Sidx wait → load → upgrade protocol. The default receiver
-     * cannot parse sidx, so a SegmentList manifest is required for segment
-     * addressing; SegmentBase loads immediately when sidx is slow so the TV
-     * still starts, then gets reloaded once SegmentList becomes available.
-     */
+    /** Publishes the initial source, then upgrades late segment indices within the same session. */
     private fun scheduleSidxUpgradeAndReceiverLoad(
         p: LocalStreamProxy,
         session: CastV2Session,
@@ -293,57 +284,14 @@ class CastController(
         positionMs: Long,
     ) {
         val gen = configureGen.get()
-        io.execute {
-            val vFuture = listeningIo.submit(Callable { p.fetchChunkIndex("v") })
-            val aFuture = listeningIo.submit(Callable { p.fetchChunkIndex("a") })
-            var sidxReady = false
-            try {
-                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
-                    Futures.getDone(vFuture); Futures.getDone(aFuture)
-                }, MoreExecutors.directExecutor()).get(SIDX_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                sidxReady = true
-            } catch (_: TimeoutException) {
-                Log.w(TAG, "sidx fetch timed out, loading SegmentBase first")
-            } catch (e: Exception) {
-                Log.w(TAG, "sidx fetch failed", e)
-            }
-
-            val vci = runCatching { Futures.getDone(vFuture) }.getOrNull()
-            val aci = runCatching { Futures.getDone(aFuture) }.getOrNull()
-            val firstLoadSegmentList = sidxReady && (vci != null || aci != null)
+        indices.load({ p.fetchChunkIndex("v") }, { p.fetchChunkIndex("a") }) { vci, aci, upgrade ->
             main.post {
                 if (this.proxy !== p || gen != configureGen.get()) return@post
-                if (firstLoadSegmentList) {
-                    upgradeToSegmentList(p, source, vci, aci, expectedGen = gen)
+                val updated = upgradeToSegmentList(p, source, vci, aci, expectedGen = gen)
+                if (!upgrade || updated) {
+                    val position = if (upgrade) player.currentPosition else positionMs
+                    loadOnReceiver(session, player, p.proxyUrl("/manifest.mpd"), source, position, upgrade)
                 }
-                loadOnReceiver(session, player, p.proxyUrl("/manifest.mpd"), source, positionMs)
-            }
-
-            if (sidxReady) return@execute
-
-            // SegmentBase was loaded; keep waiting and reload with SegmentList.
-            try {
-                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
-                    Futures.getDone(vFuture); Futures.getDone(aFuture)
-                }, MoreExecutors.directExecutor()).get(SIDX_RELOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            } catch (_: TimeoutException) {
-                Log.w(TAG, "sidx reload timed out, staying on SegmentBase")
-                return@execute
-            } catch (e: ExecutionException) {
-                Log.w(TAG, "sidx reload failed", e)
-                return@execute
-            }
-            val vReload = runCatching { Futures.getDone(vFuture) }.getOrNull()
-            val aReload = runCatching { Futures.getDone(aFuture) }.getOrNull()
-            if (this.proxy !== p || gen != configureGen.get()) return@execute
-            if (!upgradeToSegmentList(p, source, vReload, aReload, expectedGen = gen)) return@execute
-            main.post {
-                if (this.proxy !== p || gen != configureGen.get()) return@post
-                val reloadPos = runCatching { player.currentPosition }.getOrDefault(positionMs)
-                loadOnReceiver(
-                    session, player, p.proxyUrl("/manifest.mpd"), source, reloadPos,
-                    upgrade = true,
-                )
             }
         }
     }
@@ -397,10 +345,4 @@ class CastController(
         // the proxy from emitting a bogus Content-Range total.
         contentLength = -1L,
     )
-
-    companion object {
-        private const val TAG = "CastController"
-        private const val SIDX_FETCH_TIMEOUT_MS = 15_000L
-        private const val SIDX_RELOAD_TIMEOUT_MS = 15_000L
-    }
 }
