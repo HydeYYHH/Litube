@@ -67,4 +67,35 @@ class HeavyJsGateTest {
             assertEquals(listOf("playback", "download"), order)
         } finally { release.countDown(); owner.join(2_000); download.interrupt(); playback.interrupt() }
     }
+
+    @Test fun anAdoptedPreparationMovesAheadOfQueuedDownloads() {
+        val gate = HeavyJsGate()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val queued = CountDownLatch(2)
+        val observedPromotion = CountDownLatch(1)
+        lateinit var promoted: ExtractionContext
+        promoted = context(playback = false, current = {
+            if (promoted.playbackPriority) observedPromotion.countDown()
+            true
+        })
+        val nested = promoted.withTimeLimit(10_000)
+        val order = Collections.synchronizedList(mutableListOf<String>())
+        val pool = Executors.newFixedThreadPool(3)
+        try {
+            val owner = pool.submit { gate.run(context()) { entered.countDown(); release.await() } }
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val download = pool.submit { queued.countDown(); gate.run(context(playback = false)) { order += "download" } }
+            val preparation = pool.submit { queued.countDown(); gate.run(nested) { order += "playback" } }
+            assertTrue(queued.await(2, TimeUnit.SECONDS))
+            promoted.prioritizePlayback()
+            assertTrue(nested.playbackPriority)
+            assertTrue(observedPromotion.await(2, TimeUnit.SECONDS))
+            release.countDown()
+            owner.get(2, TimeUnit.SECONDS)
+            download.get(2, TimeUnit.SECONDS)
+            preparation.get(2, TimeUnit.SECONDS)
+            assertEquals(listOf("playback", "download"), order)
+        } finally { release.countDown(); pool.shutdownNow() }
+    }
 }

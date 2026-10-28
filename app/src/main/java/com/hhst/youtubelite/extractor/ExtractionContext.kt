@@ -2,6 +2,7 @@ package com.hhst.youtubelite.extractor
 
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** One executed page/API request. */
 class PageResponse(
@@ -43,13 +44,18 @@ class ExtractionContext(
     private val transport: ExtractionTransport,
     val live: Boolean,
     val catalog: Boolean,
-    val playbackPriority: Boolean,
+    playbackPriority: Boolean,
     /** Demand identity participating in stream-cache keys; empty when absent. */
     val demandKey: String = "",
     val deadlineNanos: Long,
     val current: () -> Boolean,
     val diagnostics: EngineDiagnostics,
+    private val priority: AtomicBoolean = AtomicBoolean(playbackPriority),
 ) {
+    val playbackPriority: Boolean get() = priority.get()
+
+    internal fun prioritizePlayback() { priority.set(true) }
+
     @Throws(IOException::class)
     fun check() {
         if (System.nanoTime() >= deadlineNanos) throw IOException("EXTRACTION_DEADLINE")
@@ -63,7 +69,7 @@ class ExtractionContext(
     fun withTimeLimit(limitMillis: Long): ExtractionContext {
         val nested = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(limitMillis)
         return ExtractionContext(session, transport, live, catalog, playbackPriority, demandKey,
-            minOf(deadlineNanos, nested), current, diagnostics)
+            minOf(deadlineNanos, nested), current, diagnostics, priority)
     }
 
     @Throws(IOException::class)

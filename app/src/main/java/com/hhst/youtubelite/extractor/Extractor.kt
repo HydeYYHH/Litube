@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /** Host surface the extractor drives; production bridges to the core playback session. */
 interface PlaybackHost {
@@ -97,6 +98,7 @@ class Extractor(
             }
             if (existing != null && existing.active.get()) {
                 if (!preparation) existing.claim()
+                if (playbackPriority) existing.prioritize()
                 existing to false
             } else {
                 val createdSlot = Inflight.create(id, cache, scope, streamEpochs, host,
@@ -147,6 +149,7 @@ class Extractor(
         return synchronized(recoveries) {
         recoveries.entries.removeIf { it.value.first.extraction.stream.done && System.currentTimeMillis() - it.value.second >= 10_000 }
         recoveries[recoveryKey]?.let {
+            if (playbackPriority) it.first.prioritize()
             it.first.logJoin(diagnosticContext)
             return@synchronized it.first.extraction
         }
@@ -204,6 +207,7 @@ private class Inflight(
     private val demandKey: String,
     private val sessionCurrent: () -> Boolean,
     private val diagnosticContext: DiagnosticContext,
+    private val promote: () -> Unit,
 ) {
     private var prefetchUsers = 0
     private var selected = false
@@ -213,6 +217,7 @@ private class Inflight(
                 "worker_operation_id" to diagnosticContext.operationId, "preparation" to preparation), waiter)
     }
     fun claim() { preparation = false }
+    fun prioritize() = promote()
     fun selectPreparation() { selected = true }
     fun retainPrefetch() { prefetchUsers++ }
     fun releasePrefetch() {
@@ -252,21 +257,28 @@ private class Inflight(
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45)
             val diagnostic = (diagnosticContext ?: DiagnosticContext(videoId = id)).child().copy(videoId = id)
             val initialScope = host?.scopeHint()
+            val foreground = AtomicBoolean(playbackPriority)
+            val captured = AtomicReference<ExtractionContext?>()
             // A host-less extractor serves cache entries only; touching the live
             // path without a host fails the promise instead of hanging the caller.
             fun requireHost() = host ?: throw IOException("EXTRACTION_HOST_REQUIRED")
-            val context by lazy {
+            val capturedContext by lazy { runCatching {
                 requireHost().context(id, fresh, catalog, demand,
-                    { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, playbackPriority, diagnostic)
-            }
-            val resolved by lazy { requireHost().resolve(id, context, demand, fresh) }
-            val scopedCache = host?.cache(cache) { context } ?: cache
+                    { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, foreground.get(), diagnostic).also {
+                    captured.set(it)
+                    if (foreground.get()) it.prioritizePlayback()
+                }
+            } }
+            fun context() = capturedContext.getOrThrow()
+            // Dependent reads share failures as well as successful resolution.
+            val resolved by lazy { runCatching { requireHost().resolve(id, context(), demand, fresh) } }
+            val scopedCache = host?.cache(cache) { context() } ?: cache
             val streamCache = EpochGuardedCache(scopedCache, id, epoch, streamEpochs)
             val extraction = Extraction(
                 metadata = Promise(Metadata(), scope, autostart = false) {
                     val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnostic.child())
                     try {
-                        it.resolveMetadata(id, scopedCache) { resolved.metadata }.also { operation.finish(DiagnosticOutcome.SUCCESS) }
+                        it.resolveMetadata(id, scopedCache) { resolved.getOrThrow().metadata }.also { operation.finish(DiagnosticOutcome.SUCCESS) }
                     } catch (failure: Throwable) {
                         operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
                         throw failure
@@ -275,18 +287,21 @@ private class Inflight(
                 stream = Promise(Stream(), scope, autostart = false) {
                     val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnostic.child(), mapOf("catalog" to catalog, "fresh" to fresh, "preparation" to preparation))
                     try {
-                        it.resolveStream(id, streamCache) { resolved.stream }.also { operation.finish(DiagnosticOutcome.SUCCESS) }
+                        it.resolveStream(id, streamCache) { resolved.getOrThrow().stream }.also { operation.finish(DiagnosticOutcome.SUCCESS) }
                     } catch (failure: Throwable) {
                         operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
                         throw failure
                     }
                 },
                 chapters = Promise(ChapterList(), scope, autostart = false) {
-                    it.resolveChapters(id, scopedCache) { requireHost().chapters(id, context) }
+                    it.resolveChapters(id, scopedCache) { requireHost().chapters(id, context()) }
                 },
             )
             return Inflight(id, epoch, extraction, active, preparation, catalog,
-                demand?.cacheKey().orEmpty(), { host?.scopeHint() == initialScope }, diagnostic)
+                demand?.cacheKey().orEmpty(), { host?.scopeHint() == initialScope }, diagnostic) {
+                foreground.set(true)
+                captured.get()?.prioritizePlayback()
+            }
         }
     }
 }

@@ -41,12 +41,18 @@ class HeavyJsGate {
     private var playbackWaiting = 0
     fun <T> run(context: ExtractionContext, block: () -> T): T {
         lock.lock()
-        val playback = context.playbackPriority
+        var playback = context.playbackPriority
         waiting++
         if (playback) playbackWaiting++
         try {
-            while (busy || !playback && playbackWaiting > 0) {
+            while (true) {
+                if (!playback && context.playbackPriority) {
+                    playback = true
+                    playbackWaiting++
+                    available.signalAll()
+                }
                 context.check()
+                if (!busy && (playback || playbackWaiting == 0)) break
                 available.await(minOf(50L, context.remainingMillis()), TimeUnit.MILLISECONDS)
             }
             context.check()
