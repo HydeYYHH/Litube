@@ -1,0 +1,73 @@
+name: Build APK on Demand
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or commit SHA to build'
+        required: true
+        default: 'master'
+        type: string
+      build_type:
+        description: 'Build variant'
+        required: true
+        default: 'Debug'
+        type: choice
+        options:
+          - Debug
+          - Release
+          - MinifiedDebug
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Debug APK
+        if: ${{ inputs.build_type == 'Debug' || github.event_name != 'workflow_dispatch' }}
+        run: bash gradlew :app:assembleDebug --stacktrace
+
+      - name: Build Release APK
+        if: ${{ inputs.build_type == 'Release' }}
+        run: bash gradlew :app:assembleRelease --stacktrace
+
+      - name: Build Minified Debug APK
+        if: ${{ inputs.build_type == 'MinifiedDebug' }}
+        run: bash gradlek :app:assembleMinifiedDebug --stacktrace || bash gradlew :app:assembleMinifiedDebug --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: litube-apk-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
