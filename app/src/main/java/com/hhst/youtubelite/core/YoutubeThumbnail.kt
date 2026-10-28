@@ -15,8 +15,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,36 +81,28 @@ object YoutubeThumbnail {
         return requests.get(key)
     }
 
-    private suspend fun load(url: String, maxDim: Int, requestGeneration: Long): Bitmap? = coroutineScope {
+    private suspend fun load(url: String, maxDim: Int, requestGeneration: Long): Bitmap? {
         val diagnostic = DiagnosticContext(videoId = url.toUri().pathSegments.getOrNull(1)?.takeIf { Regex("[A-Za-z0-9_-]{11}").matches(it) })
         AppLog.detail(AppLog.Category.GALLERY, "thumbnail.start", DiagnosticRedaction.resource(url), diagnostic)
         var reason = "unknown"
         var success = false
         val call = http.newCall(DiagnosticNetwork.tag(Request.Builder().url(url).build(), diagnostic))
-        try {
-            async(Dispatchers.IO) {
-                call.execute().use { conn ->
-                    reason = "http_${conn.code}"
-                    if (conn.code != 200) return@async null
-                    val declared = conn.header("Content-Length")?.toLongOrNull() ?: -1
-                    reason = "body_limit"
-                    if (declared > MAX_DOWNLOAD_BYTES) return@async null
-                    val bytes = conn.body?.byteStream()?.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return@async null
-                    reason = "decode_failed"
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@async null
-                    var sample = 1
-                    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxDim) sample *= 2
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-                        ?.also {
-                            synchronized(requestLock) {
-                                if (generation.value == requestGeneration) cache.put(cacheKey(url, maxDim), it)
-                            }
-                            success = true
-                        }
+        return try {
+            call.readCancellable { conn ->
+                reason = "http_${conn.code}"
+                if (conn.code != 200) return@readCancellable null
+                val declared = conn.header("Content-Length")?.toLongOrNull() ?: -1
+                reason = "body_limit"
+                if (declared > MAX_DOWNLOAD_BYTES) return@readCancellable null
+                val bytes = conn.body?.byteStream()?.use { readBounded(it, MAX_DOWNLOAD_BYTES) } ?: return@readCancellable null
+                reason = "decode_failed"
+                decode(bytes, maxDim)?.also {
+                    synchronized(requestLock) {
+                        if (generation.value == requestGeneration) cache.put(cacheKey(url, maxDim), it)
+                    }
+                    success = true
                 }
-            }.await()
+            }
         } catch (cancelled: CancellationException) {
             reason = "cancelled"
             throw cancelled
@@ -127,6 +117,22 @@ object YoutubeThumbnail {
                 critical = reason != "cancelled" && reason !in EXPECTED_MISS_REASONS, context = diagnostic)
             AppLog.endContext(diagnostic)
         }
+    }
+
+    internal fun decode(bytes: ByteArray, maxDim: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val largest = maxOf(bounds.outWidth, bounds.outHeight)
+        val target = minOf(largest, maxDim.coerceIn(64, MAX_DECODE_DIM))
+        var sample = 1
+        while (largest / (sample * 2) >= target) sample *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inScaled = target < largest
+            inDensity = largest
+            inTargetDensity = target * sample
+        })?.apply { density = Bitmap.DENSITY_NONE }
     }
 
     /** Reads at most [max] bytes; null when the stream exceeds the cap. */
