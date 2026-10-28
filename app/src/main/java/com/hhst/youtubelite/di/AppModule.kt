@@ -141,7 +141,9 @@ val appModule = module {
     single { PoTokenProvider(androidContext(), get(), get()) } bind PoTokenMinter::class
     single { AdaptiveClientOrder() }
     single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get(), get(),
-        playback = com.hhst.youtubelite.extractor.MscPlayback(get(), get(), com.hhst.youtubelite.data.media.MediaSession::freshContext)) } bind PlaybackHost::class
+        playback = com.hhst.youtubelite.extractor.MscPlayback(get(), get(),
+            com.hhst.youtubelite.data.media.MediaSession::freshContext,
+            com.hhst.youtubelite.data.media.MediaSession::rememberVisitor)) } bind PlaybackHost::class
     single { OEmbedTitleFetcher(get()) }
     single {
         Extractor(

@@ -196,6 +196,14 @@ object MediaSession {
         }
     }
 
+    fun updateAccounts(accounts: List<Account>, expectedGeneration: Long): Boolean = synchronized(lock) {
+        if (session.snapshot().generation != expectedGeneration || !session.updateAccounts(accounts)) return false
+        store?.write(KEY_ACCOUNT_ID, session.snapshot().accountId)
+        store?.write(KEY_ACCOUNTS, encodeAccounts(session.accounts()))
+        changed()
+        true
+    }
+
     fun selectAccount(id: String): Boolean = synchronized(lock) {
         if (!session.select(id)) return false
         store?.write(KEY_ACCOUNT_ID, session.snapshot().accountId)

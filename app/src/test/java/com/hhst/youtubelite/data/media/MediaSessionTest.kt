@@ -227,4 +227,23 @@ class MediaSessionTest {
         MediaSession.initialize(store)
         assertEquals(2, MediaSession.accounts().size)
     }
+
+    @Test fun credentialsSurviveAProfileBootstrapWithoutAccounts() {
+        MediaSession.completeSignIn(client(), token(), emptyList())
+        MediaSession.initialize(store)
+        assertTrue(MediaSession.signedIn())
+        assertEquals("access", MediaSession.snapshot().accessToken)
+        assertTrue(MediaSession.updateAccounts(accounts(), MediaSession.snapshot().generation))
+        MediaSession.initialize(store)
+        assertEquals("owner", MediaSession.snapshot().accountId)
+    }
+
+    @Test fun lateProfilesCannotRestoreASignedOutSession() {
+        MediaSession.completeSignIn(client(), token(), emptyList())
+        val generation = MediaSession.snapshot().generation
+        MediaSession.signOut()
+        assertFalse(MediaSession.updateAccounts(accounts(), generation))
+        assertFalse(MediaSession.signedIn())
+        assertTrue(MediaSession.accounts().isEmpty())
+    }
 }

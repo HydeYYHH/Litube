@@ -40,11 +40,21 @@ class MediaSignInService(http: okhttp3.OkHttpClient, private val store: AuthStor
 
     override suspend fun complete(token: AccessToken): List<Account> {
         val signInClient = resolved ?: error("loadCode must run before complete")
-        val accounts = client.read { _, http ->
-            loadAccounts(RequestContext(accessToken = token.accessToken), http).requireValue()
+        MediaSession.completeSignIn(signInClient, token, emptyList())
+        val generation = MediaSession.snapshot().generation
+        return try {
+            val accounts = client.read { _, http ->
+                loadAccounts(RequestContext(accessToken = token.accessToken), http).requireValue()
+            }
+            if (!MediaSession.updateAccounts(accounts, generation)) throw kotlinx.coroutines.CancellationException("Session changed")
+            accounts
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            com.hhst.youtubelite.diagnostics.AppLog.event(
+                com.hhst.youtubelite.diagnostics.AppLog.Category.APP, "sign_in.accounts_unavailable", failure = error)
+            emptyList()
         }
-        MediaSession.completeSignIn(signInClient, token, accounts)
-        return accounts
     }
 
     /** Client credentials come from the cached bootstrap or the runtime youtube.com/tv bootstrap. */

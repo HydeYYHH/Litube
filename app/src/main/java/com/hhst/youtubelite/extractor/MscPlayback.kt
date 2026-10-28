@@ -35,6 +35,7 @@ class MscPlayback(
     private val solver: SignatureSolver,
     private val tokens: PoTokenMinter,
     private val identity: () -> RequestContext = { RequestContext() },
+    private val onAnonymousVisitor: (String?, Long) -> Unit = { _, _ -> },
 ) {
     private class Task(val context: ExtractionContext, val videoId: String)
 
@@ -117,6 +118,9 @@ class MscPlayback(
         val account = identity()
         context.check()
         val sessionSnapshot = context.session
+        if (!account.signedIn && account.visitor.isNullOrBlank() && sessionSnapshot.account == WebAccount.ANONYMOUS) {
+            onAnonymousVisitor(sessionSnapshot.visitorData, account.generation)
+        }
         val cookies = sessionSnapshot.cookies(YoutubeSessionProvider.ORIGIN)
         val web = cookies.takeIf { sessionSnapshot.account != WebAccount.ANONYMOUS && it.isNotEmpty() }
             ?.let { WebSession(it, sessionSnapshot.accountIndex) }
@@ -163,8 +167,7 @@ class MscPlayback(
                 TokenPurpose.MEDIA -> PoTokenMinter.Purpose.GVS
                 TokenPurpose.SUBTITLE -> PoTokenMinter.Purpose.SUBS
             }
-            // Content-bound minting for the player request; streaming tokens follow the
-            // session's visitor/data-sync binding unless the web experiment binds content.
+            // Media tokens use the player request's identity; player and subtitle tokens bind to the video.
             val video = purpose != PoTokenMinter.Purpose.GVS || context.session.videoBoundGvs
             val binding = when {
                 video -> PoTokenMinter.Binding.VIDEO
@@ -173,7 +176,7 @@ class MscPlayback(
             }
             val identifier = when (binding) {
                 PoTokenMinter.Binding.VIDEO -> task.videoId
-                PoTokenMinter.Binding.VISITOR -> context.session.visitorData
+                PoTokenMinter.Binding.VISITOR -> request.context.visitor ?: context.session.visitorData
                 PoTokenMinter.Binding.DATA_SYNC -> context.session.dataSyncId
             } ?: return null
             if (identifier.isBlank()) return null
