@@ -398,7 +398,7 @@ class PlayerViewModel(
         _uiState.update {
             it.copy(
                 diagnostics = s.diagnostics,
-                loading = s.isBuffering && s.userWantsPlay,
+                loading = s.isBuffering,
                 isPlaying = s.isPlaying,
                 durationMs = s.durationMs,
                 speed = s.speed,
@@ -1090,6 +1090,10 @@ class PlayerViewModel(
     override fun onMiniRestore() {
         val url = _uiState.value.url ?: return
         onRestoreWatch?.invoke(url)
+    }
+
+    override fun onMiniEnter() {
+        enterMiniPlayer()
     }
 
     fun currentCastLink(): String? = cast.state.value.linkUrl

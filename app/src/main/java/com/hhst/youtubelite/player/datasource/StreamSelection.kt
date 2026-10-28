@@ -38,7 +38,9 @@ object StreamSelection {
         val matching = if (preferredKey.isNullOrBlank()) formats
         else AudioTrackIdentity.matchingFormats(formats, preferredKey)
         return matching.filter(AudioTrackIdentity::isOriginal).ifEmpty {
-            matching.filter { it.audioTrackType.equals("default", ignoreCase = true) }.ifEmpty { matching }
+            matching.filter { !it.audioTrackType.equals("dubbed", ignoreCase = true) }.ifEmpty {
+                matching.filter { it.audioTrackType.equals("default", ignoreCase = true) }.ifEmpty { matching }
+            }
         }
     }
 

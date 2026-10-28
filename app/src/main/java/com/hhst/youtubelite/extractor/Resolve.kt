@@ -271,11 +271,11 @@ private fun StreamCandidate.asFormat(): Format {
         audioTrackId = id,
         audioTrackName = track.getString("displayName", "").takeIf { it.isNotBlank() },
         audioTrackType = when {
-            track.getBoolean("audioIsDefault", false) -> "original"
             track.getBoolean("isAutoDubbed", false) -> "dubbed"
+            track.getBoolean("audioIsDefault", false) -> "original"
             else -> null
         },
-        audioTrackOriginal = track.getBoolean("audioIsDefault", false),
+        audioTrackOriginal = !track.getBoolean("isAutoDubbed", false) && track.getBoolean("audioIsDefault", false),
         formatKey = key,
         resourceIdentity = resourceIdentity,
         expiresAtMillis = expiresAtMillis,

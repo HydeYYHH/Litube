@@ -48,6 +48,7 @@ interface PlayerPlaybackActions {
     fun onCloseCastLink()
     fun onMiniClose()
     fun onMiniRestore()
+    fun onMiniEnter() {}
     /** User cancelled the sponsor pre-skip countdown. */
     fun onSponsorSkipCancel()
     /** User tapped the countdown card: skip the pending segment now. */
@@ -83,7 +84,7 @@ interface PlayerSurfaceCallbacks : PlayerPlaybackActions, PlayerWindowActions {
 }
 
 /** Compose-friendly merge of the two action surfaces. */
-class PlayerCallbackBridge(
+open class PlayerCallbackBridge(
     private val playback: PlayerPlaybackActions,
     private val window: PlayerWindowActions,
 ) : PlayerSurfaceCallbacks,
@@ -92,6 +93,10 @@ class PlayerCallbackBridge(
     override fun onGestureEnd() {
         playback.onGestureEnd()
         window.onGestureEnd()
+    }
+
+    override fun onMiniEnter() {
+        playback.onMiniEnter()
     }
 
     override fun onShareCastLink() {

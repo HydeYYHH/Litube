@@ -3,6 +3,7 @@ package com.hhst.youtubelite.player.surface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -384,6 +385,7 @@ fun BottomBar(
             positionState = positionState,
             bufferedPositionState = bufferedPositionState,
             durationMs = state.durationMs,
+            isLive = state.isLive,
             segments = state.sponsorSegments,
             onSeek = onSeek,
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
@@ -835,7 +837,10 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
         .pointerInput(handle) {
             awaitEachGesture {
                 try {
+                val velocityTracker = VelocityTracker()
                 val down = awaitFirstDown(requireUnconsumed = true)
+                val downPos = rootPos(down)
+                velocityTracker.addPosition(down.uptimeMillis, downPos)
                 handle.begin()
                 val slop = viewConfiguration.touchSlop
                 var dragging = false
@@ -844,11 +849,14 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 // True when the final up stayed unconsumed (no mini control
                 // handled the tap) — only then it counts as a background tap.
                 var backgroundTap = false
-                val start = rootPos(down)
+                val start = downPos
                 do {
                     val event = awaitPointerEvent()
                     val pressed = event.changes.filter { it.pressed }
                     backgroundTap = event.changes.any { !it.isConsumed }
+                    if (pressed.isNotEmpty()) {
+                        velocityTracker.addPosition(pressed[0].uptimeMillis, rootPos(pressed[0]))
+                    }
                     if (pressed.size >= 2) {
                         val p0 = rootPos(pressed[0])
                         val p1 = rootPos(pressed[1])
@@ -880,7 +888,10 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 } while (event.changes.any { it.pressed })
                 when {
                     dragging || pinching -> {
-                        if (dragging && !pinching) handle.release() else handle.end(true)
+                        if (dragging && !pinching) {
+                            val velocity = velocityTracker.calculateVelocity()
+                            handle.release(velocity.x, velocity.y)
+                        } else handle.end(true)
                     }
                     backgroundTap -> {
                         handle.end(false)

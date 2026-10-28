@@ -585,8 +585,12 @@ fun BrowserScreen(
             },
         )
     }
-    val playerCallbacks = remember(playerViewModel, windowHost) {
-        PlayerCallbackBridge(playerViewModel, windowHost)
+    val playerCallbacks = remember(playerViewModel, windowHost, viewModel) {
+        object : PlayerCallbackBridge(playerViewModel, windowHost) {
+            override fun onMiniEnter() {
+                viewModel.onBack(webCanGoBack = false)
+            }
+        }
     }
     val onActiveChanged = rememberUpdatedState(onPlayerActiveChanged)
 

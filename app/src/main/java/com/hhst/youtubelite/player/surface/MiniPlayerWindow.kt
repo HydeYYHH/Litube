@@ -67,7 +67,7 @@ internal class MiniPlayerHandle {
     var pinchScale: (scale: Float) -> Unit = {}
     var end: (moved: Boolean) -> Unit = {}
     var tap: () -> Unit = {}
-    var release: () -> Unit = {}
+    var release: (velocityX: Float, velocityY: Float) -> Unit = { _, _ -> }
     var cancel: () -> Unit = {}
     /** Finish the exit animation before releasing the surface. */
     var dismiss: () -> Unit = {}
@@ -228,26 +228,28 @@ fun MiniPlayerWindow(
         transitionRunning = false
     }
 
+    val miniTarget = Rect(restX + dragX, restY + dragY, restX + dragX + widthPx, restY + dragY + heightPx)
+
     val handle = remember { MiniPlayerHandle() }
     val fullscreenSwipe = remember { FullscreenSwipeHandle() }
     SideEffect {
         fullscreenSwipe.drag = fun(distance) {
             if (mini || !fullscreenSwipeEnabled || dismissing || parentSize.width <= 0 || parentSize.height <= 0) return
             if (!swiping) {
-                if ((fillsWindow && distance <= 0f) || (!fillsWindow && distance >= 0f)) return
+                if (fillsWindow && distance <= 0f) return
                 swiping = true
                 swipeStartedFullscreen = fillsWindow
                 swipeParentSize = parentSize
                 awaitingFullscreen = null
             }
-            val progress = ((if (swipeStartedFullscreen) distance else -distance) /
-                (parentSize.height * 0.4f).coerceAtLeast(1f)).coerceIn(0f, 1f)
-            viewport = if (swipeStartedFullscreen) lerp(fullscreenBounds, embeddedBounds, progress)
-                else lerp(embeddedBounds, fullscreenBounds, progress)
+            val progress = (distance / (parentSize.height * 0.4f).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            val startBounds = if (swipeStartedFullscreen) fullscreenBounds else embeddedBounds
+            val destBounds = if (swipeStartedFullscreen) embeddedBounds else miniTarget
+            viewport = lerp(startBounds, destBounds, progress)
         }
         fullscreenSwipe.end = { committed ->
             if (swiping) {
-                awaitingFullscreen = if (committed) !swipeStartedFullscreen else null
+                awaitingFullscreen = if (committed && swipeStartedFullscreen) false else null
                 transitionRunning = true
                 swiping = false
                 // A move and cancellation in one frame still need a settling animation.
@@ -278,16 +280,8 @@ fun MiniPlayerWindow(
                 originY = dragY
             }
             dragging = true
-            dragX = MiniPlayerLayout.clampTranslation(
-                originX + dx, restX.toInt(), widthPx.toInt(), parentSize.width,
-            )
-            // Partial off-screen movement lets every window size reach the bottom target.
-            dragY = (originY + dy).coerceIn(with(density) { topInsetDp.dp.toPx() } - restY,
-                maxOf(with(density) { topInsetDp.dp.toPx() } - restY, closeBounds.center.y - restY - heightPx / 2))
-            val hit = MiniPlayerLayout.hitsCloseTarget(restX + dragX + widthPx / 2,
-                restY + dragY + heightPx / 2, closeBounds.left, closeBounds.top, closeBounds.right, closeBounds.bottom)
-            if (hit && !closeArmed) haptics.perform(HapticsController.Event.DROP_TARGET)
-            closeArmed = hit
+            dragX = originX + dx
+            dragY = originY + dy
         }
         handle.pinchScale = { scale ->
             dragging = false
@@ -325,24 +319,80 @@ fun MiniPlayerWindow(
                 persist(x, y)
             }
         }
-        handle.cancel = { dragging = false; closeArmed = false; handle.end(true) }
-        handle.release = { if (dragging && closeArmed) handle.dismiss() else handle.end(true) }
-        handle.tap = onBackgroundTap
-        handle.dismiss = {
+        fun dismissInDirection(vx: Float, vy: Float) {
             if (mini && !dismissing && parentSize.width > 0 && parentSize.height > 0) {
                 dragging = false
                 closeArmed = false
                 dismissing = true
                 snapJob?.cancel()
                 snapJob = null
+
+                var dirX = vx
+                var dirY = vy
+                var len = kotlin.math.hypot(dirX, dirY)
+                if (len < 1f) {
+                    dirX = dragX
+                    dirY = dragY
+                    len = kotlin.math.hypot(dirX, dirY)
+                }
+                if (len < 1f) {
+                    dirX = 1f
+                    dirY = 0f
+                    len = 1f
+                }
+                val normX = dirX / len
+                val normY = dirY / len
+                val distance = maxOf(parentSize.width, parentSize.height).toFloat() * 0.8f
+                val targetDragX = dragX + normX * distance
+                val targetDragY = dragY + normY * distance
+
                 scope.launch {
+                    val ax = Animatable(dragX)
+                    val ay = Animatable(dragY)
                     coroutineScope {
-                        launch { Animatable(1f).animateTo(0.5f, tween(MiniPlayerLayout.DISMISS_MS)) { dismissScale = value } }
+                        launch { ax.animateTo(targetDragX, tween(MiniPlayerLayout.DISMISS_MS)) { dragX = value } }
+                        launch { ay.animateTo(targetDragY, tween(MiniPlayerLayout.DISMISS_MS)) { dragY = value } }
+                        launch { Animatable(1f).animateTo(0.8f, tween(MiniPlayerLayout.DISMISS_MS)) { dismissScale = value } }
                         launch { Animatable(1f).animateTo(0f, tween(MiniPlayerLayout.DISMISS_MS)) { dismissAlpha = value } }
                     }
                     onDismiss()
                 }
             }
+        }
+
+        handle.cancel = { dragging = false; closeArmed = false; handle.end(true) }
+        handle.release = fun(vx, vy) {
+            if (!dragging) {
+                handle.end(true)
+                return
+            }
+            dragging = false
+            closeArmed = false
+            if (!mini || dismissing || transitionRunning) return
+
+            val minFlingVelocity = with(density) { 800.dp.toPx() }
+            val velocityMagnitude = kotlin.math.hypot(vx, vy)
+            val isVelocityDismiss = velocityMagnitude >= minFlingVelocity
+
+            val currentLeft = restX + dragX
+            val currentRight = currentLeft + widthPx
+            val currentTop = restY + dragY
+            val currentBottom = currentTop + heightPx
+
+            val isPositionDismiss = currentLeft < -widthPx * 0.3f ||
+                currentRight > parentSize.width + widthPx * 0.3f ||
+                currentTop < -heightPx * 0.3f ||
+                currentBottom > parentSize.height + heightPx * 0.3f
+
+            if (isVelocityDismiss || isPositionDismiss) {
+                dismissInDirection(vx, vy)
+            } else {
+                handle.end(true)
+            }
+        }
+        handle.tap = onBackgroundTap
+        handle.dismiss = {
+            dismissInDirection(0f, 0f)
         }
     }
 
@@ -357,20 +407,6 @@ fun MiniPlayerWindow(
                 val shade = ((viewport.height - embeddedBounds.height) /
                     (fullscreenBounds.height - embeddedBounds.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade)))
-            }
-            if (mini && dragging && !dismissing) {
-                val shade = if (closeArmed) MaterialTheme.colorScheme.error else Color(0xFF606060)
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .height((bottomInsetDp + 156).dp)
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(Brush.verticalGradient(
-                        listOf(shade.copy(alpha = 0.56f), shade.copy(alpha = 0.72f)))))
-                Box(Modifier.zIndex(2f).absoluteOffset { IntOffset(closeBounds.left.roundToInt(), closeBounds.top.roundToInt()) }
-                    .size(96.dp, 72.dp), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.close_player),
-                        tint = Color.White.copy(alpha = if (closeArmed) 1f else 0.95f),
-                        modifier = Modifier.size(36.dp))
-                }
             }
             // Wait until the parent reports its size. With restX and restY still
             // at 0, the window would appear at the parent's top-left corner
