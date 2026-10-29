@@ -13,10 +13,12 @@ import com.hhst.youtubelite.playlist.domain.PlaylistAppendPage as AppAppendPage
 import com.hhst.youtubelite.channel.domain.ChannelPage as AppChannelPage
 
 class MediaWatchRepository(private val client: MediaClient) : WatchRepository {
-    override suspend fun watch(videoId: String): AppWatchPage = client.read { context, http ->
-        val page = loadWatch(videoId, context, http = http).requireValue()
-        val details = loadPlayerDetails(videoId, context, http).value
-        page.toAppWatchPage(videoId, details, context.generation)
+    override suspend fun watch(videoId: String): AppWatchPage {
+        val (page, details) = client.readTogether(
+            { context, http -> loadWatch(videoId, context, http = http).requireValue() to context.generation },
+            { context, http -> loadPlayerDetails(videoId, context, http).value },
+        )
+        return page.first.toAppWatchPage(videoId, details, page.second)
     }
     override suspend fun next(videoId: String, cursor: String): RelatedPage = client.read { context, http ->
         val page = loadWatch(videoId, context, continuation = cursor, http = http).requireValue()
@@ -33,7 +35,7 @@ internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?, g
         details?.thumbnail.orEmpty(), "", viewCount.present() ?: details?.viewCount?.let {
             java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
         }.orEmpty(), published.orEmpty(), commentCount.orEmpty(), WatchComment("", "", ""),
-        description.present() ?: details?.description.orEmpty(), details?.liveContent == true,
+        description.present() ?: details?.description.orEmpty(), details?.live == true,
         rating = when (rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
         subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading,
         tracking = details?.tracking, chatKey = chatKey, sessionGeneration = generation),

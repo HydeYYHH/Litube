@@ -142,23 +142,9 @@ class QueueRepository(
     }
 
     /**
-     * Next item; wraps to head at the end.
-     * Null when empty, or when the only entry is the current video (no wrap-of-one).
-     */
-    fun next(currentVideoId: String?): QueueItem? {
-        val items = _state.value.items
-        if (items.isEmpty()) return null
-        val idx = items.indexOfFirst { it.videoId == currentVideoId }
-        if (idx < 0) return items.first()
-        if (items.size < 2) return null
-        return items[(idx + 1).mod(items.size)]
-    }
-
-    /**
      * Next item WITHOUT wrapping; null at the tail and when the current video
-     * is not queued. The auto-advance path uses this — wrapping the ended
-     * playback into the queue head again would loop forever (the official
-     * queue stops at the tail).
+     * is not queued. Both manual and automatic queue navigation stop at the
+     * tail — there is no whole-queue loop mode.
      */
     fun nextStrict(currentVideoId: String?): QueueItem? {
         val items = _state.value.items

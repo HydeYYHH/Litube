@@ -86,17 +86,27 @@ class PlayerControlSizingAndroidTest {
             full.performTouchInput { click() }
             compose.runOnIdle { assertEquals(old + 1, calls["onFullscreenToggle"]) }
 
-            // Speed and quality live only in the More sheet now.
+            // Quality and speed are subpages of the same More sheet: entering
+            // one replaces the sheet body (back returns to More) instead of
+            // closing the sheet and stacking a popup over the player.
             more.performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
+                .performScrollTo().performTouchInput { click() }
+            compose.onNodeWithTag("player-sheet-quality").assertIsDisplayed()
+            compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertDoesNotExist()
+            compose.onNodeWithTag("player-sheet-back").performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertIsDisplayed()
             compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
                 .performScrollTo().performTouchInput { click() }
             val oldQuality = calls["onQuality"] ?: 0
             compose.onNodeWithText("720p").assertIsDisplayed().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldQuality + 1, calls["onQuality"]) }
+            compose.onNodeWithTag("player-sheet-quality").assertDoesNotExist()
             compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options))
                 .performTouchInput { click() }
             compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed))
                 .performScrollTo().performTouchInput { click() }
+            compose.onNodeWithTag("player-sheet-speed").assertIsDisplayed()
             val oldSpeed = calls["onSpeed"] ?: 0
             compose.onNodeWithText("1.5x").performScrollTo().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldSpeed + 1, calls["onSpeed"]) }

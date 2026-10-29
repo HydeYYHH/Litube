@@ -22,6 +22,10 @@ sealed interface FeedItem {
         val age: String? = null,
         val isNew: Boolean = false,
         val avatar: String? = null,
+        /** The item's own not-interested feedback token, when the feed rendered one. */
+        val notInterestedToken: String? = null,
+        val dontRecommendToken: String? = null,
+        val feedbackGeneration: Long? = null,
     ) : FeedItem
     data class Mix(override val id: String, val title: String, val authors: String, val artwork: String, val palette: ThumbnailPalette) : FeedItem
     data class Shorts(override val id: String, val videos: List<Video>) : FeedItem
@@ -37,6 +41,8 @@ data class ThumbnailPalette(val stackColor: Int, val badgeColor: Int)
 interface HomeRepository {
     val filters: List<String> get() = HomeLayout.chips
     suspend fun loadHome(filter: String, continuation: String? = null): HomePage
+
+    suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) = Unit
 }
 
 enum class AppendState { Idle, Loading, Failed }
@@ -98,6 +104,7 @@ data class HomeUiState(
     val avatar: String? = null,
     /** Production mode: feedback menu rows without server tokens hide. Fixtures keep the recorded menus. */
     val live: Boolean = false,
+    val sessionGeneration: Long? = null,
     /** Set when the feed read came back as a `/sorry` traffic challenge; existing content stays visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
@@ -121,18 +128,18 @@ enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
     Mix(listOf(FeedMenuAction.SaveToLibrary, FeedMenuAction.Share, FeedMenuAction.NotInterested)),
 }
 
-/**
- * The rows with a real production route. The feedback rows need a signed-in feedbackToken the
- * rendered feeds never carry, and SaveToLibrary has no server route, so production menus only
- * offer rows that actually run; fixtures keep the full recorded menus.
- */
-fun FeedMenuKind.productionActions(): List<FeedMenuAction> = when (this) {
-    FeedMenuKind.Video -> listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share)
+fun FeedMenuKind.productionActions(signedIn: Boolean = false, video: FeedItem.Video? = null): List<FeedMenuAction> = when (this) {
+    FeedMenuKind.Video -> buildList {
+        addAll(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share))
+        if (signedIn && !video?.notInterestedToken.isNullOrBlank()) add(FeedMenuAction.NotInterested)
+        if (signedIn && !video?.dontRecommendToken.isNullOrBlank()) add(FeedMenuAction.DontRecommend)
+    }
     FeedMenuKind.Mix -> listOf(FeedMenuAction.Share)
     FeedMenuKind.Short, FeedMenuKind.Shorts, FeedMenuKind.Post -> emptyList()
 }
 
-fun FeedMenuKind.visibleActions(live: Boolean): List<FeedMenuAction> = if (live) productionActions() else actions
+fun FeedMenuKind.visibleActions(live: Boolean, signedIn: Boolean = false, video: FeedItem.Video? = null): List<FeedMenuAction> =
+    if (live) productionActions(signedIn, video) else actions
 
 /** Navigation and operation requests handled by the host. */
 sealed interface HomeNavigationRequest {

@@ -105,9 +105,10 @@ private fun LiveChatSurface(
 ) {
     val shape = if (compact) RoundedCornerShape(topStart = CommentsLayout.SheetRadius.dp,
         topEnd = CommentsLayout.SheetRadius.dp) else RectangleShape
+    val title = stringResource(if (state.replay) R.string.chat_replay else R.string.chat_live)
     Column(
         modifier.fillMaxSize().background(DesignTokens.Background, shape)
-            .semantics { paneTitle = "Live chat" }
+            .semantics { paneTitle = title }
             .testTag("live-chat"),
     ) {
         if (compact) {
@@ -118,7 +119,7 @@ private fun LiveChatSurface(
         }
         Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            AppText("Live chat", Modifier.weight(1f), size = 16, line = 22, weight = FontWeight.Medium)
+            AppText(title, Modifier.weight(1f), size = 16, line = 22, weight = FontWeight.Medium)
             AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_live_chat), Modifier.testTag("live-chat-close"), onClick = onClose)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -137,7 +138,10 @@ private fun LiveChatSurface(
                 is LiveChatContent.Ready -> {
                     if (content.messages.isEmpty()) {
                         Box(Modifier.fillMaxSize().testTag("live-chat-empty"), contentAlignment = Alignment.Center) {
-                            AppText("Say hello in the chat", size = 14, line = 20, color = DesignTokens.Secondary)
+                            AppText(
+                                if (state.replay) stringResource(R.string.chat_replay_empty) else "Say hello in the chat",
+                                size = 14, line = 20, color = DesignTokens.Secondary,
+                            )
                         }
                     }
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("live-chat-list")) {
@@ -167,31 +171,35 @@ private fun LiveChatSurface(
                 }
             }
         }
-        if (state.signedIn && !state.canSend) {
-            AppText("Posting is unavailable for this chat", Modifier.fillMaxWidth().padding(16.dp)
-                .testTag("live-chat-readonly"), size = 14, line = 20, color = DesignTokens.Secondary)
-        } else if (state.signedIn) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).heightIn(min = 36.dp)
-                    .background(DesignTokens.Surface, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)) {
-                    if (state.draft.isEmpty()) {
-                        AppText("Chat publicly…", size = 14, line = 20, color = DesignTokens.Secondary)
+        when {
+            state.ended || state.replay -> AppText(stringResource(R.string.chat_ended),
+                Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-ended"),
+                size = 14, line = 20, color = DesignTokens.Secondary)
+            state.signedIn && !state.canSend -> AppText("Posting is unavailable for this chat",
+                Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-readonly"),
+                size = 14, line = 20, color = DesignTokens.Secondary)
+            state.signedIn -> {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).heightIn(min = 36.dp)
+                        .background(DesignTokens.Surface, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                        if (state.draft.isEmpty()) {
+                            AppText("Chat publicly…", size = 14, line = 20, color = DesignTokens.Secondary)
+                        }
+                        BasicTextField(state.draft, { onAction(LiveChatAction.DraftChanged(it)) },
+                            Modifier.fillMaxWidth().testTag("live-chat-input"),
+                            textStyle = DesignTokens.text(14, 20, FontWeight.Normal, DesignTokens.Ink))
                     }
-                    BasicTextField(state.draft, { onAction(LiveChatAction.DraftChanged(it)) },
-                        Modifier.fillMaxWidth().testTag("live-chat-input"),
-                        textStyle = DesignTokens.text(14, 20, FontWeight.Normal, DesignTokens.Ink))
-                }
-                Spacer(Modifier.width(8.dp))
-                val canSend = state.draft.isNotBlank() && !state.sending
-                AppIconButton(AppIcon.Send, stringResource(R.string.a11y_send_message), Modifier.testTag("live-chat-send"),
-                    color = if (canSend) AppStyle.Action else DesignTokens.Secondary.copy(alpha = .5f)) {
-                    if (canSend) onAction(LiveChatAction.Send)
+                    Spacer(Modifier.width(8.dp))
+                    val canSend = state.draft.isNotBlank() && !state.sending
+                    AppIconButton(AppIcon.Send, stringResource(R.string.a11y_send_message), Modifier.testTag("live-chat-send"),
+                        color = if (canSend) AppStyle.Action else DesignTokens.Secondary.copy(alpha = .5f)) {
+                        if (canSend) onAction(LiveChatAction.Send)
+                    }
                 }
             }
-        } else {
-            AppText("Sign in to join the chat",
+            else -> AppText("Sign in to join the chat",
                 Modifier.fillMaxWidth().clickable { onAction(LiveChatAction.SignIn) }
                     .testTag("live-chat-signin").padding(16.dp),
                 size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)

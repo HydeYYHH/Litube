@@ -7,15 +7,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -50,7 +46,6 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
-import com.hhst.youtubelite.ui.YoutubeThumb
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 
 /**
@@ -175,58 +170,56 @@ fun ChaptersSheet(
         val index = PlayerUi.chapterIndexAt(chapters, positionState.value)
         if (index > 0) listState.scrollToItem(index)
     }
-    BoxWithConstraints {
-        val thumbWidth = (maxWidth * 0.28f).coerceIn(80.dp, 120.dp)
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("chapters-sheet-list"),
-        ) {
-            if (chapters.isEmpty() && segments.isEmpty()) {
-                item("empty") {
-                    Text(
-                        text = stringResource(R.string.no_chapters),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = SettingsTokens.BodySize.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                    )
-                }
-            }
-            itemsIndexed(chapters, key = { index, chapter -> "chapter-$index-${chapter.startSeconds}" }) { index, chapter ->
-                ChapterRow(
-                    chapter = chapter,
-                    current = index == currentIndex,
-                    thumbWidth = thumbWidth,
-                    fallbackThumb = fallbackThumb,
-                    onSeek = onSeek,
-                    onPreview = { preview = chapter },
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("chapters-sheet-list"),
+    ) {
+        if (chapters.isEmpty() && segments.isEmpty()) {
+            item("empty") {
+                Text(
+                    text = stringResource(R.string.no_chapters),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = SettingsTokens.BodySize.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 )
             }
-            if (segments.isNotEmpty()) {
-                item("segments-header") {
-                    Text(
-                        text = stringResource(R.string.skippable_segments),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = SettingsTokens.DetailSize.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-                itemsIndexed(segments, key = { index, segment -> "segment-$index-${segment.startMs}" }) { _, segment ->
-                    SegmentRow(segment = segment, onSeek = onSeek)
-                }
+        }
+        itemsIndexed(chapters, key = { index, chapter -> "chapter-$index-${chapter.startSeconds}" }) { index, chapter ->
+            ChapterRow(
+                chapter = chapter,
+                current = index == currentIndex,
+                onSeek = onSeek,
+                onPreview = { preview = chapter },
+            )
+        }
+        if (segments.isNotEmpty()) {
+            item("segments-header") {
+                Text(
+                    text = stringResource(R.string.skippable_segments),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = SettingsTokens.DetailSize.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            itemsIndexed(segments, key = { index, segment -> "segment-$index-${segment.startMs}" }) { _, segment ->
+                SegmentRow(segment = segment, onSeek = onSeek)
             }
         }
     }
 }
 
+/**
+ * One compact chapter line: timestamp and title only. Per-row preview thumbnails
+ * made the list long enough to hide half the chapters; the thumbnail now loads
+ * only when the long-press preview is actually opened.
+ */
 @Composable
 private fun ChapterRow(
     chapter: Chapter,
     current: Boolean,
-    thumbWidth: androidx.compose.ui.unit.Dp,
-    fallbackThumb: String?,
     onSeek: (Long, String) -> Unit,
     onPreview: () -> Unit,
 ) {
@@ -235,7 +228,7 @@ private fun ChapterRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = 16.dp)
             .then(
                 if (current) {
                     Modifier.border(
@@ -249,34 +242,28 @@ private fun ChapterRow(
             )
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = { onSeek(startMs, title) }, onLongClick = onPreview)
-            .padding(8.dp)
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
             .testTag("chapter-row-${chapter.startSeconds}"),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        YoutubeThumb(
-            url = chapter.previewUrl ?: fallbackThumb,
-            modifier = Modifier
-                .width(thumbWidth)
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp)),
-            contentDescription = null,
+        Text(
+            text = PlayerUi.formatTime(startMs),
+            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = SettingsTokens.DetailSize.sp,
+            maxLines = 1,
+            modifier = Modifier.widthIn(min = 44.dp),
         )
-        Column(Modifier.padding(start = 12.dp)) {
-            Text(
-                text = title,
-                color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                fontSize = SettingsTokens.BodySize.sp,
-                fontWeight = if (current) FontWeight.Medium else FontWeight.Normal,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = PlayerUi.formatTime(startMs),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = SettingsTokens.DetailSize.sp,
-                maxLines = 1,
-            )
-        }
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            fontSize = SettingsTokens.BodySize.sp,
+            fontWeight = if (current) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

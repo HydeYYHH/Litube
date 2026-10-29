@@ -32,16 +32,9 @@ import org.koin.android.ext.android.inject
 import com.hhst.youtubelite.R
 
 /** Lifecycle and system controls for the retained playback engine. */
-abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity(),
-    com.hhst.youtubelite.ui.components.MediaActionHost {
+abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private val prefs: ExtensionManager by inject()
     protected val playerViewModel: PlayerViewModel by inject()
-
-    // Watch-screen panels (related rail long-press) resolve the executor through
-    // the hosting activity; without this the rows would close without executing.
-    override val mediaActionExecutor: com.hhst.youtubelite.ui.components.MediaActionExecutor by lazy {
-        com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this)
-    }
 
     @Volatile
     private var pipEligibilityLocked = false
@@ -157,7 +150,10 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity(),
         lifecycleScope.launch { playerViewModel.uiState.collect { state ->
             if (!pipEligibilityLocked) {
                 playerActive = state.visible && !state.mini
-                playerPlaying = state.isPlaying
+                // Buffering with a live play intent still owns a PiP entry: a
+                // video still resolving its stream must not lose auto-PiP
+                // because isPlaying has not flipped yet.
+                playerPlaying = state.isPlaying || state.loading
                 playerWidth = state.videoWidth
                 playerHeight = state.videoHeight
             }
@@ -212,7 +208,8 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity(),
 
     private fun pipEligible(): Boolean =
         PipSupport.isSupported(this) && playerActive && playerPlaying &&
-            !playerViewModel.audioOnlyBackground && prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
+            !playerViewModel.audioOnlyBackground && prefs.isEnabled(PreferenceKeys.ENABLE_PIP) &&
+            playerViewModel.currentMediaKind != MediaKind.SHORTS
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun pipParams(): PictureInPictureParams {

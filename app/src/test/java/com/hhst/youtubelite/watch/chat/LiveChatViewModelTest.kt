@@ -244,4 +244,75 @@ class LiveChatViewModelTest {
         advanceUntilIdle()
         vm.close()
     }
+
+    /** A gateway whose continuation ends normally, as the server does when a stream ends. */
+    private class EndingGateway(private val pages: List<ChatPage>) : LiveChatGateway {
+        var replayCalls = 0
+        var replayPosition = -1L
+        override suspend fun listen(key: String, onPage: (ChatPage) -> Unit) {
+            pages.forEach(onPage)
+        }
+        override suspend fun replay(key: String, positionMs: () -> Long, onPage: (ChatPage) -> Unit) {
+            replayCalls++
+            replayPosition = positionMs()
+            pages.forEach(onPage)
+        }
+        override suspend fun send(key: String, text: String) = Unit
+    }
+
+    @Test fun aFinishedLiveStreamKeepsItsTranscriptAndStopsPosting() = runTest {
+        val gateway = EndingGateway(listOf(page(message("a"))))
+        val vm = LiveChatViewModel(gateway, signedIn = true)
+        vm.open("key")
+        advanceUntilIdle()
+        val state = vm.uiState.value
+        assertEquals(listOf("a"), (state.content as LiveChatContent.Ready).messages.map { it.id })
+        assertTrue("A completed continuation means the stream ended", state.ended)
+        assertFalse(state.replay)
+        assertFalse("Ended chat cannot post", state.canSend)
+        vm.close()
+    }
+
+    @Test fun anEndedStreamReplaysAtThePlayerPosition() = runTest {
+        val gateway = EndingGateway(listOf(page(message("a"), message("b"))))
+        val position = 65_000L
+        val vm = LiveChatViewModel(gateway, signedIn = true)
+        vm.openReplay("key") { position }
+        advanceUntilIdle()
+        val state = vm.uiState.value
+        assertTrue(state.replay)
+        assertTrue(state.ended)
+        assertFalse(state.canSend)
+        assertEquals(65_000L, gateway.replayPosition)
+        assertEquals(setOf("a", "b"), (state.content as LiveChatContent.Ready).messages.map { it.id }.toSet())
+        vm.close()
+    }
+
+    @Test fun aLiveStreamThatEndsSwitchesToReplayWithoutDroppingMessages() = runTest {
+        val gateway = object : LiveChatGateway {
+            var replayPosition = -1L
+            override suspend fun listen(key: String, onPage: (ChatPage) -> Unit) {
+                onPage(page(message("live")))
+                awaitCancellation()
+            }
+            override suspend fun replay(key: String, positionMs: () -> Long, onPage: (ChatPage) -> Unit) {
+                replayPosition = positionMs()
+                onPage(page(message("replay")))
+            }
+            override suspend fun send(key: String, text: String) = Unit
+        }
+        val vm = LiveChatViewModel(gateway, signedIn = true)
+        vm.open("key")
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.ended)
+        vm.openReplay("key") { 12_000L }
+        advanceUntilIdle()
+        val state = vm.uiState.value
+        assertTrue(state.replay)
+        assertTrue(state.ended)
+        // The live transcript survives the mode switch and the replay appends to it.
+        assertEquals(listOf("live", "replay"), (state.content as LiveChatContent.Ready).messages.map { it.id })
+        assertEquals(12_000L, gateway.replayPosition)
+        vm.close()
+    }
 }

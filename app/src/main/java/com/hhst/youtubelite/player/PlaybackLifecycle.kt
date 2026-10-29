@@ -28,12 +28,17 @@ internal class PlaybackLifecycle : Application.ActivityLifecycleCallbacks {
             if (!player.audioOnlyBackground) player.setVideoVisible(player.uiState.value.visible)
         }
     }
+    override fun onActivityResumed(activity: Activity) {
+        // A navigation handoff ends when the destination owns the foreground,
+        // not when the source activity behind it comes back or dies.
+        com.hhst.youtubelite.core.PipAutoEnter.onActivityResumed(activity)
+    }
+
     override fun onActivityStopped(activity: Activity) {
         started = (started - 1).coerceAtLeast(0)
         main.postDelayed(background, 700)
     }
     override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
-    override fun onActivityResumed(activity: Activity) = Unit
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit

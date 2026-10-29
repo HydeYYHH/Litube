@@ -141,4 +141,57 @@ class ShortsViewModelTest {
         assertEquals(2, calls)
     }
 
+    @Test fun serverSubscriptionStateSeedsTheMapThroughHydration() = runTest {
+        val vm = ShortsViewModel(object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(listOf(
+                ShortItem("short-1", "T", "Author", "ch-1", "", "", "", ""),
+                ShortItem("short-2", "T", "Author", "ch-2", "", "", "", "")))
+            override suspend fun hydrate(itemId: String): ShortDetail {
+                val channel = if (itemId == "short-1") "ch-1" else "ch-2"
+                return ShortDetail(ShortItem(itemId, "T", "Author", channel, "", "", "", ""),
+                    subscribed = itemId == "short-1")
+            }
+        }, SavedStateHandle(), ShortsScenario.Content, null, videoActions = NoopActions())
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.SelectItem("short-1"))
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.SelectItem("short-2"))
+        advanceUntilIdle()
+        // Both server states land in the map; no click happened this session.
+        assertEquals(true, vm.uiState.value.subscriptions["ch-1"])
+        assertEquals(false, vm.uiState.value.subscriptions["ch-2"])
+    }
+
+    @Test fun subscribeShowsPendingUntilTheServerConfirms() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val actions = object : com.hhst.youtubelite.watch.domain.VideoActions {
+            val calls = mutableListOf<Pair<String, Boolean>>()
+            override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating, previous: com.hhst.youtubelite.watch.domain.VideoRating) {}
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) {
+                calls += channelId to subscribed
+                gate.await()
+            }
+        }
+        val vm = ShortsViewModel(object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(listOf(ShortItem("short-1", "T", "Author", "ch-1", "", "", "", "")))
+        }, SavedStateHandle(), ShortsScenario.Content, null, videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.Subscribe("ch-1"))
+        runCurrent()
+        assertTrue("channel is pending while the write is in flight", "ch-1" in vm.uiState.value.subscriptionsPending)
+        // A second tap on the pending channel must not submit again.
+        vm.onAction(ShortsAction.Subscribe("ch-1"))
+        runCurrent()
+        assertEquals(1, actions.calls.size)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(mapOf("ch-1" to true), vm.uiState.value.subscriptions)
+        assertTrue(vm.uiState.value.subscriptionsPending.isEmpty())
+    }
+
+    private class NoopActions : com.hhst.youtubelite.watch.domain.VideoActions {
+        override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating, previous: com.hhst.youtubelite.watch.domain.VideoRating) {}
+        override suspend fun subscribe(channelId: String, subscribed: Boolean) {}
+    }
+
 }

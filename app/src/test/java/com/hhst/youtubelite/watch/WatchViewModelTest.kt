@@ -375,6 +375,19 @@ class WatchViewModelTest {
         assertEquals("bunny", restored.uiState.value.videoId)
     }
 
+    @Test fun aTypingEventAfterSubmitCannotReopenTheSearchOverlay() = runTest {
+        val vm = WatchViewModel(FixtureWatchRepository(), SavedStateHandle(), "bunny")
+        vm.onAction(WatchAction.OpenSearch)
+        vm.onAction(WatchAction.QueryChanged("meadow"))
+        vm.onAction(WatchAction.SubmitSearch(vm.uiState.value.draftQuery))
+        assertFalse(vm.uiState.value.searchOpen)
+        assertEquals(WatchNavigationRequest.Search("meadow"), vm.navigationRequests.first())
+        // A stale IME commit can outlive the submit; it must not re-open the overlay.
+        vm.onAction(WatchAction.QueryChanged("meadow"))
+        assertFalse(vm.uiState.value.searchOpen)
+        assertEquals("meadow", vm.uiState.value.draftQuery)
+    }
+
     @Test fun shortWindowsLeaveTheBodyReachable() {
         assertFalse(WatchLayout.pinnedPlayer(320f, 240f))
         assertFalse(WatchLayout.pinnedPlayer(390f, 240f))

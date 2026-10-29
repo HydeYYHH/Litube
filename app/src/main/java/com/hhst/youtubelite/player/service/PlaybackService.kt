@@ -283,13 +283,32 @@ class PlaybackService : Service() {
 
     // -- notification --
 
+    /**
+     * Notification tap returns to the media's own context: Shorts audio
+     * reopens the Shorts feed at the current short, everything else opens
+     * Watch. A Short must never be restored as a regular watch playback.
+     */
+    private fun resumeIntent(): Intent {
+        val shorts = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<com.hhst.youtubelite.player.PlayerViewModel>()
+        }.getOrNull()?.takeIf {
+            it.currentMediaKind == com.hhst.youtubelite.player.MediaKind.SHORTS
+        }
+        return if (shorts != null) {
+            com.hhst.youtubelite.shorts.ShortsActivity.intent(this, shorts.uiState.value.videoId)
+        } else {
+            Intent(this, WatchActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        }
+    }
+
     private fun buildNotification(isPlaying: Boolean): Notification? {
         val current = session ?: return null
         val contentIntent = PendingIntent.getActivity(
             this, 101,
-            Intent(this, WatchActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            },
+            resumeIntent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 

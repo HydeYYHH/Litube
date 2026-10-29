@@ -16,10 +16,7 @@ import com.hhst.youtubelite.player.surface.MiniPlayerWindow
 import com.hhst.youtubelite.watch.presentation.WatchPlayer
 import org.koin.compose.koinInject
 
-abstract class ContentActivity : NativeActivity(), com.hhst.youtubelite.ui.components.MediaActionHost {
-    override val mediaActionExecutor: com.hhst.youtubelite.ui.components.MediaActionExecutor by lazy {
-        ActivityMediaActionExecutor(this)
-    }
+abstract class ContentActivity : NativeActivity() {
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)

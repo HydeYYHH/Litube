@@ -2,8 +2,6 @@
 
 package com.hhst.youtubelite.watch.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -459,15 +457,9 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                     .clickable(enabled = video.channelId.isNotBlank(), role = Role.Button) { onAction(WatchAction.OpenChannel(video.channelId)) },
                     size = 14, line = 20, weight = FontWeight.Medium, maxLines = 2)
             }
-            Box(Modifier.heightIn(min = 48.dp).clickable(enabled = !pending && video.channelId.isNotBlank(), role = Role.Button) {
-                onAction(WatchAction.Subscribe)
-            }.testTag("watch-action-subscribe"), contentAlignment = Alignment.Center) {
-                Box(Modifier.clip(RoundedCornerShape(18.dp)).background(DesignTokens.Ink)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    AppText(if (video.subscribed) "Subscribed" else "Subscribe", size = 12, line = 20,
-                        weight = FontWeight.Medium, color = DesignTokens.Background)
-                }
-            }
+            SubscribeButton(video.subscribed, { onAction(WatchAction.Subscribe) },
+                Modifier.testTag("watch-action-subscribe"), enabled = video.channelId.isNotBlank(),
+                pending = pending, onDarkSurface = false)
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("watch-actions")
             .padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -543,8 +535,11 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
         ) {
             Column {
                 Row(Modifier.heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Live streams with a chat continuation open the live chat panel instead.
-                    AppText(if (video.live && video.chatKey != null) "Live chat" else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
+                    // A chat continuation opens the live chat (live stream) or its
+                    // replay (ended stream); otherwise this card is the comments panel.
+                    AppText(if (video.chatKey != null) {
+                        stringResource(if (video.live) R.string.chat_live else R.string.chat_replay)
+                    } else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
                     Spacer(Modifier.width(4.dp))
                     AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
                 }
@@ -554,7 +549,9 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                         Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
                         Spacer(Modifier.width(12.dp))
                     }
-                    AppText(if (video.live && video.chatKey != null) "Join the live chat" else when (video.commentsStatus) {
+                    AppText(if (video.chatKey != null) {
+                        stringResource(if (video.live) R.string.chat_join_live else R.string.chat_replay_available)
+                    } else when (video.commentsStatus) {
                         WatchCommentsStatus.Loading -> "Loading comments…"
                         WatchCommentsStatus.Empty -> "No comments yet"
                         WatchCommentsStatus.Disabled -> "Comments are turned off"
@@ -819,7 +816,7 @@ private fun RelatedThumb(
 ) {
     Box(
         modifier.clip(RoundedCornerShape(radius))
-            .mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) }
+            .clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) }
             .appDescription(R.string.a11y_title_duration, item.title, item.duration)
             .testTag("watch-thumb-${item.id}"),
     ) {
@@ -848,7 +845,7 @@ private fun RelatedText(
     onAction: (WatchAction) -> Unit,
 ) {
     Column(
-        modifier.mediaActions(MediaActionItem(item.id, item.title, item.channel, item.artwork)) { onAction(WatchAction.OpenRelated(item.id)) },
+        modifier.clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) },
     ) {
         AppText(
             rememberDeArrowTitle(item.id, item.title),

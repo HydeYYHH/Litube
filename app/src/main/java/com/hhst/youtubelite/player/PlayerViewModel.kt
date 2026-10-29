@@ -58,6 +58,9 @@ sealed interface GestureUi {
     data class EdgeSlider(val volume: Boolean, val percent: Int) : GestureUi
 }
 
+/** Source of the media the engine currently owns; decides floating-window policy. */
+enum class MediaKind { NONE, WATCH, SHORTS }
+
 /** Player-facing UI state: engine snapshot + surface-only flags. */
 data class PlayerUiState(
     val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
@@ -424,6 +427,7 @@ class PlayerViewModel(
             )
         }
         maybeSyncQueue(s)
+        maybePrefetchRelated(s)
     }
 
     private fun maybeSyncQueue(s: PlaybackSnapshot) {
@@ -449,8 +453,23 @@ class PlayerViewModel(
     /** Play intent captured when a swipe hold pauses the settled short. */
     private var shortsHoldWasPlaying = false
 
+    /**
+     * Media source of the current playback session, stable across surface and
+     * host changes — unlike [inShorts], which only tracks the transient
+     * Shorts host and is cleared the moment it is left. Mini player, PiP and
+     * autoplay decisions must consult this, not [inShorts].
+     */
+    @Volatile private var mediaKind = MediaKind.NONE
+    val currentMediaKind: MediaKind get() = mediaKind
+
     fun onBrowseOpened() {
         if (!_uiState.value.visible || _uiState.value.mini) return
+        if (mediaKind == MediaKind.SHORTS) {
+            // Shorts never collapse into the mini player: presentation ends
+            // here; audio keeps following the background-play preference.
+            onShortsStopped()
+            return
+        }
         if (prefs.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) enterMiniPlayer()
         else onLeaveWatch()
     }
@@ -458,6 +477,7 @@ class PlayerViewModel(
     fun openVideo(videoId: String, startSeconds: Long? = null) {
         val id = VideoId.parse(videoId) ?: return
         inShorts = false
+        mediaKind = MediaKind.WATCH
         if (playlistActive && playlistItems.none { it.videoId == id }) {
             playlistItems = emptyList()
             playlistActive = false
@@ -466,14 +486,18 @@ class PlayerViewModel(
         if (current.videoId == id && current.prepared && startSeconds != null) engine.seekTo(startSeconds.coerceAtLeast(0).coerceAtMost(Long.MAX_VALUE / 1000) * 1000)
         if (current.videoId == id && (current.prepared || _uiState.value.visible)) {
             _uiState.update { it.copy(visible = true, mini = false, controlsVisible = true) }
+            // A Shorts session turned the engine output off; a same-video
+            // restore must turn it back on or the surface stays black.
+            engine.setVideoVisible(true)
             return
         }
-        startPlayback(VideoId.watchUrl(id) + (startSeconds?.takeIf { it > 0 }?.let { "&t=" + it } ?: ""), keepMini = false)
+        startPlayback(VideoId.watchUrl(id) + (startSeconds?.takeIf { it > 0 }?.let { "&t=" + it } ?: ""), keepMini = false, kind = MediaKind.WATCH)
     }
 
     fun setVideoVisible(visible: Boolean) = engine.setVideoVisible(visible)
 
     fun onShortsOpened() {
+        mediaKind = MediaKind.SHORTS
         if (inShorts) {
             engine.setVideoVisible(true)
             return
@@ -490,22 +514,30 @@ class PlayerViewModel(
     fun onShortsClosed() {
         onSpeedHoldEnd()
         inShorts = false
+        stopShortsPresentation()
     }
 
     fun onShortsStopped() {
         onSpeedHoldEnd()
         engine.setVideoVisible(false)
         if (!prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) engine.pause()
+        stopShortsPresentation()
+    }
+
+    /** Shorts never keep a floating window: every presentation flag ends here. */
+    private fun stopShortsPresentation() {
+        _uiState.update { it.copy(visible = false, mini = false, fullscreen = false, locked = false) }
     }
 
     fun openShort(videoId: String) {
         val id = VideoId.parse(videoId) ?: return
         inShorts = true
+        mediaKind = MediaKind.SHORTS
         val current = engine.snapshot.value
         if (current.videoId == id && (current.prepared || _uiState.value.visible)) {
             _uiState.update { it.copy(visible = true, mini = false, fullscreen = false) }
             engine.setVideoVisible(true)
-        } else startPlayback(VideoId.watchUrl(id), keepMini = false)
+        } else startPlayback(VideoId.watchUrl(id), keepMini = false, kind = MediaKind.SHORTS)
     }
 
     fun pauseShort() {
@@ -574,15 +606,22 @@ class PlayerViewModel(
     }
 
     /** Queue navigation keeps the current surface. */
-    private fun startPlayback(url: String, keepMini: Boolean) {
+    private fun startPlayback(url: String, keepMini: Boolean, kind: MediaKind? = null, recordHistory: Boolean = true) {
         autoplayRequestId.incrementAndGet()
         playbackRequestSeq++
         val token = playbackRequestSeq
         val id = VideoId.parse(url)
+        val previousId = _uiState.value.videoId
+        val previousKind = mediaKind
+        if (kind != null) mediaKind = kind
+        val switching = id != null && id != previousId
+        if (recordHistory && switching && previousKind == MediaKind.WATCH && previousId != null) {
+            if (sessionTrail.lastOrNull() != previousId) sessionTrail.addLast(previousId)
+            if (sessionTrail.size > MAX_SESSION_TRAIL) sessionTrail.removeFirst()
+        }
         // A speed-hold or scrub interrupted by surface mode swaps (PiP enter,
         // mini collapse) never sees its End/Commit; drop the stale gesture
         // state so the next video starts clean.
-        val switching = id != null && id != _uiState.value.videoId
         speedBeforeHold = null
         engine.setSpeedHold(false)
         scrubAnchorMs = null
@@ -795,23 +834,75 @@ class PlayerViewModel(
         return queue.state.value.items.any { it.videoId == id }
     }
 
+    /** Watch videos loaded this session, most recent last; Previous walks it back. */
+    private val sessionTrail = ArrayDeque<String>()
+
+    /**
+     * Resolved related-video target as (playing id -> next id or null). Null
+     * next is a resolved "no related video"; an entry for another id (or no
+     * entry) is unresolved and treated optimistically as available until a
+     * resolve proves otherwise.
+     */
+    private var relatedNext: Pair<String, String?>? = null
+    private var relatedJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The single navigation decision shared by the surface buttons, the
+     * media notification, PiP actions and headset keys. Queue and playlist
+     * navigate inside their own context only — a stale persisted queue never
+     * hijacks a video outside it — and Shorts switch within their own
+     * sequence, so they expose no watch navigation.
+     */
+    private fun nextTarget(id: String?): QueueItem? {
+        if (id == null) return null
+        return when {
+            queueActive() && currentInQueue() -> when (_uiState.value.loopMode) {
+                LoopMode.QUEUE_RANDOM -> queue.random(id)
+                else -> queue.nextStrict(id)
+            }
+            playlistActive && playlistItems.any { it.videoId == id } -> playlistNeighbor(1)
+            else -> null
+        }
+    }
+
+    private fun previousTarget(id: String?): QueueItem? {
+        if (id == null) return null
+        return when {
+            queueActive() && currentInQueue() -> queue.previous(id)
+            playlistActive && playlistItems.any { it.videoId == id } -> playlistNeighbor(-1)
+            else -> null
+        }
+    }
+
+    /** Next is a resolved related video when no queue/playlist owns the context. */
+    private fun relatedAvailable(id: String?): Boolean {
+        if (id == null || nextVideo == null) return false
+        if (queueActive() && currentInQueue()) return false
+        if (playlistActive && playlistItems.any { it.videoId == id }) return false
+        val resolved = relatedNext
+        return resolved?.first != id || resolved.second != null
+    }
+
+    /** Previous can always restart the current video past the restart threshold. */
+    private fun restartAvailable(): Boolean =
+        engine.snapshot.value.positionMs > PREVIOUS_RESTART_MS
+
     private fun queueNavAvailability(): QueueNav {
         val id = playbackQueueId()
-        return if (queueActive()) {
-            QueueNav(queue.next(id) != null, currentInQueue() && queue.previous(id) != null)
-        } else QueueNav(playlistNeighbor(1) != null, playlistNeighbor(-1) != null)
+        if (mediaKind == MediaKind.SHORTS || id == null) return QueueNav(false, false)
+        val next = nextTarget(id) != null || relatedAvailable(id)
+        val previous = restartAvailable() || previousTarget(id) != null || sessionTrail.isNotEmpty()
+        return QueueNav(next, previous)
     }
 
     internal data class QueueNav(val next: Boolean, val previous: Boolean)
 
     /** Menu picks and notification buttons land here. */
     fun skipToNext() {
-        if (queueActive()) {
-            queue.next(playbackQueueId())?.url?.let { startPlayback(it, keepMini = true) }
-            return
-        }
-        playlistNeighbor(1)?.let { startPlayback(it.url, keepMini = true); return }
-        requestNextVideo(requireEnded = false)
+        val id = playbackQueueId()
+        if (mediaKind == MediaKind.SHORTS || id == null) return
+        nextTarget(id)?.let { startPlayback(it.url, keepMini = true); return }
+        if (relatedAvailable(id)) startRelatedNext(id)
     }
 
     fun skipToPrevious() {
@@ -819,10 +910,68 @@ class PlayerViewModel(
             engine.seekTo(0)
             return
         }
-        val previous = if (queueActive()) {
-            if (currentInQueue()) queue.previous(playbackQueueId()) else null
-        } else playlistNeighbor(-1)
-        previous?.let { startPlayback(it.url, keepMini = true) }
+        val id = playbackQueueId()
+        if (mediaKind == MediaKind.SHORTS || id == null) return
+        previousTarget(id)?.let { startPlayback(it.url, keepMini = true); return }
+        // Plain watch without queue/playlist: walk back this session's trail.
+        sessionTrail.removeLastOrNull()?.let { startPlayback(VideoId.watchUrl(it), keepMini = true, recordHistory = false) }
+    }
+
+    /**
+     * Manual next resolves the related target even when autoplay is off;
+     * a resolved miss keeps the current playback untouched and refreshes
+     * the button to its now-known disabled state.
+     */
+    private fun startRelatedNext(id: String, requireEnded: Boolean = false, honorAutoplay: Boolean = false) {
+        val provider = nextVideo ?: return
+        if (honorAutoplay &&
+            (!prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) || _uiState.value.loopMode != LoopMode.QUEUE_NEXT)
+        ) return
+        val resolved = relatedNext
+        if (resolved?.first == id) {
+            if (requireEnded && (!engine.snapshot.value.ended || !_uiState.value.visible)) return
+            val next = resolved.second
+            if (next != null && next != id) startPlayback(VideoId.watchUrl(next), keepMini = true)
+            return
+        }
+        val token = playbackRequestSeq
+        val request = autoplayRequestId.incrementAndGet()
+        viewModelScope.launch {
+            val next = try { provider(id) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+            if (request != autoplayRequestId.get() || token != playbackRequestSeq) return@launch
+            if (honorAutoplay && (!prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) ||
+                _uiState.value.loopMode != LoopMode.QUEUE_NEXT || mediaKind != MediaKind.WATCH)) return@launch
+            if (relatedNext?.first != id) relatedNext = id to next
+            if (requireEnded && (!engine.snapshot.value.ended || !_uiState.value.visible)) return@launch
+            if (next != null && next != id) startPlayback(VideoId.watchUrl(next), keepMini = true)
+            else refreshNavAvailability()
+        }
+    }
+
+    private fun refreshNavAvailability() {
+        val nav = queueNavAvailability()
+        pushNavIfChanged(nav.next, nav.previous)
+        _uiState.update { it.copy(hasNext = nav.next, hasPrevious = nav.previous) }
+    }
+
+    /** Resolves the related next once per video so the Next button is honest. */
+    private fun maybePrefetchRelated(s: PlaybackSnapshot) {
+        val id = s.videoId ?: return
+        if (mediaKind != MediaKind.WATCH || !s.prepared) return
+        if (queueActive() || playlistActive || nextVideo == null) return
+        if (relatedNext?.first == id || relatedJob?.isActive == true) return
+        val provider = nextVideo!!
+        val token = playbackRequestSeq
+        relatedJob = viewModelScope.launch {
+            val next = try { provider(id) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+            if (token != playbackRequestSeq) return@launch
+            if (relatedNext?.first != id) relatedNext = id to next
+            refreshNavAvailability()
+        }
     }
 
     override fun onNext() = skipToNext()
@@ -1099,8 +1248,9 @@ class PlayerViewModel(
     private fun onPlaybackEnded() {
         if (!engine.snapshot.value.ended || handledEndSeq == playbackRequestSeq) return
         handledEndSeq = playbackRequestSeq
-        // Queue and playlist playback take priority over page autoplay.
-        val queueContext = queueActive()
+        // Queue and playlist playback take priority over page autoplay; both
+        // navigate strictly inside their own context (no stale-queue hijack).
+        val queueContext = queueActive() && currentInQueue()
         val current = playbackQueueId()
         val target = when (_uiState.value.loopMode) {
             LoopMode.QUEUE_NEXT ->
@@ -1118,27 +1268,8 @@ class PlayerViewModel(
             playlistNeighbor(1)?.let { startPlayback(it.url, keepMini = true) }
             return
         }
-        if (!queueContext && !playlistActive && !inShorts && _uiState.value.loopMode == LoopMode.QUEUE_NEXT) {
-            requestNextVideo(requireEnded = true)
-        }
-    }
-
-    private fun requestNextVideo(requireEnded: Boolean) {
-        val provider = nextVideo ?: return
-        if (inShorts || queueActive() || playlistActive || !prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY)) return
-        val id = engine.snapshot.value.videoId ?: return
-        val token = playbackRequestSeq
-        val request = autoplayRequestId.incrementAndGet()
-        viewModelScope.launch {
-            val next = try { provider(id) }
-            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-            catch (_: Exception) { return@launch }
-            val current = engine.snapshot.value
-            if (request != autoplayRequestId.get() || token != playbackRequestSeq || current.videoId != id ||
-                (requireEnded && !current.ended) || !_uiState.value.visible || inShorts || queueActive() || playlistActive ||
-                !prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) || _uiState.value.loopMode != LoopMode.QUEUE_NEXT) return@launch
-            val target = VideoId.parse(next)?.takeUnless { it == id } ?: return@launch
-            startPlayback(VideoId.watchUrl(target), keepMini = true)
+        if (!queueContext && !playlistActive && mediaKind == MediaKind.WATCH && _uiState.value.loopMode == LoopMode.QUEUE_NEXT) {
+            current?.let { startRelatedNext(it, requireEnded = true, honorAutoplay = true) }
         }
     }
 
@@ -1237,6 +1368,9 @@ class PlayerViewModel(
 
         /** Previous tap past this position restarts the current video. */
         private const val PREVIOUS_RESTART_MS = 3_000L
+
+        /** Bound on the plain-watch Previous trail. */
+        private const val MAX_SESSION_TRAIL = 50
 
         /** Cast handoff readiness: the target video prepared or failed. */
         internal fun loadSettledFor(snapshot: PlaybackSnapshot, videoId: String?): Boolean =

@@ -30,6 +30,8 @@ fun ShortItem.fillFrom(detail: ShortItem): ShortItem = copy(
 /** Full per-item metadata from the watch read; feeds reporting and fills thin feed rows. */
 data class ShortDetail(
     val item: ShortItem,
+    /** Server-side subscription state of the item's channel; null when the page didn't say. */
+    val subscribed: Boolean? = null,
     /** Playback-tracking endpoints for watch-time reporting; feeds carry none. */
     val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
     val sessionGeneration: Long? = null,
@@ -54,6 +56,8 @@ data class ShortsUiState(
     /** Confirmed viewer state per item/channel, applied only after the server confirms. */
     val ratings: Map<String, com.hhst.youtubelite.watch.domain.VideoRating> = emptyMap(),
     val subscriptions: Map<String, Boolean> = emptyMap(),
+    /** Channels with a subscription write in flight; their buttons ignore taps. */
+    val subscriptionsPending: Set<String> = emptySet(),
     /** Hydrated per-item metadata (bounded by the ViewModel); keyed by item id. */
     val details: Map<String, ShortDetail> = emptyMap(),
 )

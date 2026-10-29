@@ -48,6 +48,7 @@ class HomeViewModel(
     val actionNotices = notices.receiveAsFlow()
     private var loadJob: Job? = null
     private var saveJob: Job? = null
+    private var feedbackJob: Job? = null
     private var generation = 0
     private var liveResultReceived = false
 
@@ -97,8 +98,9 @@ class HomeViewModel(
         val changed = sessionKey != null && sessionKey != key
         sessionKey = key
         setSignedInPreview(signedIn)
-        _state.update { it.copy(avatar = avatar) }
+        _state.update { it.copy(avatar = avatar, sessionGeneration = key) }
         if (changed) {
+            feedbackJob?.cancel()
             overlay(HomeOverlay.None)
             lastSeenReportSignal = reportSignal?.invoke() ?: -1L
             load(append = false)
@@ -173,6 +175,10 @@ class HomeViewModel(
                 if (menu.kind == FeedMenuKind.Video && action.action == FeedMenuAction.WatchLater && saveRepository != null) {
                     overlay(HomeOverlay.None)
                     saveWatchLater(menu.itemId)
+                    return
+                }
+                if (saveRepository != null && action.action in setOf(FeedMenuAction.NotInterested, FeedMenuAction.DontRecommend)) {
+                    sendFeedback(menu.itemId, action.action)
                     return
                 }
                 val feedback = when (action.action) {
@@ -350,6 +356,33 @@ class HomeViewModel(
             catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
             catch (_: UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
             catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't save this video. Try again.")) }
+        }
+    }
+
+    private fun sendFeedback(itemId: String, action: FeedMenuAction) {
+        if (feedbackJob?.isActive == true) return
+        val state = _state.value
+        val video = (state.content as? HomeContent.Feed)?.page?.items
+            ?.filterIsInstance<FeedItem.Video>()?.firstOrNull { it.id == itemId }
+            ?.takeIf { it.feedbackGeneration == state.sessionGeneration } ?: return
+        if (action !in FeedMenuKind.Video.productionActions(state.signedInPreview, video)) return
+        overlay(HomeOverlay.None)
+        val requestGeneration = generation
+        feedbackJob = viewModelScope.launch {
+            try {
+                repository.feedback(video, action)
+                if (generation != requestGeneration || _state.value.sessionGeneration != video.feedbackGeneration) return@launch
+                _state.update { current ->
+                    val feed = current.content as? HomeContent.Feed ?: return@update current
+                    current.copy(content = feed.copy(page = feed.page.copy(items = feed.page.items.filterNot {
+                        it.id == itemId || action == FeedMenuAction.DontRecommend && it is FeedItem.Video &&
+                            video.channelId.isNotBlank() && it.channelId == video.channelId
+                    })))
+                }
+                notices.trySend(AppNotice.Message("Removed from recommendations"))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update recommendations. Try again.")) }
         }
     }
 

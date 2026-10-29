@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -168,11 +171,18 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                         com.hhst.youtubelite.data.media.MediaSession.changes, inPip) { watch, player, _, pip ->
                         val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
                         chatViewModel.updateSession(fixtures || session.signedIn, session.generation)
-                        (watch.content as? WatchContent.Ready)?.page?.video?.takeIf {
-                            watch.commentsOpen && !watch.searchOpen && !player.fullscreen && !pip && it.live
-                        }?.chatKey
-                    }.distinctUntilChanged().collect { key ->
-                        if (key == null) chatViewModel.close() else chatViewModel.open(key)
+                        com.hhst.youtubelite.watch.chat.liveChatTarget(
+                            (watch.content as? WatchContent.Ready)?.page?.video, player.isLive,
+                            watch.commentsOpen, watch.searchOpen, player.fullscreen, pip,
+                        )
+                    }.distinctUntilChanged().collect { target ->
+                        when {
+                            target == null -> chatViewModel.close()
+                            target.replay -> chatViewModel.openReplay(target.key) {
+                                playerViewModel.positionState.value
+                            }
+                            else -> chatViewModel.open(target.key)
+                        }
                     }
                 } finally { chatViewModel.close() }
             }
@@ -367,7 +377,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 val panelsCover = state.searchOpen || state.commentsOpen ||
                     state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
                     state.overlay is WatchOverlay.Feedback
-                BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
                         state.overlay is WatchOverlay.Save || state.overlay is WatchOverlay.Feedback ||
                         (state.commentsOpen && !fullscreen && !WatchLayout.sidebar(maxWidth.value, maxHeight.value))
@@ -422,9 +432,11 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     )
                 }
                 if (state.commentsOpen && !fullscreen && !state.searchOpen) {
-                    val chatVideo = (state.content as? WatchContent.Ready)?.page?.video
-                        ?.takeIf { it.live && it.chatKey != null }
-                    if (chatVideo != null) {
+                    val chatTarget = com.hhst.youtubelite.watch.chat.liveChatTarget(
+                        (state.content as? WatchContent.Ready)?.page?.video, playerState.isLive,
+                        commentsOpen = true, searchOpen = false, fullscreen = false, pip = false,
+                    )
+                    if (chatTarget != null) {
                         val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
                         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
                             .imePadding()
@@ -441,7 +453,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                             CommentsContent.Disabled -> ""
                             else -> commentsState.total.ifBlank { (state.content as? WatchContent.Ready)?.page?.video?.commentCount.orEmpty() }
                         }
-                        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
                             .then(if (state.overlay is WatchOverlay.ItemMenu) Modifier.clearAndSetSemantics {} else Modifier)
                             .testTag("comments-panel-host")) {
                             CommentsPanel(

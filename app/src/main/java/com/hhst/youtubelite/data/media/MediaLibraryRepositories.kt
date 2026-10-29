@@ -177,19 +177,26 @@ class MediaExploreRepository(private val client: MediaClient) : ExploreRepositor
 }
 
 class MediaShortsRepository(private val client: MediaClient, private val startId: String? = null, private val channelId: String? = null) : ShortsRepository {
-    override suspend fun shorts() = client.read { context, http ->
-        // An explicit seed is the primary read: it resolves first and independently, so a
-        // rejected global shorts feed (the seedless reel_watch_sequence is network-rejected
-        // on some networks) cannot block a valid seeded entry. When the seed itself fails,
-        // the whole read fails — the pager never quietly plays a different video.
-        if (startId != null) {
-            val video = loadWatch(startId, context, http = http).requireValue()
-            val seed = ShortItem(startId, video.title.orEmpty(), video.author.orEmpty(), video.channelId.orEmpty(),
-                "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "", video.authorThumbnail.orEmpty())
-            ShortsPage(listOf(seed), INITIAL_CURSOR)
-        } else {
-            shortsPage(context, http, null)
+    override suspend fun shorts(): com.hhst.youtubelite.shorts.domain.ShortsPage {
+        val started = android.os.SystemClock.elapsedRealtime()
+        val page = client.read { context, http ->
+            // An explicit seed is the primary read: it resolves first and independently, so a
+            // rejected global shorts feed (the seedless reel_watch_sequence is network-rejected
+            // on some networks) cannot block a valid seeded entry. When the seed itself fails,
+            // the whole read fails — the pager never quietly plays a different video.
+            if (startId != null) {
+                val video = loadWatch(startId, context, http = http).requireValue()
+                val seed = ShortItem(startId, video.title.orEmpty(), video.author.orEmpty(), video.channelId.orEmpty(),
+                    "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "", video.authorThumbnail.orEmpty())
+                ShortsPage(listOf(seed), INITIAL_CURSOR)
+            } else {
+                shortsPage(context, http, null)
+            }
         }
+        com.hhst.youtubelite.diagnostics.AppLog.event(com.hhst.youtubelite.diagnostics.AppLog.Category.PLAYER,
+            "shorts_seed_read", mapOf("ms" to (android.os.SystemClock.elapsedRealtime() - started),
+                "seeded" to (startId != null), "items" to page.items.size))
+        return page
     }
 
     override suspend fun shortsNext(cursor: String): ShortsPage = client.read { context, http ->
@@ -206,7 +213,8 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
                 page.channelId ?: details?.channelId.orEmpty(), details?.thumbnail.orEmpty(),
                 page.viewCount ?: details?.viewCount?.let {
                     java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
-                }.orEmpty(), "", page.commentCount.orEmpty(), page.authorThumbnail.orEmpty()),
+                }.orEmpty(), page.likeCount.orEmpty(), page.commentCount.orEmpty(), page.authorThumbnail.orEmpty()),
+            page.subscribed,
             details?.tracking,
             context.generation,
         )

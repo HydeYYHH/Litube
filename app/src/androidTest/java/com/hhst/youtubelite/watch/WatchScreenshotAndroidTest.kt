@@ -508,10 +508,18 @@ class WatchScreenshotAndroidTest {
         val actualPixels = IntArray(expectedPixels.size)
         expected.getPixels(expectedPixels, 0, expected.width, 0, 0, expected.width, expected.height)
         actual.getPixels(actualPixels, 0, actual.width, 0, 0, actual.width, actual.height)
-        val changed = expectedPixels.indices.count { i -> listOf(0, 8, 16).any { shift ->
+        val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        assertTrue("$name changed $changed pixels; inspect the saved screenshot", changed.toFloat() / expectedPixels.size <= 0.001f)
+        // Report where the diff lives so an intentional geometry change is
+        // distinguishable from unrelated drift without lowering the bar.
+        val changedArea = changed.fold(null as IntArray?) { area, i ->
+            val x = i % expected.width; val y = i / expected.width
+            if (area == null) intArrayOf(x, y, x, y)
+            else intArrayOf(minOf(area[0], x), minOf(area[1], y), maxOf(area[2], x), maxOf(area[3], y))
+        }
+        assertTrue("$name changed ${changed.size} pixels in ${changedArea?.contentToString()}; inspect the saved screenshot",
+            changed.size.toFloat() / expectedPixels.size <= 0.001f)
         expected.recycle()
     }
 }

@@ -40,6 +40,7 @@ import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
+import com.hhst.youtubelite.ui.design.SubscribeButton
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.ui.design.appDescription
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
@@ -126,6 +127,7 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
             playbackControls = if (page == pagerState.settledPage) playbackControls else null,
             rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
             subscribed = state.subscriptions[items[page].channelId] == true,
+            subscribePending = items[page].channelId in state.subscriptionsPending,
             menuVisible = !state.live)
     }
     if (state.appendFailed) AppText(androidx.compose.ui.res.stringResource(R.string.retry),
@@ -142,7 +144,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
     videoReady: Boolean = false,
     playbackControls: (@Composable (String) -> Unit)? = null,
     rating: com.hhst.youtubelite.watch.domain.VideoRating = com.hhst.youtubelite.watch.domain.VideoRating.None,
-    subscribed: Boolean = false, menuVisible: Boolean = true) {
+    subscribed: Boolean = false, subscribePending: Boolean = false, menuVisible: Boolean = true) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
         videoContent?.invoke(item.id)
         if (!videoReady) VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize().testTag("short-cover-${item.id}").semantics { contentDescription = "Play ${item.title}" })
@@ -182,10 +184,10 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
                     }
                     AppText(item.author, Modifier.padding(start = 8.dp), size = 14, line = 20, color = Color.White, maxLines = 1)
                 }
-                AppText(if (subscribed) "Subscribed" else "Subscribe", Modifier.padding(start = 8.dp).clip(RoundedCornerShape(20.dp))
-                    .background(if (subscribed) Color.White.copy(alpha = 0.25f) else Color(0xFF0F0F0F)).clickable(role = Role.Button) { onAction(ShortsAction.Subscribe(item.channelId)) }
-                    .padding(horizontal = 16.dp).heightIn(min = 40.dp),
-                    size = 14, line = 40, weight = FontWeight.Medium, color = Color.White, maxLines = 1)
+                SubscribeButton(subscribed, { onAction(ShortsAction.Subscribe(item.channelId)) },
+                    Modifier.padding(start = 8.dp), enabled = item.channelId.isNotBlank(),
+                    pending = subscribePending, onDarkSurface = true,
+                    testTag = "short-subscribe-${item.id}")
             }
             AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(top = 8.dp).testTag("short-title-${item.id}"),
                 size = 14, line = 20, color = Color.White, maxLines = 3)

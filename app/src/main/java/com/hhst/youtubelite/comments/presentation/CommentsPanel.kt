@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -117,9 +118,11 @@ fun CommentsPanel(
             val canDrag by rememberUpdatedState(state.overlay == CommentsOverlay.None)
             val motionScale by rememberUpdatedState(LocalMotionScale.current)
             val sheetHeight = (height - top).coerceAtLeast(0f)
+            var dismissing by rememberSaveable(state.target) { mutableStateOf(false) }
+            LaunchedEffect(Unit) { if (dismissing) close() }
             val motion = remember(state.target, sheetHeight, density) {
                 CommentSheetMotion(scope, sheetHeight * density, density, { canDrag },
-                    { motionScale > 0f }, { close() })
+                    { motionScale > 0f }, { close() }, { dismissing = true })
             }
             val headerDrag = Modifier.draggable(
                 state = rememberDraggableState { motion.drag(it) },
@@ -296,6 +299,7 @@ private fun CommentComposerSheet(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val editorBottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 8.dp else MenuSheetLayout.BottomInset.dp
     LaunchedEffect(Unit) {
         withFrameNanos {}
         runCatching { focus.requestFocus() }
@@ -313,9 +317,9 @@ private fun CommentComposerSheet(
     )
     BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
         Column(
-            Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)
+            Modifier.padding(bottom = editorBottom)
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
-                .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
+                .heightIn(max = (maxHeight - editorBottom).coerceAtLeast(0.dp))
                 .verticalScroll(rememberScrollState())
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Background)
                 .testTag("comment-composer").semantics { paneTitle = "Comment editor" },

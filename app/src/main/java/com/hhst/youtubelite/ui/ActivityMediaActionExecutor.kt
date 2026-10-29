@@ -1,9 +1,6 @@
 package com.hhst.youtubelite.ui
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.widget.Toast
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.ui.DownloadUi
@@ -11,24 +8,22 @@ import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.share.VideoShare
-import com.hhst.youtubelite.ui.components.MediaActionExecutor
-import com.hhst.youtubelite.ui.components.MediaActionItem
-import com.hhst.youtubelite.ui.components.MediaActionKind
 import org.koin.java.KoinJavaComponent.getKoin
 
+/** The card actions a host activity executes for the unified More sheet. */
+enum class MediaActionKind(val label: String) {
+    PlayNext("Play next"), Queue("Add to queue"), Download("Download"), OpenWith("Open with"),
+    Share("Share"), CopyLink("Copy link"),
+}
+
+data class MediaActionItem(val id: String, val title: String, val author: String = "", val artwork: String = "")
+
 /**
- * The activity-owned executor behind the long-press action panel. This is the
- * only place the panel's actions touch the player, the downloader or the system
- * share sheet, so the dialog stays a pure surface.
+ * Queue access, download pickers and the system share sheet stay with the
+ * activity that owns them; the sheet only routes taps here.
  */
-class ActivityMediaActionExecutor(private val activity: Activity) : MediaActionExecutor {
-    override fun execute(item: MediaActionItem, action: MediaActionKind) {
-        if (action == MediaActionKind.CopyTitle) {
-            activity.getSystemService(ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("", item.title))
-            Toast.makeText(activity, R.string.title_copied, Toast.LENGTH_SHORT).show()
-            return
-        }
+class ActivityMediaActionExecutor(private val activity: Activity) {
+    fun execute(item: MediaActionItem, action: MediaActionKind) {
         val url = VideoShare.urlFor(item.id) ?: return
         val id = url.substringAfterLast('/')
         when (action) {
@@ -49,7 +44,6 @@ class ActivityMediaActionExecutor(private val activity: Activity) : MediaActionE
             MediaActionKind.OpenWith -> ShareGateway(activity).openWith(item.id)
             MediaActionKind.Share -> ShareGateway(activity).share(item.id)
             MediaActionKind.CopyLink -> ShareGateway(activity).copyLink(item.id)
-            MediaActionKind.CopyTitle -> Unit
         }
     }
 }

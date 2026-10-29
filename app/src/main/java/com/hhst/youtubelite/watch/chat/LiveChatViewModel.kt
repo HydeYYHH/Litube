@@ -26,6 +26,11 @@ import com.hhst.youtubelite.core.AppNotice
 interface LiveChatGateway {
     /** Blocking poll loop over the chat continuation; runs on a MediaClient worker. */
     suspend fun listen(key: String, onPage: (ChatPage) -> Unit)
+    /**
+     * Replays an ended stream's chat at the player position. Defaults to the
+     * live loop so a seam that only models live chat stays valid.
+     */
+    suspend fun replay(key: String, positionMs: () -> Long, onPage: (ChatPage) -> Unit) = listen(key, onPage)
     suspend fun send(key: String, text: String)
 }
 
@@ -39,6 +44,23 @@ class MediaLiveChatGateway(private val client: MediaClient) : LiveChatGateway {
         }
     }
 
+    override suspend fun replay(key: String, positionMs: () -> Long, onPage: (ChatPage) -> Unit) {
+        client.read<Unit> { context, http ->
+            val replay = com.liskovsoft.youtubeapi.videoinfo.V2.ChatReplay(key, context, http)
+            try {
+                while (true) {
+                    val result = replay.read(positionMs())
+                    if (!result.ok) throw MediaException(
+                        result.error ?: com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(RequestFailure.TRANSPORT, "chat_replay"))
+                    val page = result.value!!
+                    onPage(page)
+                    if (page.nextKey == null) break
+                    Thread.sleep(REPLAY_POLL_MS)
+                }
+            } finally { replay.close() }
+        }
+    }
+
     override suspend fun send(key: String, text: String) {
         try {
             client.read { context, http ->
@@ -49,6 +71,10 @@ class MediaLiveChatGateway(private val client: MediaClient) : LiveChatGateway {
             if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()
             throw error
         }
+    }
+
+    private companion object {
+        const val REPLAY_POLL_MS = 2_000L
     }
 }
 
@@ -68,27 +94,50 @@ class LiveChatViewModel(
     private var generation: Long? = null
     private var epoch = 0L
     private var sendParams: String? = null
+    private var replay = false
+    private var displayedReplay = false
+    private var position: () -> Long = { 0L }
 
     fun updateSession(signedIn: Boolean, generation: Long) {
         if (this.generation == generation && _uiState.value.signedIn == signedIn) return
         val reopen = key
+        val reopenReplay = replay
+        val reopenPosition = position
         close()
         this.generation = generation
         displayedKey = null
         sendParams = null
         _uiState.value = LiveChatUiState(signedIn = signedIn, canSend = gateway == null)
-        reopen?.let(::open)
+        reopen?.let { open(it, reopenReplay, reopenPosition) }
     }
 
     /** Opens the stream for a chat continuation key; repeated opens with the same key are free. */
-    fun open(key: String) {
-        if (this.key == key && listenJob?.isActive == true) return
+    fun open(key: String) = open(key, replay = false, position = { 0L })
+
+    /**
+     * Follows an ended stream's replay at the player position. The panel keeps
+     * the same layout; posting is disabled because the stream is over.
+     */
+    fun openReplay(key: String, position: () -> Long) = open(key, replay = true, position = position)
+
+    private fun open(key: String, replay: Boolean, position: () -> Long) {
+        if (this.key == key && this.replay == replay && listenJob?.isActive == true) return
         close()
         this.key = key
+        this.replay = replay
+        this.position = position
         if (displayedKey != key) {
             displayedKey = key
+            displayedReplay = replay
             sendParams = null
-            _uiState.update { LiveChatUiState(signedIn = it.signedIn, canSend = gateway == null) }
+            _uiState.update {
+                LiveChatUiState(signedIn = it.signedIn, canSend = gateway == null, replay = replay)
+            }
+        } else if (displayedReplay != replay) {
+            // Same chat, live ended and the replay took over: keep the transcript.
+            displayedReplay = replay
+            sendParams = null
+            _uiState.update { it.copy(replay = replay, ended = false, canSend = false) }
         }
         val current = epoch
         val gateway = gateway ?: run {
@@ -96,13 +145,31 @@ class LiveChatViewModel(
             return
         }
         listenJob = viewModelScope.launch {
-            _uiState.update { it.copy(content = LiveChatContent.Loading) }
+            _uiState.update { state ->
+                state.copy(
+                    content = if (state.content is LiveChatContent.Ready) state.content else LiveChatContent.Loading,
+                    ended = false,
+                )
+            }
             try {
-                gateway.listen(key) { page ->
-                    viewModelScope.launch { if (current == epoch) apply(page) }
+                if (replay) {
+                    gateway.replay(key, position) { page ->
+                        viewModelScope.launch { if (current == epoch) apply(page) }
+                    }
+                } else {
+                    gateway.listen(key) { page ->
+                        viewModelScope.launch { if (current == epoch) apply(page) }
+                    }
                 }
-                if (current == epoch && _uiState.value.content == LiveChatContent.Loading)
-                    _uiState.update { it.copy(content = LiveChatContent.Ready(emptyList())) }
+                if (current == epoch) {
+                    // The continuation stopped: the stream or its replay is over.
+                    _uiState.update { state ->
+                        state.copy(
+                            content = if (state.content == LiveChatContent.Loading) LiveChatContent.Ready(emptyList()) else state.content,
+                            ended = true, sending = false, canSend = false,
+                        )
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -119,6 +186,8 @@ class LiveChatViewModel(
         _uiState.update { it.copy(sending = false) }
         listenJob = null
         key = null
+        replay = false
+        position = { 0L }
     }
 
     fun onAction(action: LiveChatAction) {
@@ -126,7 +195,7 @@ class LiveChatViewModel(
             is LiveChatAction.DraftChanged ->
                 _uiState.update { it.copy(draft = action.text.take(MAX_MESSAGE_LENGTH + 1)) }
             LiveChatAction.Send -> send()
-            LiveChatAction.Retry -> key?.let { listenJob?.cancel(); listenJob = null; open(it) }
+            LiveChatAction.Retry -> key?.let { open(it, replay, position) }
             LiveChatAction.SignIn -> notices.trySend(AppNotice.SignIn)
         }
     }

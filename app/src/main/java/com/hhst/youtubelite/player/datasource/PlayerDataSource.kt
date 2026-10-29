@@ -43,6 +43,7 @@ class PlayerDataSource private constructor(
     private val manifestFactory: ((MediaRequestPlan?) -> DataSource.Factory)? = null,
     private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
     private val hlsFactory: ((MediaRequestPlan) -> HlsDataSourceFactory)? = null,
+    private val hlsMediaFactory: ((MediaRequestPlan) -> CacheDataSource)? = null,
 ) {
     fun withDiagnostics(context: DiagnosticContext): PlayerDataSource {
         fun scoped(factory: DataSource.Factory) = DataSource.Factory { DiagnosticDataSource(factory.createDataSource(), context) }
@@ -51,7 +52,8 @@ class PlayerDataSource private constructor(
             formatFactory = { formats, dash, cached -> scoped(this.formats(formats, dash, cached)) },
             hlsFactory = { plan -> val original = vodHls(plan); HlsDataSourceFactory { type ->
                 DiagnosticDataSource(original.createDataSource(type), context, type)
-            } })
+            } },
+            hlsMediaFactory = { plan -> requireNotNull(vodHlsMedia(plan)) })
     }
     fun manifest(plan: MediaRequestPlan?): DataSource.Factory =
         if (plan != null) manifestFactory?.invoke(plan) ?: live else live
@@ -60,6 +62,13 @@ class PlayerDataSource private constructor(
     fun vodHls(plan: MediaRequestPlan?): HlsDataSourceFactory =
         if (plan != null) hlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
         else DefaultHlsDataSourceFactory(live)
+
+    /**
+     * The cache-backed media source for [plan]'s HLS stream, built by the same
+     * factory playback reads through, so prefetched segment heads key exactly
+     * as playback's `hls:v1:` keys. Null without an HLS media factory.
+     */
+    fun vodHlsMedia(plan: MediaRequestPlan?): CacheDataSource? = plan?.let { hlsMediaFactory?.invoke(it) }
     companion object {
         private const val CACHE_DIR = "player"
         private const val CACHE_BYTES = 512L * 1024 * 1024
@@ -122,16 +131,16 @@ class PlayerDataSource private constructor(
                     val playlist = manifests.factory(plan.session.key, plan.expiresAtMillis, current, upstream)
                     // Exact signed URL and session identity prove only this segment.
                     // Hash cache keys so media credentials never enter the disk index.
-                    val media = maybeCache(context, upstream, CacheKeyFactory { spec ->
-                        "hls:v1:" + MessageDigest.getInstance("SHA-256")
-                            .digest("${plan.session.key}:${spec.uri}".toByteArray()).hexString()
-                    })
+                    val media = hlsMediaCache(context, http, plans, plan)
                     HlsDataSourceFactory { type ->
                         if (type == C.DATA_TYPE_MANIFEST) playlist.createDataSource()
                         else if (type == C.DATA_TYPE_MEDIA || type == C.DATA_TYPE_MEDIA_INITIALIZATION) {
                             SessionCheckedDataSource(media.createDataSource(), plan, current) { plans?.invalidationReason(plan) ?: "unknown" }
                         } else upstream.createDataSource()
                     }
+                },
+                hlsMediaFactory = { plan ->
+                    hlsMediaCache(context, http, plans, plan).createDataSource() as CacheDataSource
                 },
             )
         }
@@ -146,6 +155,20 @@ class PlayerDataSource private constructor(
                 .setReadTimeoutMs(30_000)
                 .setRangeParameterEnabled(range)
                 .setRnParameterEnabled(rn)
+
+        /** Cache-backed HLS media factory for [plan]; keys match playback's `hls:v1:` keys. */
+        private fun hlsMediaCache(
+            context: Context,
+            http: OkHttpClient,
+            plans: YoutubeMediaRequests?,
+            plan: MediaRequestPlan,
+        ): CacheDataSource.Factory {
+            val upstream = youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan)
+            return maybeCache(context, upstream, CacheKeyFactory { spec ->
+                "hls:v1:" + MessageDigest.getInstance("SHA-256")
+                    .digest("${plan.session.key}:${spec.uri}".toByteArray()).hexString()
+            }) as CacheDataSource.Factory
+        }
 
         private fun maybeCache(context: Context, upstream: DataSource.Factory, keys: CacheKeyFactory = VIDEO_PLAYBACK_CACHE_KEY): DataSource.Factory =
             CacheDataSource.Factory()

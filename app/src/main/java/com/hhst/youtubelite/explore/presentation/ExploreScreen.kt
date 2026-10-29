@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.explore.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
@@ -282,7 +280,7 @@ private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (
     val badge = if (item.live) "LIVE" else item.duration
     Column(Modifier.fillMaxWidth().testTag("explore-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(ExploreAction.OpenVideo(item.id)) }
+            .clickable(role = Role.Button) { onAction(ExploreAction.OpenVideo(item.id)) }
             .semantics { contentDescription = listOf(item.title, badge).filter(String::isNotBlank).joinToString(", ") }) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             // No empty pills: the badge only renders with a duration or a live stream.

@@ -36,8 +36,9 @@ internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit,
 }
 
 @Composable
-internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video, live: Boolean = false) {
-    val rows = kind.visibleActions(live)
+internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video, live: Boolean = false,
+    signedIn: Boolean = false, video: FeedItem.Video? = null) {
+    val rows = kind.visibleActions(live, signedIn, video)
     MenuBottomSheet(
         items = rows.map { MenuSheetItem(it.icon(), it.label) },
         onDismiss = { onAction(HomeAction.CloseOverlay) },

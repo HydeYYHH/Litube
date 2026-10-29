@@ -5,15 +5,23 @@ import com.hhst.youtubelite.search.domain.*
 import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 import com.liskovsoft.youtubeapi.videoinfo.V2.MediaItem
 import com.liskovsoft.youtubeapi.videoinfo.V2.HomeSection
+import com.liskovsoft.youtubeapi.videoinfo.V2.feedbackToken
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadHome
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadSearch
+import com.liskovsoft.youtubeapi.videoinfo.V2.sendFeedback
 
 // Metadata joins drop blank parts so a missing half cannot leave an orphaned separator;
 // the avatar is null (not "") when the response did not carry one, which is the signal
 // the shared avatar directory enriches from.
 internal fun MediaItem.feedVideo() = FeedItem.Video(id, title.orEmpty(), author.orEmpty(),
     listOfNotNull(viewCount, published).filter(String::isNotBlank).joinToString(" · "), thumbnail.orEmpty(),
-    duration.orEmpty(), channelId.orEmpty(), live, progressPercent?.div(100f), avatar = authorThumbnail?.takeIf(String::isNotBlank))
+    duration.orEmpty(), channelId.orEmpty(), live, progressPercent?.div(100f), avatar = authorThumbnail?.takeIf(String::isNotBlank),
+    notInterestedToken = notInterestedToken())
+
+/** The card's own not-interested feedback token, when the item menu rendered one. */
+internal fun MediaItem.notInterestedToken(): String? = feedbackToken("Not interested")
+private fun MediaItem.feedbackToken(label: String): String? =
+    actions.firstOrNull { it.title.equals(label, true) }?.feedbackToken()
 
 internal fun MediaItem.playlistSummary() = PlaylistSummary(id.removePrefix("VL"), title.orEmpty(), author.orEmpty(),
     channelId.orEmpty(), null, thumbnail.orEmpty(), "", null, videoCountText = videoCountText)
@@ -33,7 +41,27 @@ class MediaHomeRepository(private val client: MediaClient) : HomeRepository {
         }
         val page = loadHome(section, context, continuation, http).requireValue()
         if (!context.signedIn) MediaSession.rememberVisitor(page.visitor, context.generation)
-        HomePage(homeFeed(page.items), page.messages, page.nextKey)
+        val feed = homeFeed(page.items).map { item ->
+            if (item is FeedItem.Video && context.signedIn) item.copy(
+                dontRecommendToken = page.items.firstOrNull { it.id == item.id }?.feedbackToken("Don't recommend channel"),
+                feedbackGeneration = context.generation,
+            ) else if (item is FeedItem.Video) item.copy(notInterestedToken = null) else item
+        }
+        HomePage(feed, page.messages, page.nextKey)
+    }
+
+    override suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) {
+        client.read { context, http ->
+            if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            val token = when (action) {
+                FeedMenuAction.NotInterested -> video.notInterestedToken
+                FeedMenuAction.DontRecommend -> video.dontRecommendToken
+                else -> null
+            }
+            if (token.isNullOrBlank() || video.feedbackGeneration != context.generation)
+                throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
+            sendFeedback(token, context, http).requireValue()
+        }
     }
 }
 

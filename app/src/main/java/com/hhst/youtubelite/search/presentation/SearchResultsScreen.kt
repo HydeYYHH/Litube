@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.search.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -346,7 +344,7 @@ private fun ResultThumbnail(
     onAction: (SearchAction) -> Unit,
 ) {
     Box(modifier.testTag("search-thumb-${result.id}").clip(RoundedCornerShape(radius))
-        .mediaActions(MediaActionItem(result.id, result.title, result.channel, result.artwork)) { onAction(SearchAction.OpenResult(result.id)) }
+        .clickable(role = Role.Button) { onAction(SearchAction.OpenResult(result.id)) }
         .appDescription(R.string.a11y_title_duration, result.title, result.duration)) {
         VideoArtwork(result.id, result.artwork, Modifier.fillMaxSize())
         result.progress?.let { progress ->

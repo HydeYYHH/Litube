@@ -1,13 +1,12 @@
 package com.hhst.youtubelite.home.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +62,7 @@ private fun Modifier.semanticsLabel(label: String) = this.then(Modifier.semantic
 private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAction) -> Unit) {
     Column(Modifier.testTag("feed-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
+            .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
             .semanticsLabel("${item.title}, ${item.duration}")) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -79,7 +78,7 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
             Avatar(item.avatar ?: item.artwork, item.author, item.channelId, onAction, size = 36.dp)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
-                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
+                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
                     AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
                     AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
@@ -99,7 +98,7 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onActio
             if (compact) Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-8).dp).background(Color(item.palette.stackColor).copy(alpha = 0.5f), RoundedCornerShape(12.dp)))
             Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-5).dp).background(Color(item.palette.stackColor), RoundedCornerShape(12.dp)))
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp))
-                .mediaActions(MediaActionItem(item.id, item.title, item.authors, item.artwork)) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
+                .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
                 VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
                 Row(Modifier.align(Alignment.BottomEnd).padding(8.dp).height(24.dp).background(Color(item.palette.badgeColor), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -23,6 +23,7 @@ internal class CommentSheetMotion(
     private val enabled: () -> Boolean,
     private val animateMotion: () -> Boolean,
     private val onDismiss: () -> Unit,
+    private val onDismissStarted: () -> Unit = {},
 ) : NestedScrollConnection {
     var offset by mutableFloatStateOf(0f)
         private set
@@ -48,6 +49,7 @@ internal class CommentSheetMotion(
 
     private fun settleTo(close: Boolean, velocity: Float) {
         if (dismissed) return
+        if (close) onDismissStarted()
         settling?.cancel()
         settling = scope.launch {
             val target = if (close) height else 0f

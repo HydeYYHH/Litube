@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.data.media.MediaHomeRepository
 import com.hhst.youtubelite.data.media.MediaSession
 import com.hhst.youtubelite.data.media.PlaybackWatchReporting
+import com.hhst.youtubelite.home.domain.FeedItem
 import com.hhst.youtubelite.player.PlayerViewModel
 import com.hhst.youtubelite.player.engine.PlaybackApi
 import com.hhst.youtubelite.watch.WatchActivity
@@ -109,6 +110,7 @@ class AnonymousLearningAndroidTest {
             val settled = home.loadHome("All", null)
             record("home_after_wait", JSONObject().put("homeItems", settled.items.size)
                 .put("messages", settled.messages.size).put("hasNext", settled.nextKey != null))
+
         } finally {
             File(context.filesDir, "anonymous-learning.json").writeText(records.toString(2))
         }

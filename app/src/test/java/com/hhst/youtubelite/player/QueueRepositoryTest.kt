@@ -66,26 +66,14 @@ class QueueRepositoryTest {
     }
 
     @Test
-    fun next_wrapsToHead_previous_nullAtHead() {
-        val repo = QueueRepository(MemJsonCache())
-        repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
-        assertEquals(vid("b"), repo.next(vid("a"))?.videoId)
-        assertEquals(vid("a"), repo.next(vid("c"))?.videoId) // wrap
-        assertNull(repo.previous(vid("a")))
-        assertEquals(vid("a"), repo.previous(vid("b"))?.videoId)
-    }
-
-    @Test
-    fun nextStrict_stopsAtTail_wrapsOnlyManually() {
+    fun nextStrict_stopsAtTail_previous_nullAtHead() {
         val repo = QueueRepository(MemJsonCache())
         repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
         assertEquals(vid("b"), repo.nextStrict(vid("a"))?.videoId)
-        // Tail: auto-advance stops instead of looping.
+        // Tail: navigation stops instead of looping back to the head.
         assertNull(repo.nextStrict(vid("c")))
-        // Manual next still wraps.
-        assertEquals(vid("a"), repo.next(vid("c"))?.videoId)
-        // Unknown current starts from the head, same as next().
-        assertEquals(vid("a"), repo.nextStrict("other")?.videoId)
+        assertNull(repo.previous(vid("a")))
+        assertEquals(vid("a"), repo.previous(vid("b"))?.videoId)
     }
 
     @Test
@@ -108,14 +96,14 @@ class QueueRepositoryTest {
     }
 
     @Test
-    fun next_nullWhenSingleItem_firstWhenCurrentMissing() {
+    fun nextStrict_nullWhenSingleItem_firstWhenCurrentMissing() {
         val repo = QueueRepository(MemJsonCache())
         repo.add(item("a"))
-        assertNull(repo.next(vid("a")))
-        assertEquals(vid("a"), repo.next("other")?.videoId)
+        assertNull(repo.nextStrict(vid("a")))
+        assertEquals(vid("a"), repo.nextStrict("other")?.videoId)
         repo.add(item("b"))
-        assertEquals(vid("b"), repo.next(vid("a"))?.videoId)
-        assertEquals(vid("a"), repo.next(vid("b"))?.videoId)
+        assertEquals(vid("b"), repo.nextStrict(vid("a"))?.videoId)
+        assertNull(repo.nextStrict(vid("b")))
     }
 
     @Test

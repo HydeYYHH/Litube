@@ -95,13 +95,24 @@ class ShortsViewModel(
                 else if (actionJob?.isActive != true) {
                     val target = _uiState.value.subscriptions[action.channelId] != true
                     actionJob = viewModelScope.launch {
+                        _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending + action.channelId) }
                         try {
                             actions.subscribe(action.channelId, target)
-                            _uiState.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target)) }
+                            _uiState.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target),
+                                subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         } catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message(UNCONFIRMED)) }
-                        catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again.")) }
+                        catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                            notices.trySend(AppNotice.SignIn)
+                            _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
+                        }
+                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                            notices.trySend(AppNotice.Message(UNCONFIRMED))
+                            _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
+                        }
+                        catch (_: Exception) {
+                            notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again."))
+                            _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
+                        }
                     }
                 }
             }
@@ -195,6 +206,11 @@ class ShortsViewModel(
                 })),
                 details = (state.details + (itemId to detail)).entries.toList().takeLast(MAX_DETAILS)
                     .associateTo(LinkedHashMap()) { it.key to it.value },
+                // The server's subscription state feeds the map; the local click
+                // write only lands after the same server confirms the change.
+                subscriptions = if (detail.subscribed != null && detail.item.channelId.isNotBlank())
+                    state.subscriptions + (detail.item.channelId to detail.subscribed)
+                else state.subscriptions,
             )
         }
     }
@@ -254,7 +270,7 @@ class ShortsViewModel(
         preloader?.cancel()
         val request = ++generation
         _uiState.update { it.copy(content = ShortsContent.Loading, appendLoading = false, appendFailed = false,
-            ratings = emptyMap(), subscriptions = emptyMap(), details = emptyMap()) }
+            ratings = emptyMap(), subscriptions = emptyMap(), subscriptionsPending = emptySet(), details = emptyMap()) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.shorts()

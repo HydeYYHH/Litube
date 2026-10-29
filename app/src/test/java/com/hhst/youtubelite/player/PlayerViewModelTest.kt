@@ -139,8 +139,12 @@ class PlayerViewModelTest {
         preferences.setEnabled(PreferenceKeys.ENABLE_AUTOPLAY, false)
         viewModel.openVideo(watchId)
         engine.settle(watchId)
+        // One prefetch resolves the Next button's target; ending the video
+        // must not issue another autoplay request with the pref off.
+        val prefetched = calls
         engine.finish()
-        assertEquals(0, calls)
+        assertEquals(prefetched, calls)
+        assertEquals(listOf(watchUrl), engine.playCalls)
         viewModel.onQueueAdd(QueueItem("bbbbbbbbbbb", title = "Next"))
         viewModel.openVideo(watchId)
         engine.settle(watchId)
@@ -322,6 +326,142 @@ class PlayerViewModelTest {
         preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
         viewModel.onShortsStopped()
         assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun leavingShortsNeverCollapsesIntoTheMiniPlayer() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        preferences.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
+        preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
+        // ContentActivity can resume before ShortsActivity stops: the browse
+        // hook must end the shorts presentation, not park it as a mini player.
+        viewModel.onBrowseOpened()
+        assertFalse(viewModel.uiState.value.visible)
+        assertFalse(viewModel.uiState.value.mini)
+        assertTrue(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun shortsStopClearsFloatingStateAndBrowseKeepsItClosed() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
+        viewModel.onShortsStopped()
+        assertFalse(viewModel.uiState.value.visible)
+        assertFalse(viewModel.uiState.value.mini)
+        assertTrue(engine.snapshot.value.isPlaying)
+        viewModel.onBrowseOpened()
+        assertFalse(viewModel.uiState.value.mini)
+        preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        viewModel.onShortsStopped()
+        assertFalse(viewModel.uiState.value.mini)
+        assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun endingAShortNeverRequestsWatchAutoplay() {
+        var calls = 0
+        bindViewModel { calls++; "bbbbbbbbbbb" }
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        engine.finish()
+        assertEquals(0, calls)
+    }
+
+    @Test fun manualNextUsesRelatedVideosEvenWhenAutoplayIsOff() {
+        var calls = 0
+        bindViewModel { calls++; "bbbbbbbbbbb" }
+        preferences.setEnabled(PreferenceKeys.ENABLE_AUTOPLAY, false)
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        assertTrue(viewModel.uiState.value.hasNext)
+        viewModel.skipToNext()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+        assertEquals(1, calls)
+    }
+
+    @Test fun relatedMissKeepsTheCurrentPlaybackAndDisablesNext() {
+        var calls = 0
+        bindViewModel { calls++; null }
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        // The per-video prefetch already resolved the miss: the button must
+        // show its honest disabled state without the user probing it.
+        assertFalse(viewModel.uiState.value.hasNext)
+        viewModel.skipToNext()
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(1, calls)
+        assertFalse(viewModel.uiState.value.hasNext)
+    }
+
+    @Test fun aStaleQueueNeverSeizesAPlainWatch() {
+        bindViewModel { "ccccccccccc" }
+        queue.setEnabled(true)
+        queue.add(QueueItem("ddddddddddd", title = "Leftover"))
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        // Still only the requested video: the leftover queue never hijacked it.
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        // Ending the video must not drop into the stale queue either.
+        engine.finish()
+        assertEquals(listOf(watchUrl, VideoId.watchUrl("ccccccccccc")), engine.playCalls)
+    }
+
+    @Test fun previousRestartsTheCurrentVideoPastTheThreshold() {
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        engine.settle(watchId, 42_000)
+        assertTrue(viewModel.uiState.value.hasPrevious)
+        viewModel.skipToPrevious()
+        assertEquals(0L, engine.snapshot.value.positionMs)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+    }
+
+    @Test fun previousWalksBackThisSessionsTrail() {
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        viewModel.openVideo("bbbbbbbbbbb")
+        engine.settle("bbbbbbbbbbb")
+        viewModel.openVideo("ccccccccccc")
+        engine.settle("ccccccccccc")
+        viewModel.skipToPrevious()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+        engine.settle("bbbbbbbbbbb")
+        viewModel.skipToPrevious()
+        assertEquals(watchUrl, engine.playCalls.last())
+        engine.settle(watchId)
+        assertFalse(viewModel.uiState.value.hasPrevious)
+    }
+
+    @Test fun loopOneDoesNotBlockManualQueueNext() {
+        bindViewModel()
+        queue.setEnabled(true)
+        queue.add(QueueItem(watchId, watchUrl, "First"))
+        queue.add(QueueItem("bbbbbbbbbbb", VideoId.watchUrl("bbbbbbbbbbb"), "Second"))
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        engine.setLoopMode(LoopMode.LOOP_ONE)
+        viewModel.skipToNext()
+        assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
+    }
+
+    @Test fun shortsExposeNoWatchNavigation() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        assertFalse(viewModel.uiState.value.hasNext)
+        assertFalse(viewModel.uiState.value.hasPrevious)
+        viewModel.skipToNext()
+        viewModel.skipToPrevious()
+        assertEquals(listOf(watchUrl), engine.playCalls)
     }
 
     @Test fun endingAnInactiveHoldPreservesSpeedAndStoppingRestoresAnActiveHoldOnce() {

@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.playlist.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -286,14 +284,14 @@ private fun PlaylistVideoRow(entry: PlaylistEntry, onAction: (PlaylistAction) ->
         val thumbnailWidth = if (LocalDensity.current.fontScale > 1.3f) minOf(160.dp, maxWidth * 0.4f) else 160.dp
         Row(Modifier.fillMaxWidth()) {
             Box(Modifier.size(thumbnailWidth, thumbnailWidth * 9f / 16f).clip(RoundedCornerShape(8.dp))
-                .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.channel, entry.artwork)) { onAction(PlaylistAction.OpenVideo(entry.id)) }.testTag("playlist-entry-cover-${entry.id}")) {
+                .clickable(role = Role.Button) { onAction(PlaylistAction.OpenVideo(entry.id)) }.testTag("playlist-entry-cover-${entry.id}")) {
                 PlaylistArtwork(entry.artwork, Modifier.fillMaxSize())
                 AppText(entry.duration, Modifier.align(Alignment.BottomEnd).padding(4.dp)
                     .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
                     size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
             }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f).mediaActions(MediaActionItem(entry.videoId, entry.title, entry.channel, entry.artwork)) { onAction(PlaylistAction.OpenVideo(entry.id)) }) {
+            Column(Modifier.weight(1f).clickable(role = Role.Button) { onAction(PlaylistAction.OpenVideo(entry.id)) }) {
                 AppText(entry.title, Modifier.fillMaxWidth().padding(end = 24.dp).testTag("playlist-entry-title-${entry.id}"), weight = FontWeight.Medium, maxLines = 2)
                 AppText(entry.channel, Modifier.padding(top = 4.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 val metadata = listOf(entry.views, entry.age).filter(String::isNotBlank).joinToString(" • ")

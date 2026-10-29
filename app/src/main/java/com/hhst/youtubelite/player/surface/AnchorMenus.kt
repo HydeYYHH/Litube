@@ -63,24 +63,6 @@ fun PlayerAnchorDropdown(
     onSubtitleStyle: () -> Unit = {},
 ) {
     when (menu) {
-        PlayerAnchorMenu.Speed -> OptionDropdown(
-            rows = PlayerUi.SpeedChoices.map { OptionRow(it, PlayerUi.speedLabel(it)) },
-            selected = state.speed,
-            onPick = { speed ->
-                speed?.let(callbacks::onSpeed)
-                onDismiss()
-            },
-            onDismiss = onDismiss,
-        )
-        PlayerAnchorMenu.Quality -> OptionDropdown(
-            rows = buildList<OptionRow<String>> {
-                add(OptionRow(null, stringResource(R.string.player_quality_auto)))
-                state.qualities.forEach { add(OptionRow(it, it)) }
-            },
-            selected = state.qualityLabel,
-            onPick = { callbacks.onQuality(it); onDismiss() },
-            onDismiss = onDismiss,
-        )
         PlayerAnchorMenu.Subtitles -> {
             // Languages only — no "off" row. Tapping the active language
             // turns captions off. Style sits under the list.

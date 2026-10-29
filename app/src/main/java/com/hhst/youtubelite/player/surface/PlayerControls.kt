@@ -373,8 +373,6 @@ fun BottomBar(
     chapters: List<Chapter> = emptyList(),
     hasSegments: Boolean = false,
     onOpenChapters: () -> Unit = {},
-    menu: PlayerAnchorMenu? = null,
-    onDismissMenu: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
     compact: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
@@ -438,19 +436,12 @@ fun BottomBar(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box {
-                        PlayerIconButton(
-                            icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
-                            contentDescription = stringResource(R.string.action_fullscreen),
-                            onClick = onFullscreen,
-                            iconSize = sizing.iconDp,
-                        )
-                        // Speed/quality open from the More sheet; the dropdown
-                        // surfaces here, anchored to the last chrome row.
-                        if (callbacks != null && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality)) {
-                            PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                        }
-                    }
+                    PlayerIconButton(
+                        icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
+                        contentDescription = stringResource(R.string.action_fullscreen),
+                        onClick = onFullscreen,
+                        iconSize = sizing.iconDp,
+                    )
                 }
             }
         }

@@ -234,7 +234,7 @@ class PlayerInteractionAndroidTest {
         compose.setContent {
             AppTheme(darkTheme = true, dynamicColor = false) {
                 PlayerSheetHost(sheet, PlayerUiState(videoId = "abcdefghijk", title = "Queue clip", author = "Channel"),
-                    remember { mutableStateOf(0L) }, callbacks, { sheet = null }, {})
+                    remember { mutableStateOf(0L) }, callbacks, { sheet = null }, {}, { sheet = it })
             }
         }
         compose.onNodeWithText(compose.activity.getString(R.string.add_to_queue)).performScrollTo().performClick()

@@ -60,8 +60,8 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
     /** Identity of the video whose overflow menu opened the shared actions dialog, if any. */
-    private val itemMenuState = androidx.compose.runtime.mutableStateOf<com.hhst.youtubelite.ui.components.MediaActionItem?>(null)
-    private var itemMenu: com.hhst.youtubelite.ui.components.MediaActionItem?
+    private val itemMenuState = androidx.compose.runtime.mutableStateOf<com.hhst.youtubelite.ui.MediaActionItem?>(null)
+    private var itemMenu: com.hhst.youtubelite.ui.MediaActionItem?
         get() = itemMenuState.value
         set(value) { itemMenuState.value = value }
 
@@ -125,7 +125,7 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             val video = ready?.page?.let { page ->
                                 (page.videos + page.homeShelves.flatMap { it.videos }).firstOrNull { it.id == request.videoId }
                             }
-                            if (video != null) itemMenu = com.hhst.youtubelite.ui.components.MediaActionItem(
+                            if (video != null) itemMenu = com.hhst.youtubelite.ui.MediaActionItem(
                                 video.id, video.title, ready.page.profile.name, video.artwork)
                         }
                         // Typed exits for fixture instrumentation; the ViewModel already applied
@@ -151,7 +151,25 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             itemMenu?.let { item ->
-                com.hhst.youtubelite.ui.components.MediaActionsDialog(item) { itemMenu = null }
+                // The unified More sheet routes taps to the activity-owned executor;
+                // the card long-press dialog is gone.
+                val executor = androidx.compose.runtime.remember { com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@ChannelActivity) }
+                val items = com.hhst.youtubelite.ui.MediaActionKind.entries.map { kind ->
+                    com.hhst.youtubelite.ui.design.MenuSheetItem(icon = when (kind) {
+                        com.hhst.youtubelite.ui.MediaActionKind.PlayNext -> com.hhst.youtubelite.ui.design.AppIcon.Play
+                        com.hhst.youtubelite.ui.MediaActionKind.Queue -> com.hhst.youtubelite.ui.design.AppIcon.QueueAdd
+                        com.hhst.youtubelite.ui.MediaActionKind.Download -> com.hhst.youtubelite.ui.design.AppIcon.Download
+                        com.hhst.youtubelite.ui.MediaActionKind.OpenWith -> com.hhst.youtubelite.ui.design.AppIcon.OpenWith
+                        com.hhst.youtubelite.ui.MediaActionKind.Share -> com.hhst.youtubelite.ui.design.AppIcon.Share
+                        com.hhst.youtubelite.ui.MediaActionKind.CopyLink -> null
+                    }, label = kind.label, tag = "media-action-${kind.name}")
+                }
+                com.hhst.youtubelite.ui.design.MenuBottomSheet(items,
+                    onDismiss = { itemMenu = null },
+                    onSelect = { index ->
+                        executor.execute(item, com.hhst.youtubelite.ui.MediaActionKind.entries[index])
+                        itemMenu = null
+                    })
             }
         }
     }

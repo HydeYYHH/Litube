@@ -1293,6 +1293,7 @@ class PlaybackEngine(
      * remembered key so turning captions back on restores the same track.
      */
     override fun setSubtitle(trackKey: String?): Boolean {
+        val previousKey = _snapshot.value.subtitleKey
         if (trackKey != null &&
             !resolver.hasSubtitleTrack(currentStream?.subtitles.orEmpty(), trackKey)
         ) {
@@ -1308,7 +1309,7 @@ class PlaybackEngine(
         }
         val stream = currentStream
         val metadata = currentMetadata
-        if (stream != null && metadata != null && trackKey != null) {
+        if (stream != null && metadata != null && (trackKey != null || previousKey != null)) {
             rebuildAtCurrentPosition(stream, metadata, subtitleKey = trackKey)
         }
         applySubtitle(trackKey)
@@ -1612,8 +1613,8 @@ class PlaybackEngine(
         // (old video still attached) must not drive recovery — same
         // metadata/snapshot identity guard as refreshCastUrl.
         if (metadata != null && metadata.id != videoId) return
-        if (isTextRendererError(error)) {
-            recoverFromTextError()
+        if (_snapshot.value.subtitleKey != null && (isTextRendererError(error) || isSubtitleSourceError(error))) {
+            recoverFromTextError(error)
             return
         }
         var reason = recoveryReason(error)
@@ -1801,20 +1802,20 @@ class PlaybackEngine(
         return false
     }
 
-    /** Drop captions and keep A/V playing after a TTML/cue renderer failure. */
-    private fun recoverFromTextError() {
-        // Disable TEXT first; re-prepare can otherwise retry the same samples
-        // and crash again while ExoPlayer tries to disable the text renderer.
-        runCatching { applySubtitle(null) }
-        val position = player.currentPosition.coerceAtLeast(0L)
-        if (player.playerError != null) {
-            runCatching {
-                skipSeekInProgress = true
-                player.prepare()
-                player.seekTo(position)
-                player.playWhenReady = userWantsPlay && castPlayer == null
-            }
-        }
+    private fun isSubtitleSourceError(error: PlaybackException): Boolean {
+        val urls = SubtitleSelection.select(currentStream?.subtitles.orEmpty(), _snapshot.value.subtitleKey)
+            .map { Uri.parse(it.url) }.toSet()
+        return generateSequence<Throwable>(error) { it.cause }.take(8)
+            .filterIsInstance<HttpDataSource.HttpDataSourceException>().any { it.dataSpec.uri in urls }
+    }
+
+    private fun recoverFromTextError(error: PlaybackException) {
+        val stream = currentStream ?: return
+        val metadata = currentMetadata ?: return
+        playerLog("subtitle_disabled", mapOf("error_code" to error.errorCode), error)
+        applySubtitle(null)
+        // Disabling the renderer leaves a failed merged source attached. Remove that source too.
+        rebuildAtCurrentPosition(stream, metadata, subtitleKey = null)
     }
 
 

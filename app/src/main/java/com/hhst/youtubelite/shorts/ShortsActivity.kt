@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -232,6 +235,67 @@ class ShortsActivity : ComponentActivity() {
                     }
                 }
             }
+            // Startup telemetry: entry, media prepare and first frame are
+            // logged separately so the seed read (logged by the repository)
+            // can be compared against the media pipeline it must not block.
+            if (!fixtures) {
+                val entryAt = remember { android.os.SystemClock.elapsedRealtime() }
+                // The entry item: the seed when one was passed, otherwise the
+                // first item the feed settles on.
+                var entryItem by remember { mutableStateOf(state.currentItemId) }
+                LaunchedEffect(state.currentItemId) {
+                    if (entryItem == null) entryItem = state.currentItemId
+                }
+                val preloader = remember { org.koin.java.KoinJavaComponent.getKoin()
+                    .get<com.hhst.youtubelite.shorts.data.ShortsMediaPreloader>() }
+                LaunchedEffect(Unit) {
+                    com.hhst.youtubelite.diagnostics.AppLog.event(
+                        com.hhst.youtubelite.diagnostics.AppLog.Category.PLAYER, "shorts_entry",
+                        mapOf("seeded" to (entryItem != null)))
+                }
+                var preparedLogged by remember { mutableStateOf(false) }
+                LaunchedEffect(playerState.videoId, playerState.prepared, entryItem) {
+                    if (!preparedLogged && entryItem != null && playerState.prepared &&
+                        playerState.videoId == com.hhst.youtubelite.extractor.VideoId.parse(entryItem!!)) {
+                        preparedLogged = true
+                        com.hhst.youtubelite.diagnostics.AppLog.event(
+                            com.hhst.youtubelite.diagnostics.AppLog.Category.PLAYER, "shorts_media_prepared",
+                            mapOf("video_id" to entryItem, "ms" to android.os.SystemClock.elapsedRealtime() - entryAt))
+                    }
+                }
+                // One event per video that reaches its first frame: latency from
+                // selection to frame with the prefetch-hit/cold split the swipe
+                // run reports on. Keyed on the engine's id so a frame that lands
+                // after the pager moved on still counts.
+                val settleStamps = remember {
+                    object : LinkedHashMap<String, Long>(16, 0.75f, true) {
+                        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 24
+                    }
+                }
+                LaunchedEffect(state.currentItemId) {
+                    state.currentItemId?.let { settleStamps[it] = android.os.SystemClock.elapsedRealtime() }
+                }
+                val frameLogged = remember { mutableSetOf<String>() }
+                // Collect the state flow directly: a per-video frame must never
+                // be lost to recomposition coalescing during fast swipes.
+                LaunchedEffect(playerViewModel) {
+                    playerViewModel.uiState.collect { s ->
+                        val item = s.videoId ?: return@collect
+                        if (!s.firstFrameRendered) return@collect
+                        if (frameLogged.size >= 64) frameLogged.remove(frameLogged.first())
+                        if (!frameLogged.add(item)) return@collect
+                        val warmed = preloader.prefetchedBytes(item)
+                        val settledAt = settleStamps[item]
+                        com.hhst.youtubelite.diagnostics.AppLog.event(
+                            com.hhst.youtubelite.diagnostics.AppLog.Category.PLAYER, "shorts_first_frame",
+                            mapOf("video_id" to item,
+                                "ms" to (settledAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: -1L),
+                                "mode" to if (warmed > 0) "prefetch" else "cold", "prefetch_bytes" to warmed,
+                                "entry" to (item == entryItem),
+                                "settled" to (item == shortsViewModel.uiState.value.currentItemId)))
+                    }
+                }
+            }
             ShortsScreen(state, shortsViewModel::onAction, Modifier.fillMaxSize(),
                 videoContent = if (fixtures) null else { itemId ->
                     // Only the short the engine actually loaded may render; every
@@ -259,7 +323,7 @@ class ShortsActivity : ComponentActivity() {
                 onSwipeStart = if (fixtures) null else playerViewModel::holdShortsForSwipe,
                 onSwipeCancel = if (fixtures) null else playerViewModel::resumeShortsAfterSwipe)
             if (state.overlay is ShortsOverlay.Comments && activeComments != null) {
-                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).testTag("comments-panel-host")) {
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)).testTag("comments-panel-host")) {
                     CommentsPanel(
                         state = commentsState,
                         commentCount = commentsState.total,

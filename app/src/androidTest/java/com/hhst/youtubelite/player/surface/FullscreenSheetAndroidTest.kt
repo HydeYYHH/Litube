@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -53,7 +54,7 @@ class FullscreenSheetAndroidTest {
         compose.setContent { AppTheme {
             PlayerWindowEffects(compose.activity, host, fullscreen, 1920, 1080)
             val state = PlayerUiState(fullscreen = fullscreen, visible = true)
-            PlayerSheetHost(sheet, state, remember { mutableStateOf(0L) }, callbacks, { sheet = null }, { dialog = it })
+            PlayerSheetHost(sheet, state, remember { mutableStateOf(0L) }, callbacks, { sheet = null }, { dialog = it }, { sheet = it })
             PlayerDialogHost(dialog, state, callbacks, { dialog = null })
         } }
         fun hidden(): Boolean {
@@ -66,13 +67,14 @@ class FullscreenSheetAndroidTest {
         var frames = 0
         var barFrames = 0
         var lostFocusFrames = 0
+        var watchSheetFocus = true
         val decor = compose.activity.window.decorView
         val watcher = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 if (!watching) return
                 frames++
                 if (systemBarsVisible(decor)) barFrames++
-                if (!decor.hasWindowFocus()) lostFocusFrames++
+                if (watchSheetFocus && !decor.hasWindowFocus()) lostFocusFrames++
                 Choreographer.getInstance().postFrameCallback(this)
             }
         }
@@ -126,6 +128,7 @@ class FullscreenSheetAndroidTest {
             compose.onNodeWithContentDescription(compose.activity.getString(R.string.close)).performClick()
             compose.waitUntil(10000) { sheet == null }
             compose.runOnIdle { sheet = PlayerSheet.More }
+            compose.runOnIdle { watchSheetFocus = false }
             compose.onNodeWithText(compose.activity.getString(R.string.subtitle_style)).performClick()
             compose.onNodeWithText(compose.activity.getString(R.string.subtitle_style)).assertIsDisplayed()
             DeviceEvidence.captureScene("fullscreen-sheet-subtitle-style")
@@ -147,5 +150,45 @@ class FullscreenSheetAndroidTest {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.waitUntil(10_000) { sheet == null }
         assertFalse("Regular player should retain visible system bars", hidden())
+    }
+
+    /** Quality/Speed are subpages of one sheet; back walks them without a popup layer. */
+    @Test fun qualityAndSpeedReplaceTheMoreSheetInPlace() {
+        compose.runOnUiThread { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE }
+        compose.waitUntil(10_000) {
+            compose.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        }
+        var sheet by mutableStateOf<PlayerSheet?>(PlayerSheet.More)
+        var quality: String? = "unset"
+        var speed = 0f
+        val callbacks = proxyActions("SheetSubpageActions") { name, args ->
+            if (name == "onQuality") quality = args!![0] as String?
+            if (name == "onSpeed") speed = args!![0] as Float
+        }
+        val state = PlayerUiState(fullscreen = true, visible = true, speed = 1f, qualityLabel = "720p",
+            qualities = listOf("1080p", "720p", "480p"))
+        compose.setContent { AppTheme {
+            PlayerSheetHost(sheet, state, remember { mutableStateOf(0L) }, callbacks,
+                { sheet = null }, {}, { sheet = it })
+        } }
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText(compose.activity.getString(R.string.more_options))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality)).performClick()
+        compose.onNodeWithTag("player-sheet-quality").assertIsDisplayed()
+        // The root page is replaced, not covered: More-only rows stop existing.
+        compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertDoesNotExist()
+        // The checked row mirrors the active quality.
+        compose.onNodeWithText("720p").assertIsDisplayed()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(PlayerSheet.More, sheet) }
+        compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed)).performClick()
+        compose.onNodeWithTag("player-sheet-speed").assertIsDisplayed()
+        compose.onNodeWithText("1.5x").performClick()
+        compose.waitUntil(10_000) { sheet == null }
+        compose.runOnIdle { assertEquals(1.5f, speed) }
     }
 }

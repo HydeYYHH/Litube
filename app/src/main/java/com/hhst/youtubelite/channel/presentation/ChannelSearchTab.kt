@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.channel.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -125,13 +123,13 @@ private fun ChannelSearchVideoRow(video: ChannelVideo, channel: String, width: F
     Row(Modifier.fillMaxWidth().heightIn(min = 115.dp).padding(start = 12.dp, top = 12.dp, bottom = 12.dp)
         .testTag("channel-search-video-${video.id}")) {
         Box(Modifier.size(imageWidth.dp, (imageWidth * .5625f).dp).clip(RoundedCornerShape(8.dp))
-            .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }.testTag("channel-search-thumb-${video.id}")) {
+            .clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }.testTag("channel-search-thumb-${video.id}")) {
             VideoArtwork(video.id, video.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(5.dp).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp)) {
                 AppText(video.duration, size = 12, line = 18, color = Color.White, maxLines = 1)
             }
         }
-        Column(Modifier.weight(1f).padding(start = 8.dp, top = 2.dp).mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }) {
+        Column(Modifier.weight(1f).padding(start = 8.dp, top = 2.dp).clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }) {
             AppText(rememberDeArrowTitle(video.id, video.title), size = 14, line = 18, exactLineHeight = 17.5.sp, maxLines = 2)
             AppText(channel, size = 12, line = 15, color = Color(0xFF888888), maxLines = 1)
             AppText(listOf(video.views, video.age).filter(String::isNotBlank).joinToString(" · "), size = 12, line = 15, color = Color(0xFF888888), maxLines = 2)

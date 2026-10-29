@@ -2,8 +2,6 @@ package com.hhst.youtubelite.library.presentation
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -112,7 +110,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
     Row(Modifier.fillMaxWidth().heightIn(min = 90.dp).testTag("history-item-${entry.id}")) {
         Box(Modifier.padding(start = 12.dp).width(160.dp).height(90.dp)
             .clip(RoundedCornerShape(8.dp))
-            .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)
+            .clickable(role = Role.Button, onClick = onOpen)
             .semanticsLabel("${entry.title}, ${entry.duration}")) {
             VideoArtwork(entry.videoId, entry.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(5.dp)
@@ -123,7 +121,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
         }
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Column(Modifier.padding(start = 8.dp, end = 48.dp)
-                .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork), onOpen)) {
+                .clickable(role = Role.Button, onClick = onOpen)) {
                 AppText(rememberDeArrowTitle(entry.videoId, entry.title), size = 14, exactLineHeight = 17.5.sp, maxLines = if (compact) 3 else 1)
                 AppText(entry.author, size = 12, line = 15, color = DesignTokens.Secondary, maxLines = 1)
                 if (entry.views.isNotEmpty()) {
@@ -169,7 +167,7 @@ internal fun HistoryShelf(entries: List<HistoryEntry>, onOpen: (String) -> Unit)
         horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         items(entries, key = { it.id }) { entry ->
             Column(Modifier.width(175.dp).testTag("library-history-${entry.id}")
-                .mediaActions(MediaActionItem(entry.videoId, entry.title, entry.author, entry.artwork)) { onOpen(entry.videoId) }) {
+                .clickable(role = Role.Button) { onOpen(entry.videoId) }) {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp))) {
                     VideoArtwork(entry.videoId, entry.artwork, Modifier.fillMaxSize())
                     entry.progress?.let { progress ->

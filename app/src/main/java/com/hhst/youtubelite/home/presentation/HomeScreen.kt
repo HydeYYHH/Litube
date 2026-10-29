@@ -159,7 +159,11 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
             when (val overlay = state.overlay) {
                 HomeOverlay.None -> Unit
                 HomeOverlay.Search -> SearchOverlay(state, onAction, searchRows)
-                is HomeOverlay.Menu -> if (overlay.kind == FeedMenuKind.Mix) MixMenu(onAction, state.live) else VideoMenu(onAction, overlay.kind, state.live)
+                is HomeOverlay.Menu -> if (overlay.kind == FeedMenuKind.Mix) MixMenu(onAction, state.live) else VideoMenu(
+                    onAction, overlay.kind, state.live, state.signedInPreview,
+                    (state.content as? HomeContent.Feed)?.page?.items?.filterIsInstance<FeedItem.Video>()
+                        ?.firstOrNull { it.id == overlay.itemId && it.feedbackGeneration == state.sessionGeneration },
+                )
                 is HomeOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
                     draft = NewPlaylistDraft(overlay.title, overlay.description),
                     onDismiss = { onAction(HomeAction.CloseOverlay) },

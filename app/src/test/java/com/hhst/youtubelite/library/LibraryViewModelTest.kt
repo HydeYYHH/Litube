@@ -49,6 +49,18 @@ class LibraryViewModelTest {
         assertTrue(loads.isEmpty())
     }
 
+    @Test fun theAnonymousAccountMenuRoutesToSignInAndNeverToTheSwitcher() = runTest {
+        val loads = mutableListOf<String>()
+        val anonymous = YouViewModel(recordingRepository(loads), SavedStateHandle(), LibraryScenario.Content, signedIn = false)
+        anonymous.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
+        assertEquals(LibraryNavigationRequest.SignIn, anonymous.navigationRequests.first())
+        // The signed-in avatar routes the same row to the real account switcher.
+        val signedIn = YouViewModel(FixtureLibraryRepository(LibraryScenario.Content), SavedStateHandle(), LibraryScenario.Content, signedIn = true)
+        advanceUntilIdle()
+        signedIn.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
+        assertEquals(LibraryNavigationRequest.SwitchAccount, signedIn.navigationRequests.first())
+    }
+
     @Test fun youPageLoadsSectionsAndEmitsTypedExits() = runTest {
         val vm = YouViewModel(FixtureLibraryRepository(LibraryScenario.Content), SavedStateHandle(), LibraryScenario.Content, signedIn = true)
         advanceUntilIdle()

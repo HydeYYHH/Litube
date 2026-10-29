@@ -31,7 +31,7 @@ abstract class NativeActivity : ComponentActivity() {
 
     private fun suppressNavigationPip(intent: Intent) {
         if (intent.component?.packageName == packageName && navigationPip == null) {
-            navigationPip = com.hhst.youtubelite.core.PipAutoEnter.suppress()
+            navigationPip = com.hhst.youtubelite.core.PipAutoEnter.suppressForNavigation(this)
         }
     }
 

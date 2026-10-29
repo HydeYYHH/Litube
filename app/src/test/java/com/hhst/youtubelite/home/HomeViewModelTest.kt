@@ -192,6 +192,65 @@ class HomeViewModelTest {
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
+    @Test fun confirmedFeedbackRemovesTheRow() = runTest {
+        val calls = ArrayList<Pair<String, String?>>()
+        val repo = object : HomeRepository {
+            override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(
+                FeedItem.Video("a", "A", "Blender", "1 view", "a", "1:00", "blender", notInterestedToken = "token-a", feedbackGeneration = 1),
+                FeedItem.Video("b", "B", "Blender", "1 view", "b", "1:00", "blender"),
+            ))
+            override suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) { calls += video.id to video.notInterestedToken }
+        }
+        val vm = HomeViewModel(repo, SavedStateHandle(), saveRepository = FakeSaveRepository())
+        vm.updateSession(true, 1)
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        vm.onAction(HomeAction.OpenMenu("a"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+        assertEquals(listOf("b"), (vm.uiState.value.content as HomeContent.Feed).page.items.map { it.id })
+        assertEquals(listOf("a" to "token-a"), calls)
+        assertEquals(AppNotice.Message("Removed from recommendations"), withTimeoutOrNull(500) { vm.actionNotices.first() })
+    }
+
+    @Test fun failedFeedbackKeepsTheRow() = runTest {
+        val repo = object : HomeRepository {
+            override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(
+                FeedItem.Video("a", "A", "Blender", "1 view", "a", "1:00", "blender", notInterestedToken = "token-a", feedbackGeneration = 1),
+            ))
+            override suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) { throw java.io.IOException("offline") }
+        }
+        val vm = HomeViewModel(repo, SavedStateHandle(), saveRepository = FakeSaveRepository())
+        vm.updateSession(true, 1)
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        vm.onAction(HomeAction.OpenMenu("a"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertEquals(listOf("a"), (vm.uiState.value.content as HomeContent.Feed).page.items.map { it.id })
+        assertEquals(AppNotice.Message("Couldn't update recommendations. Try again."), withTimeoutOrNull(500) { vm.actionNotices.first() })
+    }
+
+    @Test fun guestNotInterestedStillOpensTheReasonSheetWithoutWriting() = runTest {
+        val vm = HomeViewModel(FixtureHomeRepository(), SavedStateHandle(), HomeScenario.Feed)
+        vm.onAction(HomeAction.OpenMenu("bunny"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
+        assertEquals(HomeOverlay.Feedback("bunny", HomeFeedbackKind.NotInterested), vm.uiState.value.overlay)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        assertEquals(FixtureHomeRepository.samplePage().items, (vm.uiState.value.content as HomeContent.Feed).page.items)
+    }
+
+    @Test fun productionMenusOfferOnlyRowsWithARealRoute() {
+        assertEquals(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share), FeedMenuKind.Video.productionActions())
+        assertEquals(listOf(FeedMenuAction.Share), FeedMenuKind.Mix.productionActions())
+        assertTrue(FeedMenuKind.Short.productionActions().isEmpty())
+        assertTrue(FeedMenuKind.Shorts.productionActions().isEmpty())
+        assertTrue(FeedMenuKind.Post.productionActions().isEmpty())
+        assertEquals(FeedMenuKind.Video.actions, FeedMenuKind.Video.visibleActions(false))
+        assertEquals(FeedMenuKind.Video.productionActions(), FeedMenuKind.Video.visibleActions(true))
+    }
+
     @Test fun firstVisitDoesNotLoadRecommendations() = runTest {
         var calls = 0
         val vm = HomeViewModel(repository { _, _ -> calls++; FixtureHomeRepository.samplePage() }, SavedStateHandle())

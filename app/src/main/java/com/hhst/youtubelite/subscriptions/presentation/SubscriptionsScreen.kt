@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.subscriptions.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
@@ -236,7 +234,7 @@ internal fun SubscriptionsArtwork(asset: String, modifier: Modifier = Modifier) 
 internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (SubscriptionsAction) -> Unit) {
     Column(Modifier.testTag("subs-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }
+            .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }
             .appDescription(R.string.a11y_title_duration, item.title, item.duration)) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
@@ -255,7 +253,7 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f)) {
                     Column(Modifier.padding(end = 48.dp)
-                        .mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
+                        .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
                         AppText(rememberDeArrowTitle(item.id, item.title), size = 14, exactLineHeight = 17.5.sp, weight = FontWeight.Medium, maxLines = 2)
                         AppText("${item.author} • ${item.metadata}", Modifier.padding(top = 3.dp),
                             size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
@@ -275,7 +273,7 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
                 }
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    Column(Modifier.mediaActions(MediaActionItem(item.id, item.title, item.author, item.artwork)) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
+                    Column(Modifier.clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
                         AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
                         AppText("${item.author} · ${item.metadata}", Modifier.padding(top = 2.dp), size = 12, line = 18,
                             color = DesignTokens.Secondary, maxLines = 1)

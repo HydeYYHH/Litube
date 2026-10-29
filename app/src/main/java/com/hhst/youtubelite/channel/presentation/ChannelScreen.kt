@@ -1,7 +1,5 @@
 package com.hhst.youtubelite.channel.presentation
 
-import com.hhst.youtubelite.ui.components.mediaActions
-import com.hhst.youtubelite.ui.components.MediaActionItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -464,7 +462,7 @@ private fun ChannelVideoRow(
         .testTag("channel-video-${video.id}")) {
         Box(Modifier.padding(top = 12.dp).size(ChannelLayout.ThumbnailWidth.dp, ChannelLayout.ThumbnailHeight.dp)
             .clip(RoundedCornerShape(ChannelLayout.ThumbnailRadius.dp))
-            .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }
+            .clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }
             .appDescription(R.string.a11y_title_duration, video.title, video.duration)
             .testTag("channel-thumb-${video.id}")) {
             VideoArtwork(video.id, video.artwork, Modifier.fillMaxSize())
@@ -476,7 +474,7 @@ private fun ChannelVideoRow(
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).padding(top = 14.dp)
-            .mediaActions(MediaActionItem(video.id, video.title, artwork = video.artwork)) { onAction(ChannelAction.OpenVideo(video.id)) }) {
+            .clickable(role = Role.Button) { onAction(ChannelAction.OpenVideo(video.id)) }) {
             AppText(rememberDeArrowTitle(video.id, video.title), Modifier.fillMaxWidth(), size = 14, line = 18, maxLines = 2, exactLineHeight = 17.sp)
             Spacer(Modifier.height(2.dp))
             if (video.age.isNotBlank() && video.views.isNotBlank()) {

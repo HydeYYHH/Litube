@@ -71,7 +71,10 @@ class ShortsScreenshotAndroidTest {
         compose.onNodeWithText("Subscribe").assertIsDisplayed()
         val channel = compose.onNodeWithTag("short-channel-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, channel.left, 0.5f)
-        assertEquals(760f, channel.top, 0.5f)
+        // 752f: the shared SubscribeButton carries a 48dp touch target, so the
+        // bottom-anchored channel row is 8dp taller than the old 40dp pill row.
+        // The block is bottom-anchored, so the title below keeps its 808f top.
+        assertEquals(752f, channel.top, 0.5f)
         val title = compose.onNodeWithTag("short-title-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, title.left, 0.5f)
         assertEquals(808f, title.top, 0.5f)
@@ -115,10 +118,18 @@ class ShortsScreenshotAndroidTest {
         val actualPixels = IntArray(expectedPixels.size)
         expected.getPixels(expectedPixels, 0, expected.width, 0, 0, expected.width, expected.height)
         actual.getPixels(actualPixels, 0, actual.width, 0, 0, actual.width, actual.height)
-        val changed = expectedPixels.indices.count { i -> listOf(0, 8, 16).any { shift ->
+        val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        assertTrue("$name changed $changed pixels; inspect the saved screenshot", changed.toFloat() / expectedPixels.size <= 0.001f)
+        // Report where the diff lives so an intentional geometry change is
+        // distinguishable from unrelated drift without lowering the bar.
+        val changedArea = changed.fold(null as IntArray?) { area, i ->
+            val x = i % expected.width; val y = i / expected.width
+            if (area == null) intArrayOf(x, y, x, y)
+            else intArrayOf(minOf(area[0], x), minOf(area[1], y), maxOf(area[2], x), maxOf(area[3], y))
+        }
+        assertTrue("$name changed ${changed.size} pixels in ${changedArea?.contentToString()}; inspect the saved screenshot",
+            changed.size.toFloat() / expectedPixels.size <= 0.001f)
         expected.recycle()
     }
 }

@@ -335,4 +335,29 @@ class WatchCommentsHostAndroidTest {
         awaitNode("watch-metadata")
         assertEquals(0, nodeCount("comments-panel"))
     }
+
+    @Test fun editorTracksTheKeyboardWithoutMovingThePanel() {
+        val host = launch()
+        openPanel()
+        val panelTop = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithTag("comments-input").performClick()
+        awaitNode("comment-composer")
+        var keyboardTop = 0f
+        var density = 1f
+        compose.waitUntil(10_000) {
+            var visible = false
+            host.onActivity { activity ->
+                val decor = activity.window.decorView
+                val insets = androidx.core.view.ViewCompat.getRootWindowInsets(decor)
+                visible = insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                keyboardTop = decor.height - (insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom ?: 0).toFloat()
+                density = activity.resources.displayMetrics.density
+            }
+            visible
+        }
+        compose.waitForIdle()
+        val editorBottom = compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot.bottom
+        assertEquals(8f, (keyboardTop - editorBottom) / density, 2f)
+        assertEquals(panelTop, compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot.top, 2f)
+    }
 }

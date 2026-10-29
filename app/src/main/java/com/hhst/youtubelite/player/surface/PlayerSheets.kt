@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.player.surface
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -27,6 +29,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,9 +47,15 @@ import com.hhst.youtubelite.ui.components.audioTrackLabel
 import com.hhst.youtubelite.ui.components.AppSheetHandle
 import com.hhst.youtubelite.ui.theme.AppStyle
 
-/** Player sheets: More + Queue + Chapters. */
+/**
+ * Player sheets: More is the root settings page; Quality and Speed are its
+ * subpages. They replace the sheet content in place (with an in-sheet back
+ * action) instead of closing the sheet and stacking a popup over the player.
+ */
 sealed interface PlayerSheet {
     data object More : PlayerSheet
+    data object Quality : PlayerSheet
+    data object Speed : PlayerSheet
     data object Queue : PlayerSheet
     data object Chapters : PlayerSheet
 }
@@ -59,10 +69,8 @@ sealed interface PlayerDialog {
     data object SubtitleStyle : PlayerDialog
 }
 
-/** Anchored popup menus. */
+/** Anchored popup menus opened directly from the chrome. */
 sealed interface PlayerAnchorMenu {
-    data object Speed : PlayerAnchorMenu
-    data object Quality : PlayerAnchorMenu
     data object Subtitles : PlayerAnchorMenu
 }
 
@@ -85,9 +93,8 @@ fun PlayerSheetHost(
     callbacks: PlayerSurfaceCallbacks,
     onDismiss: () -> Unit,
     onOpenDialog: (PlayerDialog) -> Unit,
+    onNavigate: (PlayerSheet) -> Unit,
     onOpenQueue: (() -> Unit)? = null,
-    onSpeed: (() -> Unit)? = null,
-    onQuality: (() -> Unit)? = null,
 ) {
     if (sheet == null) return
     val context = LocalContext.current
@@ -99,8 +106,8 @@ fun PlayerSheetHost(
                 onQueue = onOpenQueue,
                 onLoop = onOpenQueue?.let { { callbacks.onLoop(); onDismiss() } },
                 loopMode = state.loopMode,
-                onSpeed = onSpeed,
-                onQuality = onQuality,
+                onSpeed = { onNavigate(PlayerSheet.Speed) },
+                onQuality = { onNavigate(PlayerSheet.Quality) },
                 showPip = state.pipAvailable,
                 onResize = {
                     onDismiss()
@@ -140,6 +147,27 @@ fun PlayerSheetHost(
                     }
                     onDismiss()
                 },
+            )
+            PlayerSheet.Quality -> OptionSheet(
+                title = stringResource(R.string.player_info_quality),
+                tag = "player-sheet-quality",
+                onBack = { onNavigate(PlayerSheet.More) },
+                onClose = onDismiss,
+                rows = buildList {
+                    add(OptionRow<String>(null, stringResource(R.string.player_quality_auto)))
+                    state.qualities.forEach { add(OptionRow(it, it)) }
+                },
+                selected = state.qualityLabel,
+                onPick = { callbacks.onQuality(it); onDismiss() },
+            )
+            PlayerSheet.Speed -> OptionSheet(
+                title = stringResource(R.string.info_playback_speed),
+                tag = "player-sheet-speed",
+                onBack = { onNavigate(PlayerSheet.More) },
+                onClose = onDismiss,
+                rows = PlayerUi.SpeedChoices.map { OptionRow(it, PlayerUi.speedLabel(it)) },
+                selected = state.speed,
+                onPick = { speed -> speed?.let(callbacks::onSpeed); onDismiss() },
             )
             PlayerSheet.Queue -> QueueSheet(
                 items = state.queueItems,
@@ -304,6 +332,86 @@ private fun MoreSheet(
 private fun MoreDivider() {
     HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+}
+
+/**
+ * Subpage of [PlayerSheet.More]: one header (back + title + close) and a
+ * radio list. It replaces the More rows in the same sheet instance, so there
+ * is never a popup stacked over an open sheet. System back returns to More.
+ */
+@Composable
+private fun <T> OptionSheet(
+    title: String,
+    tag: String,
+    onBack: () -> Unit,
+    onClose: () -> Unit,
+    rows: List<OptionRow<T>>,
+    selected: T?,
+    onPick: (T?) -> Unit,
+) {
+    BackHandler { onBack() }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerIconButton(
+            icon = R.drawable.ic_arrow_back,
+            contentDescription = stringResource(R.string.a11y_back),
+            onClick = onBack,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag("player-sheet-back"),
+        )
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+            fontSize = SettingsTokens.TitleSize.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        PlayerIconButton(
+            icon = R.drawable.ic_close,
+            contentDescription = stringResource(R.string.close),
+            onClick = onClose,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag("player-sheet-close"),
+        )
+    }
+    Column(
+        Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.dp),
+    ) {
+        for (row in rows) {
+            val isSelected = row.value == selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = SettingsTokens.RowHeight)
+                    .clickable(enabled = row.enabled, role = Role.Button) { onPick(row.value) }
+                    .padding(start = 24.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = row.label,
+                    modifier = Modifier.weight(1f),
+                    fontSize = SettingsTokens.BodySize.sp,
+                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                    color = when {
+                        !row.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                if (isSelected) Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable

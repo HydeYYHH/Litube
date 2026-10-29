@@ -15,6 +15,10 @@ data class LiveChatUiState(
     val sending: Boolean = false,
     val signedIn: Boolean = true,
     val canSend: Boolean = true,
+    /** Following an ended stream's replay rather than the live continuation. */
+    val replay: Boolean = false,
+    /** The stream (or its replay) is over: messages stay, posting stops. */
+    val ended: Boolean = false,
 )
 
 sealed interface LiveChatAction {

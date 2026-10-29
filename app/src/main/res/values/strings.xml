@@ -146,6 +146,8 @@
     <string name="queue_autoplay">Autoplay</string>
     <string name="player_error">Could not play this video</string>
     <string name="retry">Retry</string>
+    <string name="subscribe">Subscribe</string>
+    <string name="subscribed">Subscribed</string>
     <string name="segment_intro">Intro</string>
     <string name="segment_outro">Outro</string>
     <string name="segment_interaction">Engagement prompt</string>
@@ -354,6 +356,12 @@
     <string name="a11y_close_delete_confirmation">Close delete confirmation</string>
     <string name="a11y_close_new_playlist">Close new playlist</string>
     <string name="a11y_close_live_chat">Close live chat</string>
+    <string name="chat_live">Live chat</string>
+    <string name="chat_replay">Chat replay</string>
+    <string name="chat_join_live">Join the live chat</string>
+    <string name="chat_replay_available">Chat replay is available</string>
+    <string name="chat_ended">Chat has ended</string>
+    <string name="chat_replay_empty">No chat replay is available</string>
     <string name="a11y_close_post">Close post</string>
     <string name="a11y_close_channel_details">Close channel details</string>
     <string name="a11y_close_channel_page">Close the channel page</string>

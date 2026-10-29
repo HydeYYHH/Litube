@@ -159,7 +159,7 @@ class WatchViewModel(
             is WatchAction.OpenDescriptionLink -> navigation.trySend(WatchNavigationRequest.OpenLink(action.url))
             WatchAction.OpenSearch -> editSearch(true, uiState.value.draftQuery)
             WatchAction.CloseSearch -> editSearch(false, uiState.value.draftQuery)
-            is WatchAction.QueryChanged -> editSearch(true, action.query)
+            is WatchAction.QueryChanged -> editSearch(true, action.query, reopen = uiState.value.overlay is WatchOverlay.Search)
             is WatchAction.SubmitSearch -> {
                 val query = action.query.trim()
                 if (query.isNotEmpty()) {
@@ -373,9 +373,13 @@ class WatchViewModel(
         }
     }
 
-    private fun editSearch(open: Boolean, query: String) {
+    private fun editSearch(open: Boolean, query: String, reopen: Boolean = true) {
         savedState["draftQuery"] = query
-        _state.update { it.copy(overlay = if (open) WatchOverlay.Search else WatchOverlay.None, draftQuery = query) }
+        _state.update {
+            // A stale IME commit can outlive a submit that just closed the panel;
+            // a typing event never re-opens a search the user already left.
+            it.copy(overlay = if (open && reopen) WatchOverlay.Search else WatchOverlay.None, draftQuery = query)
+        }
         persistOverlay(uiState.value.overlay)
     }
 

@@ -22,6 +22,14 @@ object PipAutoEnter {
     private val suppressCount = AtomicInteger(0)
     private val host = AtomicReferenceHolder()
 
+    /**
+     * In-app navigation handoffs still waiting for their destination. Each
+     * entry is one [suppress] hold created by the source activity; entries
+     * are released when any other activity resumes (the destination took
+     * over) or when the owning source resumes or dies. Guarded by itself.
+     */
+    private val handoffs = ArrayList<Activity>()
+
     @Volatile
     var legacySuppressUntil: Long = 0L
         private set
@@ -43,6 +51,38 @@ object PipAutoEnter {
         // re-enable when ENABLE_PIP / player eligibility still wants it.
         host.get()?.let { pushParams(it, autoEnter = false) }
         return Handle { restore() }
+    }
+
+    /**
+     * A short hold for an in-app navigation transition: the source activity
+     * keeps auto-PiP off while the destination starts up. Released as soon
+     * as any other activity resumes — the handoff ends when the destination
+     * owns the screen, not when the source comes back — plus on the source's
+     * own resume or destroy (the [Handle] returned here).
+     */
+    fun suppressForNavigation(owner: Activity): Handle {
+        synchronized(handoffs) { handoffs.add(owner) }
+        suppress()
+        return Handle { releaseNavigation(owner) }
+    }
+
+    private fun releaseNavigation(owner: Activity) {
+        val released = synchronized(handoffs) {
+            val before = handoffs.size
+            handoffs.removeAll { it === owner }
+            before - handoffs.size
+        }
+        repeat(released) { restore() }
+    }
+
+    /** The resumed activity now owns the foreground: drop every other handoff. */
+    fun onActivityResumed(resumed: Activity) {
+        val released = synchronized(handoffs) {
+            val before = handoffs.size
+            handoffs.removeAll { it !== resumed }
+            before - handoffs.size
+        }
+        repeat(released) { restore() }
     }
 
     fun restore() {

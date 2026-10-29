@@ -2,6 +2,8 @@ package com.hhst.youtubelite.data.media
 
 import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import okhttp3.Call
@@ -27,17 +29,32 @@ class MediaClient(
     private val http = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     suspend fun <T> read(block: (RequestContext, HttpClient) -> T): T = pendingReads.withPermit {
-        execute(block)
+        execute(null, block)
     }
 
-    private suspend fun <T> execute(block: (RequestContext, HttpClient) -> T): T = suspendCancellableCoroutine { continuation ->
+    suspend fun <A, B> readTogether(
+        first: (RequestContext, HttpClient) -> A,
+        second: (RequestContext, HttpClient) -> B,
+    ): Pair<A, B> {
+        val session = read { context, _ -> context }
+        return coroutineScope {
+            val other = async { pendingReads.withPermit { execute(session, second) } }
+            val value = pendingReads.withPermit { execute(session, first) }
+            value to other.await()
+        }
+    }
+
+    private suspend fun <T> execute(captured: RequestContext?, block: (RequestContext, HttpClient) -> T): T = suspendCancellableCoroutine { continuation ->
         val cancelled = AtomicBoolean(false)
         val calls = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Call, Boolean>())
         val future = workers.submit {
             try {
                 // Resolved on the worker: the session lambda may block on an OAuth token
                 // refresh, which must never run on the calling (possibly main) thread.
-                val session = context()
+                val current = context()
+                val session = captured ?: current
+                if (session.generation != current.generation)
+                    throw MediaException(RequestError(RequestFailure.AUTH, "session_changed"))
                 val transport = object : HttpClient {
                     override fun execute(request: HttpRequest): HttpReply {
                         if (cancelled.get()) throw InterruptedException()
