@@ -29,6 +29,119 @@ class SubscriptionsViewModelTest {
         override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) = block(filter, continuation)
     }
 
+    private class ChannelFeedRepository : SubscriptionsRepository {
+        val reads = mutableListOf<Pair<String?, String?>>()
+        var channels = FixtureSubscriptionsRepository.channels()
+        var delayBlender = false
+        private val video = FixtureSubscriptionsRepository.sampleVideos().first()
+        override suspend fun subscribedChannelsPage(cursor: String?) = ChannelDirectoryPage(channels)
+        override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage {
+            reads += null to continuation
+            return SubscriptionsPage(listOf(video.copy(id = "combined")), emptyList())
+        }
+        override suspend fun channelSubscriptions(channel: SubscribedChannel, filter: SubscriptionsFilter,
+                                                 continuation: String?): SubscriptionsPage {
+            reads += channel.channelId to continuation
+            if (delayBlender && channel.channelId == "blender") kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                kotlinx.coroutines.delay(200)
+            }
+            return SubscriptionsPage(listOf(video.copy(id = "${channel.channelId}-${continuation ?: "first"}",
+                channelId = channel.channelId)), emptyList(), if (continuation == null) "${channel.channelId}-next" else null)
+        }
+    }
+
+    @Test fun selectingAnAvatarLoadsItsFeedAndClearsOnlyItsBadgeWithoutNavigating() = runTest {
+        val repo = ChannelFeedRepository()
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChannel("blender"))
+        assertEquals("blender", vm.uiState.value.selectedChannel?.channelId)
+        val channels = (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels
+        assertFalse(channels.first { it.channelId == "blender" }.hasNewContent)
+        assertTrue(channels.first { it.channelId == "studio" }.hasNewContent)
+        advanceUntilIdle()
+        assertEquals(listOf(null to null, "blender" to null), repo.reads)
+        assertEquals("blender", (vm.uiState.value.content as SubscriptionsContent.Feed).page.items.single().channelId)
+        assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+        vm.onAction(SubscriptionsAction.OpenChannel("blender"))
+        assertEquals(SubscriptionsNavigationRequest.Channel("blender"), vm.navigationRequests.first())
+    }
+
+    @Test fun selectedChannelPaginationAndBackKeepTheirOwnFeedScopes() = runTest {
+        val repo = ChannelFeedRepository()
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChannel("studio"))
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.LoadNext)
+        advanceUntilIdle()
+        assertEquals("studio" to "studio-next", repo.reads.last())
+        assertEquals(2, (vm.uiState.value.content as SubscriptionsContent.Feed).page.items.size)
+        vm.onAction(SubscriptionsAction.SelectChannel(null))
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.selectedChannel)
+        assertEquals(null to null, repo.reads.last())
+        assertEquals("combined", (vm.uiState.value.content as SubscriptionsContent.Feed).page.items.single().id)
+        assertFalse((vm.uiState.value.channels as SubscriptionsChannels.Ready).channels.first { it.channelId == "studio" }.hasNewContent)
+    }
+
+    @Test fun aSlowSelectedChannelCannotReplaceTheNextSelection() = runTest {
+        val repo = ChannelFeedRepository().apply { delayBlender = true }
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChannel("blender"))
+        runCurrent()
+        vm.onAction(SubscriptionsAction.SelectChannel("studio"))
+        advanceUntilIdle()
+        assertEquals("studio", vm.uiState.value.selectedChannel?.channelId)
+        assertEquals("studio-first", (vm.uiState.value.content as SubscriptionsContent.Feed).page.items.single().id)
+    }
+
+    @Test fun consumedBadgesSurviveStaleRefreshButFutureUpdatesCanBadgeAgain() = runTest {
+        var now = 0L
+        val repo = ChannelFeedRepository()
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true, clock = { now })
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChannel("blender"))
+        advanceUntilIdle()
+        fun hasBadge() = (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels.first { it.channelId == "blender" }.hasNewContent
+        now += 60_000
+        vm.onForeground()
+        advanceUntilIdle()
+        assertFalse(hasBadge()) // A stale true flag cannot undo the user's read.
+        repo.channels = repo.channels.map { it.copy(hasNewContent = false) }
+        now += 60_000
+        vm.onForeground()
+        advanceUntilIdle()
+        repo.channels = repo.channels.map { it.copy(hasNewContent = true) }
+        now += 60_000
+        vm.onForeground()
+        advanceUntilIdle()
+        assertTrue(hasBadge()) // A fresh server unread cycle is not suppressed forever.
+    }
+
+    @Test fun selectionAndConsumedBadgesRestoreButNeverLeakAcrossAccounts() = runTest {
+        val handle = SavedStateHandle()
+        val repo = ChannelFeedRepository().apply {
+            channels = channels.map { it.copy(subscriptionParams = "params-${it.channelId}") }
+        }
+        val vm = SubscriptionsViewModel(repo, handle, SubscriptionsScenario.Content, true)
+        vm.updateSession(true, 1)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.SelectChannel("blender"))
+        advanceUntilIdle()
+        val restored = SubscriptionsViewModel(repo, handle, SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertEquals("params-blender", restored.uiState.value.selectedChannel?.subscriptionParams)
+        assertEquals("blender" to null, repo.reads.last())
+        assertFalse((restored.uiState.value.channels as SubscriptionsChannels.Ready).channels.first { it.channelId == "blender" }.hasNewContent)
+        restored.updateSession(true, 2)
+        advanceUntilIdle()
+        assertNull(restored.uiState.value.selectedChannel)
+        assertTrue((restored.uiState.value.channels as SubscriptionsChannels.Ready).channels.first { it.channelId == "blender" }.hasNewContent)
+        assertEquals(null to null, repo.reads.last())
+    }
+
     @Test fun directoryRefreshKeepsContentAndReordersUpdatedChannels() = runTest {
         var now = 0L
         var reads = 0
@@ -104,6 +217,27 @@ class SubscriptionsViewModelTest {
         val feed = vm.uiState.value.content as SubscriptionsContent.Feed
         assertTrue(feed.page.items.all { it.live })
         assertEquals(SubscriptionsChip.Live, vm.uiState.value.selectedChip)
+    }
+
+    @Test fun selectingTheCurrentChipKeepsTheActiveReadAndLoadedFeed() = runTest {
+        var calls = 0
+        val response = kotlinx.coroutines.CompletableDeferred<SubscriptionsPage>()
+        val vm = SubscriptionsViewModel(repository { _, _ ->
+            calls++
+            response.await()
+        }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
+        runCurrent()
+        vm.onAction(SubscriptionsAction.SelectChip(SubscriptionsChip.All))
+        runCurrent()
+        assertEquals(1, calls)
+
+        response.complete(SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList()))
+        advanceUntilIdle()
+        val feed = vm.uiState.value.content as SubscriptionsContent.Feed
+        vm.onAction(SubscriptionsAction.SelectChip(SubscriptionsChip.All))
+        assertSame(feed, vm.uiState.value.content)
+        advanceUntilIdle()
+        assertEquals(1, calls)
     }
 
     @Test fun postsChipKeepsTheEmptyStateInsteadOfInventingPosts() = runTest {
@@ -228,7 +362,6 @@ class SubscriptionsViewModelTest {
         }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = true)
         advanceUntilIdle()
         assertEquals(challenge, vm.uiState.value.verification?.challengeUrl)
-        // A cancelled visit reports nothing; a wrong challenge must not clear the banner or reload.
         vm.verificationCompleted(null)
         advanceUntilIdle()
         vm.verificationCompleted("https://www.google.com/sorry/other")
@@ -602,7 +735,6 @@ class SubscriptionsViewModelTest {
         assertEquals(listOf("b", "a", "c", "d"), ready.channels.map { it.channelId })
         assertNull(ready.nextKey)
         assertEquals(AppendState.Idle, ready.append)
-        // The honest end: a further request must not re-fetch anything.
         vm.onAction(SubscriptionsAction.LoadMoreChannels)
         advanceUntilIdle()
         assertEquals(listOf("b", "a", "c", "d"),

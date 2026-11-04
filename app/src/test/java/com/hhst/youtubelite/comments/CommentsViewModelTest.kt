@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.comments
 
+import com.hhst.youtubelite.watch.domain.VideoRating
 import androidx.lifecycle.SavedStateHandle
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentAction
@@ -34,20 +35,137 @@ import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CommentsViewModelTest {
+    @Test fun authorizationRefreshPublishesLoadedPagesTogetherAndKeepsRepliesAndDraft() = runTest {
+        val author = com.hhst.youtubelite.comments.domain.CommentAuthor("Reader", "", "")
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var refreshing = false
+        val repository = object : CommentsRepository {
+            override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget, sort: CommentSort, cursor: String?): CommentsPage {
+                if (refreshing) gate.await()
+                val n = if (cursor == null) 1 else 2
+                return CommentsPage("2", listOf(com.hhst.youtubelite.comments.domain.CommentThread("c$n", author, "", "Comment $n", "1", 1,
+                    replies = if (refreshing) emptyList() else listOf(com.hhst.youtubelite.comments.domain.CommentReply("r$n", author, "", "Reply", "1")))),
+                    if (n == 1) "second" else null)
+            }
+        }
+        val target = com.hhst.youtubelite.comments.domain.CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity("studio", "post"))
+        val vm = CommentsViewModel(repository, SavedStateHandle(), target)
+        advanceUntilIdle()
+        vm.onAction(CommentAction.LoadMore)
+        advanceUntilIdle()
+        vm.onAction(CommentAction.ToggleReplies("c2"))
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Keep draft"))
+        val before = vm.uiState.value.content
+        refreshing = true
+        vm.refreshAuthorization()
+        runCurrent()
+        assertEquals(before, vm.uiState.value.content)
+        assertTrue(vm.uiState.value.refreshing)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        val ready = vm.uiState.value.content as CommentsContent.Ready
+        assertEquals(listOf("c1", "c2"), ready.threads.map { it.id })
+        assertEquals("r2", ready.threads[1].replies.single().id)
+        assertEquals(setOf("c2"), vm.uiState.value.expanded)
+        assertEquals("Keep draft", vm.uiState.value.draft)
+        assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
+        assertFalse(vm.uiState.value.refreshing)
+    }
+
+    @Test fun submittingAfterPostAuthorizationWaitsForFreshActionTokens() = runTest {
+        val ready = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var refresh = false
+        var writes = 0
+        val repository = object : CommentsRepository, com.hhst.youtubelite.comments.domain.CommentActions {
+            override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget, sort: CommentSort, cursor: String?): CommentsPage {
+                if (refresh) ready.await()
+                return CommentsPage("", emptyList(), null)
+            }
+            override suspend fun perform(request: CommentNavigationRequest): com.hhst.youtubelite.comments.domain.CommentMutation {
+                writes++
+                return com.hhst.youtubelite.comments.domain.CommentMutation()
+            }
+        }
+        val target = com.hhst.youtubelite.comments.domain.CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity("studio", "post"))
+        val vm = CommentsViewModel(repository, SavedStateHandle(), target)
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Ready after authorization"))
+        refresh = true
+        vm.refreshAuthorization()
+        vm.onAction(CommentAction.SubmitDraft)
+        runCurrent()
+        assertEquals(0, writes)
+        assertTrue(vm.uiState.value.actionPending)
+        ready.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, writes)
+        assertEquals("", vm.uiState.value.draft)
+    }
+
+    @Test fun postAuthorizationKeepsTheComposerDraftAndRefreshDoesNotSubmitIt() = runTest {
+        var writes = 0
+        val repository = object : CommentsRepository by com.hhst.youtubelite.post.data.FixturePostCommentsRepository(),
+            com.hhst.youtubelite.comments.domain.CommentActions {
+            override suspend fun perform(request: CommentNavigationRequest): com.hhst.youtubelite.comments.domain.CommentMutation {
+                writes++
+                throw com.hhst.youtubelite.post.domain.PostAuthorizationRequiredException()
+            }
+        }
+        val target = com.hhst.youtubelite.comments.domain.CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity("studio", "post"))
+        val vm = CommentsViewModel(repository, SavedStateHandle(), target)
+        advanceUntilIdle()
+        vm.onAction(CommentAction.Compose)
+        vm.onAction(CommentAction.DraftChanged("Keep this comment"))
+        vm.onAction(CommentAction.SubmitDraft)
+        advanceUntilIdle()
+        assertEquals(Unit, vm.authorizationRequests.first())
+        assertEquals("Keep this comment", vm.uiState.value.draft)
+        assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
+        vm.refreshAuthorization()
+        advanceUntilIdle()
+        assertEquals(1, writes)
+        assertEquals("Keep this comment", vm.uiState.value.draft)
+        assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
+    }
+
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
 
-    /** Write service whose operations wait on caller-supplied gates, one per request. */
+    @Test fun startupDefersCommentReadsUntilReleasedAndUsesTheCurrentVideo() = runTest {
+        val repository = GatedActions()
+        val vm = CommentsViewModel(repository, SavedStateHandle(), "first", loadOnStart = false)
+        vm.selectVideo("second")
+        vm.refreshSession()
+        advanceUntilIdle()
+        assertEquals(0, repository.loadCalls)
+        vm.startLoading()
+        vm.startLoading()
+        advanceUntilIdle()
+        assertEquals(1, repository.loadCalls)
+        assertEquals("second", vm.uiState.value.videoId)
+    }
+
+    @Test fun explicitCommentInteractionDoesNotWaitForPlayback() = runTest {
+        val repository = GatedActions()
+        val vm = CommentsViewModel(repository, SavedStateHandle(), "bunny", loadOnStart = false)
+        vm.onAction(CommentAction.Retry)
+        advanceUntilIdle()
+        assertEquals(1, repository.loadCalls)
+        assertTrue(vm.uiState.value.content is CommentsContent.Ready)
+    }
+
     private class GatedActions : com.hhst.youtubelite.comments.domain.CommentActions,
         CommentsRepository by FixtureCommentsRepository() {
         val requests = mutableListOf<CommentNavigationRequest>()
         private val gates = ArrayDeque<kotlinx.coroutines.CompletableDeferred<Unit>>()
-        /** When set, page reads block so a reload cannot replace the visible threads mid-scenario. */
         var loadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         fun nextGate() = kotlinx.coroutines.CompletableDeferred<Unit>().also { gates.add(it) }
-        override suspend fun perform(request: CommentNavigationRequest) {
+        override suspend fun perform(request: CommentNavigationRequest): com.hhst.youtubelite.comments.domain.CommentMutation {
             requests += request
             gates.removeFirst().await()
+            return com.hhst.youtubelite.comments.domain.CommentMutation()
         }
         var loadCalls = 0
         override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget,
@@ -110,7 +228,6 @@ class CommentsViewModelTest {
         val third = vm.uiState.value.content as CommentsContent.Ready
         assertEquals(9, third.threads.size)
         assertNull(third.nextCursor)
-        // A finished list ignores further pagination requests.
         vm.onAction(CommentAction.LoadMore)
         advanceUntilIdle()
         assertEquals(9, (vm.uiState.value.content as CommentsContent.Ready).threads.size)
@@ -158,13 +275,13 @@ class CommentsViewModelTest {
         val vm = CommentsViewModel(FixtureCommentsRepository(), SavedStateHandle(), "bunny")
         advanceUntilIdle()
         val expectations = listOf(
-            CommentAction.LikeThread("c1") to CommentNavigationRequest.LikeComment("bunny", "c1"),
-            CommentAction.DislikeThread("c1") to CommentNavigationRequest.DislikeComment("bunny", "c1"),
+            CommentAction.LikeThread("c1") to CommentNavigationRequest.LikeComment("bunny", "c1", VideoRating.Like, VideoRating.None),
+            CommentAction.DislikeThread("c1") to CommentNavigationRequest.DislikeComment("bunny", "c1", VideoRating.Dislike, VideoRating.None),
             CommentAction.ReportThread("c1") to CommentNavigationRequest.ReportComment("bunny", "c1", "c1"),
             CommentAction.OpenThreadMenu("c1") to CommentNavigationRequest.OpenCommentMenu("bunny", "c1"),
             CommentAction.OpenAuthor("blender") to CommentNavigationRequest.OpenAuthor("blender"),
-            CommentAction.LikeReply("c1", "c1r1") to CommentNavigationRequest.LikeComment("bunny", "c1r1"),
-            CommentAction.DislikeReply("c1", "c1r1") to CommentNavigationRequest.DislikeComment("bunny", "c1r1"),
+            CommentAction.LikeReply("c1", "c1r1") to CommentNavigationRequest.LikeComment("bunny", "c1r1", VideoRating.Like, VideoRating.None),
+            CommentAction.DislikeReply("c1", "c1r1") to CommentNavigationRequest.DislikeComment("bunny", "c1r1", VideoRating.Dislike, VideoRating.None),
             CommentAction.ReportReply("c1", "c1r1") to CommentNavigationRequest.ReportComment("bunny", "c1", "c1r1"),
             CommentAction.OpenReplyMenu("c1", "c1r1") to CommentNavigationRequest.OpenReplyMenu("bunny", "c1", "c1r1"),
         )
@@ -408,7 +525,10 @@ class CommentsViewModelTest {
 
     private fun actionsRepository(block: suspend (CommentNavigationRequest) -> Unit) = object :
         CommentsRepository by FixtureCommentsRepository(), com.hhst.youtubelite.comments.domain.CommentActions {
-        override suspend fun perform(request: CommentNavigationRequest) = block(request)
+        override suspend fun perform(request: CommentNavigationRequest): com.hhst.youtubelite.comments.domain.CommentMutation {
+            block(request)
+            return com.hhst.youtubelite.comments.domain.CommentMutation()
+        }
     }
 
     @Test fun postingKeepsDraftUntilConfirmedAndRejectsDuplicateSubmission() = runTest {
@@ -505,20 +625,15 @@ class CommentsViewModelTest {
         vm.onAction(CommentAction.OpenThreadMenu("c1"))
         vm.onAction(CommentAction.MenuAction(CommentMenuAction.Report))
         assertTrue(vm.uiState.value.actionPending)
-        // The identity switches: the write job is cancelled and the session moves on.
         vm.refreshSession()
         assertFalse(vm.uiState.value.actionPending)
         advanceUntilIdle()
         assertFalse(vm.uiState.value.actionPending)
-        // The old session's result lands late: it must not flip pending back on,
-        // reopen anything, notify, or restart the page read.
         gate1.complete(Unit)
         advanceUntilIdle()
         assertFalse(vm.uiState.value.actionPending)
         assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
-        // No sign-in notice may arrive from the stale write's failure paths.
         assertTrue(notices.none { it == AppNotice.SignIn })
-        // Two page reads only: the initial load plus the refreshSession reload.
         assertEquals(2, actions.loadCalls)
     }
 }

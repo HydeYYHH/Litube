@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
 
@@ -46,19 +47,20 @@ internal fun ShortPlaybackControls(
     active: Boolean = true,
     paused: Boolean = !playing,
     ready: Boolean = true,
+    notice: String? = null,
     content: @Composable () -> Unit,
 ) {
     val buffering = loading || !ready
     val toggle by rememberUpdatedState(onToggle)
     val holdStart by rememberUpdatedState(onHoldStart)
     val holdEnd by rememberUpdatedState(onHoldEnd)
-    val canHold by rememberUpdatedState(active && !buffering && error == null)
-    val canToggle by rememberUpdatedState(active && ready && error == null)
+    val canHold by rememberUpdatedState(active && !buffering && error == null && notice == null)
+    val canToggle by rememberUpdatedState(active && ready && error == null && notice == null)
     var holding by remember { mutableStateOf(false) }
     var pauseVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(active, paused, buffering, error) {
+    LaunchedEffect(active, paused, buffering, error, notice) {
         pauseVisible = false
-        if (active && paused && !buffering && error == null) {
+        if (active && paused && !buffering && error == null && notice == null) {
             kotlinx.coroutines.delay(120)
             pauseVisible = true
         }
@@ -124,6 +126,9 @@ internal fun ShortPlaybackControls(
         } else if (error != null && active) {
             com.hhst.youtubelite.player.surface.ErrorOverlay(
                 message = error, onRetry = onRetry, onDetails = onDetails, modifier = Modifier.align(Alignment.Center))
+        } else if (notice != null && active) {
+            Text(notice, color = Color.White, textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).padding(24.dp).testTag("short-access-notice"))
         } else if (buffering && active) {
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp,
                 modifier = Modifier.align(Alignment.Center).size(24.dp).testTag("short-buffering"))

@@ -2,12 +2,14 @@ package com.hhst.youtubelite.downloader.resolve
 
 import kotlinx.serialization.encodeToString
 import com.hhst.youtubelite.downloader.core.AssetKind
+import com.hhst.youtubelite.downloader.core.BackgroundDecision
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadPhase
 import com.hhst.youtubelite.downloader.core.DownloadResolveOutcome
 import com.hhst.youtubelite.downloader.core.DownloadResolver
 import com.hhst.youtubelite.downloader.core.DownloadStatus
+import com.hhst.youtubelite.downloader.core.DownloadStateMachine
 import com.hhst.youtubelite.downloader.core.DownloadTask
 import com.hhst.youtubelite.downloader.core.InputComponentKind
 import com.hhst.youtubelite.downloader.core.ResolvedComponentUpdate
@@ -34,15 +36,22 @@ class DownloadResolverImpl(
 
     val lastPlan: DownloadPlan? get() = lastReadyPlan
     private var lastReadyPlan: DownloadPlan? = null
-    private val sources = ConcurrentHashMap<String, List<DownloadComponentSource>>()
-    private data class FallbackCatalog(val catalog: DownloadCatalog, val scope: String, val expires: Long)
+    private data class ResolvedSources(val generation: Long, val values: List<DownloadComponentSource>)
+    private val sources = ConcurrentHashMap<String, ResolvedSources>()
+    private data class FallbackCatalog(
+        val generation: Long,
+        val catalog: DownloadCatalog,
+        val scope: String,
+        val expires: Long,
+        val sizeBytes: Int,
+    )
     private val fallbackCatalogs = LinkedHashMap<String, FallbackCatalog>(16, .75f, true)
 
-    override fun sourcesOf(taskId: String): List<DownloadComponentSource> = sources[taskId].orEmpty()
+    override fun sourcesOf(taskId: String, generation: Long): List<DownloadComponentSource> =
+        sources[taskId]?.takeIf { it.generation == generation }?.values.orEmpty()
 
-    override suspend fun resolve(taskId: String): DownloadResolveOutcome {
-        val task = repository.transact { getTask(taskId) } ?: return DownloadResolveOutcome.Stale
-        val generation = task.executionGeneration
+    override suspend fun resolve(taskId: String, generation: Long): DownloadResolveOutcome {
+        val task = currentTask(taskId, generation) ?: return DownloadResolveOutcome.Stale
         if (!coordinator.reportExecution(taskId, generation, DownloadStatus.RUNNING, DownloadPhase.RESOLVE)) {
             return if (task.userCancelled) DownloadResolveOutcome.Cancelled else DownloadResolveOutcome.Stale
         }
@@ -66,45 +75,44 @@ class DownloadResolverImpl(
         }
     }
 
-    /**
-     * 403 refresh that verifies media identity and marks components
-     * that cannot be proven as needing a full re-download.
-     */
-    suspend fun refreshAfter403(taskId: String): IdentityRefreshResult? {
-        val snapshot = repository.transact { snapshot(taskId) } ?: return null
+    suspend fun refreshAfter403(taskId: String, generation: Long): IdentityRefreshResult? {
+        val snapshot = repository.transact { snapshot(taskId)?.takeIf { it.task.accepts(generation) } } ?: return null
         val task = snapshot.task
         val previous = snapshot.assets.flatMap { asset ->
             asset.components.mapNotNull { it.component.resourceIdentity }
         }
         val result = poTokens.refreshAfter403(task.videoId, previous)
+        if (currentTask(taskId, generation) == null) return null
         result.decisions.filter { it.needsRedownload }.forEach { decision ->
             coordinator.reportComponentNeedsRedownload(
                 taskId,
-                task.executionGeneration,
+                generation,
                 decision.previousIdentity,
             )
         }
-        return result
+        return result.takeIf { currentTask(taskId, generation) != null }
     }
 
-    override suspend fun recoverForbidden(taskId: String): Boolean {
-        val result = refreshAfter403(taskId) ?: return false
+    override suspend fun recoverForbidden(taskId: String, generation: Long): Boolean {
+        val result = refreshAfter403(taskId, generation) ?: return false
         if (result.exhausted) return false
-        val task = repository.transact { getTask(taskId) } ?: return false
+        val task = currentTask(taskId, generation) ?: return false
         val catalog = result.catalog ?: return false
         return when (val selected = DownloadSelector.select(catalog, task.config)) {
-            is DownloadSelection.Ready -> ready(task, task.executionGeneration, catalog, selected.plan) is DownloadResolveOutcome.Ready
+            is DownloadSelection.Ready -> ready(task, generation, catalog, selected.plan) is DownloadResolveOutcome.Ready
             is DownloadSelection.Failed -> false
         }
     }
 
-    suspend fun recoverSource(taskId: String, identity: String?): RecoveredSource? {
-        val previous = sourcesOf(taskId).firstOrNull { it.resourceIdentity == identity }
-        val ok = recoverForbidden(taskId)
+    suspend fun recoverSource(taskId: String, generation: Long, identity: String?): RecoveredSource? {
+        if (currentTask(taskId, generation) == null) return null
+        val previous = sourcesOf(taskId, generation).firstOrNull { it.resourceIdentity == identity }
+        val ok = recoverForbidden(taskId, generation)
+        val snapshot = repository.transact { snapshot(taskId)?.takeIf { it.task.accepts(generation) } } ?: return null
         // Strict identity match only: falling back to the first source could
         // hand an audio refresh a video URL and splice foreign bytes.
-        val next = sourcesOf(taskId).firstOrNull { identity == null || it.resourceIdentity == identity }
-            ?: previous?.let { old -> sourcesOf(taskId).firstOrNull { it.assetKind == old.assetKind && it.componentKind == old.componentKind } }
+        val next = sourcesOf(taskId, generation).firstOrNull { identity == null || it.resourceIdentity == identity }
+            ?: previous?.let { old -> sourcesOf(taskId, generation).firstOrNull { it.assetKind == old.assetKind && it.componentKind == old.componentKind } }
             ?: return RecoveredSource(
                 source = DownloadComponentSource(
                     assetKind = AssetKind.VIDEO,
@@ -114,25 +122,23 @@ class DownloadResolverImpl(
                 needsRedownload = true,
                 exhausted = true,
             )
-        val needs = repository.transact { snapshot(taskId) }
-            ?.assets
-            ?.flatMap { it.components }
-            ?.any { it.component.resourceIdentity == identity && it.component.needsRedownload }
-            ?: !ok
+        val needs = snapshot.assets.flatMap { it.components }
+            .any { it.component.resourceIdentity == identity && it.component.needsRedownload }
         return RecoveredSource(source = next, needsRedownload = needs, exhausted = !ok)
     }
 
     /** Uses only the existing catalog; there is no session recapture or token mint in this step. */
-    suspend fun backupSource(taskId: String, identity: String?): RecoveredSource? {
-        val previous = sourcesOf(taskId).firstOrNull { it.resourceIdentity == identity } ?: return null
+    suspend fun backupSource(taskId: String, generation: Long, identity: String?): RecoveredSource? {
+        val task = currentTask(taskId, generation) ?: return null
+        val previous = sourcesOf(taskId, generation).firstOrNull { it.resourceIdentity == identity } ?: return null
         val profile = previous.requestPlan?.client ?: return null
         val cached = synchronized(fallbackCatalogs) { fallbackCatalogs[taskId] }
-            ?.takeIf { it.scope == catalogs.scope() && it.expires > System.currentTimeMillis() } ?: return null
+            ?.takeIf { it.generation == generation && it.scope == catalogs.scope() && it.expires > System.currentTimeMillis() } ?: return null
         val catalog = cached.catalog.copy(formats = cached.catalog.formats.filter { it.requestPlan?.client != profile })
-        val task = repository.transact { getTask(taskId) } ?: return null
         val selection = DownloadSelector.select(catalog, task.config) as? DownloadSelection.Ready ?: return null
-        if (ready(task, task.executionGeneration, catalog, selection.plan) !is DownloadResolveOutcome.Ready) return null
-        val next = sourcesOf(taskId).firstOrNull { it.assetKind == previous.assetKind && it.componentKind == previous.componentKind } ?: return null
+        if (ready(task, generation, catalog, selection.plan) !is DownloadResolveOutcome.Ready) return null
+        if (currentTask(taskId, generation) == null) return null
+        val next = sourcesOf(taskId, generation).firstOrNull { it.assetKind == previous.assetKind && it.componentKind == previous.componentKind } ?: return null
         return RecoveredSource(next, identity == null || !DownloadResourceIdentity.proven(identity, next.resourceIdentity.orEmpty()), false)
     }
 
@@ -142,22 +148,16 @@ class DownloadResolverImpl(
         catalog: DownloadCatalog,
         plan: DownloadPlan,
     ): DownloadResolveOutcome {
-        lastReadyPlan = plan
-        synchronized(fallbackCatalogs) {
-            val now = System.currentTimeMillis()
-            val expiry = catalog.formats.mapNotNull { it.expiresAtMillis }.minOrNull() ?: now + 120_000
-            fallbackCatalogs[task.id] = FallbackCatalog(catalog, catalogs.scope(), minOf(now + 120_000, expiry - 30_000))
-            fallbackCatalogs.entries.removeAll { it.value.expires <= now }
-            val json = kotlinx.serialization.json.Json
-            var size = fallbackCatalogs.values.sumOf { json.encodeToString(kotlinx.serialization.serializer(DownloadCatalog::class.java), it.catalog).toByteArray().size }
-            while ((size > 8 * 1024 * 1024 || fallbackCatalogs.size > 128) && fallbackCatalogs.isNotEmpty()) {
-                size -= json.encodeToString(kotlinx.serialization.serializer(DownloadCatalog::class.java), fallbackCatalogs.remove(fallbackCatalogs.keys.first())!!.catalog).toByteArray().size
-            }
-        }
-        sources[task.id] = buildSources(task, plan)
+        if (currentTask(task.id, generation) == null) return DownloadResolveOutcome.Stale
+        val resolvedSources = buildSources(task, plan)
+        val now = System.currentTimeMillis()
+        val expiry = catalog.formats.mapNotNull { it.expiresAtMillis }.minOrNull() ?: now + 120_000
+        val fallback = FallbackCatalog(generation, catalog, catalogs.scope(), minOf(now + 120_000, expiry - 30_000),
+            kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.serializer(DownloadCatalog::class.java), catalog).toByteArray().size)
         val updates = buildUpdates(task, plan)
-        val previous = repository.transact { snapshot(task.id) }
-        previous?.assets?.forEach { asset -> asset.components.forEach { saved ->
+        val previous = repository.transact { snapshot(task.id)?.takeIf { it.task.accepts(generation) } }
+            ?: return DownloadResolveOutcome.Stale
+        previous.assets.forEach { asset -> asset.components.forEach { saved ->
             val update = updates.firstOrNull { it.assetKind == asset.asset.kind && it.componentKind == saved.component.kind }
             val old = saved.component.resourceIdentity
             val next = update?.resourceIdentity
@@ -169,6 +169,24 @@ class DownloadResolverImpl(
         if (!coordinator.reportResolved(task.id, generation, updates)) {
             return if (task.userCancelled) DownloadResolveOutcome.Cancelled else DownloadResolveOutcome.Stale
         }
+        // Serialize this check and cache publication with pause/resume transactions.
+        // The work above may suspend; an old result must not replace a newer plan.
+        val committed = repository.transact {
+            if (getTask(task.id)?.accepts(generation) != true) return@transact false
+            sources[task.id] = ResolvedSources(generation, resolvedSources)
+            lastReadyPlan = plan
+            synchronized(fallbackCatalogs) {
+                fallbackCatalogs[task.id] = fallback
+                val publishedAt = System.currentTimeMillis()
+                fallbackCatalogs.entries.removeAll { it.value.expires <= publishedAt }
+                var size = fallbackCatalogs.values.sumOf { it.sizeBytes.toLong() }
+                while ((size > 8 * 1024 * 1024 || fallbackCatalogs.size > 128) && fallbackCatalogs.isNotEmpty()) {
+                    size -= fallbackCatalogs.remove(fallbackCatalogs.keys.first())!!.sizeBytes
+                }
+            }
+            true
+        }
+        if (!committed) return DownloadResolveOutcome.Stale
         // An unavailable attachment fails its own asset only; media proceeds.
         plan.subtitleFailure?.let {
             coordinator.reportAssetFailed(task.id, generation, AssetKind.SUBTITLE, it.name)
@@ -176,7 +194,9 @@ class DownloadResolverImpl(
         plan.coverFailure?.let {
             coordinator.reportAssetFailed(task.id, generation, AssetKind.COVER, it.name)
         }
-        coordinator.reportExecution(task.id, generation, DownloadStatus.QUEUED, DownloadPhase.TRANSFER)
+        if (!coordinator.reportExecution(task.id, generation, DownloadStatus.QUEUED, DownloadPhase.TRANSFER)) {
+            return DownloadResolveOutcome.Stale
+        }
         return DownloadResolveOutcome.Ready(task.id, generation)
     }
 
@@ -185,6 +205,7 @@ class DownloadResolverImpl(
         generation: Long,
         failed: DownloadSelection.Failed,
     ): DownloadResolveOutcome {
+        if (currentTask(task.id, generation) == null) return DownloadResolveOutcome.Stale
         val kinds = repository.transact { assetsForTask(task.id) }.map { it.kind }.distinct()
         kinds.forEach { kind ->
             coordinator.reportAssetFailed(task.id, generation, kind, failed.reason.name)
@@ -200,6 +221,12 @@ class DownloadResolverImpl(
         )
         return DownloadResolveOutcome.Failed(failed.reason.name)
     }
+
+    private suspend fun currentTask(taskId: String, generation: Long): DownloadTask? =
+        repository.transact { getTask(taskId)?.takeIf { it.accepts(generation) } }
+
+    private fun DownloadTask.accepts(generation: Long): Boolean = !removed &&
+        DownloadStateMachine.acceptBackground(this, generation, DownloadStatus.RUNNING) == BackgroundDecision.APPLY
 
     private fun buildUpdates(
         task: DownloadTask,

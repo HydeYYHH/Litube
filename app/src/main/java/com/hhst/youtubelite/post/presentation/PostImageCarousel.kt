@@ -34,10 +34,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import com.hhst.youtubelite.ui.design.appDescription
 import com.hhst.youtubelite.R
 
-/**
- * Measured post carousel: each photo is the available width minus 48 dp, square, with a 12 dp
- * gutter, a 12 dp radius and a 36x24 counter inset 12 dp from the photo's top-right corner.
- */
 @Composable
 fun PostImageCarousel(
     images: List<String>,

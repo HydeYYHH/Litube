@@ -15,7 +15,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import com.hhst.youtubelite.ui.design.DesignTokens
 
-/** One interactive-or-plain run of a video description. */
 internal sealed interface DescriptionSegment {
     data class Plain(val text: String) : DescriptionSegment
     /** `0:42`, `12:34`, `1:02:03` chapter mark pointing into the current video. */

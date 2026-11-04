@@ -49,6 +49,10 @@ object AppStyle {
     )
     val SheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
     val MenuShape = RoundedCornerShape(12.dp)
+    /** Sheets, dialogs and popup menus share the page's neutral black/white surface.
+     * Grey containers belong to controls and item states inside these panels. */
+    val Panel: Color
+        @Composable get() = MaterialTheme.colorScheme.surface
     val Action: Color
         @Composable get() = LocalActionColors.current?.foreground ?: MaterialTheme.colorScheme.onSurface
     val OnAction: Color

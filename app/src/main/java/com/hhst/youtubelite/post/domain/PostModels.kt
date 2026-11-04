@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.post.domain
 
+import com.hhst.youtubelite.watch.domain.VideoRating
+
 /** Stable identity for a community post. A post is never addressed by a list index. */
 data class PostIdentity(
     val channelId: String,
@@ -20,6 +22,7 @@ data class PostSummary(
     val images: List<String> = emptyList(),
     val likes: String,
     val comments: String,
+    val poll: PostPollData? = null,
 )
 
 data class PostDetail(
@@ -30,7 +33,20 @@ data class PostDetail(
     val images: List<String> = emptyList(),
     val likes: String,
     val comments: String,
+    val rating: VideoRating = VideoRating.None,
+    val poll: PostPollData? = null,
 )
+
+data class PostPollOption(val text: String, val image: String? = null, val percentage: String? = null, val selected: Boolean = false)
+data class PostPollData(val options: List<PostPollOption>, val total: String = "", val voted: Boolean = false)
+
+interface PostActions {
+    /** The caller's displayed state determines the intent, independently of capability reads. */
+    suspend fun rate(identity: PostIdentity, rating: VideoRating, previous: VideoRating): PostDetail
+    suspend fun vote(identity: PostIdentity, option: Int, selected: Boolean): PostDetail
+}
+
+class PostAuthorizationRequiredException : Exception("post_web_authorization_required")
 
 interface PostRepository {
     suspend fun post(identity: PostIdentity): PostDetail?
@@ -41,7 +57,6 @@ interface PostRepository {
     suspend fun channelPostsNext(channelId: String, cursor: String): ChannelPostsPage = ChannelPostsPage(emptyList())
 }
 
-/** One server page of a channel's community posts. */
 data class ChannelPostsPage(val posts: List<PostSummary>, val nextKey: String? = null)
 
 enum class PostMenuAction(val label: String) {
@@ -68,11 +83,15 @@ data class PostDetailUiState(
     val commentsOpen: Boolean = false,
     /** Production mode: anonymous post pages carry no menu renderer, so the actions entry hides. */
     val live: Boolean = false,
+    val signedIn: Boolean = false,
+    val actionPending: Boolean = false,
+    val pendingAction: PostDetailAction? = null,
+    val refreshing: Boolean = false,
 ) {
     val post: PostDetail? get() = (content as? PostDetailContent.Ready)?.post
 }
 
-enum class PostDestination { Home, Shorts, You }
+enum class PostDestination { Home, Shorts, Subscriptions, You }
 
 sealed interface PostDetailNavigationRequest {
     data class Feedback(val identity: PostIdentity, val liked: Boolean) : PostDetailNavigationRequest
@@ -88,6 +107,7 @@ sealed interface PostDetailAction {
     data class OpenImage(val index: Int) : PostDetailAction
     data object Like : PostDetailAction
     data object Dislike : PostDetailAction
+    data class Vote(val option: Int, val selected: Boolean) : PostDetailAction
     data object Comments : PostDetailAction
     data object CloseComments : PostDetailAction
     data object OpenMenu : PostDetailAction

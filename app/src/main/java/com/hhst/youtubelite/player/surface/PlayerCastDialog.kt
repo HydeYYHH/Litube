@@ -31,12 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.cast.CastDevice
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
 
-/** Live Google Cast intro page. */
 private const val CAST_LEARN_URL = "https://support.google.com/googlecast/answer/6102923"
 
 @Composable
@@ -65,7 +65,7 @@ internal fun CastDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         title = {
             Text(
                 text = stringResource(R.string.cast),

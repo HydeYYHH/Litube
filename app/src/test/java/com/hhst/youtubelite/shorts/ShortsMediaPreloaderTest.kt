@@ -35,4 +35,10 @@ class ShortsMediaPreloaderTest {
     fun hlsVariantPickWithoutVariantsStaysNull() {
         assertNull(ShortsMediaPreloader.pickHlsVariant(emptyList(), 1080))
     }
+
+    @Test fun playbackSelectionOutranksTheLargestRendition() {
+        val variants = listOf(variant(480, 700_000), variant(720, 2_000_000))
+        val picked = ShortsMediaPreloader.pickHlsVariant(variants, 720) { formats -> formats.first() }
+        assertEquals(variants.first(), picked)
+    }
 }

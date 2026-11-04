@@ -19,6 +19,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import com.hhst.youtubelite.post.domain.PostDetailAction
+import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.post.presentation.PostCardInteractions
+import com.hhst.youtubelite.watch.domain.VideoRating
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -32,7 +37,8 @@ import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
-internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live: Boolean = false, onAction: (HomeAction) -> Unit) {
+internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live: Boolean = false, onAction: (HomeAction) -> Unit,
+    postInteractions: PostCardInteractions? = null) {
     when (item) {
         is FeedItem.Video -> VideoCard(item, compact, onAction)
         is FeedItem.Mix -> MixCard(item, compact, live, onAction)
@@ -51,7 +57,7 @@ internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live
         }
         is FeedItem.Shorts -> ShortsShelf(item, windowWidth, live, onAction)
         is FeedItem.Post -> BoxWithConstraints {
-            Box(Modifier.requiredWidth(maxWidth + if (compact) 0.dp else 32.dp)) { PostCard(item, live, onAction) }
+            Box(Modifier.requiredWidth(maxWidth + if (compact) 0.dp else 32.dp)) { PostCard(item, live, onAction, postInteractions) }
         }
     }
 }
@@ -74,7 +80,6 @@ private fun Modifier.semanticsLabel(label: String) = this.then(Modifier.semantic
 
 @Composable
 private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAction) -> Unit) {
-    // The tapped card hands its known fields to the Watch page before navigating.
     val openWatch = {
         com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
         onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id)))
@@ -94,7 +99,7 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
             }
         }
         Row(Modifier.padding(start = if (compact) 12.dp else 0.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-            Avatar(item.avatar ?: item.artwork, item.author, item.channelId, onAction, size = 36.dp)
+            Avatar(item.avatar.orEmpty(), item.author, item.channelId, onAction, size = 36.dp)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).clickable(role = Role.Button) { openWatch() }) {
@@ -180,7 +185,14 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean
 }
 
 @Composable
-private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) -> Unit) {
+private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) -> Unit, interactions: PostCardInteractions?) {
+    val interaction = interactions?.posts?.get(item.postId)
+    val rating = interaction?.post?.rating ?: VideoRating.None
+    val pending = interaction?.pendingAction
+    fun rate(liked: Boolean) {
+        if (interactions != null) interactions.perform(PostIdentity(item.channelId, item.postId), if (liked) PostDetailAction.Like else PostDetailAction.Dislike)
+        else onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, liked, item.channelId)))
+    }
     Column(Modifier.fillMaxWidth().testTag("community-post")) {
         Row(Modifier.padding(start = 12.dp, top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Box(Modifier.size(48.dp)) { Avatar(item.artwork, item.author, item.channelId, onAction, size = 40.dp) }
@@ -201,7 +213,8 @@ private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) 
                 items(item.images.size) { index ->
                     Box(Modifier.size(imageWidth).clip(RoundedCornerShape(12.dp))
                         .clickable(role = Role.Button) {
-                            onAction(HomeAction.Navigate(HomeNavigationRequest.OpenPost(item.channelId, item.postId)))
+                            if (interactions?.openImages != null) interactions.openImages.invoke(item.images, index)
+                            else onAction(HomeAction.Navigate(HomeNavigationRequest.OpenPost(item.channelId, item.postId)))
                         }.testTag("post-image-${item.id}-$index")) {
                         Artwork(item.images[index], Modifier.fillMaxSize())
                         if (item.images.size > 1) Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(36.dp, 24.dp)
@@ -213,9 +226,17 @@ private fun PostCard(item: FeedItem.Post, live: Boolean, onAction: (HomeAction) 
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Like, stringResource(R.string.a11y_like_post), diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, true, item.channelId))) }
-            AppText(item.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
-            AppIconButton(AppIcon.Dislike, stringResource(R.string.a11y_dislike_post), diameter = 40.dp) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostFeedback(item.postId, false, item.channelId))) }
+            AppIconButton(AppIcon.Like, stringResource(R.string.a11y_like_post), diameter = 40.dp,
+                modifier = Modifier.testTag("post-like-${item.postId}").semantics { selected = rating == VideoRating.Like },
+                enabled = pending == null, pending = pending == PostDetailAction.Like,
+                background = if (rating == VideoRating.Like) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+                color = if (rating == VideoRating.Like) DesignTokens.Red else DesignTokens.Ink) { rate(true) }
+            AppText(interaction?.post?.likes ?: item.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
+            AppIconButton(AppIcon.Dislike, stringResource(R.string.a11y_dislike_post), diameter = 40.dp,
+                modifier = Modifier.testTag("post-dislike-${item.postId}").semantics { selected = rating == VideoRating.Dislike },
+                enabled = pending == null, pending = pending == PostDetailAction.Dislike,
+                background = if (rating == VideoRating.Dislike) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+                color = if (rating == VideoRating.Dislike) DesignTokens.Red else DesignTokens.Ink) { rate(false) }
             Spacer(Modifier.weight(1f))
             Row(Modifier.clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.PostComments(item.postId, item.channelId))) }
                 .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

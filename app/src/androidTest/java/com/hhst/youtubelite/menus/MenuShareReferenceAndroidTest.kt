@@ -17,7 +17,7 @@ import org.junit.Test
 
 /**
  * Read-only sampling for the search filter surface, ordinary-video action menus,
- * comment/reply menus and the share entry. Requires `-e network 1`.
+ * comment/reply menus and the share entry; requires `-e network 1`.
  */
 class MenuShareReferenceAndroidTest {
 
@@ -98,7 +98,6 @@ class MenuShareReferenceAndroidTest {
                 }
                 DeviceEvidence.captureScene("comment2-after-click-$width")
 
-                // Replies: expand the first thread that exposes a reply control.
                 var expanded = false
                 repeat(8) {
                     if (expanded) return@repeat
@@ -328,7 +327,6 @@ class MenuShareReferenceAndroidTest {
 
             collectFilter(probe, width, origin)
 
-            // Re-open results for a clean item menu.
             load(web, "https://m.youtube.com/results?search_query=blender+open+movie&hl=en", "/results")
             probeUntil(probe, COLLECT_PAGE, 20_000) { it.optBoolean("ready") }
             probe.evaluate(INSTALL_SHARE_STUB)
@@ -429,7 +427,6 @@ class MenuShareReferenceAndroidTest {
                 JSONObject().put("before", before).put("after", after).toString(2),
             )
             DeviceEvidence.captureScene("menu-share-filter-selected-$width")
-            // Close if the surface is still open.
             if (probe.evaluate(FILTER_OPEN).optBoolean("open")) probe.evaluate(CLOSE_SURFACE)
         }
     }
@@ -490,7 +487,7 @@ class MenuShareReferenceAndroidTest {
         val after = probe.evaluate(SHARE_STATE)
         DeviceEvidence.writeJson("menu-share-share-after-$width.json", after.toString(2))
         DeviceEvidence.captureScene("menu-share-share-after-$width")
-        // The native sheet is outside the WebView: record the UI tree and close it.
+        // The native sheet is outside the WebView; record the UI tree and close it.
         DeviceEvidence.dumpUi("menu-share-share-ui-$width.xml")
         val dump = DeviceEvidence.shell("cat /data/local/tmp/menu-share-share-ui-$width.xml")
         if (dump.contains("Copy link") || dump.contains("Share with") || dump.contains("Nearby")) {

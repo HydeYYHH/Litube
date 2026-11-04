@@ -71,15 +71,13 @@ class ShortsScreenshotAndroidTest {
         compose.onNodeWithText("Subscribe").assertIsDisplayed()
         val channel = compose.onNodeWithTag("short-channel-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, channel.left, 0.5f)
-        // 752f: the shared SubscribeButton carries a 48dp touch target, so the
-        // bottom-anchored channel row is 8dp taller than the old 40dp pill row.
-        // The block is bottom-anchored, so the title below keeps its 808f top.
+        // The shared SubscribeButton's 48dp touch target makes the bottom-anchored channel row
+        // 8dp taller than the old 40dp pill row; the block stays bottom-anchored, so the title keeps its 808f top.
         assertEquals(752f, channel.top, 0.5f)
         val title = compose.onNodeWithTag("short-title-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, title.left, 0.5f)
         assertEquals(808f, title.top, 0.5f)
-        // The fabricated "author · Original" sound pill is gone; nothing may
-        // resurrect it as attribution without a real source entry point.
+        // The fabricated "author · Original" sound pill is gone; nothing may resurrect it as attribution without a real source entry point.
         compose.onNodeWithTag("short-sound-short-1", useUnmergedTree = true).assertDoesNotExist()
         compose.runOnIdle { width = 844; height = 390 }
         capture("shorts-390-landscape", output, record, goldens)
@@ -131,8 +129,7 @@ class ShortsScreenshotAndroidTest {
         val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        // Report where the diff lives so an intentional geometry change is
-        // distinguishable from unrelated drift without lowering the bar.
+        // Report the diff region so an intentional geometry change is distinguishable from unrelated drift.
         val changedArea = changed.fold(null as IntArray?) { area, i ->
             val x = i % expected.width; val y = i / expected.width
             if (area == null) intArrayOf(x, y, x, y)

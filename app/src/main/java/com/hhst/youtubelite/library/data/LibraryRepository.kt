@@ -9,10 +9,8 @@ interface LibraryRepository {
     suspend fun history(): HistoryPage
     suspend fun playlists(): PlaylistCollectionPage
 
-    /** Further history entries after [cursor]; the fixture history is finite. */
     suspend fun historyNext(cursor: String): HistoryPage = HistoryPage(emptyList())
 
-    /** Further playlist rows after [cursor]; the fixture collection is finite. */
     suspend fun playlistsNext(cursor: String): PlaylistCollectionPage = PlaylistCollectionPage(emptyList())
 
     /** Live-only removal write; fixtures never reach it because the menu stays a typed exit there.

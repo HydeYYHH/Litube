@@ -382,4 +382,10 @@
     <string name="home_popular_gaming">遊戲熱門</string>
     <string name="home_popular_sports">體育熱門</string>
     <string name="home_top_news">焦點新聞</string>
+    <string name="subscription_visit_channel">造訪頻道</string>
+    <string name="action_in_progress">正在處理…</string>
+    <string name="unsubscribe">取消訂閱</string>
+    <string name="unsubscribe_title">要取消訂閱此頻道嗎？</string>
+    <string name="unsubscribe_message">此頻道的影片將不再出現在你的訂閱中。</string>
+    <string name="player_payment_required">這部影片需要付費觀看。</string>
 </resources>

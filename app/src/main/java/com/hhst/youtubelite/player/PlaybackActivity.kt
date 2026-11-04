@@ -39,7 +39,6 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     @Volatile
     private var pipEligibilityLocked = false
 
-    /** Tracks the current playback window for auto-PiP. */
     @Volatile
     private var playerActive = false
     @Volatile
@@ -65,11 +64,11 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
         syncPipParams()
     }
 
-    /** PiP mode changes without recreating the playback window. */
     protected val inPip = MutableStateFlow(false)
     private var pipWasActive = false
 
     private var pipPrefListenerRef: ((String) -> Unit)? = null
+    private val pipActionIntents = mutableMapOf<String, PendingIntent>()
 
     private val pipActionsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -202,7 +201,11 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
             super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         }
         inPip.value = isInPictureInPictureMode
-        if (isInPictureInPictureMode) pipWasActive = true
+        PlaybackSession.updatePipHost(this, isInPictureInPictureMode)
+        if (isInPictureInPictureMode) {
+            pipWasActive = true
+            playerViewModel.onPipEntered()
+        }
         AppLog.event(AppLog.Category.APP, "pip_state", mapOf("active" to isInPictureInPictureMode))
     }
 
@@ -221,12 +224,15 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private fun pipActions(): List<RemoteAction> {
         fun action(name: String, icon: Int, label: Int): RemoteAction {
             val title = getString(label)
-            val intent = Intent(name).setPackage(packageName)
-            val pending = PendingIntent.getBroadcast(this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val pending = pipActionIntents.getOrPut(name) {
+                val intent = Intent(name).setPackage(packageName)
+                PendingIntent.getBroadcast(this, 0, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
             return RemoteAction(Icon.createWithResource(this, icon), title, title, pending)
         }
         val state = playerViewModel.uiState.value
+        val playPauseAction = PlayerUi.playPauseAction(state)
         return buildList {
             if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) {
                 add(action(ACTION_PIP_AUDIO, R.drawable.ic_headphones, R.string.player_audio_only))
@@ -234,8 +240,7 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
                 add(action(ACTION_PIP_PREVIOUS, R.drawable.ic_pip_previous, R.string.action_previous)
                     .apply { isEnabled = state.hasPrevious })
             }
-            add(if (state.isPlaying) action(ACTION_PIP_TOGGLE, R.drawable.ic_pause, R.string.action_pause)
-                else action(ACTION_PIP_TOGGLE, R.drawable.ic_play, R.string.action_play))
+            add(action(ACTION_PIP_TOGGLE, playPauseAction.playerIcon, playPauseAction.label))
             add(action(ACTION_PIP_NEXT, R.drawable.ic_pip_next, R.string.action_next)
                 .apply { isEnabled = state.hasNext })
         }
@@ -254,6 +259,7 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
 
     override fun onDestroy() {
         closeStoppedPip()
+        PlaybackSession.updatePipHost(this, false)
         PipAutoEnter.unregister(this)
         unregisterReceiver(pipActionsReceiver)
         pipPrefListenerRef?.let { prefs.removeOnChangedListener(it) }

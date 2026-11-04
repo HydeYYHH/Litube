@@ -50,13 +50,20 @@ fun rememberDeArrowArtwork(videoId: String?, original: String): String {
 @Composable
 fun VideoArtwork(videoId: String?, original: String, modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier) {
     val view = androidx.compose.ui.platform.LocalView.current
-    com.hhst.youtubelite.ui.design.Artwork(rememberDeArrowArtwork(videoId, original),
+    val displayed = rememberDeArrowArtwork(videoId, original)
+    var bounds by remember(videoId) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    androidx.compose.runtime.SideEffect {
+        bounds?.let { rect ->
+            if (videoId != null) com.hhst.youtubelite.navigation.WatchTransition.artwork(view, videoId,
+                rect)
+        }
+    }
+    com.hhst.youtubelite.ui.design.Artwork(displayed,
         modifier.then(androidx.compose.ui.Modifier.onGloballyPositioned { coordinates ->
-            if (videoId != null) com.hhst.youtubelite.navigation.WatchTransition.artwork(view, videoId, coordinates.boundsInWindow())
+            bounds = coordinates.boundsInWindow()
         }), fallback = original)
 }
 
-/** DeArrow thumbnail service URL for a community screenshot at [thumbTime]. */
 fun deArrowThumbnailUrl(videoId: String, thumbTime: Double?): String? {
     val time = thumbTime ?: return null
     return "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=$videoId&time=$time"

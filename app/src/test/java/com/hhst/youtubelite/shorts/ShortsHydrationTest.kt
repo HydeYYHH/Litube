@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -26,10 +27,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Hydration request-count coverage: a settled item costs at most one watch read,
- * the adjacent prefetch is bounded to one, and fast swipes cancel in-flight reads.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ShortsHydrationTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
@@ -45,6 +42,67 @@ class ShortsHydrationTest {
         assertEquals("art", filled.artwork)
         assertEquals("channel-avatar", filled.avatar)
         assertEquals("feed-avatar", filled.copy(avatar = "feed-avatar").fillFrom(item).avatar)
+        assertEquals(item, item.fillFrom(thinItem("other").copy(views = "other views")))
+    }
+
+    @Test fun anEmptyHydrationResponseRetriesOnceWithoutBlockingTheSelectedShort() = runTest {
+        var calls = 0
+        val item = thinItem("s1")
+        val repo = object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(listOf(item))
+            override suspend fun hydrate(itemId: String): ShortDetail? {
+                calls++
+                return if (calls == 1) null else ShortDetail(item.copy(views = "2K views", avatar = "avatar"))
+            }
+        }
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        assertEquals(1, calls)
+        assertTrue(vm.uiState.value.content is ShortsContent.Ready)
+        advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals("2K views", readyItems(vm).single().views)
+        assertEquals("avatar", readyItems(vm).single().avatar)
+    }
+
+    @Test fun emptyHydrationRetriesAreBoundedAndSwipingCancelsTheBackoff() = runTest {
+        val reads = mutableListOf<String>()
+        val repo = object : ShortsRepository {
+            override suspend fun shorts() = feed(listOf("s1", "s2"))
+            override suspend fun hydrate(itemId: String): ShortDetail? { reads += itemId; return null }
+        }
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s2"))
+        vm.onPlaybackReady("s2")
+        advanceUntilIdle()
+        assertEquals(listOf("s1", "s2", "s2"), reads)
+        vm.onAction(ShortsAction.OpenMenu("s2"))
+        advanceUntilIdle()
+        assertEquals(listOf("s1", "s2", "s2"), reads)
+    }
+
+    @Test fun aDuplicateAppendCanFillMissingMetadataWithoutReplacingKnownValues() = runTest {
+        val item = thinItem("s1")
+        val repo = object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(listOf(item), "next")
+            override suspend fun shortsNext(cursor: String) = ShortsPage(listOf(
+                item.copy(title = "Another title", views = "3K views", avatar = "avatar"), thinItem("s2")))
+        }
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(listOf("s1", "s2"), readyItems(vm).map { it.id })
+        assertEquals(item.title, readyItems(vm).first().title)
+        assertEquals("3K views", readyItems(vm).first().views)
+        assertEquals("avatar", readyItems(vm).first().avatar)
     }
 
     private class HydratingRepository(
@@ -95,49 +153,150 @@ class ShortsHydrationTest {
         assertEquals(listOf("select:s2", "preload:s3"), events)
     }
 
-    @Test fun settledItemHydratesOnceAndPrefetchStaysBounded() = runTest {
+    @Test fun onlyTheSelectedItemHydratesAndRevisitsReuseItsDetail() = runTest {
         val repo = HydratingRepository(listOf("s1", "s2", "s3", "s4"))
         val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
         advanceUntilIdle()
         vm.onAction(ShortsAction.SelectItem("s2"))
         advanceUntilIdle()
-        // Current item plus the one adjacent prefetch — no more.
-        assertEquals(listOf("s2", "s3"), repo.started)
+        assertEquals(listOf("s2"), repo.started)
         assertEquals("1K views", readyItems(vm).first { it.id == "s2" }.views)
-        assertEquals("1K views", readyItems(vm).first { it.id == "s3" }.views)
+        assertEquals("", readyItems(vm).first { it.id == "s3" }.views)
         assertEquals("", readyItems(vm).first { it.id == "s4" }.views)
-        // Re-settling a hydrated item fires nothing.
         vm.onAction(ShortsAction.SelectItem("s1"))
         advanceUntilIdle()
         vm.onAction(ShortsAction.SelectItem("s2"))
         advanceUntilIdle()
-        assertEquals(listOf("s2", "s3", "s1"), repo.started)
+        assertEquals(listOf("s2", "s1"), repo.started)
         vm.onAction(ShortsAction.SelectItem("s2"))
         advanceUntilIdle()
-        assertEquals(listOf("s2", "s3", "s1"), repo.started)
+        assertEquals(listOf("s2", "s1"), repo.started)
     }
 
-    @Test fun fastSwipesCancelInFlightHydration() = runTest {
+    @Test fun fastSwipesRetainClaimedMetadataAndCancelReadsOutsideTheWindow() = runTest {
         val gate = CompletableDeferred<Unit>()
         val repo = HydratingRepository(listOf("s1", "s2", "s3", "s4", "s5"), gate)
         val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
         advanceUntilIdle()
         vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onPlaybackReady("s1")
         runCurrent()
         vm.onAction(ShortsAction.SelectItem("s2"))
+        vm.onPlaybackReady("s2")
         runCurrent()
         vm.onAction(ShortsAction.SelectItem("s4"))
+        vm.onPlaybackReady("s4")
         runCurrent()
         gate.complete(Unit)
         advanceUntilIdle()
-        // The swiped-past reads were cancelled; only the settled item and its
-        // neighbour completed and merged.
-        assertEquals(listOf("s1", "s2"), repo.cancelled)
-        assertEquals(listOf("s1", "s2", "s4", "s5"), repo.started)
+        assertEquals(listOf("s1", "s2", "s3"), repo.cancelled)
+        assertEquals(listOf("s1", "s2", "s3", "s4", "s5"), repo.started)
         assertEquals("1K views", readyItems(vm).first { it.id == "s4" }.views)
         assertEquals("1K views", readyItems(vm).first { it.id == "s5" }.views)
         assertEquals("", readyItems(vm).first { it.id == "s2" }.views)
         assertEquals(setOf("s4", "s5"), vm.uiState.value.details.keys)
+    }
+
+    @Test fun detailsWaitForARealFrameAndFastSwipesDoNotReadSkippedItems() = runTest {
+        val repo = HydratingRepository(listOf("s1", "s2", "s3"))
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        advanceTimeBy(500)
+        vm.onAction(ShortsAction.SelectItem("s2"))
+        advanceTimeBy(500)
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        assertTrue(repo.started.isEmpty())
+        vm.onPlaybackReady("s2")
+        advanceUntilIdle()
+        assertEquals(listOf("s2", "s3"), repo.started)
+        assertEquals(setOf("s2", "s3"), vm.uiState.value.details.keys)
+    }
+
+    @Test fun stalledPlaybackStillGetsDetailsAndItsFirstFrameDoesNotRestartTheRead() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = HydratingRepository(listOf("s1", "s2"), gate)
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        advanceTimeBy(2_999)
+        assertTrue(repo.started.isEmpty())
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf("s1"), repo.started)
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        assertTrue(repo.cancelled.isEmpty())
+        assertEquals(listOf("s1", "s2"), repo.started)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(setOf("s1", "s2"), vm.uiState.value.details.keys)
+    }
+
+    @Test fun openingTheMenuDoesNotWaitForPlayback() = runTest {
+        val repo = HydratingRepository(listOf("s1", "s2"))
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onAction(ShortsAction.OpenMenu("s1"))
+        runCurrent()
+        assertEquals(listOf("s1"), repo.started)
+        assertEquals(setOf("s1"), vm.uiState.value.details.keys)
+    }
+
+    @Test fun returningBeforeCancellationCompletesStillHydratesTheSelectedItem() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = HydratingRepository(listOf("s1", "s2"), gate)
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        // Both selections happen before the cancelled coroutine gets another main-loop turn.
+        vm.onAction(ShortsAction.SelectItem("s2"))
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        runCurrent()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("s1", "s2", "s1"), repo.started)
+        assertEquals(listOf("s1"), repo.cancelled)
+        assertEquals(setOf("s1", "s2"), vm.uiState.value.details.keys)
+    }
+
+    @Test fun nextTwoDetailsAreReadyBeforeSelectionAndAreNotFetchedAgain() = runTest {
+        val repo = HydratingRepository(listOf("s1", "s2", "s3", "s4"))
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        advanceTimeBy(500)
+        assertTrue(repo.started.isEmpty())
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        assertEquals(listOf("s1", "s2", "s3"), repo.started)
+        assertEquals(setOf("s1", "s2", "s3"), vm.uiState.value.details.keys)
+        vm.onAction(ShortsAction.SelectItem("s2"))
+        assertEquals("1K views", readyItems(vm).first { it.id == "s2" }.views)
+        vm.onPlaybackReady("s2")
+        advanceUntilIdle()
+        assertEquals(listOf("s1", "s2", "s3", "s4"), repo.started)
+        assertTrue(repo.cancelled.isEmpty())
+    }
+
+    @Test fun accountChangeCancelsUpcomingMetadataAndDiscardsOldDetails() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = HydratingRepository(listOf("s1", "s2", "s3"), gate)
+        val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")
+        runCurrent()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        vm.onPlaybackReady("s1")
+        runCurrent()
+        vm.updateSession(Long.MAX_VALUE)
+        runCurrent()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(setOf("s1", "s2", "s3"), repo.cancelled.toSet())
+        assertTrue(vm.uiState.value.details.isEmpty())
     }
 
     @Test fun hydrationNeverBlocksTheFeed() = runTest {

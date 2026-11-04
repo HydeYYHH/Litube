@@ -22,9 +22,6 @@ object GestureMath {
     private const val SEEK_FULL_RANGE_MS = 120_000L
     const val DOUBLE_TAP_SEEK_MS = 10_000L
 
-    /** Vertical swipe enters/exits fullscreen past this fraction of the height. */
-    const val FULLSCREEN_SWIPE_MIN_FRACTION = 0.08f
-
     /**
      * Minimal vertical velocity estimate (px/s, sign follows y-down). Only the
      * samples inside [windowMs] before the last point count, so a slow hold
@@ -76,7 +73,6 @@ object GestureMath {
     private const val BRIGHTNESS_ZONE_END = 0.35f
     private const val VOLUME_ZONE_START = 0.65f
 
-    /** Scroll sensitivity: brightness 1.5, volume 1.2 (per gesture pixel). */
     private const val BRIGHTNESS_FACTOR = 1.5f
     private const val VOLUME_FACTOR = 1.2f
 
@@ -87,7 +83,6 @@ object GestureMath {
         else -> DoubleTapZone.CENTER
     }
 
-    /** Pixels → seek offset; full width maps to ±[SEEK_FULL_RANGE_MS]. */
     fun seekOffsetMs(dx: Float, width: Float): Long {
         if (width <= 0f) return 0L
         return (dx / width * SEEK_FULL_RANGE_MS).toLong()
@@ -112,11 +107,13 @@ object GestureMath {
         startX: Float,
         width: Float,
         verticalFeed: Boolean = false,
+        fullscreenEntry: Boolean = false,
     ): DragMode {
         if (abs(dx) > abs(dy)) return DragMode.SEEK
         // Shorts (and similar vertical feeds): every vertical drag switches
         // the page video; brightness/volume must not eat the swipe.
         if (verticalFeed) return DragMode.NONE
+        if (fullscreenEntry && dy < 0f && startX >= width * .2f && startX <= width * .8f) return DragMode.NONE
         return when {
             startX < width * BRIGHTNESS_ZONE_END -> DragMode.BRIGHTNESS
             startX > width * VOLUME_ZONE_START -> DragMode.VOLUME
@@ -128,7 +125,6 @@ object GestureMath {
     fun accumulateLevel(current: Float, delta: Float, min: Float, max: Float): Float =
         (current + delta).coerceIn(min, max)
 
-    /** Overlay percent from a session level in `[0, max]`. */
     fun levelPercent(level: Float, max: Float): Int {
         if (max <= 0f) return 0
         return ((level / max) * 100f).roundToInt().coerceIn(0, 100)

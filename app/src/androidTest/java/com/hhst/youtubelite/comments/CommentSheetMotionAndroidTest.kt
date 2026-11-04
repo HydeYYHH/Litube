@@ -1,110 +1,126 @@
-package com.hhst.youtubelite.comments
+package com.hhst.youtubelite.comments.presentation
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
-import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
-import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentsUiState
-import com.hhst.youtubelite.comments.presentation.CommentsPanel
 import com.hhst.youtubelite.ui.design.AppTheme
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
 class CommentSheetMotionAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val overlay = mutableStateOf<CommentsOverlay>(CommentsOverlay.None)
-    private lateinit var list: androidx.compose.foundation.lazy.LazyListState
-    private var closes = 0
 
-    private fun show() {
+    @Test fun smallFastDragsBounceAndThresholdFeedbackDoesNotRepeat() {
+        lateinit var motion: CommentSheetMotion
+        var closes = 0
+        var pulses = 0
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            motion = remember { CommentSheetMotion(scope, 600f, 1f, { true }, { true }, { closes++ },
+                onThreshold = { pulses++ }) }
+            Box(Modifier.size(100.dp))
+        }
+        compose.runOnIdle {
+            assertEquals(20f, motion.drag(20f), .001f)
+            assertTrue(motion.offset < 20f)
+            motion.settle(4_000f)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(0, closes)
+            assertEquals(0f, motion.offset, .01f)
+            assertEquals(0, pulses)
+            motion.drag(160f)
+            assertEquals(1, pulses)
+            motion.drag(-40f)
+            motion.drag(40f)
+            assertEquals(1, pulses)
+            motion.settle(0f)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, closes); assertEquals(1, pulses) }
+    }
+
+    @Test fun systemBackKeepsCompactCommentsUntilTheExitCompletes() {
+        var open by mutableStateOf(true)
+        var closes = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AppTheme { CompositionLocalProvider(LocalDensity provides Density(1f)) {
+            if (open) CommentsPanel(CommentsUiState(videoId = "comments-motion", content = CommentsContent.Empty),
+                "0", {}, { closes++; open = false }, Modifier.requiredSize(390.dp, 844.dp))
+        } } }
+        compose.mainClock.advanceTimeBy(240)
+        compose.runOnIdle {
+            compose.activity.onBackPressedDispatcher.onBackPressed()
+            compose.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        compose.mainClock.advanceTimeBy(16)
+        compose.onNodeWithTag("comments-panel").assertExists()
+        compose.runOnIdle { assertEquals(0, closes) }
+        compose.mainClock.advanceTimeBy(200)
+        compose.onNodeWithTag("comments-panel").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, closes) }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun entryAndRepeatedBackRetainOneExitAcrossKeyboardResize() {
+        lateinit var motion: CommentSheetMotion
+        var closes = 0
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            CompositionLocalProvider(LocalDensity provides Density(1f)) {
-                AppTheme {
-                    list = rememberLazyListState()
-                    Box(Modifier.requiredSize(390.dp, 844.dp)) {
-                        CommentsPanel(CommentsUiState(videoId = "bunny", overlay = overlay.value,
-                            content = CommentsContent.Ready(FixtureCommentsRepository.sampleThreads(CommentSort.Top), null)),
-                            "20", {}, { closes++ }, listState = list)
-                    }
-                }
+            val scope = rememberCoroutineScope()
+            motion = remember { CommentSheetMotion(scope, 600f, 1f, { true }, { true }, { closes++ }, startHidden = true) }
+            LaunchedEffect(motion) { motion.enter() }
+            DisposableEffect(motion) { onDispose { motion.cancel() } }
+            Box(Modifier.size((600f - motion.offset).coerceAtLeast(1f).dp))
+        }
+        compose.mainClock.advanceTimeBy(64)
+        compose.runOnIdle {
+            assertTrue("Compact comments must enter from below", motion.offset > 0f && motion.offset < 600f)
+            val fraction = motion.offset / 600f
+            motion.resize(420f)
+            assertEquals("Keyboard resize preserves the displayed fraction", fraction, motion.offset / 420f, 0.001f)
+            motion.dismiss()
+        }
+        repeat(5) {
+            compose.mainClock.advanceTimeBy(16)
+            compose.runOnIdle { motion.dismiss() }
+        }
+        compose.mainClock.advanceTimeBy(160)
+        compose.runOnIdle { assertEquals(1, closes); assertEquals(420f, motion.offset, 0.01f) }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun removingThePanelCancelsItsPendingDismissal() {
+        lateinit var motion: CommentSheetMotion
+        var open by mutableStateOf(true)
+        var closes = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            if (open) {
+                val scope = rememberCoroutineScope()
+                motion = remember { CommentSheetMotion(scope, 600f, 1f, { true }, { true }, { closes++ }) }
+                DisposableEffect(motion) { onDispose { motion.cancel() } }
+                Box(Modifier.size(100.dp))
             }
         }
         compose.mainClock.advanceTimeBy(32)
-    }
-
-    private fun top() = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot.top
-
-    @Test fun headerTracksTheFingerThenSettlesBeforeDismissal() {
-        show()
-        val initial = top()
-        val header = compose.onNodeWithTag("comments-header")
-        header.performTouchInput { down(Offset(30f, 30f)); moveBy(Offset(0f, 180f), 300) }
-        compose.mainClock.advanceTimeBy(16)
-        assertTrue("The sheet must move before release", top() > initial + 140f)
-        assertEquals(0, closes)
-        header.performTouchInput { advanceEventTime(120); up() }
-        compose.mainClock.advanceTimeBy(80)
-        assertEquals("Dismissal waits for the exit animation", 0, closes)
-        compose.mainClock.advanceTimeBy(300)
-        compose.runOnIdle { assertEquals(1, closes) }
-    }
-
-    @Test fun aShortDragReturnsToTheSamePosition() {
-        show()
-        val initial = top()
-        val header = compose.onNodeWithTag("comments-header")
-        header.performTouchInput { down(Offset(30f, 30f)); moveBy(Offset(0f, 40f), 400) }
-        compose.mainClock.advanceTimeBy(16)
-        assertTrue(top() > initial)
-        header.performTouchInput { advanceEventTime(200); up() }
-        compose.mainClock.advanceTimeBy(1000)
-        assertEquals(initial, top(), .5f)
-        assertEquals(0, closes)
-    }
-
-    @Test fun listScrollingOnlyHandsOffAtItsStart() {
-        show()
-        compose.runOnIdle { runBlocking { list.scrollToItem(2) } }
-        val initial = top()
-        compose.onNodeWithTag("comments-list").performTouchInput {
-            down(Offset(30f, 180f)); moveBy(Offset(0f, 60f), 400); advanceEventTime(120); up()
-        }
-        compose.mainClock.advanceTimeBy(500)
-        assertEquals(initial, top(), .5f)
-        assertEquals(0, closes)
-        compose.runOnIdle { runBlocking { list.scrollToItem(0) } }
-        compose.onNodeWithTag("comments-list").performTouchInput {
-            down(Offset(30f, 80f)); moveBy(Offset(0f, 190f), 400); advanceEventTime(120); up()
-        }
-        compose.mainClock.advanceTimeBy(400)
-        assertEquals(1, closes)
-    }
-
-    @Test fun modalMenusKeepTheParentSheetStationary() {
-        show()
-        compose.runOnIdle { overlay.value = CommentsOverlay.SortMenu }
-        val initial = top()
-        compose.onNodeWithTag("comments-header").performTouchInput {
-            down(Offset(30f, 30f)); moveBy(Offset(0f, 200f), 300); up()
-        }
-        compose.mainClock.advanceTimeBy(500)
-        assertEquals(initial, top(), .5f)
-        assertEquals(0, closes)
+        compose.runOnIdle { motion.dismiss() }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { open = false }
+        compose.mainClock.advanceTimeBy(240)
+        compose.runOnIdle { assertEquals(0, closes) }
+        compose.mainClock.autoAdvance = true
     }
 }

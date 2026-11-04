@@ -20,7 +20,6 @@ import java.util.UUID
 interface SignInService {
     suspend fun loadCode(): SignInCode
     suspend fun poll(code: SignInCode): AccessToken
-    /** Loads the account list and commits the session; returns the committed accounts. */
     suspend fun complete(token: AccessToken): List<Account>
 }
 
@@ -57,7 +56,6 @@ class MediaSignInService(http: okhttp3.OkHttpClient, private val store: AuthStor
         }
     }
 
-    /** Client credentials come from the cached bootstrap or the runtime youtube.com/tv bootstrap. */
     private fun resolveClient(http: HttpClient): SignInClient {
         val id = store.read(MediaSession.KEY_CLIENT_ID)
         val secret = store.read(MediaSession.KEY_CLIENT_SECRET)

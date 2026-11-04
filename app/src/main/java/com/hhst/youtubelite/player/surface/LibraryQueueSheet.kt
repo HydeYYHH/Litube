@@ -17,7 +17,7 @@ internal fun LibraryQueueSheet(onDismiss: () -> Unit, onPlay: (String) -> Unit) 
     val state by queue.state.collectAsStateWithLifecycle()
     val owner = state.owner
     val context = LocalContext.current
-    PlayerModalSheet(onDismiss = onDismiss) {
+    PlayerModalSheet(onDismiss = onDismiss, expanded = true) {
         QueueSheet(state.items, currentId = null, loopMode = LoopMode.QUEUE_NEXT,
             onItem = { url -> VideoId.parse(url)?.let(onPlay) },
             onClear = { queue.clear(owner) }, onRemove = { queue.remove(it, owner) },

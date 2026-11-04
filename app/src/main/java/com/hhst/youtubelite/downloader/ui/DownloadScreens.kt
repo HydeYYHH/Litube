@@ -1,4 +1,7 @@
 package com.hhst.youtubelite.downloader.ui
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -42,7 +45,9 @@ import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,16 +69,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
 import com.hhst.youtubelite.core.HapticsController
-import com.hhst.youtubelite.downloader.core.DownloadFilter
 import com.hhst.youtubelite.downloader.core.DownloadSettings
 import com.hhst.youtubelite.downloader.core.DownloadStatus
 import com.hhst.youtubelite.downloader.core.DownloadTarget
 import com.hhst.youtubelite.downloader.core.RemoveMode
 import com.hhst.youtubelite.ui.components.ConstrainedPage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
 import org.koin.compose.koinInject
 
 sealed class DownloadDest {
@@ -119,6 +125,11 @@ fun DownloadManagerScreen(
     var pendingDelete by remember { mutableStateOf<DownloadItemUiState?>(null) }
     // Hoisted so returning from a batch detail restores the list scroll position.
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Keep one live snapshot while opening details/settings. A new cold Room
+    // subscription in each pane briefly replaced existing downloads with an empty state.
+    val downloads = remember(viewModel) { viewModel.observeDownloads() }
+    val downloadItems = downloads.collectAsStateWithLifecycle<List<DownloadItemUiState>?>(null)
+    var filter by rememberSaveable { mutableStateOf(ManagerFilter.ALL) }
     LaunchedEffect(newBatchRequests) {
         newBatchRequests.collect { dest = DownloadDest.Batch(it) }
     }
@@ -152,12 +163,14 @@ fun DownloadManagerScreen(
         if (dest != DownloadDest.List) dest = DownloadDest.List else onClose()
     }
 
+    val appBar = rememberAppBarCollapseState(dest to filter,
+        enabled = dest != DownloadDest.Settings && !downloadItems.value.isNullOrEmpty())
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().nestedScroll(appBar.connection),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            CollapsingAppBar(appBar) { TopAppBar(
                 expandedHeight = settingsAppBarHeight(),
                 title = {
                     Text(
@@ -200,16 +213,19 @@ fun DownloadManagerScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
-            )
+            ) }
         },
     ) { padding ->
         ConstrainedPage {
             when (val current = dest) {
                 DownloadDest.List -> DownloadListPane(
                     listState = listState,
-                    viewModel = viewModel,
+                    downloadItems = downloadItems,
+                    filter = filter,
+                    onFilter = { filter = it },
                     padding = padding,
                     onOpenBatch = { dest = DownloadDest.Batch(it) },
+                    onRemove = { item, mode -> viewModel.remove(item.target(), mode) },
                     onAction = ::handle,
                 )
                 is DownloadDest.Batch -> DownloadBatchPane(
@@ -221,10 +237,10 @@ fun DownloadManagerScreen(
                 DownloadDest.Settings -> DownloadSettingsPane(
                     viewModel = viewModel,
                     padding = padding,
-                    onHistory = { dest = DownloadDest.History },
                 )
                 DownloadDest.History -> DownloadHistoryPane(
                     viewModel = viewModel,
+                    downloadItems = downloadItems,
                     padding = padding,
                     onAction = ::handle,
                     snackbar = snackbar,
@@ -252,13 +268,19 @@ fun DownloadManagerScreen(
 @Composable
 private fun DownloadListPane(
     listState: androidx.compose.foundation.lazy.LazyListState,
-    viewModel: DownloadViewModel,
+    downloadItems: State<List<DownloadItemUiState>?>,
+    filter: ManagerFilter,
+    onFilter: (ManagerFilter) -> Unit,
     padding: PaddingValues,
     onOpenBatch: (String) -> Unit,
+    onRemove: (DownloadItemUiState, RemoveMode) -> Unit,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
 ) {
-    var filter by rememberSaveable { mutableStateOf(ManagerFilter.ALL) }
-    val items by viewModel.observeDownloads(filter).collectAsStateWithLifecycle(emptyList())
+    val loaded = downloadItems.value
+    val items = remember(loaded, filter) {
+        val phases = DownloadPresentation.managerFilter(filter).phases
+        loaded.orEmpty().filter { phases == null || it.phase in phases }
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -272,36 +294,42 @@ private fun DownloadListPane(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             DownloadFilterChip(filter == ManagerFilter.ALL, stringResource(R.string.download_filter_all), compact = true) {
-                filter = ManagerFilter.ALL
+                onFilter(ManagerFilter.ALL)
             }
             DownloadFilterChip(filter == ManagerFilter.IN_PROGRESS, stringResource(R.string.download_filter_in_progress), compact = true) {
-                filter = ManagerFilter.IN_PROGRESS
+                onFilter(ManagerFilter.IN_PROGRESS)
             }
             DownloadFilterChip(filter == ManagerFilter.COMPLETED, stringResource(R.string.download_filter_completed), compact = true) {
-                filter = ManagerFilter.COMPLETED
+                onFilter(ManagerFilter.COMPLETED)
             }
         }
         DownloadHairline()
-        if (items.isEmpty()) {
+        if (loaded == null) {
+            DownloadsLoading()
+        } else if (items.isEmpty()) {
             EmptyDownloads()
         } else {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                items(items, key = { it.itemId ?: it.taskId }) { item ->
-                    DownloadItemRow(
-                        item = item,
-                        onOpen = { item.batchId?.let(onOpenBatch) },
-                        onAction = { action -> onAction(item, action) },
-                    )
-                    DownloadHairline()
-                }
-            }
+            SelectableDownloads(items, listState = listState,
+                onOpen = { it.batchId?.let(onOpenBatch) }, onAction = onAction, onRemove = onRemove)
         }
     }
 }
 
 @Composable
-private fun EmptyDownloads() {
+private fun DownloadsLoading() {
+    var showProgress by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(150)
+        showProgress = true
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (showProgress) com.hhst.youtubelite.home.presentation.LoadingSpinner()
+    }
+}
+
+@Composable
+private fun EmptyDownloads() {
+    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp),
@@ -322,6 +350,9 @@ private fun EmptyDownloads() {
     }
 }
 
+/** An emitted null is a missing batch; no emission yet is still loading. */
+private data class LoadedBatch(val value: BatchUiState?)
+
 @Composable
 private fun DownloadBatchPane(
     batchId: String,
@@ -329,10 +360,11 @@ private fun DownloadBatchPane(
     padding: PaddingValues,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
 ) {
-    val batch by viewModel.observeBatch(batchId).collectAsStateWithLifecycle(null)
+    val batchFlow = remember(viewModel, batchId) { viewModel.observeBatch(batchId).map(::LoadedBatch) }
+    val loaded = key(batchId) { batchFlow.collectAsStateWithLifecycle<LoadedBatch?>(null).value }
+    val batch = loaded?.value
     val items = batch?.items.orEmpty()
     val stats = batch?.stats
-    var pendingBatchDelete by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(padding)) {
         Text(
             text = batch?.name.orEmpty(),
@@ -360,26 +392,24 @@ private fun DownloadBatchPane(
                 trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f),
             )
         }
-        // Batch controls mirror the row-level semantics: skipped rows are
-        // inert, pause targets running work, resume targets held or queued
-        // work, matching what actionsFor offers per row.
+        // Batch controls mirror the per-row semantics offered by actionsFor.
         val target = { item: DownloadItemUiState ->
             item.itemId?.let(DownloadTarget::Item) ?: DownloadTarget.Task(item.taskId)
         }
-        val pausable = items.filter {
+        val pausable = remember(items) { items.filter {
             !it.skipped && it.status in setOf(
                 DownloadStatus.RUNNING,
                 DownloadStatus.PAUSING,
                 DownloadStatus.WAITING_SYSTEM,
             )
-        }
-        val resumable = items.filter {
+        } }
+        val resumable = remember(items) { items.filter {
             !it.skipped && it.status in setOf(
                 DownloadStatus.PAUSED,
                 DownloadStatus.WAITING_NETWORK,
                 DownloadStatus.QUEUED,
             )
-        }
+        } }
         if (items.isNotEmpty()) {
             Row(
                 Modifier
@@ -397,46 +427,26 @@ private fun DownloadBatchPane(
                         Text(stringResource(R.string.download_resume_all))
                     }
                 }
-                TextButton(onClick = { pendingBatchDelete = true }) {
-                    Text(stringResource(R.string.download_delete_batch))
-                }
             }
         }
         DownloadHairline()
-        if (items.isEmpty()) {
+        if (loaded == null) {
+            DownloadsLoading()
+        } else if (items.isEmpty()) {
             EmptyDownloads()
         } else {
-            LazyColumn {
-                items(items, key = { it.itemId ?: it.taskId }) { item ->
-                    DownloadItemRow(
-                        item = item,
-                        onOpen = { onAction(item, DownloadRowAction.OPEN) },
-                        onAction = { action -> onAction(item, action) },
-                    )
-                    DownloadHairline()
-                }
-            }
+            SelectableDownloads(items,
+                onOpen = { onAction(it, DownloadRowAction.OPEN) }, onAction = onAction,
+                onRemove = { item, mode -> viewModel.remove(item.target(), mode) })
         }
     }
-    if (pendingBatchDelete) {
-        DeleteDialog(
-            onDismiss = { pendingBatchDelete = false },
-            onConfirm = { mode ->
-                items.forEach { item ->
-                    val t = item.itemId?.let(DownloadTarget::Item) ?: DownloadTarget.Task(item.taskId)
-                    viewModel.remove(t, mode)
-                }
-                pendingBatchDelete = false
-            },
-        )
-    }
+
 }
 
 @Composable
 private fun DownloadSettingsPane(
     viewModel: DownloadViewModel,
     padding: PaddingValues,
-    onHistory: () -> Unit,
 ) {
     var wifi by remember { mutableStateOf(viewModel.prefs.wifiOnly()) }
     var quality by remember { mutableStateOf(viewModel.prefs.defaultQuality()) }
@@ -452,6 +462,7 @@ private fun DownloadSettingsPane(
         SettingsRow(
             title = stringResource(R.string.download_wifi_only),
             subtitle = null,
+            onClick = { wifi = !wifi; viewModel.setWifiOnly(wifi) },
             trailing = {
                 Switch(checked = wifi, onCheckedChange = {
                     wifi = it
@@ -504,24 +515,20 @@ private fun DownloadSettingsPane(
             valueRange = DownloadSettings.MIN_CONNECTIONS.toFloat()..DownloadSettings.MAX_CONNECTIONS.toFloat(),
             steps = DownloadSettings.MAX_CONNECTIONS - DownloadSettings.MIN_CONNECTIONS - 1,
         )
-        DownloadHairline()
-        SettingsRow(
-            title = stringResource(R.string.download_history),
-            subtitle = stringResource(R.string.download_delete_downloads),
-            onClick = onHistory,
-        )
+
     }
 }
 
 @Composable
 private fun DownloadHistoryPane(
     viewModel: DownloadViewModel,
+    downloadItems: State<List<DownloadItemUiState>?>,
     padding: PaddingValues,
     onAction: (DownloadItemUiState, DownloadRowAction) -> Unit,
     snackbar: SnackbarHostState,
 ) {
-    val items by viewModel.observeDownloads(DownloadFilterAll).collectAsStateWithLifecycle(emptyList())
-    val terminal = items.filter(DownloadPresentation::isTerminal)
+    val items = downloadItems.value
+    val terminal = remember(items) { items.orEmpty().filter(DownloadPresentation::isTerminal) }
     val scope = rememberCoroutineScope()
     var confirmClear by remember { mutableStateOf(false) }
     var deleteFiles by remember { mutableStateOf(false) }
@@ -537,7 +544,9 @@ private fun DownloadHistoryPane(
             Text(stringResource(R.string.download_clear_history))
         }
         DownloadHairline()
-        if (terminal.isEmpty()) {
+        if (items == null) {
+            DownloadsLoading()
+        } else if (terminal.isEmpty()) {
             EmptyDownloads()
         } else {
             LazyColumn {
@@ -555,7 +564,7 @@ private fun DownloadHistoryPane(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = AppStyle.Panel,
             tonalElevation = 0.dp,
             title = { Text(stringResource(R.string.download_clear_history)) },
             text = {
@@ -571,7 +580,6 @@ private fun DownloadHistoryPane(
                 TextButton(onClick = {
                     confirmClear = false
                     scope.launch {
-                        // Report the outcome only after clearing finished.
                         val outcome = runCatching { viewModel.clearHistory(deleteFiles) }
                         snackbar.showSnackbar(if (outcome.isSuccess) clearedMessage else failedMessage)
                     }
@@ -584,7 +592,6 @@ private fun DownloadHistoryPane(
     }
 }
 
-private val DownloadFilterAll = DownloadFilter()
 
 @Composable
 private fun SettingsRow(
@@ -612,21 +619,22 @@ private fun SettingsRow(
 }
 
 @Composable
-private fun DeleteDialog(
+internal fun DeleteDialog(
     onDismiss: () -> Unit,
     onConfirm: (RemoveMode) -> Unit,
 ) {
     var files by remember { mutableStateOf(false) }
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         tonalElevation = 0.dp,
         title = { Text(stringResource(R.string.download_delete)) },
         text = {
             Row(
                 Modifier.fillMaxWidth().heightIn(min = DownloadTokens.MinTouch)
                     .toggleable(value = files, role = Role.Checkbox,
-                        onValueChange = { files = it }),
+                        onValueChange = { haptic(); files = it }),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(checked = files, onCheckedChange = null)

@@ -30,6 +30,80 @@ class SearchResultsViewModelTest {
         override suspend fun search(query: String, filters: SearchFilters) = block(query)
     }
 
+    @Test fun pagingKeepsMetadataThatArrivesWhileTheNextPageIsPending() = runTest {
+        val row = SearchResult("song", "Song", "Artist", "UCartist", "2K views", "", "", "cover")
+        val metadata = kotlinx.coroutines.CompletableDeferred<SearchResult>()
+        val next = kotlinx.coroutines.CompletableDeferred<SearchPage>()
+        val repository = object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters) = SearchPage(query, listOf(row), nextCursor = "next")
+            override suspend fun metadata(result: SearchResult) = metadata.await()
+            override suspend fun next(query: String, filters: SearchFilters, cursor: String) = next.await()
+        }
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "music")
+        runCurrent()
+        assertTrue(vm.uiState.value.content is SearchContent.Results)
+        vm.onAction(SearchAction.LoadMore)
+        runCurrent()
+        metadata.complete(row.copy(duration = "3:41", age = "2025-11-10"))
+        runCurrent()
+        next.complete(SearchPage("music", listOf(row.copy(id = "another", duration = "4:57"))))
+        advanceUntilIdle()
+        val result = (vm.uiState.value.content as SearchContent.Results).page.results.first()
+        assertEquals("3:41", result.duration)
+        assertEquals("2025-11-10", result.age)
+    }
+
+    @Test fun optionalMetadataIsBoundedAndDoesNotBlockResults() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var active = 0
+        var maximum = 0
+        var requests = 0
+        val rows = (1..10).map { SearchResult("song$it", "Song", "Artist", "UCartist", "", "", "", "") }
+        val repository = object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters) = SearchPage(query, rows)
+            override suspend fun metadata(result: SearchResult): SearchResult {
+                requests++; active++; maximum = maxOf(maximum, active)
+                gate.await(); active--
+                return result.copy(duration = "3:41", age = "Today", views = "1K views")
+            }
+        }
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "music")
+        runCurrent()
+        assertTrue(vm.uiState.value.content is SearchContent.Results)
+        assertEquals(3, requests)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(3, maximum)
+        assertEquals(3, requests)
+        vm.onAction(SearchAction.VisibleResults("music", SearchFilters(), rows.drop(3).map { it.id }))
+        advanceUntilIdle()
+        assertEquals(10, requests)
+        assertTrue((vm.uiState.value.content as SearchContent.Results).page.results.all { it.duration == "3:41" })
+    }
+
+    @Test fun changingQueryCancelsMetadataAndAllowsTheSameVideoToBeEnrichedAgain() = runTest {
+        val row = SearchResult("song", "Song", "Artist", "UCartist", "", "", "", "")
+        var requests = 0
+        var cancelled = false
+        val repository = object : SearchRepository {
+            override suspend fun search(query: String, filters: SearchFilters) = SearchPage(query, listOf(row))
+            override suspend fun metadata(result: SearchResult): SearchResult {
+                if (++requests == 1) try { kotlinx.coroutines.awaitCancellation() }
+                finally { cancelled = true }
+                return result.copy(duration = "3:41", age = "Today", views = "1K views")
+            }
+        }
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "old")
+        runCurrent()
+        vm.onAction(SearchAction.SubmitSearch("new"))
+        advanceUntilIdle()
+        assertTrue(cancelled)
+        assertEquals(2, requests)
+        val page = (vm.uiState.value.content as SearchContent.Results).page
+        assertEquals("new", page.query)
+        assertEquals("3:41", page.results.single().duration)
+    }
+
     @Test fun ordinaryEntryLoadsTheLocalResultsForTheSubmittedQuery() = runTest {
         val queries = mutableListOf<String>()
         val vm = SearchResultsViewModel(repository { query -> queries += query; SearchPage(query, FixtureSearchRepository.sampleResults()) }, SavedStateHandle(), "open movie")
@@ -434,13 +508,35 @@ class SearchResultsViewModelTest {
         assertTrue(vm.uiState.value.signedInPreview)
     }
 
+    @Test fun signedInRecoveryWithinTheGenerationDoesNotRestartThePendingSearch() = runTest {
+        val response = kotlinx.coroutines.CompletableDeferred<SearchPage>()
+        var calls = 0
+        val vm = SearchResultsViewModel(repository {
+            calls++
+            response.await()
+        }, SavedStateHandle(), "movie", signedIn = false)
+        vm.updateSession(false, 1L)
+        runCurrent()
+
+        vm.updateSession(true, 1L)
+        assertTrue(vm.uiState.value.signedInPreview)
+        response.complete(SearchPage("movie", FixtureSearchRepository.sampleResults()))
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertEquals("movie", (vm.uiState.value.content as SearchContent.Results).page.query)
+        assertTrue(vm.uiState.value.signedInPreview)
+    }
+
     private class RecordingVideoActions : com.hhst.youtubelite.watch.domain.VideoActions {
         val subscriptions = ArrayList<Pair<String, Boolean>>()
         var error: Exception? = null
+        var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating, previous: com.hhst.youtubelite.watch.domain.VideoRating) = Unit
         override suspend fun subscribe(channelId: String, subscribed: Boolean) {
             error?.let { throw it }
             subscriptions += channelId to subscribed
+            gate?.await()
         }
     }
 
@@ -485,6 +581,27 @@ class SearchResultsViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("northlight" to true, "northlight" to false), actions.subscriptions)
         assertEquals(false, vm.uiState.value.subscriptions["northlight"])
+    }
+
+    @Test fun subscriptionProgressClearsOnFailureAndPreservesConfirmedMembership() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val actions = RecordingVideoActions().apply { this.gate = gate }
+        val vm = liveViewModel(actions = actions)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        assertEquals(setOf("northlight"), vm.uiState.value.subscriptionsPending)
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        runCurrent()
+        assertEquals(1, actions.subscriptions.size)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.subscriptionsPending.isEmpty())
+        assertEquals(true, vm.uiState.value.subscriptions["northlight"])
+        actions.error = java.io.IOException("offline")
+        vm.onAction(SearchAction.Subscribe("northlight"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.subscriptionsPending.isEmpty())
+        assertEquals(true, vm.uiState.value.subscriptions["northlight"])
     }
 
     @Test fun failedLiveSubscribeKeepsTheStateAndNotifies() = runTest {
@@ -573,7 +690,6 @@ class SearchResultsViewModelTest {
         assertFalse(vm.uiState.value.menuFailed)
         val page = (vm.uiState.value.content as SearchContent.Results).page
         assertEquals("token-harbour", page.results.first { it.id == "harbour" }.notInterestedToken)
-        // Untouched cards stay untouched: no preload for menus never opened.
         assertNull(page.results.first { it.id == "studio" }.notInterestedToken)
         assertEquals(1, repository.menuCalls)
     }

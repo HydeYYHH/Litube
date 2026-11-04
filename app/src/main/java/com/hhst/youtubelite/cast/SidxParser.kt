@@ -14,16 +14,6 @@ import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.ChunkIndex
 
-/**
- * Parses an ISO 14496-12 SegmentIndex (sidx) box into a [ChunkIndex].
- *
- * The sidx box lives at the index range the extractor reported for the fmp4
- * stream (see the extractor Format's indexStart/indexEnd).
- * Parsing it on the phone lets the cast proxy emit a DASH `SegmentList`
- * with explicit per-segment byte ranges, so the Chromecast default receiver
- * issues targeted Range GETs for individual fmp4 segments instead of
- * downloading the entire stream with `Range: bytes=0-`.
- */
 @UnstableApi
 object SidxParser {
 
@@ -32,16 +22,10 @@ object SidxParser {
     private const val TYPE_SIDX = 0x73696478
 
     /**
-     * Parses a raw sidx box into a [ChunkIndex].
-     *
-     * @param sidxData        the raw bytes fetched from the stream's index range.
-     *                        May contain other boxes (for example a moov tail)
-     *                        before the sidx box; this method scans for the
-     *                        `sidx` type at four-byte boundaries
-     * @param dataStartOffset the absolute byte offset in the stream where
-     *                        `sidxData[0]` begins (the itag's indexStart)
-     * @return the parsed chunk index, or `null` if no sidx box could be
-     *         located or the data is malformed
+     * @param sidxData raw index-range bytes; other boxes (e.g. a moov tail) may precede
+     *   the sidx box, which is scanned for at four-byte boundaries
+     * @param dataStartOffset absolute stream offset of `sidxData[0]` (the itag's indexStart)
+     * @return null if no sidx box can be located or the data is malformed
      */
     fun parse(sidxData: ByteArray, dataStartOffset: Long): ChunkIndex? {
         return try {
@@ -73,8 +57,7 @@ object SidxParser {
             val atom = ParsableByteArray(sidxData, sidxData.size)
             atom.setPosition(sidxOffset + headerSize)
             val fullAtom = atom.readInt()
-            // Big-endian fullbox word: (version << 24) | flags — same read as
-            // media3's Atom.parseFullAtomVersion, which this parser is adapted from.
+            // Big-endian fullbox word: (version << 24) | flags, as media3's Atom.parseFullAtomVersion reads it.
             val version = fullAtom ushr 24
 
             atom.skipBytes(4) // reference_ID
@@ -88,9 +71,8 @@ object SidxParser {
                 earliestPresentationTime = atom.readUnsignedInt()
                 offset += atom.readUnsignedInt()
             } else {
-                // Version 1 uses 64-bit fields. ParsableByteArray.readUnsignedLongToLong
-                // throws when the high bit is set. Sidx times and offsets can exceed
-                // signed long in rare VP9/AV1 streams; read the bits without that check.
+                // Version 1: 64-bit fields. ParsableByteArray.readUnsignedLongToLong throws on
+                // the high bit, but sidx times/offsets can exceed signed long in rare VP9/AV1 streams.
                 earliestPresentationTime = readUnsignedLongBitsAsLong(atom)
                 offset += readUnsignedLongBitsAsLong(atom)
             }
@@ -114,8 +96,7 @@ object SidxParser {
             var timeUs = earliestPresentationTimeUs
             for (i in 0 until referenceCount) {
                 val firstInt = atom.readInt()
-                // Bit 31 is the reference type (1 = indirect, 0 = media).
-                // Indirect references are not supported.
+                // Bit 31 is the reference type (1 = indirect, 0 = media); indirect references unsupported.
                 if ((firstInt and Int.MIN_VALUE) != 0) {
                     Log.w(TAG, "SidxParser: indirect reference at index $i, aborting")
                     return null
@@ -155,10 +136,7 @@ object SidxParser {
             if (type == TYPE_SIDX) {
                 return position
             }
-            // ISO 14496-12: size == 1 means the real size follows as an
-            // 8-byte largesize; skipping only the 4-byte header field would
-            // desynchronize the box walk. size == 0 extends to EOF, so
-            // nothing can follow it.
+            // ISO 14496-12: size == 1 means an 8-byte largesize follows (skipping only the 4-byte header desyncs the box walk); size == 0 extends to EOF.
             if (size == 1L && position + 16 <= data.size) {
                 size = readUint64(data, position + 8)
             }
@@ -167,8 +145,7 @@ object SidxParser {
             }
             position += size.toInt()
         }
-        // Last resort: scan for "sidx" at four-byte boundaries. Accept the
-        // match only when the preceding four bytes form a plausible box size.
+        // Last resort: scan for "sidx" at four-byte boundaries; accept only matches with a plausible box size before them.
         var index = 4
         while (index + 4 <= data.size) {
             if (data[index] == 0x73.toByte() && data[index + 1] == 0x69.toByte() &&
@@ -187,12 +164,8 @@ object SidxParser {
         return -1
     }
 
-    /**
-     * Reads eight bytes as an unsigned 64-bit integer into a [Long].
-     * Unlike [ParsableByteArray.readUnsignedLongToLong], values with
-     * the high bit set do not throw; they appear as negative longs, which
-     * does not occur for sidx times and offsets in practice.
-     */
+    /** Unsigned 64-bit read into a [Long]; unlike [ParsableByteArray.readUnsignedLongToLong]
+     *  it never throws on the high bit (such values appear as negative longs). */
     private fun readUnsignedLongBitsAsLong(atom: ParsableByteArray): Long {
         val high = atom.readUnsignedInt()
         val low = atom.readUnsignedInt()

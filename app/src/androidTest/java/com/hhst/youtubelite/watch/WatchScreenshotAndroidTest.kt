@@ -48,8 +48,7 @@ class WatchScreenshotAndroidTest {
         state = WatchUiState(videoId = "bunny", content = content),
         onAction = onAction,
         onBack = {},
-        // The real player needs a live PlayerViewModel; the page geometry only
-        // depends on the slot's bounds, so tests substitute a black box.
+        // The real player needs a live PlayerViewModel; page geometry depends only on the slot's bounds, so tests substitute a black box.
         playerSlot = { slot -> Box(slot.background(Color.Black)) },
     )
 
@@ -72,7 +71,6 @@ class WatchScreenshotAndroidTest {
     private fun viewportShift() =
         compose.onNodeWithTag("watch-screen").fetchSemanticsNode().boundsInRoot.left
 
-    /** Phone chrome, author identity, and non-overlapping actions. */
     @Test fun phoneChromeMatchesMeasuredAnchors() {
         compose.setContent { Viewport(411, 844) { RenderScreen(contentOf("content")) } }
         compose.onNodeWithTag("watch-topbar").assertDoesNotExist()
@@ -147,7 +145,6 @@ class WatchScreenshotAndroidTest {
         }
     }
 
-    /** Phone related lockup: full-bleed cover with +13, details at x12, kebab flush right. */
     @Test fun phoneRelatedLockupMatchesMeasuredAnchors() {
         compose.setContent { Viewport(390, 844) { RenderScreen(contentOf("content")) } }
         val cell = bounds("watch-related-harbour")
@@ -158,7 +155,6 @@ class WatchScreenshotAndroidTest {
         assertEquals(0f, thumb.left, 0.5f)
         assertEquals(390f, thumb.width, 0.5f)
         assertEquals(232.375f, thumb.height, 0.6f)
-        // Feed inset: comments bottom + 12; the phone cover has no extra top pad.
         assertEquals(comments.bottom + 12f, thumb.top, 0.6f)
         val avatar = bounds("watch-avatar-harbour")
         assertEquals(12f, avatar.left, 0.5f)
@@ -185,7 +181,6 @@ class WatchScreenshotAndroidTest {
         assertEquals(48f, kebab.width, 0.5f)
     }
 
-    /** Portrait grid at 600: 2 columns of 292, thumbs inset 8, row gap 0. */
     @Test fun gridRelatedRowsStayFlushAtSixHundred() {
         compose.setContent { Viewport(600, 960) { RenderScreen(contentOf("content")) } }
         val cell = bounds("watch-related-harbour")
@@ -198,13 +193,11 @@ class WatchScreenshotAndroidTest {
         val second = bounds("watch-related-studio")
         assertEquals(300f, second.left, 0.5f)
         assertEquals(292f, second.width, 0.5f)
-        // Row gap 0: the next chunk starts at the previous chunk's bottom edge.
         val third = bounds("watch-related-meadow")
         val firstRowBottom = maxOf(cell.bottom, second.bottom)
         assertEquals(firstRowBottom, third.top, 0.6f)
     }
 
-    /** Wide-short landscape list: 200×112 covers at x12, pitch 124, no avatar column. */
     @Test fun listRelatedRowsUseTheWideShortCover() {
         compose.setContent { Viewport(844, 342) { RenderScreen(contentOf("content")) } }
         val player = bounds("watch-player-slot")
@@ -225,7 +218,6 @@ class WatchScreenshotAndroidTest {
         assertEquals(thumb.bottom + 12f, second.top, 0.6f)
     }
 
-    /** Stacked landscape: cover inset 12 with an exact 16:9 box, avatar back at x12. */
     @Test fun stackedRelatedUsesTheInsetCover() {
         compose.setContent { Viewport(840, 725) { RenderScreen(contentOf("content")) } }
         val player = bounds("watch-player-slot")
@@ -243,7 +235,6 @@ class WatchScreenshotAndroidTest {
         assertEquals(12f, bounds("watch-avatar-harbour").left, 0.5f)
     }
 
-    /** Sidebar panes: compact 256 at 931, wide 500 at ≥1280; the player spans the main column. */
     @Test fun sidebarPanesMatchBothBreakpointWidths() {
         var width by mutableIntStateOf(931)
         var height by mutableIntStateOf(744)
@@ -290,7 +281,6 @@ class WatchScreenshotAndroidTest {
         assertEquals(12f + tallShift, bounds("watch-action-like").left, 0.6f)
     }
 
-    /** Content / loading / error are distinct surfaces; Retry emits exactly one typed action. */
     @Test fun stateMatrixSwitchesSurfaces() {
         var state by mutableStateOf(contentOf("content"))
         val actions = mutableListOf<WatchAction>()
@@ -314,7 +304,6 @@ class WatchScreenshotAndroidTest {
         compose.onNodeWithTag("watch-error").assertDoesNotExist()
     }
 
-    /** fontScale 2 at 320: the chrome stays inside the column and keeps its controls. */
     @Test fun enlargedTextKeepsTheTitleInsideTheColumn() {
         compose.setContent { Viewport(320, 844, fontScale = 2f) { RenderScreen(contentOf("content")) } }
         compose.onNodeWithTag("watch-title").assertIsDisplayed()
@@ -327,7 +316,6 @@ class WatchScreenshotAndroidTest {
         capture("content-320-font2", output, true, emptySet())
     }
 
-    /** Split-style windows keep the top bar, player, and action bar inside the window. */
     @Test fun splitWindowsKeepTheChromeInsideTheWindow() {
         var width by mutableIntStateOf(390)
         var height by mutableIntStateOf(400)
@@ -343,14 +331,12 @@ class WatchScreenshotAndroidTest {
             val player = bounds("watch-player-slot")
             assertEquals(0f, player.top, 0.5f)
             assertEquals(w.toFloat(), player.width, 0.5f)
-            // Short windows push the action bar below the fold; scroll it into view.
             compose.onNodeWithTag("watch-actions").performScrollTo()
             assertTrue("$w × $h actions height", bounds("watch-actions").height >= 48f)
             capture("split-$w-$h", output, true, emptySet())
         }
     }
 
-    /** The related-card action sheet uses the measured 400 / inset geometry. */
     @Test fun relatedCardMenuSurfaceMatchesTheSheetGeometry() {
         var width by mutableIntStateOf(390)
         var height by mutableIntStateOf(844)
@@ -511,8 +497,7 @@ class WatchScreenshotAndroidTest {
         val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        // Report where the diff lives so an intentional geometry change is
-        // distinguishable from unrelated drift without lowering the bar.
+        // Report the diff region so an intentional geometry change is distinguishable from unrelated drift.
         val changedArea = changed.fold(null as IntArray?) { area, i ->
             val x = i % expected.width; val y = i / expected.width
             if (area == null) intArrayOf(x, y, x, y)

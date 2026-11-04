@@ -7,10 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Issue 351 regression guard: the bundled production roots and fallback CRL must parse and
- * validate on the Android security providers, not only on the JVM. The fixture-based VM tests
- * exercise the protocol with a synthetic chain; this one runs the real bundled trust data
- * through the production verifier without ever disabling a check.
+ * Issue 351 regression guard: the bundled production roots and fallback CRL must validate on
+ * the Android security providers, not only the JVM. This runs the real bundled trust data
+ * through the production verifier with no disabled checks.
  */
 class CastProductionTrustAndroidTest {
     private fun decode(value: String) = android.util.Base64.decode(value, android.util.Base64.DEFAULT)

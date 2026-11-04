@@ -22,8 +22,14 @@ ksp = "2.2.20-2.0.4"
 workManager = "2.10.5"
 nanohttpd = "2.3.1"
 upnpcast = "v1.3.0"
+coil = "3.3.0"
+leakcanary = "2.14"
+turbine = "1.2.1"
 
 [libraries]
+coil-core = { module = "io.coil-kt.coil3:coil-core", version.ref = "coil" }
+leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 androidx-javascriptengine = { module = "androidx.javascriptengine:javascriptengine", version.ref = "javascriptengine" }
 desugar_jdk_libs_nio = { module = "com.android.tools:desugar_jdk_libs_nio", version.ref = "desugar_jdk_libs_nio" }
 guava = { module = "com.google.guava:guava", version = "33.3.1-android" }

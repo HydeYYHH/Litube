@@ -14,6 +14,5 @@ data class VerificationRequired(val challengeUrl: String)
 fun RequestError.isTrafficChallenge(): Boolean =
     kind == RequestFailure.VERIFICATION && UrlPolicy.isTrafficChallenge(detail)
 
-/** The challenge to surface for this failure, or null when it is an ordinary one. */
 fun trafficChallenge(error: com.hhst.youtubelite.data.media.MediaException): VerificationRequired? =
     if (error.failure.isTrafficChallenge()) error.failure.detail?.let(::VerificationRequired) else null

@@ -13,6 +13,10 @@ interface PlayerPlaybackActions {
     fun onToggleControls()
     fun onHideControls()
     fun onFullscreenToggle()
+    /** A swipe exit keeps the current direction; the button retains its own policy. */
+    fun onFullscreenSwipeExit() = onFullscreenToggle()
+    /** Downward exit restores the presentation from before fullscreen entry. */
+    fun onFullscreenSwipeRestore() = onFullscreenToggle()
     fun onSpeedHoldStart()
     fun onSpeedHoldEnd()
     fun onHint(text: String?)
@@ -27,11 +31,10 @@ interface PlayerPlaybackActions {
     fun onScrubCommit(offsetMs: Long)
     /** Time-bar drag preview: non-null target shows a bubble, null ends the drag. */
     fun onTimeBarPreview(targetMs: Long?)
-    /** Time-bar drag released. */
     fun onTimeBarCommit()
     fun onLockToggle()
     fun onAudioTrack(trackKey: String?)
-    /** The audio menu opened; may trigger a bounded audio-catalog supplement. No-op by default. */
+    /** May trigger a bounded audio-catalog supplement. */
     fun onAudioMenuOpened() {}
     /** Subtitle appearance changed (applies live and persists). */
     fun onSubtitleStyle(style: SubtitleStyle)
@@ -59,9 +62,8 @@ interface PlayerPlaybackActions {
     fun onCloseCastLink()
     fun onMiniClose()
     fun onMiniRestore()
-    /** User cancelled the sponsor pre-skip countdown. */
     fun onSponsorSkipCancel()
-    /** User tapped the countdown card: skip the pending segment now. */
+    /** User tapped the countdown card. */
     fun onSponsorSkipNow()
     /** Manual skip via the chip while inside a suppressed segment. */
     fun onSponsorChipSkip()
@@ -88,7 +90,6 @@ interface PlayerWindowActions {
     fun onGestureEnd() {}
 }
 
-/** Surface contract: playback intents + window side effects. */
 interface PlayerSurfaceCallbacks : PlayerPlaybackActions, PlayerWindowActions {
     override fun onGestureEnd()
 }

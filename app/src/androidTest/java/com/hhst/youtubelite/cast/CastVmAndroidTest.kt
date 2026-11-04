@@ -7,6 +7,7 @@ import androidx.media3.common.Player
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.cast.protocol.CastDeviceAuth
 import com.hhst.youtubelite.cast.protocol.CastV2Session
+import com.hhst.youtubelite.cast.protocol.Proto
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.player.engine.CastSource
 import fi.iki.elonen.NanoHTTPD
@@ -104,5 +105,20 @@ class CastVmAndroidTest {
         rejected { CastDeviceAuth.verify(CastVmFixture.response(nonce, wrongSignature = true), CastVmFixture.tls, nonce, listOf(CastVmFixture.root), CastVmFixture.root, CastVmFixture.fixedTime) }
         rejected { CastDeviceAuth.verify(response, CastVmFixture.tls, nonce, listOf(CastVmFixture.root), CastVmFixture.root, Date(0)) }
         rejected { CastDeviceAuth.verify(CastVmFixture.response(nonce, revoked = true), CastVmFixture.tls, nonce, listOf(CastVmFixture.root), CastVmFixture.root, CastVmFixture.fixedTime) }
+    }
+
+    @Test fun legacyDeviceAuthUsesProtocolDefaultsAndStillVerifiesTheSignedPeer() {
+        val nonce = ByteArray(16) { it.toByte() }
+        fun verify(response: ByteArray) = CastDeviceAuth.verify(response, CastVmFixture.tls, nonce,
+            listOf(CastVmFixture.root), CastVmFixture.root, CastVmFixture.fixedTime)
+        verify(CastVmFixture.response(nonce, legacy = true))
+        assertTrue(runCatching { verify(CastVmFixture.response(nonce, legacy = true, wrongSignature = true)) }.isFailure)
+        assertTrue(runCatching { verify(CastVmFixture.response(nonce, legacy = true, revoked = true)) }.isFailure)
+        // Omitting a nonce must never turn a modern SHA256 response into legacy authentication.
+        val modern = Proto.parse(CastVmFixture.response(nonce))
+        val missingNonce = Proto.encode(*modern.filterKeys { it != 5 }.flatMap { (field, values) ->
+            values.map { field to it }
+        }.toTypedArray())
+        assertTrue(runCatching { verify(missingNonce) }.isFailure)
     }
 }

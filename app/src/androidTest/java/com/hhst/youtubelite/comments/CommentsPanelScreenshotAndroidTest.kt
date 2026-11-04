@@ -43,7 +43,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** Screenshot acceptance for the comments panel at the sampled widths. */
 @SdkSuppress(minSdkVersion = 35, maxSdkVersion = 35)
 class CommentsPanelScreenshotAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
@@ -135,7 +134,6 @@ class CommentsPanelScreenshotAndroidTest {
         }
     }
 
-    /** The public comment menu reuses the measured sheet inside the panel. */
     @Test fun commentMenuSurfaceMatchesTheSheetGeometry() {
         val record = InstrumentationRegistry.getArguments().getString("recordMenuGoldens") == "true"
         val goldens = setOf("comments-menu-390", "comments-menu-1280")
@@ -175,7 +173,6 @@ class CommentsPanelScreenshotAndroidTest {
         capture("comments-menu-1280", output, record, goldens)
     }
 
-    /** Reply/edit composer and the owner-only delete confirmation. */
     @Test fun commentComposerAndDeleteConfirmationMatchGoldens() {
         val record = InstrumentationRegistry.getArguments().getString("recordCommentsGoldens") == "true"
         val goldens = setOf("comments-composer-390", "comments-composer-1280", "comments-delete-390")

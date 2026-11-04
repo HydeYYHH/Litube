@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
+import android.os.SystemClock
 import java.net.NoRouteToHostException
 import java.util.concurrent.TimeUnit
 import android.util.Log
@@ -27,6 +28,12 @@ import com.hhst.youtubelite.extractor.MediaRange
 import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 
+/** Local-only speculative-read budget, carried through cache misses and range reopens. */
+internal data class PrefetchDeadline(val elapsedRealtimeMs: Long)
+
+/** Time already spent joining a speculative manifest, charged to the normal open budget. */
+internal data class ManifestJoinWait(val elapsedMs: Long, val customData: Any?)
+
 /** Media3 and cast consume the extractor's session, client, method and bounded range plan. */
 @UnstableApi
 class YoutubeHttpDataSource private constructor(
@@ -37,6 +44,8 @@ class YoutubeHttpDataSource private constructor(
     private val mediaRequests: YoutubeMediaRequests?,
     private val inheritedPlan: MediaRequestPlan?,
     private val planResolver: ((String) -> MediaRequestPlan?)?,
+    private val openTimeoutMs: Long,
+    private val onSlowInitialRead: (() -> Unit)?,
 ) : BaseDataSource(true), HttpDataSource {
 
     private val requestProperties = HttpDataSource.RequestProperties()
@@ -55,8 +64,6 @@ class YoutubeHttpDataSource private constructor(
     private var effectiveRange = MediaRange.NONE
     /** True when this [open] put `&range=` on the request that produced [response]. */
     private var rangeQueryApplied = false
-
-    // -- HttpDataSource --
 
     override fun getUri(): Uri? =
         response?.request?.url?.toString()?.let(Uri::parse)
@@ -183,6 +190,20 @@ class YoutubeHttpDataSource private constructor(
             }
         }
 
+        // An HLS server may ignore our optional Range header and return the entire object.
+        // Its Content-Length proves EOF even when the plan does not know the segment length.
+        // Treating a larger prefetch budget as the response length reopens the same segment at
+        // EOF (and can cache its prefix again as if it were the tail).
+        if (activePlan?.range == MediaRange.NONE && responseCode == 200 && !rangeQueryApplied &&
+            resp.header("Content-Range") == null && !compressed) {
+            resp.body?.contentLength()?.takeIf { it >= 0 }?.let { total ->
+                val available = (total - dataSpec.position).coerceAtLeast(0)
+                bytesToRead = if (dataSpec.length == LENGTH_UNSET) available else minOf(dataSpec.length, available)
+                expectedWindow = available
+                windowLimit = available
+            }
+        }
+
         inputStream = try {
             resp.body?.byteStream()?.let { if (compressed) GZIPInputStream(it) else it }
                 ?: throw IOException("Empty response body")
@@ -241,8 +262,6 @@ class YoutubeHttpDataSource private constructor(
             }
         }
     }
-
-    // -- connection --
 
     private fun makeConnection(spec: DataSpec): Response {
         val boundPlan = planResolver?.invoke(spec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(spec.uri.toString())
@@ -351,11 +370,42 @@ class YoutubeHttpDataSource private constructor(
     }
 
     private fun executeCall(request: Request): Response {
-        val diagnostic = dataSpec?.customData as? DiagnosticContext
+        val joinWait = dataSpec?.customData as? ManifestJoinWait
+        val customData = if (joinWait != null) joinWait.customData else dataSpec?.customData
+        val diagnostic = customData as? DiagnosticContext
         val tagged = if (diagnostic != null) DiagnosticNetwork.tag(request, diagnostic) else request
         val call = callFactory.newCall(tagged)
+        // A tiny DASH init/index read cannot make useful progress while its TLS handshake
+        // hangs. Bound only these initial reads; ordinary media chunks keep their full budget.
+        // Let the existing finite transport recovery own a timeout without altering identity.
+        // Legacy sources without a plan must obey the same transport bound.
+        val spec = dataSpec
+        val initialRead = spec != null && spec.position == 0L && spec.length in 1L..65_536L
+        if (initialRead) {
+            call.timeout().timeout(6_000L, TimeUnit.MILLISECONDS)
+        }
+        val prefetchDeadline = customData as? PrefetchDeadline
+        if (prefetchDeadline != null) {
+            val remaining = prefetchDeadline.elapsedRealtimeMs - SystemClock.elapsedRealtime()
+            if (remaining <= 0) throw InterruptedIOException("PREFETCH_DEADLINE")
+            // Progress callbacks cannot bound DNS, TLS or waiting for response headers.
+            // Keep the same absolute budget when a cache miss opens another byte range.
+            call.timeout().deadline(remaining, TimeUnit.MILLISECONDS)
+        }
         activeCall = call
-        return call.execute()
+        try {
+            return if (prefetchDeadline == null) MediaOpenTimeout.execute(call,
+                (openTimeoutMs - (joinWait?.elapsedMs ?: 0L)).coerceAtLeast(1L),
+                onSlowInitialRead.takeIf { initialRead }) else call.execute()
+        } catch (failure: InterruptedIOException) {
+            // OkHttp's whole-call deadline uses InterruptedIOException, whereas a socket
+            // timeout uses SocketTimeoutException. Keep both on the same finite recovery path;
+            // explicit cancellation/interruption must retain its cancellation semantics.
+            if (initialRead && prefetchDeadline == null && failure !is java.net.SocketTimeoutException && failure.message == "timeout") {
+                throw java.net.SocketTimeoutException("MEDIA_INIT_TIMEOUT").apply { initCause(failure) }
+            }
+            throw failure
+        }
     }
 
     private fun readInternal(buffer: ByteArray, offset: Int, length: Int): Int {
@@ -410,6 +460,12 @@ class YoutubeHttpDataSource private constructor(
         private var readTimeoutMs = 30_000
         private var rangeParameterEnabled = false
         private var rnParameterEnabled = false
+        private var openTimeoutMs = 6_000L
+        private var onSlowInitialRead: (() -> Unit)? = null
+
+        fun setSlowInitialReadListener(value: (() -> Unit)?) = apply { onSlowInitialRead = value }
+
+        fun setOpenTimeoutMs(value: Long) = apply { require(value > 0); openTimeoutMs = value }
 
         // Required by the Factory interface but unused: every request's headers
         // come from DataSpec.httpRequestHeaders, so factory-level defaults have
@@ -436,7 +492,7 @@ class YoutubeHttpDataSource private constructor(
 
         override fun createDataSource(): YoutubeHttpDataSource = YoutubeHttpDataSource(
             sharedCallFactory(), rangeParameterEnabled,
-            rnParameterEnabled, userAgent, mediaRequests, inheritedPlan, planResolver,
+            rnParameterEnabled, userAgent, mediaRequests, inheritedPlan, planResolver, openTimeoutMs, onSlowInitialRead,
         )
 
         @Volatile

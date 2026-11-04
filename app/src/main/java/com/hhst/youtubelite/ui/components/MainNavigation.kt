@@ -23,7 +23,6 @@ import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 
-/** The main tabs shared by the home, subscriptions and library hosts. */
 enum class MainTab(val label: String) { Home("Home"), Shorts("Shorts"), Subscriptions("Subscriptions"), You("You") }
 
 object MainTabs {
@@ -45,10 +44,23 @@ object MainTabs {
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         MainTab.Shorts -> com.hhst.youtubelite.shorts.ShortsActivity.intent(context)
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    }?.putExtra(com.hhst.youtubelite.navigation.WatchTransition.INSTANT, true)
+    }?.putExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_NAVIGATION, true)
+        ?.putExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_BACKWARD, backwards(context, tab))
+
+    private fun backwards(context: Context, target: MainTab): Boolean {
+        var owner = context
+        while (owner is android.content.ContextWrapper && owner !is android.app.Activity) owner = owner.baseContext
+        val source = when (owner) {
+            is com.hhst.youtubelite.home.HomeActivity -> MainTab.Home
+            is com.hhst.youtubelite.shorts.ShortsActivity -> MainTab.Shorts
+            is com.hhst.youtubelite.subscriptions.SubscriptionsActivity -> MainTab.Subscriptions
+            is com.hhst.youtubelite.library.YouActivity -> MainTab.You
+            else -> return false
+        }
+        return target.ordinal < source.ordinal
+    }
 }
 
-/** The bottom navigation bar shared by the main-tab hosts. */
 @Composable
 fun MainNavigationBar(tag: String, signedIn: Boolean, avatarAsset: String?, selected: MainTab = MainTab.You, onSelect: (MainTab) -> Unit) {
     val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.TAB)

@@ -22,11 +22,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The avatar directory is the one place missing author avatars are filled: coalesced per
- * channel, capped, cached with expiries — the tests pin those bounds so no screen can
- * degrade into one request per card.
- */
 class MediaAvatarDirectoryTest {
     private class Counting(private val code: Int, private val body: String, private val calls: MutableList<String>) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
@@ -45,8 +40,8 @@ class MediaAvatarDirectoryTest {
     }
 
     private val channelBody = """
-        {"channelMetadataRenderer":{"externalId":"UCabc","title":"Blender",
-        "avatar":{"thumbnails":[{"url":"https://yt3/avatar.png"}]}}}
+        {"header":{"musicVisualHeaderRenderer":{"foregroundThumbnail":{"musicThumbnailRenderer":{
+        "thumbnail":{"thumbnails":[{"url":"https://yt3/avatar.png"}]}}}}}}
     """.trimIndent()
 
     @Test fun concurrentCallersShareOneChannelRead() = runBlocking {
@@ -81,6 +76,47 @@ class MediaAvatarDirectoryTest {
         directory.dispose()
     }
 
+    @Test fun transientFailuresRecoverWithoutWaitingMinutes() = runBlocking {
+        var now = 0L
+        var calls = 0
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
+            calls++
+            Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(if (calls == 1) 503 else 200).message("Reply")
+                .body((if (calls == 1) "{}" else channelBody).toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        val directory = MediaAvatarDirectory(client, clock = { now })
+        try {
+            assertNull(directory.avatar("UCabc"))
+            now = 4_999L
+            assertNull(directory.avatar("UCabc"))
+            assertEquals(1, calls)
+            now = 5_001L
+            assertEquals("https://yt3/avatar.png", directory.avatar("UCabc"))
+            assertEquals(2, calls)
+        } finally { directory.dispose() }
+    }
+
+    @Test fun aSuccessfulButSparseResponseCanRecoverItsMissingAvatar() = runBlocking {
+        var now = 0L
+        var calls = 0
+        val client = MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
+            calls++
+            Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200).message("OK")
+                .body((if (calls <= 2) """{"channelMetadataRenderer":{"externalId":"UCabc","title":"Blender"}}""" else channelBody).toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        val directory = MediaAvatarDirectory(client, clock = { now })
+        try {
+            assertNull(directory.avatar("UCabc"))
+            assertNull(directory.avatar("UCabc"))
+            assertEquals(2, calls)
+            now = 5_101
+            assertEquals("https://yt3/avatar.png", directory.avatar("UCabc"))
+            assertEquals(3, calls)
+        } finally { directory.dispose() }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun cancelledWaitersDoNotKeepCompletedRequestsPastExpiry() = runTest {
         val started = CountDownLatch(1)
@@ -101,12 +137,16 @@ class MediaAvatarDirectoryTest {
         try {
             val waiter = launch { directory.avatar("UCabc") }
             runCurrent()
-            check(started.await(5, TimeUnit.SECONDS))
+            // Session capture and the HTTP read resume through the test dispatcher.
+            // Do not block that dispatcher while waiting for the worker to reach HTTP.
+            check(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                started.await(5, TimeUnit.SECONDS)
+            })
             val request = owner.children.single()
             waiter.cancelAndJoin()
             release.countDown()
             request.join()
-            now = 60 * 60 * 1000L
+            now = 8 * 24 * 60 * 60 * 1000L
             assertEquals("https://yt3/avatar.png", directory.avatar("UCabc"))
             assertEquals(2, reads)
         } finally {
@@ -115,7 +155,7 @@ class MediaAvatarDirectoryTest {
         }
     }
     @Test fun saturatedRequestsWaitWithoutDroppingAvatars() = runBlocking {
-        val started = CountDownLatch(3)
+        val started = CountDownLatch(2)
         val release = CountDownLatch(1)
         val active = java.util.concurrent.atomic.AtomicInteger()
         val peak = java.util.concurrent.atomic.AtomicInteger()
@@ -137,7 +177,7 @@ class MediaAvatarDirectoryTest {
             release.countDown()
             assertEquals(List(70) { "https://yt3/avatar.png" }, results.awaitAll())
             assertEquals(70, calls.get())
-            org.junit.Assert.assertTrue(peak.get() <= 3)
+            org.junit.Assert.assertTrue(peak.get() <= 2)
         } finally { release.countDown(); directory.dispose() }
     }
 

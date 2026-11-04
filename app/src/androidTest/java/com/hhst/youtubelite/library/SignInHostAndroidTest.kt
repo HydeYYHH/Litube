@@ -10,9 +10,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /**
- * Debug-only interactive sign-in host. It opens the mobile site in the same
- * isolated WebView data directory the reference sampler uses, so the session
- * persists for later read-only sampling. Gated behind `-e signin 1`.
+ * Debug-only interactive sign-in host: opens the mobile site in the same isolated WebView data
+ * directory the reference sampler uses, so the session persists for later read-only sampling.
+ * Gated behind `-e signin 1`.
  */
 class SignInHostAndroidTest {
     @Test fun openSignInAndWaitForTheSession() {
@@ -36,9 +36,7 @@ class SignInHostAndroidTest {
                 activity.setContentView(web)
                 web.loadUrl("https://m.youtube.com/?hl=en&persist_app=1")
             }
-            // Poll until the account session cookie exists; the human finishes
-            // the login inside the emulator window. No credentials pass through
-            // the instrumentation.
+            // Poll until the account session cookie exists; a human completes the login in the emulator window. No credentials pass through the instrumentation.
             val deadline = System.currentTimeMillis() + timeoutMinutes * 60_000
             var signedIn = false
             while (System.currentTimeMillis() < deadline) {

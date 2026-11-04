@@ -6,10 +6,7 @@ import androidx.media3.common.MimeTypes
 import com.hhst.youtubelite.downloader.core.MediaCombo
 import com.hhst.youtubelite.extractor.Format
 
-/**
- * Mux whitelist: AVC+AAC MP4 and AAC M4A are enabled. HEVC/VP9/AV1/Dolby
- * Vision/H.264+Opus stay gated until extract/mux/playback is proven.
- */
+/** Mux whitelist backed by [MediaCombo]. */
 object DownloadCodecs {
 
     private fun videoSampleMime(format: Format): String? = mimeFromCodec(format.codec, video = true)

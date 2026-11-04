@@ -82,7 +82,6 @@ class ChannelCommunityReferenceAndroidTest {
                     fun scrollToBottom() = scrollTo(100000)
 
                     try {
-                        // Posts tab, followed by the same post identities opened as details.
                         load("https://m.youtube.com/@$channel/posts?hl=en")
                         val posts = snapshot("posts")
                         scrollTo(700)
@@ -143,13 +142,11 @@ class ChannelCommunityReferenceAndroidTest {
                         }
 
                         if (args.getString("postsOnly") != "true") {
-                            // Shorts tab.
                             load("https://m.youtube.com/@$channel/shorts?hl=en")
                             snapshot("shorts")
                             scrollTo(700)
                             snapshot("shorts-scroll")
 
-                            // Live tab.
                             load("https://m.youtube.com/@$liveChannel/live?hl=en")
                             snapshot("live")
                             scrollTo(700)

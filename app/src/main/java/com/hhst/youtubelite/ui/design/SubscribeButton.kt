@@ -35,10 +35,12 @@ fun SubscribeButton(
     pending: Boolean = false,
     onDarkSurface: Boolean = false,
     testTag: String? = null,
+    channelId: String? = null,
 ) {
     val haptic = rememberHapticAction()
     val colors = subscribeColors(subscribed, onDarkSurface)
     val interactive = enabled && !pending
+    val subscriptionAction = rememberSubscriptionAction(subscribed, interactive, channelId, onClick)
     val tag = if (testTag != null) Modifier.testTag(testTag) else Modifier
     Box(
         modifier
@@ -50,16 +52,17 @@ fun SubscribeButton(
             Modifier
                 .clip(RoundedCornerShape(20.dp))
                 .background(colors.background)
-                .clickable(enabled = interactive, role = Role.Button) { haptic(); onClick() }
+                .clickable(enabled = interactive, role = Role.Button) { haptic(); subscriptionAction() }
                 .heightIn(min = 40.dp)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center,
         ) {
             AppText(
                 if (subscribed) stringResource(R.string.subscribed) else stringResource(R.string.subscribe),
-                Modifier.alpha(if (interactive) 1f else 0.55f),
+                Modifier.alpha(if (pending) 0f else if (interactive) 1f else 0.55f),
                 size = 14, line = 20, weight = FontWeight.Medium, color = colors.foreground, maxLines = 1,
             )
+            if (pending) ActionProgress(color = colors.foreground)
         }
     }
 }

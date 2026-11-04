@@ -14,15 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -34,9 +31,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.animation.core.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.unit.Density
-import kotlin.math.roundToInt
+import androidx.compose.ui.unit.Dp
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.home.domain.*
@@ -50,17 +45,28 @@ import com.hhst.youtubelite.saves.presentation.SaveSheetLive
 import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 import com.hhst.youtubelite.ui.design.appDescription
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 /** Stateless rendering boundary; local state is limited to saved scroll/focus state. */
+// The warm collector belongs to LaunchedEffect and is cancelled on key changes or
+// disposal. Lint follows HomeActivity's one-time deferred setup through onResume.
+@android.annotation.SuppressLint("RepeatOnLifecycleWrongUsage")
 @Composable
 fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier,
-    searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null) {
+    searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null,
+    onWarmCandidate: ((String) -> Unit)? = null,
+    postInteractions: com.hhst.youtubelite.post.presentation.PostCardInteractions? = null) {
     AppTheme {
         val hideShorts = state.hideShorts || LocalHideShorts.current
         BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("home-screen")) {
             val width = maxWidth.value
             val currentWidth by rememberUpdatedState(width)
             val chipExtraHeight = with(LocalDensity.current) { (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) }
+            val feedTopInset = (if (width < 528f) 98.dp else 110.dp) + chipExtraHeight
             val chromeTravel = 108f + chipExtraHeight.value
             val grid = rememberLazyGridState()
             var chromeHidden by rememberSaveable { mutableStateOf(false) }
@@ -75,47 +81,57 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                 displayedSession = state.sessionGeneration
             }
             val chromeOffset by animateFloatAsState(if (chromeHidden) 1f else 0f,
-                tween(if (chromeHidden) 195 else 225, easing = if (chromeHidden) FastOutLinearInEasing else LinearOutSlowInEasing), label = "header")
+                AppMotion.scrollResponse(LocalMotionScale.current), label = "header")
             val density = LocalDensity.current.density
-            var pull by remember { mutableFloatStateOf(0f) }
-            var pullPressed by remember { mutableStateOf(false) }
-            var pullCancelled by remember { mutableStateOf(false) }
-            var pullRelease by remember { mutableIntStateOf(0) }
-            val latestAction by rememberUpdatedState(onAction)
-            val pullConnection = remember(grid, density) { object : NestedScrollConnection {
-                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (source == NestedScrollSource.UserInput && available.y > 0 && grid.firstVisibleItemIndex == 0 && grid.firstVisibleItemScrollOffset == 0) {
-                        pull = (pull + available.y * 0.5f).coerceAtMost(80f * density)
-                        return Offset(0f, available.y)
+            val feed = state.content as? HomeContent.Feed
+            val visibleItems = remember(feed?.page?.items, hideShorts) {
+                feed?.page?.items.orEmpty().filterNot { hideShorts && (it is FeedItem.Shorts || it is FeedItem.Video && it.short) }
+            }
+            val warmCandidate by rememberUpdatedState(onWarmCandidate)
+            val homeLifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(grid, visibleItems, state.overlay == HomeOverlay.None, onWarmCandidate != null, homeLifecycle) {
+                if (onWarmCandidate == null || state.overlay != HomeOverlay.None) return@LaunchedEffect
+                val candidates = visibleItems.associateBy { it.id }
+                homeLifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    snapshotFlow {
+                        if (grid.isScrollInProgress) null else grid.layoutInfo.let { layout ->
+                            layout.visibleItemsInfo.firstNotNullOfOrNull { visible ->
+                                val shown = minOf(visible.offset.y + visible.size.height, layout.viewportEndOffset) -
+                                    maxOf(visible.offset.y, layout.viewportStartOffset)
+                                if (shown * 2 < visible.size.height) null else when (val item = candidates[visible.key]) {
+                                    is FeedItem.Video -> item.takeUnless { it.live }?.id
+                                    is FeedItem.Shorts -> item.videos.firstOrNull { !it.live }?.id
+                                    else -> null
+                                }
+                            }
+                        }
+                    }.collectLatest { id ->
+                        if (id != null) { delay(600); warmCandidate?.invoke(id) }
                     }
-                    return Offset.Zero
-                }
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (source == NestedScrollSource.UserInput && available.y != 0f) chromeHidden = available.y < 0f
-                    if (pull > 0 && available.y < 0) {
-                        val consumed = available.y.coerceAtLeast(-pull)
-                        pull += consumed
-                        return Offset(0f, consumed)
-                    }
-                    return Offset.Zero
-                }
-                override suspend fun onPreFling(available: Velocity): Velocity {
-                    return if (pull > 0f) Velocity(0f, available.y) else Velocity.Zero
-                }
-            } }
-            LaunchedEffect(pullPressed, pullRelease, pullConnection) {
-                if (!pullPressed && pull > 0f) {
-                    if (!pullCancelled && pull >= 56f * density) latestAction(HomeAction.Refresh)
-                    Animatable(pull).animateTo(0f, tween(150, easing = FastOutSlowInEasing)) { pull = value }
                 }
             }
-            val feed = state.content as? HomeContent.Feed
             val catalogMode = state.chips == HomeCatalog.filters
             val userRefreshing = when (val visible = state.content) {
                 is HomeContent.Feed -> visible.refreshing && visible.userRefresh
                 is HomeContent.Empty -> visible.refreshing && visible.userRefresh
                 else -> false
             }
+            val pullMotion = rememberPullRefreshState(userRefreshing,
+                enabled = state.overlay == HomeOverlay.None && state.content != HomeContent.Loading,
+                canPull = { feed == null || !grid.canScrollBackward }) { onAction(HomeAction.Refresh) }
+            val pull = pullMotion.offset
+            val chromeConnection = remember(pullMotion) { object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (source == NestedScrollSource.UserInput && available.y > 0f) chromeHidden = false
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (source == NestedScrollSource.UserInput && consumed.y < 0f && grid.canScrollBackward && pullMotion.offset == 0f)
+                        chromeHidden = true
+                    return Offset.Zero
+                }
+            } }
             LaunchedEffect(grid, feed != null) {
                 if (feed == null) return@LaunchedEffect
                 snapshotFlow { grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset }.collect { current ->
@@ -127,36 +143,17 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                 layout.totalItemsCount > 0 && (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) >= layout.totalItemsCount - 3
             } }
             LaunchedEffect(nearEnd, feed?.page?.nextKey, feed?.append, feed?.refreshing) {
-                if (nearEnd && feed?.page?.nextKey != null && feed.append == AppendState.Idle && !feed.refreshing) onAction(HomeAction.LoadNext)
+                if (nearEnd && feed?.page?.nextKey != null && feed.append == AppendState.Idle && !feed.refreshing && !feed.automaticPagingPaused)
+                    onAction(HomeAction.AutomaticLoadNext)
             }
             val searchOpen = state.overlay == HomeOverlay.Search
             Column(Modifier.fillMaxSize().then(if (state.overlay != HomeOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-                if (state.content == HomeContent.Loading) {
-                    Box(Modifier.zIndex(1f).fillMaxWidth().height(DesignTokens.TopBarHeight).headerShadow().background(DesignTokens.Background))
-                } else if (feed == null) {
+                if (feed == null && state.content != HomeContent.Loading) {
                     HomeTopBar(onAction)
                     if (catalogMode) ChipStrip(state.selectedChip, state.chips, true, onAction)
                 }
-                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(pullConnection)
-                    .pointerInput(pullConnection) {
-                        try {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val pressed = event.changes.any { it.pressed }
-                                    if (pressed && !pullPressed) pullCancelled = false
-                                    if (!pressed && pullPressed) {
-                                        pullCancelled = event.changes.any { it.previousPressed && it.isConsumed }
-                                        pullRelease++
-                                    }
-                                    pullPressed = pressed
-                                }
-                            }
-                        } finally {
-                            pullCancelled = true
-                            pullPressed = false
-                        }
-                    }) {
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(chromeConnection)
+                    .pullRefreshGesture(pullMotion)) {
                     when (val content = state.content) {
                         is HomeContent.Empty -> Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
                             EmptyHome(content, showTools = !searchOpen && !catalogMode, wide = width >= 528,
@@ -170,7 +167,14 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 modifier = Modifier.testTag("home-verification"),
                             ) else ErrorHome(onAction)
                         }
-                        HomeContent.Loading -> Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) { HomeSkeleton(width) }
+                        HomeContent.Loading -> Box(Modifier.fillMaxSize()) {
+                            HomeSkeleton(width, feedTopInset)
+                            // Keep navigation and card anchors in place while the first page loads.
+                            Box(Modifier.offset(y = DesignTokens.TopBarHeight).background(DesignTokens.Background)) {
+                                ChipStrip(state.selectedChip, state.chips, catalogMode, onAction)
+                            }
+                            Box(Modifier.background(DesignTokens.Background)) { HomeTopBar(onAction) }
+                        }
                         is HomeContent.Feed -> Box(Modifier.fillMaxSize()) {
                             // Pull moves the feed rows only; the chrome stack keeps its place.
                             Column(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
@@ -180,16 +184,19 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(HomeLayout.columns(width)), state = grid,
                                 modifier = Modifier.fillMaxSize().testTag("home-feed"),
-                                contentPadding = PaddingValues(start = HomeLayout.outerPadding(width).dp, end = HomeLayout.outerPadding(width).dp, top = (if (width < 528f) 98.dp else 110.dp) + chipExtraHeight, bottom = 24.dp),
+                                contentPadding = PaddingValues(start = HomeLayout.outerPadding(width).dp, end = HomeLayout.outerPadding(width).dp, top = feedTopInset, bottom = 24.dp),
                                 horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
                             ) {
-                                val visible = content.page.items.filterNot { hideShorts && (it is FeedItem.Shorts || it is FeedItem.Video && it.short) }
-                                homeCards(visible, currentWidth, state.live, onAction)
+                                homeCards(visibleItems, currentWidth, state.live, onAction, postInteractions)
                                 item(span = { GridItemSpan(maxLineSpan) }) {
                                     when (content.append) {
                                         AppendState.Loading -> Box(Modifier.fillMaxWidth().padding(top = 80.dp, bottom = 12.dp), contentAlignment = Alignment.Center) { LoadingSpinner() }
                                         AppendState.Failed -> RetryRow("Something went wrong. Tap to retry.") { onAction(HomeAction.LoadNext) }
-                                        AppendState.Idle -> Spacer(Modifier.height(1.dp))
+                                        AppendState.Idle -> if (content.page.nextKey != null && content.automaticPagingPaused) {
+                                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp).testTag("home-load-more"), contentAlignment = Alignment.Center) {
+                                                PillButton(stringResource(R.string.load_more)) { onAction(HomeAction.LoadNext) }
+                                            }
+                                        } else Spacer(Modifier.height(1.dp))
                                     }
                                 }
                             }
@@ -198,14 +205,11 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                             Box(Modifier.graphicsLayer { translationY = -48f * chromeOffset * density }.background(DesignTokens.Background)) { HomeTopBar(onAction) }
                         }
                     }
-                    // The indicator anchors below the visible chrome stack; it never pulls with the content.
-                    if (pull > 0f || userRefreshing) {
-                        val anchor = if (state.content is HomeContent.Feed) 96f + chipExtraHeight.value - chromeTravel * chromeOffset else 0f
-                        Box(Modifier.align(Alignment.TopCenter).graphicsLayer { translationY = anchor * density + 12.dp.toPx() }
-                            .testTag("home-refresh-indicator")) { LoadingSpinner() }
-                    }
+                    val refreshAnchor = if (state.content is HomeContent.Feed)
+                        (96f + chipExtraHeight.value - chromeTravel * chromeOffset).dp else 0.dp
+                    PullRefreshIndicator(pullMotion, "home-refresh-indicator", refreshAnchor)
                 }
-                HomeBottomBar(state.signedInPreview, state.content == HomeContent.Loading, onAction, state.avatar)
+                HomeBottomBar(state.signedInPreview, onAction, state.avatar)
             }
             when (val overlay = state.overlay) {
                 HomeOverlay.None -> Unit
@@ -221,6 +225,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
                     onDraftChange = { onAction(HomeAction.SaveDraftChanged(it.title, it.description)) },
                     onSubmit = { onAction(HomeAction.SubmitNewPlaylist) },
+                    pending = overlay.pending,
                 ) else if (overlay.live) SaveToPlaylistSheet(
                     playlists = emptyList(),
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
@@ -267,12 +272,13 @@ private val homeSavePlaylists: List<SavePlaylist> =
         .filter { it.id != FixturePlaylistRepository.WATCH_LATER }
         .map { SavePlaylist(it.id, it.title) }
 
-private fun LazyGridScope.homeCards(items: List<FeedItem>, width: Float, live: Boolean, onAction: (HomeAction) -> Unit) {
+private fun LazyGridScope.homeCards(items: List<FeedItem>, width: Float, live: Boolean, onAction: (HomeAction) -> Unit,
+    postInteractions: com.hhst.youtubelite.post.presentation.PostCardInteractions?) {
     items(items, key = { it.id }, span = {
         if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1)
     }, contentType = { it.javaClass.simpleName }) { item ->
-        Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
-            FeedCard(item, compact = width < 528f, windowWidth = width, live, onAction)
+        Box((if (LocalMotionScale.current > 0f) Modifier.animateItem() else Modifier).padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
+            FeedCard(item, compact = width < 528f, windowWidth = width, live, onAction, postInteractions)
         }
     }
 }
@@ -291,37 +297,35 @@ private fun HomeTopBar(onAction: (HomeAction) -> Unit) {
 }
 
 @Composable
-private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAction) -> Unit, avatar: String? = null) {
+private fun HomeBottomBar(signedIn: Boolean, onAction: (HomeAction) -> Unit, avatar: String? = null) {
     val haptic = rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.TAB)
     Column(Modifier.fillMaxWidth().testTag("home-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(DesignTokens.BottomBarHeight)) {
-            if (!loading) {
-                val destinations = if (signedIn) HomeDestination.entries else listOf(HomeDestination.Home, HomeDestination.Shorts, HomeDestination.You)
-                destinations.filterNot { LocalHideShorts.current && it == HomeDestination.Shorts }.forEach { destination ->
-                    Column(Modifier.weight(1f).fillMaxHeight()
-                        .selectable(destination == HomeDestination.Home, role = Role.Tab) {
-                            haptic()
-                            onAction(HomeAction.Navigate(HomeNavigationRequest.Destination(destination)))
-                        }.testTag("nav-${destination.name}"),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        if (signedIn && destination == HomeDestination.You) {
-                            if (avatar.isNullOrBlank()) {
-                                Image(
-                                    painterResource(R.drawable.sample_bunny),
-                                    contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape),
-                                    contentScale = ContentScale.Crop,
-                                )
-                            } else {
-                                com.hhst.youtubelite.ui.design.Artwork(avatar,
-                                    modifier = Modifier.size(24.dp).clip(CircleShape), contentScale = ContentScale.Crop)
-                            }
-                        } else AppIcon(when (destination) {
-                            HomeDestination.Home -> AppIcon.Home; HomeDestination.Shorts -> AppIcon.Shorts
-                            HomeDestination.Subscriptions -> AppIcon.Subscriptions; HomeDestination.You -> AppIcon.You
-                        })
-                        AppText(destination.label, size = 11, line = 14, maxLines = 1)
-                    }
+            val destinations = if (signedIn) HomeDestination.entries else listOf(HomeDestination.Home, HomeDestination.Shorts, HomeDestination.You)
+            destinations.filterNot { LocalHideShorts.current && it == HomeDestination.Shorts }.forEach { destination ->
+                Column(Modifier.weight(1f).fillMaxHeight()
+                    .selectable(destination == HomeDestination.Home, role = Role.Tab) {
+                        haptic()
+                        onAction(HomeAction.Navigate(HomeNavigationRequest.Destination(destination)))
+                    }.testTag("nav-${destination.name}"),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    if (signedIn && destination == HomeDestination.You) {
+                        if (avatar.isNullOrBlank()) {
+                            Image(
+                                painterResource(R.drawable.sample_bunny),
+                                contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            com.hhst.youtubelite.ui.design.Artwork(avatar,
+                                modifier = Modifier.size(24.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                        }
+                    } else AppIcon(when (destination) {
+                        HomeDestination.Home -> AppIcon.Home; HomeDestination.Shorts -> AppIcon.Shorts
+                        HomeDestination.Subscriptions -> AppIcon.Subscriptions; HomeDestination.You -> AppIcon.You
+                    })
+                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
                 }
             }
         }
@@ -420,14 +424,14 @@ private fun RetryRow(label: String, retry: () -> Unit) {
 }
 
 @Composable
-private fun HomeSkeleton(width: Float) {
-    LazyVerticalGrid(SkeletonCells(HomeLayout.columns(width)), Modifier.fillMaxSize().testTag("home-skeleton").clearAndSetSemantics {},
-        contentPadding = PaddingValues(horizontal = HomeLayout.outerPadding(width).dp, vertical = if (width < 528) 0.dp else 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(40.dp)) {
+private fun HomeSkeleton(width: Float, topInset: Dp) {
+    LazyVerticalGrid(GridCells.Fixed(HomeLayout.columns(width)), Modifier.fillMaxSize().testTag("home-skeleton").clearAndSetSemantics {},
+        contentPadding = PaddingValues(start = HomeLayout.outerPadding(width).dp, end = HomeLayout.outerPadding(width).dp,
+            top = topInset, bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap), verticalArrangement = Arrangement.spacedBy(40.dp)) {
         items(12) { index ->
-            // Mirrors the real card: thumbnail, then the avatar circle with title and metadata bars.
             Column(Modifier.testTag("skeleton-card-$index")) {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp)).background(DesignTokens.Ghost).testTag("skeleton-thumb-$index"))
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (width < 528f) 0.dp else 12.dp)).background(DesignTokens.Ghost).testTag("skeleton-thumb-$index"))
                 Row(Modifier.padding(start = if (width < 528) 12.dp else 0.dp, top = 8.dp, end = if (width < 528) 12.dp else 0.dp)) {
                     Box(Modifier.size(36.dp).clip(CircleShape).background(DesignTokens.Ghost).testTag("skeleton-avatar-$index"))
                     Spacer(Modifier.width(8.dp))
@@ -439,15 +443,6 @@ private fun HomeSkeleton(width: Float) {
                 }
             }
         }
-    }
-}
-
-private class SkeletonCells(private val count: Int) : GridCells {
-    override fun Density.calculateCrossAxisCellSizes(availableSize: Int, spacing: Int): List<Int> {
-        if (count == 1) return listOf(availableSize)
-        val fraction = when (count) { 3 -> 0.333f; 6 -> 0.166f; else -> 1f / count }
-        val pitch = (availableSize + spacing) * fraction
-        return List(count) { index -> ((index + 1) * pitch).roundToInt() - (index * pitch).roundToInt() - spacing }
     }
 }
 

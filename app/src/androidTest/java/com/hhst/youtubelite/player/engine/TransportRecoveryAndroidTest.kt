@@ -8,6 +8,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.rules.ActivityScenarioRule
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.diagnostics.AndroidDiagnosticState
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.Extractor
@@ -73,6 +75,16 @@ class TransportRecoveryAndroidTest {
         val extractionCache = streamCache(stream, onInvalidate = { _ ->
             refreshes.incrementAndGet()
             if (pauseDuringRefresh) instrumentation.runOnMainSync { engine.pause() }
+        }, onStreamRead = {
+            if (refreshes.get() > 0) {
+                instrumentation.runOnMainSync {
+                    val pending = engine.snapshot.value
+                    assertFalse("Fixture must inspect the pending replacement", pending.prepared)
+                    assertTrue("Recovery must not reset the visible progress", pending.positionMs >= 5_000)
+                    assertEquals("Recovery must not reset the visible duration", 20_000L, pending.durationMs)
+                }
+                Thread.sleep(250)
+            }
         })
         val stateCache = MemoryJsonCache()
         val prefs = GlobalContext.get().get<ExtensionManager>()
@@ -107,6 +119,13 @@ class TransportRecoveryAndroidTest {
                 if (persistent) {
                     assertFalse(engine.snapshot.value.prepared)
                     assertNotNull(engine.snapshot.value.error)
+                    // The offline CI lane disables Wi-Fi and mobile data; its message takes precedence over the timeout injected by this local transport fixture.
+                    val connected = AndroidDiagnosticState.networkSnapshot()["connected"] as? Boolean
+                    val expectedMessage = if (connected == false) R.string.player_network_offline
+                        else R.string.player_network_timeout
+                    assertEquals(app.getString(expectedMessage), engine.snapshot.value.error)
+                    assertTrue("Terminal failure must retain the injected transport timeout",
+                        engine.snapshot.value.failureReport?.text?.contains(SocketTimeoutException::class.java.name) == true)
                 } else {
                     assertNull(engine.snapshot.value.error)
                     assertTrue("Refresh lost the seek position", player!!.currentPosition >= 5_000)

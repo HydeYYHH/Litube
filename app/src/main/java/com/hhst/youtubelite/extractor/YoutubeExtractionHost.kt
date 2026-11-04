@@ -4,6 +4,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -17,7 +18,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import android.webkit.WebView
 import com.google.common.util.concurrent.SettableFuture
 
-/** Host scheduling, scoped caches, bounded transport and cancellation. */
 class YoutubeExtractionHost(
     private val sessions: YoutubeSessionProvider,
     private val http: OkHttpClient,
@@ -30,7 +30,7 @@ class YoutubeExtractionHost(
     private val playback: MscPlayback = MscPlayback(solver, tokens),
 ) : PlaybackHost {
     private val watchdog = Executors.newSingleThreadScheduledExecutor { Thread(it, "youtube-cancellation").apply { isDaemon = true } }
-    private data class CachedStream(val stream: Stream, val expires: Long, val bytes: Int)
+    private data class CachedStream(val stream: Stream, val expires: Long, val bytes: Int, val session: YoutubeWebSession)
     private val streams = LinkedHashMap<String, CachedStream>(16, .75f, true)
     private val json = Json
     private data class Refresh(val session: SettableFuture<YoutubeWebSession>, var at: Long)
@@ -73,7 +73,6 @@ class YoutubeExtractionHost(
         Unit
     }
 
-    /** Clients whose media answers this video recently refused; tried last, never dropped. */
     override fun deferredClients(videoId: String): Set<StreamClient> =
         clientOrder.refusedFor(videoId, sessions.scopeHint())
 
@@ -91,8 +90,7 @@ class YoutubeExtractionHost(
         val suffix = ":$videoId:$catalog:${demand?.cacheKey() ?: "0:null:false:"}"
         val candidate = synchronized(streams) {
             streams.entries.firstOrNull { it.key.endsWith(suffix) && it.value.expires > System.currentTimeMillis() }
-                ?.value?.stream?.let { stream -> stream.formats.firstNotNullOfOrNull { it.requestPlan?.session }
-                    ?: stream.manifests.firstOrNull()?.requestPlan?.session }
+                ?.value?.session
         }
         return candidate?.takeIf(sessions::isCurrent)
     }
@@ -103,7 +101,9 @@ class YoutubeExtractionHost(
         if (deadline <= System.nanoTime() || !taskCurrent()) throw IOException("EXTRACTION_DEADLINE")
         val started = System.nanoTime()
         val cached = if (fresh) null else cachedSession(videoId, catalog, demand)
-        val session = try { cached ?: if (fresh) refreshedSession(videoId, deadline, taskCurrent) else sessions.captureBounded(videoId, false, deadline, taskCurrent) } catch (failure: IOException) {
+        val session = try { cached ?: if (fresh) refreshedSession(videoId, deadline, taskCurrent)
+            else (if (!catalog) sessions.captureNative(deadline, taskCurrent) else null)
+                ?: sessions.captureBounded(videoId, false, deadline, taskCurrent) } catch (failure: IOException) {
             scopedDiagnostics.event("page", "WEB", "CAPTURE_FAILED", (System.nanoTime() - started) / 1_000_000,
                 (failure as? PageHttpException)?.status ?: 0)
             throw failure
@@ -119,6 +119,13 @@ class YoutubeExtractionHost(
             deadlineNanos = deadline,
             current = { sessions.isCurrent(session) && taskCurrent() },
             diagnostics = scopedDiagnostics,
+            webConfiguration = { original ->
+                val prepared = sessions.captureBounded(videoId, false, original.deadlineNanos, original.current)
+                if (prepared.account != WebAccount.ANONYMOUS) throw IOException("SESSION_ACCOUNT_CHANGED")
+                original.withSession(prepared) { sessions.isCurrent(prepared) }.also {
+                    diagnostics.bind(it, diagnosticContext)
+                }
+            },
         )
         diagnostics.bind(created, diagnosticContext)
         return created
@@ -146,7 +153,9 @@ class YoutubeExtractionHost(
                 builder.post(body.toRequestBody(type?.let { runCatching { it.toMediaType() }.getOrNull() }))
             } else builder.get()
             val client = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
-            val call = client.newCall(builder.build())
+            val request = builder.build()
+            val call = client.newCall(ExtractionDiagnostics.diagnosticContext(context)
+                ?.let { DiagnosticNetwork.tag(request, it) } ?: request)
             val requestStarted = System.nanoTime()
             val remaining = minOf(context.remainingMillis().coerceAtLeast(0), 10_000)
             if (remaining <= 0) throw IOException("REQUEST_DEADLINE")
@@ -179,10 +188,10 @@ class YoutubeExtractionHost(
 
     private val initializer = Executors.newSingleThreadExecutor { Thread(it, "youtube-init").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     private val initQueued = AtomicBoolean()
+    private val warmQueued = AtomicBoolean()
     @Volatile private var initialized = ""
     @Volatile private var initFailed = ""
     @Volatile private var initFailedAt = 0L
-    @Volatile private var preconnectedAt = 0L
 
     init { sessions.onBrowserConfiguration = ::scheduleInitialize }
 
@@ -194,18 +203,10 @@ class YoutubeExtractionHost(
         }
     }
 
-    /**
-     * Compiles the session's player solver and opens the media and HLS manifest connections, so the
-     * first selected video skips both. Uses only an already captured configuration; never reads a page.
-     */
     override fun initialize(): Boolean {
         val session = sessions.captureCached() ?: return false
         val playerUrl = session.playerUrl ?: return false
         val now = System.currentTimeMillis()
-        if (now - preconnectedAt >= PRECONNECT_INTERVAL_MS) {
-            preconnectedAt = now
-            PRECONNECT_ORIGINS.forEach { origin -> runCatching { preconnect(origin, session.userAgent) } }
-        }
         val key = session.key + playerUrl
         if (initialized == key) return true
         // A failed speculative compile must not repeat on every browser configuration message.
@@ -218,11 +219,22 @@ class YoutubeExtractionHost(
         }
     }
 
-    private fun preconnect(origin: String, userAgent: String) {
-        val started = System.nanoTime()
-        val call = http.newCall(okhttp3.Request.Builder().url("$origin/generate_204").head().header("User-Agent", userAgent).build())
-        call.timeout().timeout(5, TimeUnit.SECONDS)
-        call.execute().use { diagnostics.event("request", "preconnect", origin.substringAfter("//"), (System.nanoTime() - started) / 1_000_000, it.code) }
+    /**
+     * Captures this identity's web configuration while browsing. Direct clients need no player
+     * script; fallbacks initialize their solver on demand rather than competing with startup.
+     */
+    override fun warm(videoId: String) {
+        if (videoId.isBlank()) return
+        if (!warmQueued.compareAndSet(false, true)) return
+        initializer.execute {
+            try {
+                sessions.capture(videoId)
+            } catch (_: Throwable) {
+                // Speculative only: playback retries the same capture on the critical path.
+            } finally {
+                warmQueued.set(false)
+            }
+        }
     }
 
     /** Cache view scoped to the task's session, account and demand. */
@@ -261,11 +273,17 @@ class YoutubeExtractionHost(
             synchronized(streams) {
                 active.check()
                 val now = System.currentTimeMillis()
-                val expiration = (stream.formats.mapNotNull { it.expiresAtMillis }
-                    + stream.manifests.map { it.expiresAtMillis }).minOrNull() ?: now + 120_000
+                // Signed URLs carry their own `expire`, the real reuse limit: a cached stream
+                // dies exactly when its media URLs stop working. A flat two-minute ceiling
+                // discarded still-valid streams and forced full re-resolution.
+                val signed = (stream.formats.mapNotNull { it.expiresAtMillis ?: urlExpiry(it.url) } +
+                    stream.manifests.mapNotNull { urlExpiry(it.url) } +
+                    listOfNotNull(stream.hlsUrl?.let(::urlExpiry), stream.dashUrl?.let(::urlExpiry)))
+                    .minOrNull()
+                val expiration = signed ?: (now + STREAM_FALLBACK_MS)
                 val bytes = json.encodeToString(stream).toByteArray().size +
                     json.encodeToString(stream.manifests).toByteArray().size
-                streams[key] = CachedStream(stream, minOf(now + 120_000, expiration - 30_000), bytes)
+                streams[key] = CachedStream(stream, expiration - 30_000, bytes, active.session)
                 streams.entries.removeAll { it.value.expires <= now }
                 var totalBytes = streams.values.sumOf { it.bytes }
                 while (totalBytes > 8 * 1024 * 1024 && streams.isNotEmpty()) {
@@ -274,6 +292,11 @@ class YoutubeExtractionHost(
                 }
             }
         }
+        private fun urlExpiry(url: String?): Long? = url
+            ?.let { com.hhst.youtubelite.downloader.net.DownloadBitrate.queryParam(it, "expire") }
+            ?.toLongOrNull()
+            ?.let { it * 1000L }
+
         override fun invalidateStream(videoId: String) {
             val key = streamKey(videoId)
             synchronized(streams) { streams.remove(key) }
@@ -281,9 +304,8 @@ class YoutubeExtractionHost(
     }
 
     private companion object {
-        val PRECONNECT_ORIGINS = listOf("https://www.youtube.com", "https://manifest.googlevideo.com")
-        /** Below OkHttp's five-minute idle eviction, so a preconnected connection is still pooled. */
-        const val PRECONNECT_INTERVAL_MS = 4 * 60_000L
+        /** Only for streams whose URLs expose no `expire`: previously the ceiling for every entry. */
+        const val STREAM_FALLBACK_MS = 120_000L
         const val INIT_RETRY_MS = 10 * 60_000L
     }
 }

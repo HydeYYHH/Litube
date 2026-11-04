@@ -78,6 +78,22 @@ class PlaylistScreenAndroidTest {
         assertEquals(240f, loadingCover.height, 1f)
     }
 
+    @Test fun anEmptyPageWithAContinuationDoesNotAnnounceAnEmptyPlaylist() {
+        val page = (ready() as PlaylistContent.Ready).page.copy(entries = emptyList(), nextKey = "next")
+        var current by mutableStateOf(state(PlaylistContent.Ready(page)))
+        val actions = mutableListOf<PlaylistAction>()
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                Box(Modifier.requiredSize(390.dp, 844.dp)) { PlaylistScreen(current, actions::add, {}) }
+            }
+        }
+        compose.waitUntil(5_000) { PlaylistAction.LoadNext in actions }
+        compose.onNodeWithTag("playlist-empty").assertDoesNotExist()
+        compose.runOnIdle { current = state(PlaylistContent.Ready(page.copy(nextKey = null))) }
+        compose.onNodeWithTag("playlist-list").performScrollToNode(hasTestTag("playlist-empty"))
+        compose.onNodeWithTag("playlist-empty").assertIsDisplayed()
+    }
+
     @Test fun actionsAndMenusKeepTheirIdentity() {
         val actions = mutableListOf<PlaylistAction>()
         var current by mutableStateOf(state())

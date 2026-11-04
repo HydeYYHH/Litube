@@ -31,9 +31,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * LAN HTTP proxy: DASH manifest and byte-range segments for Chromecast / dash.js.
- */
 @UnstableApi
 class LocalStreamProxy(
     context: Context,
@@ -43,6 +40,8 @@ class LocalStreamProxy(
     private val advertisedHost: String,
     private val mediaRequests: YoutubeMediaRequests? = null,
 ) : NanoHTTPD(advertisedHost, port) {
+    init { setAsyncRunner(BoundedProxyRunner()) }
+
     @Volatile var diagnosticContext = DiagnosticContext(castSessionId = java.util.UUID.randomUUID().toString())
 
     fun interface UrlRefresher {
@@ -52,7 +51,6 @@ class LocalStreamProxy(
 
     private data class StreamInfo(
         val youtubeUrl: String,
-        /** Container MIME for the stream response Content-Type ("audio/webm" etc.). */
         val mimeType: String = "",
         val indexStart: Long,
         val indexEnd: Long,
@@ -150,16 +148,13 @@ class LocalStreamProxy(
             )
         }
         this.videoTitle = videoTitle
-        // Publish the token table before the manifest: a concurrent serveManifest
-        // then never exposes a manifest whose /stream tokens are not registered
-        // yet. The swap itself must take [streamInfoLock]: serveStream's 403
-        // refresh and the content-length backfill rebuild the table under that
-        // lock, and an unlocked full-table replace here could interleave with
-        // them and revert a just-refreshed entry (or resurrect the previous
-        // video's tokens).
+        // Publish the token table before the manifest: a concurrent serveManifest then never
+        // exposes a manifest whose /stream tokens are not registered yet. The swap must take
+        // [streamInfoLock]: an unlocked full-table replace could interleave with the 403 refresh
+        // or content-length backfill and revert a just-refreshed entry (or resurrect the
+        // previous video's tokens).
         synchronized(streamInfoLock) {
-            // New generation: the previous video's refresh cooldowns must
-            // not mute this config's first 403 refresh.
+            // New generation: previous video's refresh cooldowns must not mute this config's first 403 refresh.
             lastRefreshMs.clear()
             this.streamInfo = tokens
             val marker = manifest?.takeIf { it.videoId == videoId }?.marker
@@ -188,9 +183,8 @@ class LocalStreamProxy(
         if (info.indexStart < 0 || info.indexEnd <= info.indexStart) return null
         val length = info.indexEnd - info.indexStart + 1
         return fetchSidx(info, info.indexStart, length)
-            // The from-0 fallback scan is capped by readFully's 512 KiB window:
-            // past that the index can never be found and the probe would only
-            // burn an upstream request.
+            // The from-0 fallback is capped by readFully's 512 KiB window: past that the index
+            // can never be found and the probe would only burn an upstream request.
             ?: SIDX_READ_CAP_BYTES.takeIf { info.indexEnd + 1 <= it }
                 ?.let { fetchSidx(info, 0L, info.indexEnd + 1) }
     }
@@ -233,9 +227,8 @@ class LocalStreamProxy(
         if (session.method == Method.OPTIONS) {
             return corsPreflight(header(session, "user-agent"))
         }
-        // NanoHTTPD would still write a body for HEAD unless handed an
-        // empty stream. Keep GET's status, mime, Content-Length and CORS
-        // headers so HEAD describes the same resource.
+        // NanoHTTPD still writes a body for HEAD unless handed an empty stream; keep GET's
+        // status/mime/length/CORS so HEAD describes the same resource.
         if (session.method == Method.HEAD) {
             val get = serveGet(session, uri)
             return try {
@@ -265,9 +258,8 @@ class LocalStreamProxy(
 
     private fun serveManifest(session: IHTTPSession): Response {
         val ua = header(session, "user-agent")
-        // A browser-UA manifest fetch is the link-cast liveness signal (the
-        // page's probe re-fetches it every 15 s); curl/scanner probes must
-        // not light the "link connected" banner up.
+        // A browser-UA manifest fetch is the link-cast liveness signal (the page's probe
+        // re-fetches it every 15 s); curl/scanner probes must not light the "link connected" banner.
         if (!isReceiverUa(ua) && isLinkPeerUa(ua)) lastLinkPeerSeenMs = SystemClock.elapsedRealtime()
         val published = manifest ?: return text(Response.Status.NOT_FOUND, "No manifest")
         var xml = published.xml
@@ -289,8 +281,7 @@ class LocalStreamProxy(
     }
 
     private fun servePlayer(ua: String?): Response {
-        // Same liveness gate as [serveManifest]: the connected banner must not
-        // light up for a scanner that merely found the unlisted /player URL.
+        // Same liveness gate as [serveManifest]: a scanner that merely found the unlisted /player URL must not light the banner.
         if (!isReceiverUa(ua) && isLinkPeerUa(ua)) lastLinkPeerSeenMs = SystemClock.elapsedRealtime()
         return try {
             val raw = appContext.assets.open("cast/player.html").use { it.readBytes() }
@@ -335,6 +326,7 @@ class LocalStreamProxy(
         var rangeEnd = if (info.contentLength > 0) info.contentLength - 1 else LENGTH_UNSET
         var hasRange = false
         var fromSeg = false
+        var openEndedRange = false
         val seg = query(session, "seg")
         if (seg != null && '-' in seg) {
             val parts = seg.split('-', limit = 2)
@@ -352,6 +344,7 @@ class LocalStreamProxy(
                     Response.Status.RANGE_NOT_SATISFIABLE, "Bad range",
                 )
                 rangeStart = parsed[0]
+                openEndedRange = parsed[1] == LENGTH_UNSET
                 rangeEnd = if (parsed[1] != LENGTH_UNSET) parsed[1]
                 else if (info.contentLength > 0) info.contentLength - 1
                 else LENGTH_UNSET
@@ -374,12 +367,10 @@ class LocalStreamProxy(
         val requestLength = if (rangeEnd != LENGTH_UNSET) rangeEnd - rangeStart + 1 else LENGTH_UNSET
         val chunkStart = rangeStart
         val totalCap = if (info.contentLength > 0) info.contentLength - 1 else Long.MAX_VALUE
-        // Open-ended requests ("bytes=X-" or no Range at all) get a chunk end of
-        // the proxy's choosing; a known total caps it at the last byte of the stream.
-        val openEnded = !fromSeg && requestLength == LENGTH_UNSET
-        // A known total caps every request at the last byte of the stream: a
-        // stale segment index must not promise bytes the upstream will never
-        // deliver (the body would then end short of the claimed length).
+        val openEnded = !fromSeg && (openEndedRange || requestLength == LENGTH_UNSET)
+        // A known total caps every request at the last byte of the stream: a stale segment
+        // index must not promise bytes the upstream will never deliver (the body would then
+        // end short of the claimed length).
         val servedLength = when {
             fromSeg -> if (info.contentLength > 0) {
                 minOf(requestLength, info.contentLength - rangeStart)
@@ -387,11 +378,10 @@ class LocalStreamProxy(
                 requestLength
             }
             else -> {
-                // A bare GET (no Range header) asks for the whole
-                // representation: chunk-capping it would truncate the 200 body
-                // for any RFC-compliant client. Receivers and dash.js always
-                // send Range or ?seg=, so the chunk cap is ranged-only.
-                if (!hasRange) {
+                // A bare GET or open-ended Range asks for the whole remaining representation.
+                // Kodi treats an artificially capped body as EOF and cannot seek beyond it.
+                // Explicit finite ranges retain the cap; SegmentList URLs have their own bounds.
+                if (!hasRange || openEnded) {
                     if (info.contentLength > 0) info.contentLength - rangeStart else LENGTH_UNSET
                 } else {
                     val end = minOf(
@@ -416,16 +406,13 @@ class LocalStreamProxy(
                         token, info.publishedVideoId, info.itag,
                     )
                     if (fresh != null) {
-                        // Re-read + swap under the lock: NanoHTTPD serves
-                        // requests on multiple threads, and a concurrent
-                        // content-length backfill must not be lost to this
-                        // stale snapshot.
+                        // Re-read + swap under the lock: NanoHTTPD serves on multiple threads,
+                        // and a concurrent content-length backfill must not be lost to this stale snapshot.
                         val refreshed = synchronized(streamInfoLock) {
                             val current = streamInfo[token]
                                 ?: return text(Response.Status.FORBIDDEN, "Stale token")
-                            // A reconfigure raced this request: the table now belongs
-                            // to another video, and writing the fresh URL would corrupt
-                            // its entry. Skip the write and the retry.
+                            // A reconfigure raced this request: the table belongs to another video
+                            // now; writing the fresh URL would corrupt its entry. Skip write and retry.
                             if (current.configId != info.configId) {
                                 return text(Response.Status.FORBIDDEN, "Stale token")
                             }
@@ -455,9 +442,8 @@ class LocalStreamProxy(
                     }
                 }
             }
-            // Only a real upstream 403 answers 403; other codes map to the
-            // closest HTTP semantic so the receiver can calibrate (416) or
-            // retry (5xx) instead of treating every failure as forbidden.
+            // Only a real upstream 403 answers 403; other codes map to the closest HTTP semantic
+            // so the receiver can calibrate (416) or retry (5xx) instead of treating all as forbidden.
             if (e.responseCode == 429) {
                 val limited = newFixedLengthResponse(object : Response.IStatus {
                     override fun getRequestStatus() = 429
@@ -507,11 +493,9 @@ class LocalStreamProxy(
         ua: String?,
         openEnded: Boolean,
     ): Response {
-        // An open-ended request with no known total leaves the upstream length
-        // unset: googlevideo clips its view to the &range= window, so the
-        // resolved response length reveals the true remaining size (see
-        // [maybeBackfillContentLength]). Everything else asks for exactly the
-        // bytes the client will be served.
+        // Open-ended with no known total: leave the upstream length unset — googlevideo clips
+        // its view to the &range= window, so the resolved length reveals the true remaining size
+        // (see [maybeBackfillContentLength]). Everything else asks for exactly the served bytes.
         val upstreamUnbounded = openEnded && info.contentLength <= 0
         val specBuilder = DataSpec.Builder()
             .setUri(info.youtubeUrl.toUri())
@@ -535,10 +519,9 @@ class LocalStreamProxy(
             }
             maybeBackfillContentLength(token, info, chunkStart, resolved)
         }
-        // The upstream may end inside the requested chunk when the stream is
-        // shorter than the chunk; never claim more bytes than it will deliver.
-        // A bare GET with no known total leaves [servedLength] unset — the
-        // resolved length IS the remaining body.
+        // The upstream may end inside the requested chunk when the stream is shorter; never
+        // claim more bytes than it delivers. A bare GET with no known total leaves
+        // [servedLength] unset — the resolved length IS the remaining body.
         val bodyLength = when {
             upstreamUnbounded && servedLength == LENGTH_UNSET -> resolved
             upstreamUnbounded && resolved in 1 until servedLength -> resolved
@@ -558,23 +541,20 @@ class LocalStreamProxy(
         }
         val response: Response
         if (fromSeg) {
-            // ?seg=START-END: a standalone segment resource (its own URL in the
-            // manifest's SegmentList). 200 OK — the URL identifies a complete
-            // segment, not a byte range of a larger resource; 206 + Content-Range
-            // here confuses the cast receiver.
+            // ?seg=START-END is a standalone segment resource (its own URL in the manifest's
+            // SegmentList): 200 OK — 206 + Content-Range on a complete-segment URL confuses
+            // the cast receiver.
             response = newFixedLengthResponse(Response.Status.OK, mime, input, bodyLength)
         } else if (hasRange) {
             response = newFixedLengthResponse(
                 Response.Status.PARTIAL_CONTENT, mime, input, bodyLength,
             )
-            // Content-Range is only meaningful for a byte-range response.
             response.addHeader(
                 "Content-Range",
                 "bytes $chunkStart-${chunkStart + bodyLength - 1}/${if (total > 0) total.toString() else "*"}",
             )
         } else {
-            // No Range header: 200 OK with the whole remaining representation
-            // (chunked chunk caps are ranged-request behavior only).
+            // No Range header: 200 OK with the whole remaining representation (chunk caps are ranged-only).
             response = newFixedLengthResponse(Response.Status.OK, mime, input, bodyLength)
         }
         response.addHeader("Accept-Ranges", "bytes")
@@ -583,12 +563,10 @@ class LocalStreamProxy(
     }
 
     /**
-     * googlevideo clips its view to the &range= window: an open-ended window
-     * runs to the true end of file, so the resolved response length reveals
-     * the total size. Backfilling it lets later requests serve precise chunk
-     * ends and Content-Range totals instead of over-claiming past EOF. An
-     * overestimate is harmless (clamping then rarely binds), so this trusts
-     * the first resolved length only for a token that has no total yet.
+     * googlevideo clips its view to the &range= window, so an open-ended window's resolved
+     * length reveals the true total. Backfilling it lets later requests serve precise chunk ends
+     * and Content-Range totals instead of over-claiming past EOF. An overestimate is harmless
+     * (clamping then rarely binds), so trust the first resolved length only for a token with no total.
      */
     private fun maybeBackfillContentLength(token: String, info: StreamInfo, chunkStart: Long, resolved: Long) {
         if (resolved <= 0L) return
@@ -633,8 +611,7 @@ class LocalStreamProxy(
         var total = 0
         while (total < max) {
             val n = source.read(buf, 0, minOf(buf.size, max - total))
-            // A 0 return (media3 permits it for non-blocking sources) would
-            // spin forever without counting as progress or EOF.
+            // A 0 return (media3 permits it for non-blocking sources) would spin forever, counting as neither progress nor EOF.
             if (n == 0) break
             if (n == C.RESULT_END_OF_INPUT || n < 0) break
             out.write(buf, 0, n)
@@ -669,15 +646,12 @@ class LocalStreamProxy(
         }
 
         /**
-         * NanoHTTPD 2.3.1's Response.send() swallows IOException without closing
-         * the response InputStream (bytecode: the IOException catch block only
-         * logs "Could not send response to the client" and never calls
-         * safeClose(data); HTTPSession never calls Response.close at all), so a
-         * client abort or an upstream mid-read failure would leave [source] —
-         * and its OkHttp connection to googlevideo — open until GC. The
-         * finalizer is the last-resort reclaim; java.lang.ref.Cleaner needs
-         * API 33 and minSdk is 26. The normal path stays NanoHTTPD's
-         * success-path close plus [close].
+         * NanoHTTPD 2.3.1's Response.send() swallows IOException without closing the response
+         * InputStream (bytecode: the catch block only logs and never calls safeClose(data);
+         * HTTPSession never calls Response.close at all), so a client abort or upstream mid-read
+         * failure would leave [source] — and its OkHttp connection to googlevideo — open until GC.
+         * The finalizer is the last-resort reclaim; java.lang.ref.Cleaner needs API 33 and minSdk
+         * is 26. The normal path stays NanoHTTPD's success-path close plus [close].
          */
         @Suppress("deprecation")
         fun finalize() {
@@ -714,19 +688,13 @@ class LocalStreamProxy(
         private fun isLinkPeerUa(ua: String?): Boolean =
             ua?.lowercase()?.contains("mozilla") == true
 
-        /**
-         * Stream URLs stamp `g=` with the published config id. A missing or
-         * mismatched generation is an old manifest and must not be served as
-         * the current video's ranges.
-         */
+        /** Stream URLs stamp `g=` with the published config id; a missing or mismatched
+         *  generation is an old manifest and must not be served as the current video's ranges. */
         internal fun acceptsGeneration(requestGeneration: Long?, configId: Long): Boolean =
             requestGeneration != null && requestGeneration == configId
 
-        /**
-         * Cast receivers stall on large 200 OK bodies, so they keep the small
-         * default chunk. Browser link-cast uses larger slices; 256 KiB
-         * round-trips through the phone cause playback underruns.
-         */
+        /** Cast receivers stall on large 200 OK bodies, so they keep the small default chunk;
+         *  browser link-cast needs larger slices (256 KiB round-trips through the phone underrun). */
         internal fun chunkMaxBytes(ua: String?): Int =
             if (isReceiverUa(ua)) DEFAULT_CHUNK else LINK_PEER_CHUNK
 
@@ -765,15 +733,13 @@ class LocalStreamProxy(
         }
 
         /**
-         * RFC 7233 `bytes=start-end`. Suffix ranges (`bytes=-N`) need a known
-         * content length; without one they are unsatisfiable rather than silently
-         * turned into `0-N`. An open-ended end is reported as [LENGTH_UNSET];
-         * range sanity (end >= start) is the caller's job.
+         * RFC 7233 `bytes=start-end`. Suffix ranges (`bytes=-N`) need a known content length;
+         * without one they are unsatisfiable rather than silently turned into `0-N`. An open-ended
+         * end is reported as [LENGTH_UNSET]; range sanity (end >= start) is the caller's job.
          */
         internal fun parseRange(header: String, contentLength: Long): LongArray? {
             val spec = header.removePrefix("bytes=").trim()
-            // Multi-range specs are rejected outright (the caller answers 416);
-            // naively taking the first dash would fake an open-ended 206.
+            // Multi-range specs are rejected outright (caller answers 416); taking the first dash would fake an open-ended 206.
             if (spec.isEmpty() || spec.contains(',')) return null
             val dash = spec.indexOf('-')
             if (dash < 0) return null
@@ -791,16 +757,20 @@ class LocalStreamProxy(
         }
 
         /**
-         * LAN IPv4 used for bind, or null when no usable LAN address exists.
-         * Loopback is not a fallback: a 127.0.0.1 URL is unreachable from the
-         * receiver, so the caller refuses link-cast instead of advertising it.
+         * LAN IPv4 to bind, or null when no usable LAN address exists. Loopback is not a fallback:
+         * a 127.0.0.1 URL is unreachable from the receiver, so the caller refuses link-cast
+         * instead of advertising it.
          */
-        fun resolveBindHost(context: Context): String? =
-            detectLanIp(context).takeIf { it != LOOPBACK }
+        fun resolveBindHost(context: Context, receiverHost: String? = null): String? =
+            detectLanIp(context, receiverHost).takeIf { it != LOOPBACK }
 
-        private fun detectLanIp(context: Context): String {
+        private fun detectLanIp(context: Context, receiverHost: String?): String {
             try {
                 val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                val localNetwork = LocalCastNetwork.select(cm, receiverHost)
+                cm?.getLinkProperties(localNetwork)?.linkAddresses?.firstOrNull {
+                    it.address is Inet4Address && !it.address.isLoopbackAddress
+                }?.address?.hostAddress?.let { return it }
                 val ifaceName = cm?.getLinkProperties(cm.activeNetwork)?.interfaceName
                 if (ifaceName != null && !isTunnel(ifaceName)) {
                     ipv4Of(ifaceName)?.let { return it }

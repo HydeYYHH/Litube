@@ -4,7 +4,6 @@ import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import java.util.WeakHashMap
 
-/** Bounded local diagnostics containing only enums, counters and durations. */
 class ExtractionDiagnostics : EngineDiagnostics {
     data class Event(val sequence: Long, val stage: String, val profile: String, val detail: String,
                      val elapsedMillis: Long, val httpStatus: Int)
@@ -18,7 +17,8 @@ class ExtractionDiagnostics : EngineDiagnostics {
     }
     fun scoped(context: DiagnosticContext): EngineDiagnostics = Scoped(context, this)
     companion object { fun diagnosticContext(context: ExtractionContext): DiagnosticContext? = (context.diagnostics as? Scoped)?.context }
-    fun forContext(context: ExtractionContext): EngineDiagnostics = contextOf(context)?.let(::scoped) ?: this
+    fun forContext(context: ExtractionContext): EngineDiagnostics =
+        (contextOf(context) ?: diagnosticContext(context))?.let(::scoped) ?: this
     override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) =
         record(stage, profile, detail, elapsedMillis, httpStatus, null)
     @Synchronized private fun record(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int, context: DiagnosticContext?) {

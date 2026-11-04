@@ -35,7 +35,6 @@ internal val JsonElement?.asBool: Boolean?
 internal val JsonElement?.asLongNum: Long?
     get() = (this as? JsonPrimitive)?.takeUnless { it is JsonNull }?.let { it.longOrNull ?: it.content.toLongOrNull() }
 
-/** Fixture construction: strings, numbers, booleans, elements and nulls. */
 internal fun jsonObjectOf(vararg members: Pair<String, Any?>): JsonObject {
     val result = LinkedHashMap<String, JsonElement>()
     for ((key, value) in members) result[key] = when (value) {
@@ -49,5 +48,4 @@ internal fun jsonObjectOf(vararg members: Pair<String, Any?>): JsonObject {
     return JsonObject(result)
 }
 
-/** Parses a JSON value, rejecting malformed input. */
 internal fun parseJson(text: String): JsonElement = Json.parseToJsonElement(text)

@@ -3,7 +3,6 @@ package com.hhst.youtubelite.ui.design
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-/** Shared colors for content, controls and overlays. */
 data class AppPalette(
     val background: Color,
     val ink: Color,

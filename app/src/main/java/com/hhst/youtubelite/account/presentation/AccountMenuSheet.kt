@@ -44,7 +44,6 @@ import com.hhst.youtubelite.ui.design.MenuSheetLayout
 import com.hhst.youtubelite.ui.design.MenuSheetItem
 import com.hhst.youtubelite.ui.design.appDescription
 
-/** Menu rows below the signed-in account header. */
 val accountMenuActions = AccountMenuAction.entries.filter { it != AccountMenuAction.ViewChannel }
 val accountMenuItems = accountMenuActions.map { MenuSheetItem(null, it.label, tag = "account-action-${it.tag}") }
 
@@ -69,9 +68,6 @@ fun AccountMenuHeader(account: AccountProfile, onOpenChannel: () -> Unit) {
     }
 }
 
-/** Native account switcher: the "On this device" identity, the session's cached
- *  accounts plus the add-account entry. Selecting the device row switches the
- *  whole app to anonymous; the signed-in account stays available above. */
 @Composable
 fun AccountSwitchSheet(
     accounts: List<AccountItem>,
@@ -89,7 +85,7 @@ fun AccountSwitchSheet(
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp - 16.dp).coerceAtLeast(0.dp))
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp))
-                .background(DesignTokens.Background)
+                .background(DesignTokens.Panel)
                 .verticalScroll(rememberScrollState())
                 .testTag("account-switch")
                 .semantics { paneTitle = "Switch account" },

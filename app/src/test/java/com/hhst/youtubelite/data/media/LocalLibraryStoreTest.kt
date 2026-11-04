@@ -135,7 +135,6 @@ class LocalLibraryStoreTest {
         // Nothing is marshalled or persisted while the writer is idle; memory stays current.
         assertEquals(0, writes.get())
         assertEquals(listOf("two", "one"), library.history().entries.map { it.videoId })
-        // The first flush persists the latest pending state; the queued remainder becomes a no-op.
         queued.poll()!!.run()
         assertEquals(1, writes.get())
         assertEquals(listOf("two", "one"), LocalLibraryStore(inner).history().entries.map { it.videoId })
@@ -179,7 +178,6 @@ class LocalLibraryStoreTest {
         }
         val library = LocalLibraryStore(storage)
         library.record(video("one"))
-        // The failed flush must not drop "one": the revision stays dirty.
         library.record(video("two"))
         val stored = inner.read("device-library:data")!!
         assertTrue(stored.contains("\"one\""))
@@ -198,8 +196,7 @@ class LocalLibraryStoreTest {
         assertEquals(listOf("d", "c", "b", "a"), library.history().entries.map { it.videoId })
         val removed = library.remove("c")!!
         assertEquals("c", removed.entry.videoId)
-        // Newest-first list: the recorded neighbours are the newer ("d") and
-        // older ("b") entries around the removed slot.
+        // Newest-first list: prevVideoId is the newer neighbour ("d"), nextVideoId the older ("b").
         assertEquals("d", removed.prevVideoId)
         assertEquals("b", removed.nextVideoId)
         assertEquals(1, removed.index)
@@ -211,12 +208,9 @@ class LocalLibraryStoreTest {
         val library = LocalLibraryStore(MemoryAuthStore())
         listOf("a", "b", "c").forEach { library.record(video(it)) }
         val removed = library.remove("b")!!
-        // After the removal the user watches a new video and drops "a".
         library.record(video("new"))
         library.remove("a")
         library.restore(removed)
-        // "b" rejoins beside its still-present newer neighbour "c"; the
-        // post-delete record and removal survive untouched.
         assertEquals(listOf("new", "c", "b"), library.history().entries.map { it.videoId })
     }
 
@@ -234,7 +228,6 @@ class LocalLibraryStoreTest {
         val library = LocalLibraryStore(MemoryAuthStore())
         listOf("a", "b", "c").forEach { library.record(video(it)) }
         val removed = library.remove("b")!!
-        // The user then removes both neighbours of the removed entry.
         library.remove("c")
         library.remove("a")
         library.restore(removed)
@@ -248,16 +241,11 @@ class LocalLibraryStoreTest {
         val removed = library.remove("a")!!
         assertTrue(library.history().entries.isEmpty())
         library.restore(removed)
-        // The second restore sees the entry back in place and changes nothing.
         library.restore(removed)
         assertEquals(listOf("a"), library.history().entries.map { it.videoId })
     }
 
-    /**
-     * Entries persisted before the removal token existed deserialize with a null
-     * token; the local removal handle is the videoId, so history() normalizes the
-     * token instead of leaving those rows impossible to remove.
-     */
+    /** Rows persisted before removeToken existed deserialize with a null token; history() normalizes it so legacy rows stay removable. */
     @Test fun legacyEntriesWithoutRemoveTokenStayRemovable() {
         val storage = MemoryAuthStore()
         val legacyJson = """{"history":[

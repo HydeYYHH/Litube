@@ -3,6 +3,11 @@ package com.hhst.youtubelite.comments.presentation
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutLinearInEasing
+import com.hhst.youtubelite.ui.design.AppMotion
+import com.hhst.youtubelite.ui.design.GestureResistance
+import com.hhst.youtubelite.ui.design.GestureThreshold
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -18,47 +23,79 @@ import kotlinx.coroutines.launch
 @Stable
 internal class CommentSheetMotion(
     private val scope: CoroutineScope,
-    private val height: Float,
+    height: Float,
     private val density: Float,
     private val enabled: () -> Boolean,
     private val animateMotion: () -> Boolean,
     private val onDismiss: () -> Unit,
     private val onDismissStarted: () -> Unit = {},
+    startHidden: Boolean = false,
+    private val onThreshold: () -> Unit = {},
 ) : NestedScrollConnection {
-    var offset by mutableFloatStateOf(0f)
+    private var height = height
+    var offset by mutableFloatStateOf(if (startHidden && animateMotion()) height else 0f)
         private set
     private var settling: Job? = null
     private var dismissed = false
+    private var closing = false
+    private var finger = 0f
+    private val thresholdCue = GestureThreshold()
+    private fun threshold() = minOf(height * .28f, 144f * density).coerceAtLeast(80f * density)
+
+    fun resize(newHeight: Float) {
+        if (height == newHeight) return
+        val fraction = if (height > 0f) offset / height else 0f
+        height = newHeight.coerceAtLeast(0f)
+        offset = fraction * height
+        finger = GestureResistance.fingerDistance(offset, density)
+    }
+
+    fun enter() { if (offset > 0f) settleTo(false, 0f, entering = true) }
+    fun cancel() { settling?.cancel() }
 
     fun drag(delta: Float): Float {
-        if (!enabled() || dismissed) return 0f
-        settling?.cancel()
-        val before = offset
-        offset = (offset + delta).coerceIn(0f, height)
-        return offset - before
+        if (!enabled() || dismissed || closing) return 0f
+        if (settling != null) {
+            settling?.cancel()
+            settling = null
+            finger = GestureResistance.fingerDistance(offset, density)
+            thresholdCue.reset()
+        }
+        val consumed = delta.coerceAtLeast(-finger)
+        finger += consumed
+        offset = GestureResistance.distance(finger, density).coerceAtMost(height)
+        if (thresholdCue.crossed(finger, threshold())) onThreshold()
+        return consumed
     }
 
     fun settle(velocity: Float) {
         if (!enabled() || dismissed) return
-        val close = offset >= minOf(height * .28f, 144f * density) ||
-            (offset > 16f * density && velocity > 1200f * density)
+        val close = GestureResistance.commits(finger, velocity, threshold(), density)
+        if (close && thresholdCue.crossed(threshold(), threshold())) onThreshold()
         settleTo(close, velocity)
     }
 
     fun dismiss() = settleTo(close = true, velocity = 0f)
 
-    private fun settleTo(close: Boolean, velocity: Float) {
-        if (dismissed) return
-        if (close) onDismissStarted()
+    private fun settleTo(close: Boolean, velocity: Float, entering: Boolean = false) {
+        if (dismissed || closing) return
+        if (close) { closing = true; onDismissStarted() }
         settling?.cancel()
         settling = scope.launch {
-            val target = if (close) height else 0f
+            val target = if (close) 1f else 0f
+            val from = if (height > 0f) offset / height else target
             if (animateMotion()) {
-                animate(offset, target, initialVelocity = velocity,
-                    animationSpec = if (close) tween(180) else spring(dampingRatio = 1f, stiffness = 500f)) {
-                    value, _ -> offset = value.coerceIn(0f, height)
+                animate(from, target, initialVelocity = velocity / height.coerceAtLeast(1f),
+                    animationSpec = when {
+                        close -> tween((120 * (1f - from)).roundToInt(), easing = FastOutLinearInEasing)
+                        entering -> tween(180, easing = AppMotion.Spatial)
+                        else -> spring(dampingRatio = 1f, stiffness = 500f)
+                    }) {
+                    value, _ -> offset = value.coerceIn(0f, 1f) * height
                 }
-            } else offset = target
+            } else offset = target * height
+            finger = 0f
+            thresholdCue.reset()
             if (close) {
                 dismissed = true
                 onDismiss()

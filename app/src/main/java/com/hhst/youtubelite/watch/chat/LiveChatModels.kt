@@ -19,6 +19,7 @@ data class LiveChatUiState(
     val replay: Boolean = false,
     /** The stream (or its replay) is over: messages stay, posting stops. */
     val ended: Boolean = false,
+    val postingRestriction: String? = null,
 )
 
 sealed interface LiveChatAction {

@@ -74,11 +74,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
-/**
- * Emulator fault rows: notification shade, radio, MediaStore delete,
- * system font scale, TalkBack probe, process-death seed/assert, one live
- * live enqueue. TalkBack is recorded blocked when the package is absent.
- */
 @RunWith(AndroidJUnit4::class)
 class DownloadFaultAndroidTest {
 

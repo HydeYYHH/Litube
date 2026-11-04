@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.library
 
+import com.hhst.youtubelite.ui.observeAccountChanges
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -45,7 +47,6 @@ import com.hhst.youtubelite.library.domain.LibraryOverlay
 import com.hhst.youtubelite.library.presentation.YouScreen
 import com.hhst.youtubelite.library.presentation.YouViewModel
 import com.hhst.youtubelite.library.presentation.verificationCompleted
-import com.hhst.youtubelite.notifications.NotificationsActivity
 import com.hhst.youtubelite.playlist.PlaylistActivity
 import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.settings.SettingsActivity
@@ -60,7 +61,6 @@ import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.ui.renderNotice
 
-/** Hosts the library page. The Shorts tab is wired with its own screen. */
 class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var youViewModel: YouViewModel
         private set
@@ -99,6 +99,7 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     if (fixtures) null else sources.saves) as T
             }
         })[YouViewModel::class.java]
+        if (!fixtures) observeAccountChanges(::syncSession)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 youViewModel.navigationRequests.collect { request ->
@@ -117,7 +118,6 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is LibraryNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@YouActivity, request.query))
                         LibraryNavigationRequest.OpenHistory -> launchNavigation(HistoryActivity.intent(this@YouActivity, scenario))
                         LibraryNavigationRequest.OpenPlaylists -> launchNavigation(PlaylistsActivity.intent(this@YouActivity, scenario))
-                        LibraryNavigationRequest.OpenNotifications -> launchNavigation(NotificationsActivity.intent(this@YouActivity, signedIn))
                         LibraryNavigationRequest.OpenQueue -> showQueue = true
                         LibraryNavigationRequest.OpenDownloads ->
                             if (launchDownloads) com.hhst.youtubelite.downloader.ui.DownloadUi.openManager(this@YouActivity)
@@ -143,8 +143,10 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
         setAppContent {
             val state by youViewModel.uiState.collectAsStateWithLifecycle()
+            com.hhst.youtubelite.ui.design.WriteProgressOverlay(youViewModel.writes)
+            youViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             val back: () -> Unit = {
-                if (youViewModel.saveSheet?.state?.value != null) youViewModel.saveSheet?.close()
+                if (youViewModel.saveSheet?.state?.value != null) youViewModel.saveSheet?.dismiss()
                 else if (confirmSignOut) confirmSignOut = false
                 else if (showQueue) showQueue = false
                 else if (showSwitchSheet) showSwitchSheet = false
@@ -164,12 +166,13 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 sheetState?.let { current ->
                     if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
                         draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onDraftChange = { sheet.draftChanged(it.title, it.description) },
                         onSubmit = sheet::submitNewPlaylist,
+                        pending = current.pending,
                     ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
                         playlists = emptyList(),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onSelect = {},
                         onNewPlaylist = sheet::openNewPlaylist,
                         live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
@@ -317,6 +320,10 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onResume() {
         super.onResume()
+        syncSession()
+    }
+
+    private fun syncSession() {
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             com.hhst.youtubelite.data.media.MediaSession.snapshot().let { youViewModel.updateSession(it.signedIn, it.generation) }
         }

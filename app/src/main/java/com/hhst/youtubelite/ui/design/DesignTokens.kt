@@ -44,11 +44,12 @@ import androidx.annotation.StringRes
 import kotlin.math.ceil
 
 object DesignTokens {
-    // Colors resolve through the shared palette so every screen follows one
-    // theme entry; the getters stay call-site compatible with the old constants.
+    // Colors resolve through the shared palette so every screen follows one theme entry.
     val Background: Color @Composable get() = LocalAppColors.current.background
+    val Panel: Color @Composable get() = com.hhst.youtubelite.ui.theme.AppStyle.Panel
     val Ink: Color @Composable get() = LocalAppColors.current.ink
     val Secondary: Color @Composable get() = LocalAppColors.current.secondary
+    /** Grey inset containers (chips, fields, cards); use [Panel] for an overlay's body. */
     val Surface: Color @Composable get() = LocalAppColors.current.surface
     val Ghost: Color @Composable get() = LocalAppColors.current.ghost
     val Border: Color @Composable get() = LocalAppColors.current.border
@@ -179,7 +180,15 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
         // Cache at the displayed pixel size so vector edges retain anti-aliasing on every renderer.
         val bitmap = android.graphics.Bitmap.createBitmap(ceil(size.width).toInt().coerceAtLeast(1),
             ceil(size.height).toInt().coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color = color.toArgb() }
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color.toArgb()
+            if (icon.strokeWidth > 0f) {
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = icon.strokeWidth
+                strokeCap = android.graphics.Paint.Cap.ROUND
+                strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+        }
         val canvas = android.graphics.Canvas(bitmap).apply { scale(size.width / 24f, size.height / 24f) }
         paths.forEach { canvas.drawPath(it, paint) }
         val raster = bitmap.asImageBitmap()
@@ -193,7 +202,7 @@ fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignT
 fun AppIconButton(
     icon: AppIcon, description: String, modifier: Modifier = Modifier,
     diameter: Dp = 48.dp, background: Color = Color.Transparent, color: Color = DesignTokens.Ink,
-    enabled: Boolean = true, onClick: () -> Unit,
+    enabled: Boolean = true, pending: Boolean = false, onClick: () -> Unit,
 ) {
     val interactions = rememberAppInteractions()
     val haptic = rememberHapticAction()
@@ -203,7 +212,8 @@ fun AppIconButton(
         .hoverable(interactions, enabled = enabled)
         .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = { haptic(); onClick() })
         .semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
-        AppIcon(icon, color = if (enabled) color else color.copy(alpha = 0.4f))
+        if (pending) ActionProgress(color = color)
+        else AppIcon(icon, color = if (enabled) color else color.copy(alpha = 0.4f))
     }
 }
 

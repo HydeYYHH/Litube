@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -21,10 +22,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Host-level live routing: the watch page's comment slot renders the live chat panel for
- * a live page with a chat continuation, and keeps the comments panel otherwise — a page
- * without a continuation never fabricates a chat. Routing comes from WatchActivity's
- * combined watch/player state, not from the panel itself.
+ * Host-level live routing: the comment slot renders the live chat panel only for a live page with a
+ * chat continuation; a page without a continuation never fabricates a chat. Routing comes from
+ * WatchActivity's combined watch/player state, not from the panel itself.
  */
 @RunWith(AndroidJUnit4::class)
 class LiveChatRoutingHostAndroidTest {
@@ -80,11 +80,10 @@ class LiveChatRoutingHostAndroidTest {
         watch?.onActivity { assertFalse(it.isFinishing) }
     }
 
-    @Test fun aLivePageWithoutAChatContinuationKeepsTheCommentsPanel() {
+    @Test fun aLivePageWithoutAChatContinuationShowsUnavailable() {
         launch("live")
-        compose.onNodeWithTag("watch-comments-card").performClick()
-        awaitNode("comments-panel-host")
-        awaitNode("comments-list")
+        compose.onNodeWithTag("watch-comments-card").assertIsNotEnabled()
+        assertEquals(0, nodeCount("comments-panel-host"))
         assertEquals("No continuation must never fabricate a chat", 0, nodeCount("live-chat-panel-host"))
         watch?.onActivity { activity ->
             assertFalse(activity.chatViewModel.uiState.value.content is LiveChatContent.Ready)

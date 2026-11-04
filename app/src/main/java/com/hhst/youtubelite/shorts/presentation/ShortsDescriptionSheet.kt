@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.player.surface.PlayerModalSheet
 
-/** The hydrated watch-page description of the settled short. */
 @Composable
 internal fun ShortsDescriptionSheet(
     title: String,

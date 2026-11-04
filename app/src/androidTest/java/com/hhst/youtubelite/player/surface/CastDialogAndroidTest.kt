@@ -50,12 +50,10 @@ class CastDialogAndroidTest {
         assertEquals(listOf(true), discovery)
         assertTrue(refreshCount >= 1)
 
-        // Discovery is running but has not found anything yet.
         compose.runOnIdle { state = PlayerUiState(castAvailable = true) }
         compose.mainClock.advanceTimeBy(50)
         compose.onNodeWithText("Searching…").assertIsDisplayed()
 
-        // Found devices render as rows; a tap forwards the typed id.
         compose.runOnIdle {
             state = PlayerUiState(
                 castAvailable = true,
@@ -71,7 +69,6 @@ class CastDialogAndroidTest {
         compose.onNodeWithText("Living room TV").performClick()
         assertEquals("living-room", deviceSelection)
 
-        // A live session shows the stop control and hides the link-cast section.
         compose.runOnIdle {
             state = PlayerUiState(
                 casting = true,

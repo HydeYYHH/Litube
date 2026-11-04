@@ -4,6 +4,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ArtworkSourcesTest {
+    @Test fun nearbyCardSizesShareADecodeWithoutLosingRequestedDetail() {
+        assertEquals(artworkDecodeDimension(389), artworkDecodeDimension(391))
+        for (target in 1..2000) {
+            val decoded = artworkDecodeDimension(target)
+            org.junit.Assert.assertTrue(decoded >= target.coerceIn(64, 1600))
+            org.junit.Assert.assertTrue(decoded in 64..1600)
+            org.junit.Assert.assertTrue(decoded - target.coerceIn(64, 1600) < 64)
+        }
+    }
     @Test fun largeVideoCardsRequestAnUnscaledCoverWithTheOriginalAsFallback() {
         val original = "https://i.ytimg.com/vi/GjjK6yD5I9I/mqdefault.jpg?sqp=small&sigh=token"
         assertEquals(listOf("https://i.ytimg.com/vi/GjjK6yD5I9I/hq720.jpg", original),

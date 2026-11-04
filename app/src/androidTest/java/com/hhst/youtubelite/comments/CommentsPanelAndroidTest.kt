@@ -140,7 +140,6 @@ class CommentsPanelAndroidTest {
         compose.runOnIdle { panelContent = content }
     }
 
-    /** 390 bottom sheet: panel starts under the rounded 16:9 player, header is 65 high, handle 40×4. */
     @Test fun compactSheetMatchesSampledAnchors() {
         render()
         val panel = bounds("comments-panel")
@@ -158,15 +157,11 @@ class CommentsPanelAndroidTest {
         val header = bounds("comments-header")
         assertEquals(12f, header.top - panel.top, 0.5f)
         assertEquals(65f, header.height, 0.5f)
-        assertEquals(12f, bounds("comments-title").left - panel.left, 0.5f)
-        assertEquals(8f, bounds("comments-count").left - bounds("comments-title").right, 0.5f)
-
-        val title = textLayout("comments-title")
-        assertEquals(18f, title.layoutInput.style.fontSize.value, 0.01f)
-        assertEquals(26f, title.layoutInput.style.lineHeight.value, 0.01f)
+        compose.onNodeWithTag("comments-title").assertDoesNotExist()
+        assertEquals(12f, bounds("comments-count").left - panel.left, 0.5f)
         val count = textLayout("comments-count")
         assertEquals(14f, count.layoutInput.style.fontSize.value, 0.01f)
-        assertEquals(18f, count.layoutInput.style.lineHeight.value, 0.01f)
+        assertEquals(20f, count.layoutInput.style.lineHeight.value, 0.01f)
 
         val close = bounds("comments-close")
         assertEquals(382f, close.right - panel.left, 0.5f)
@@ -180,7 +175,6 @@ class CommentsPanelAndroidTest {
         assertEquals(56f, input.height, 0.5f)
     }
 
-    /** Thread anchors: 16 pad, 48 avatar, content at 68, actions 40 high, kebab at the content edge. */
     @Test fun threadAnchorsMatchSampledGeometry() {
         render()
         val panel = bounds("comments-panel")
@@ -222,15 +216,15 @@ class CommentsPanelAndroidTest {
         val panel = bounds("comments-panel")
         assertEquals(500f, panel.width, 0.5f)
         assertEquals(800f, panel.height, 0.5f)
-        assertEquals(20f, textLayout("comments-title").layoutInput.style.fontSize.value, 0.01f)
-        assertEquals(28f, textLayout("comments-title").layoutInput.style.lineHeight.value, 0.01f)
-        assertEquals(12f, bounds("comments-title").left - panel.left, 0.5f)
+        compose.onNodeWithTag("comments-title").assertDoesNotExist()
+        assertEquals(14f, textLayout("comments-count").layoutInput.style.fontSize.value, 0.01f)
+        assertEquals(20f, textLayout("comments-count").layoutInput.style.lineHeight.value, 0.01f)
+        assertEquals(12f, bounds("comments-count").left - panel.left, 0.5f)
         assertEquals(65f, bounds("comments-header").height, 0.5f)
         assertEquals(492f, bounds("comments-close").right - panel.left, 0.5f)
         assertEquals(68f, bounds("comments-input").left - panel.left, 0.5f)
         assertEquals(488f, bounds("comments-input").right - panel.left, 0.5f)
         assertEquals(480f, bounds("comment-c1-more").right - panel.left, 0.5f)
-        // Rail docked at the right edge of the viewport, from the top edge (no top bar).
         assertEquals(bounds("comments-rail").right, panel.right, 0.5f)
         assertEquals(0f, panel.top - bounds("comments-rail").top, 0.5f)
     }
@@ -245,6 +239,7 @@ class CommentsPanelAndroidTest {
         assertEquals(62f, bounds("comment-c1-replies").left, 0.5f)
         assertEquals(370f, bounds("comment-c1-replies").right, 0.5f)
         assertEquals(62f, bounds("reply-c1r1").left, 0.5f)
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("comment-c1-reply-toggle"))
         assertEquals(
             "Hide replies",
             compose.onNodeWithTag("comment-c1-reply-toggle").fetchSemanticsNode()
@@ -255,11 +250,49 @@ class CommentsPanelAndroidTest {
         compose.onNodeWithTag("comment-c1-reply-toggle").performClick()
         compose.waitForIdle()
         assertFalse(hasTag("comment-c1-replies"))
+        compose.onNodeWithTag("comment-c1-reply-toggle").assertIsDisplayed()
         assertEquals(
             "Show more replies",
             compose.onNodeWithTag("comment-c1-reply-toggle").fetchSemanticsNode()
                 .config[SemanticsProperties.Text].first().text,
         )
+    }
+
+    @Test fun longReplyThreadsComposeOnlyVisibleRepliesAndPaginateAtTheRealListEnd() {
+        val thread = FixtureCommentsRepository.sampleThreads(CommentSort.Top).first()
+        val reply = thread.replies.first()
+        panelContent = CommentsContent.Ready(listOf(thread.copy(
+            replies = List(100) { reply.copy(id = "long-reply-$it") },
+        )), nextCursor = "next")
+        panelExpanded = setOf(thread.id)
+        render()
+        compose.onNodeWithTag("reply-long-reply-0").assertExists()
+        compose.onNodeWithTag("reply-long-reply-99").assertDoesNotExist()
+        compose.runOnIdle { assertTrue("Reply rows must not trigger thread pagination early", actions.isEmpty()) }
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("reply-long-reply-99"))
+        compose.onNodeWithTag("reply-long-reply-99").assertExists()
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("comment-${thread.id}-reply-toggle"))
+        compose.runOnIdle { assertEquals(listOf<CommentAction>(CommentAction.LoadMore), actions) }
+        compose.onNodeWithTag("comment-${thread.id}-reply-toggle").performClick()
+        compose.onNodeWithTag("comment-${thread.id}-reply-toggle").assertIsDisplayed().assertTextEquals("Show more replies")
+    }
+
+    @Test fun sortingStartsAtTheFirstCommentInsteadOfKeepingTheOldAnchor() {
+        val threads = (1..40).map { index ->
+            FixtureCommentsRepository.sampleThreads(CommentSort.Top).first().copy(
+                id = "sort-$index", replies = emptyList(), replyCount = 0, replyKey = null,
+            )
+        }
+        panelContent = CommentsContent.Ready(threads)
+        render()
+        compose.onNodeWithTag("comments-list").performScrollToIndex(20)
+        compose.onNodeWithTag("comments-simplebox").assertDoesNotExist()
+        compose.runOnIdle {
+            panelSort = CommentSort.Newest
+            panelContent = CommentsContent.Ready(threads.reversed())
+        }
+        compose.onNodeWithTag("comments-simplebox").assertIsDisplayed()
+        compose.onNodeWithTag("comment-sort-40").assertIsDisplayed()
     }
 
     @Test fun sortMenuSwitchesTheVisibleOrderAndCloses() {
@@ -401,15 +434,16 @@ class CommentsPanelAndroidTest {
     @Test fun menuDismissalKeepsTheListScrollPositionAndExpandedReplies() {
         panelExpanded = setOf("c1")
         render()
-        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("comment-c1-reply-toggle"))
-        val before = bounds("comment-c1")
-        compose.onNodeWithTag("comment-c1-more").performClick()
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("reply-c1r1-more"))
+        compose.onNodeWithTag("reply-c1r1-more").performScrollTo().assertIsDisplayed()
+        val before = bounds("reply-c1r1-more")
+        compose.onNodeWithTag("reply-c1r1-more").performClick()
         compose.waitForIdle()
         assertTrue(hasTag("comments-menu"))
         compose.onNodeWithContentDescription("Close menu").performClick()
         compose.waitForIdle()
         assertFalse(hasTag("comments-menu"))
-        assertEquals(before, bounds("comment-c1"))
+        assertEquals(before, bounds("reply-c1r1-more"))
         compose.onNodeWithTag("comment-c1-replies", useUnmergedTree = true).assertExists()
         assertEquals(0, closes)
     }
@@ -454,11 +488,11 @@ class CommentsPanelAndroidTest {
             val close = bounds("comments-close")
             assertTrue("Close action outside the panel in $locale", close.left >= panel.left && close.right <= panel.right)
             compose.onNodeWithTag("comments-close").assertIsDisplayed()
-            val title = textLayout("comments-title")
-            assertFalse("Clipped title in $locale: size=${title.size}, constraints=${title.layoutInput.constraints}, " +
-                "width=${title.didOverflowWidth}, height=${title.didOverflowHeight}, lines=${title.lineCount}, " +
-                "text=${title.layoutInput.text.text}", title.hasVisualOverflow)
-            assertNotEquals("Untranslated title in $locale", "Comments", title.layoutInput.text.text)
+            val count = textLayout("comments-count")
+            assertFalse("Clipped count in $locale: ${count.layoutInput.text.text}", count.hasVisualOverflow)
+            val sort = bounds("comments-sort")
+            assertTrue("Sort action outside the panel in $locale", sort.left >= panel.left && sort.right <= panel.right)
+            compose.onNodeWithTag("comments-sort").assertIsDisplayed()
             compose.onNodeWithTag("comments-sort").performClick()
             compose.onNodeWithTag("comments-sort-newest").performScrollTo().assertIsDisplayed().performClick()
             compose.onNodeWithTag("comments-close").assertIsDisplayed()
@@ -477,10 +511,10 @@ class CommentsPanelAndroidTest {
         compose.onNodeWithTag("comments-sort").performClick()
         compose.onNodeWithTag("comments-sort-newest").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithTag("comments-sort").assertTextEquals("Newest")
-        val title = textLayout("comments-title")
-        assertFalse(title.isLineEllipsized(0))
-        assertEquals("Comments".length, title.getLineEnd(0))
-        assertTrue(title.multiParagraph.intrinsics.maxIntrinsicWidth <= title.size.width)
+        val count = textLayout("comments-count")
+        assertFalse(count.isLineEllipsized(0))
+        assertEquals(panelCount.length, count.getLineEnd(0))
+        assertTrue(count.multiParagraph.intrinsics.maxIntrinsicWidth <= count.size.width)
     }
 
     @Test fun compactRailKeepsReplyActionsInsideItsBounds() {
@@ -489,6 +523,7 @@ class CommentsPanelAndroidTest {
         fontScale = 2f
         panelExpanded = setOf("c1")
         render()
+        compose.onNodeWithTag("comments-list").performScrollToNode(hasTestTag("reply-c1r1-more"))
         compose.onNodeWithTag("reply-c1r1-more").performScrollTo().assertIsDisplayed().performClick()
         assertTrue(bounds("reply-c1r1-more").right <= bounds("comments-panel").right)
         assertTrue(actions.contains(CommentAction.OpenReplyMenu("c1", "c1r1")))

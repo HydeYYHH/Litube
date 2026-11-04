@@ -181,7 +181,7 @@ class DownloadViewModel(
     fun setMaxConnections(value: Int) {
         val n = value.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
         prefs.setMaxConnections(n)
-        downloadHttp?.dispatcher?.maxRequests = n
+        downloadHttp?.let { com.hhst.youtubelite.downloader.net.DownloadHttpClients.setMaxConnections(it, n) }
     }
 
     sealed class PreviewState {

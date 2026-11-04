@@ -16,11 +16,6 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * Search cards mirror the home feed's deferred-menu read: capabilities come from the card's
- * own get_panel endpoint, are cached briefly per identity, and feedback only sends the card's
- * own token for the generation it was captured in.
- */
 class MediaSearchMenuTest {
     private val processed = """{"feedbackResponses":[{"isProcessed":true}]}"""
     private val searchWithToken = """{"contents":[{"videoRenderer":{"videoId":"v1","title":{"simpleText":"Raw"},
@@ -35,7 +30,6 @@ class MediaSearchMenuTest {
     private var now = 10L
     private val calls = mutableListOf<okhttp3.Request>()
 
-    /** Replies per path suffix; an unexpected path fails the test instead of inventing data. */
     private fun client(responses: Map<String, String>): MediaClient =
         MediaClient(OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
@@ -70,7 +64,6 @@ class MediaSearchMenuTest {
 
     @Test fun staleOrUnsignedMenusCancelInsteadOfReadingTheEndpoint() = runBlocking {
         val repo = repository()
-        // The card was captured for generation 7; the session moved on without it.
         session = session.copy(generation = 8)
         assertTrue(runCatching { repo.menu(result()) }.exceptionOrNull() is CancellationException)
         session = RequestContext(generation = 8)

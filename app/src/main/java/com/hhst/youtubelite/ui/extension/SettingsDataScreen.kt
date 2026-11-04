@@ -188,7 +188,7 @@ fun SettingsDataScreen(
         val scheme = MaterialTheme.colorScheme
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            containerColor = scheme.surface,
+            containerColor = com.hhst.youtubelite.ui.theme.AppStyle.Panel,
             titleContentColor = scheme.onSurface,
             textContentColor = scheme.onSurfaceVariant,
             title = { Text(stringResource(R.string.settings_import_confirm_title)) },

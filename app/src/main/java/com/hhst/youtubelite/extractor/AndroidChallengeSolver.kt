@@ -158,7 +158,6 @@ class AndroidChallengeSolver(
         active = key
     }
 
-    /** The cached player script text, fetched through the task transport when missing. */
     override fun playerScript(playerUrl: String, context: ExtractionContext): String = lock.run(context) {
         source(playerUrl, context).file.bufferedReader().use { it.readText() }
     }

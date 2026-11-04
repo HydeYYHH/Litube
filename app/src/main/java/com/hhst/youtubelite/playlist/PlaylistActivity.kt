@@ -31,6 +31,7 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.ui.renderNotice
+import com.hhst.youtubelite.ui.observeAccountChanges
 
 class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var playlistViewModel: PlaylistViewModel
@@ -84,6 +85,15 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 return PlaylistViewModel(if (fixtures) FixturePlaylistRepository(scenario) else sources.playlist, extras.createSavedStateHandle(), id, scenario, if (fixtures) null else sources.saves) as T
             }
         })[PlaylistViewModel::class.java]
+        if (!fixtures) {
+            fun syncSession() {
+                com.hhst.youtubelite.data.media.MediaSession.snapshot().let {
+                    playlistViewModel.updateSession(it.signedIn, it.generation)
+                }
+            }
+            syncSession()
+            observeAccountChanges(::syncSession)
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 playlistViewModel.actionNotices.collect { notice ->
@@ -122,7 +132,7 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is PlaylistNavigationRequest.Download -> downloadPlaylist()
                         is PlaylistNavigationRequest.Share -> shareGateway.sharePlaylist(request.playlistId)
                         is PlaylistNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
+                            this@PlaylistActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), playlistViewModel.uiState.value.signedIn)?.let { launchNavigation(it); finish() }
                         // Fixture-only typed exits: production runs saves and per-video actions
                         // through the in-VM save sheet. No `else`: a new request type must fail
                         // to compile here.
@@ -144,13 +154,14 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
         setAppContent {
             val state by playlistViewModel.uiState.collectAsStateWithLifecycle()
+            playlistViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             val pageColor = (state.content as? PlaylistContent.Ready)?.page?.summary?.accent
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = pageColor == null
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
             }
             val back: () -> Unit = {
-                if (playlistViewModel.saveSheet?.state?.value != null) playlistViewModel.saveSheet?.close()
+                if (playlistViewModel.saveSheet?.state?.value != null) playlistViewModel.saveSheet?.dismiss()
                 else if (state.overlay != PlaylistOverlay.None) playlistViewModel.onAction(PlaylistAction.CloseOverlay)
                 else finish()
             }
@@ -165,12 +176,13 @@ class PlaylistActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     sheetState?.let { current ->
                         if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
                             draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
-                            onDismiss = sheet::close,
+                            onDismiss = sheet::dismiss,
                             onDraftChange = { sheet.draftChanged(it.title, it.description) },
                             onSubmit = sheet::submitNewPlaylist,
+                            pending = current.pending,
                         ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
                             playlists = emptyList(),
-                            onDismiss = sheet::close,
+                            onDismiss = sheet::dismiss,
                             onSelect = {},
                             onNewPlaylist = sheet::openNewPlaylist,
                             live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(

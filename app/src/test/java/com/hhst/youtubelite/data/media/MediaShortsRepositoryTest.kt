@@ -9,11 +9,6 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * Routes every request offline by URL path: the seeded watch resolution answers, the global
- * shorts feed is rejected, so the tests prove which request the repository issues first and
- * that a rejected feed cannot block a valid seeded entry.
- */
 class MediaShortsRepositoryTest {
     private class Routed(val routes: Map<String, Pair<Int, String>>, val calls: MutableList<String>) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
@@ -37,29 +32,41 @@ class MediaShortsRepositoryTest {
         return MediaClient(OkHttpClient.Builder().addInterceptor(Routed(routes, calls)).build()) to calls
     }
 
-    @Test fun aSeededEntryResolvesFirstAndSurvivesARejectedGlobalFeed() = runBlocking {
-        val (client, calls) = routedClient(mapOf(
-            // The watch `next` resolution succeeds; every browse/reel request is rejected.
-            "/next" to (200 to """{"videoDetails":{"videoId":"seedShort1","title":"Seeded short","author":"Blender"}}"""),
-        ))
+    @Test fun aSeededEntryAttachesWithoutReadingMetadataOrTheGlobalFeed() = runBlocking {
+        val (client, calls) = routedClient(emptyMap())
         val page = MediaShortsRepository(client, startId = "seedShort1").shorts()
-        // Identity: the seeded video is the pager's first item, not a stand-in video.
         assertEquals("seedShort1", page.items.firstOrNull()?.id)
-        assertEquals("Seeded short", page.items.first().title)
-        // Order: the seeded watch resolution is the first request; the global feed never blocks it.
-        assertTrue("expected the watch resolution first, got $calls", calls.first().endsWith("/next"))
+        assertTrue(page.items.first().title.isEmpty())
+        assertEquals("https://i.ytimg.com/vi/seedShort1/hqdefault.jpg", page.items.first().artwork)
+        assertNotNull(page.nextKey)
+        assertTrue("seeded entry must not wait for an API read: $calls", calls.isEmpty())
     }
 
-    @Test fun aFailedSeedFailsTheEntryInsteadOfPlayingAnotherVideo() = runBlocking {
+    @Test fun rejectedMetadataAndFeedNeverReplaceTheRequestedSeed() = runBlocking {
         val (client, _) = routedClient(mapOf("/next" to (400 to "{}")))
-        val failure = runCatching { MediaShortsRepository(client, startId = "seedShort1").shorts() }
-            .exceptionOrNull()
-        assertTrue("expected a MediaException for the failed seed", failure is MediaException)
+        val repository = MediaShortsRepository(client, startId = "seedShort1")
+        val page = repository.shorts()
+        assertNull(repository.hydrate("seedShort1"))
+        assertTrue(runCatching { repository.shortsNext(requireNotNull(page.nextKey)) }.exceptionOrNull() is MediaException)
+        assertEquals(listOf("seedShort1"), page.items.map { it.id })
     }
 
     @Test fun aSeedlessEntryStillReportsTheGlobalFeedFailure() = runBlocking {
         val (client, _) = routedClient(mapOf("/reel/reel_watch_sequence" to (400 to "{}")))
         val failure = runCatching { MediaShortsRepository(client).shorts() }.exceptionOrNull()
         assertTrue("seedless entries keep the honest failure", failure is MediaException)
+    }
+
+    @Test fun hydrationPreservesTheViewerRatingIncludingUnknown() = runBlocking {
+        val expected = mapOf("LIKE" to com.hhst.youtubelite.watch.domain.VideoRating.Like,
+            "DISLIKE" to com.hhst.youtubelite.watch.domain.VideoRating.Dislike,
+            "INDIFFERENT" to com.hhst.youtubelite.watch.domain.VideoRating.None, "UNRECOGNIZED" to null)
+        for ((rating, value) in expected) {
+            val (client, _) = routedClient(mapOf(
+                "/next" to (200 to """{"videoDetails":{"videoId":"abcdefghijk","title":"Short"},"likeStatusEntity":{"likeStatus":"$rating"}}"""),
+                "/player" to (200 to """{"videoDetails":{"videoId":"abcdefghijk","title":"Short"}}"""),
+            ))
+            assertEquals(value, MediaShortsRepository(client).hydrate("abcdefghijk")?.rating)
+        }
     }
 }

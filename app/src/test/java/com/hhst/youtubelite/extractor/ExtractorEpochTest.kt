@@ -15,11 +15,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Offline coverage for stream-invalidation epochs and in-flight extract
- * lifecycle. Every request fails fast against a throwing interceptor, so no
- * test touches the network and no IO work outlives a test.
- */
+/** Every request fails fast: no test touches the network and no IO work outlives a test. */
 class ExtractorEpochTest {
 
     /** In-memory [Cache] recording writes; reads always miss, mirroring a cold cache. */

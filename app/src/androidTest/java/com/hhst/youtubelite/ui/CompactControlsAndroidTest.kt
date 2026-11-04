@@ -63,6 +63,8 @@ class CompactControlsAndroidTest {
         }
         for (font in listOf(1f, 2f)) {
             compose.runOnIdle { scale = font }
+            compose.onNodeWithText("Download quality").assertIsDisplayed()
+            compose.onNodeWithText("360p").assertIsDisplayed()
             val option = compose.onNodeWithTag("choice-row").fetchSemanticsNode().boundsInRoot
             val footer = compose.onNodeWithTag("choice-cancel").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             val dialog = compose.onNodeWithTag("choice-dialog").fetchSemanticsNode().boundsInRoot

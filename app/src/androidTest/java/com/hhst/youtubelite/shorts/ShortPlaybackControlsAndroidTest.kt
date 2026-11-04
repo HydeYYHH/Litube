@@ -97,6 +97,23 @@ class ShortPlaybackControlsAndroidTest {
         compose.onNodeWithTag("short-paused").assertDoesNotExist()
     }
 
+    @Test fun anAccessRestrictionEndsLoadingAndExplainsWhyPlaybackStopped() {
+        val notice = mutableStateOf<String?>(null)
+        var actions = 0
+        compose.setContent {
+            ShortPlaybackControls(false, { actions++ }, { actions++ }, {},
+                ready = false, notice = notice.value) {}
+        }
+        compose.onNodeWithTag("short-buffering").assertIsDisplayed()
+        compose.runOnIdle { notice.value = compose.activity.getString(com.hhst.youtubelite.R.string.player_payment_required) }
+        compose.onNodeWithTag("short-buffering").assertDoesNotExist()
+        compose.onNodeWithTag("short-access-notice").assertIsDisplayed()
+        compose.onNodeWithTag("short-paused").assertDoesNotExist()
+        compose.onNodeWithTag("short-playback-controls").performClick()
+        compose.onNodeWithTag("short-playback-controls").performTouchInput { longClick() }
+        compose.runOnIdle { assertEquals(0, actions) }
+    }
+
     @Test fun swipingAndBriefPlaybackTransitionsNeverShowThePauseIndicator() {
         val active = mutableStateOf(false)
         val paused = mutableStateOf(true)

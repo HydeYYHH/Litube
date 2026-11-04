@@ -17,22 +17,24 @@ object PlaybackCommandRouter {
 
     private val main = Handler(Looper.getMainLooper())
 
-    fun playPause() = post { it.onPlayPause() }
-    fun play() = post { it.onPlay() }
-    fun pause() = post { it.onPause() }
-    fun next() = post { it.onNext() }
-    fun previous() = post { it.onPrevious() }
+    fun playPause(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onPlayPause() }
+    fun play(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onPlay() }
+    fun pause(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onPause() }
+    fun stop(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onStop() }
+    fun next(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onNext() }
+    fun previous(isCurrent: () -> Boolean = { true }) = post(isCurrent) { it.onPrevious() }
 
-    private fun post(block: (Handler) -> Unit) {
+    private fun post(isCurrent: () -> Boolean, block: (Handler) -> Unit) {
         val h = handler ?: return
-        main.post { block(h) }
+        if (!isCurrent()) return
+        main.post { if (handler === h && isCurrent()) block(h) }
     }
 
-    /** Navigation handler contract (implemented by PlayerViewModel). */
     interface Handler {
         fun onPlayPause()
         fun onPlay()
         fun onPause()
+        fun onStop()
         fun onNext()
         fun onPrevious()
     }

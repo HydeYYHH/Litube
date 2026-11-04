@@ -13,6 +13,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaClientTest {
+    @Test fun optionalRepairsAcrossClientsLeaveRoomForForegroundWork() = runBlocking<Unit> {
+        val entered = CountDownLatch(2)
+        val release = CountDownLatch(1)
+        val clients = List(2) { MediaClient(OkHttpClient()) }
+        val repairs = (0 until 6).map { index ->
+            async(start = CoroutineStart.UNDISPATCHED) {
+                clients[index % 2].readBackgroundIdempotent { _, _ ->
+                    entered.countDown()
+                    check(release.await(10, TimeUnit.SECONDS))
+                }
+            }
+        }
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val foreground = (0 until 2).map { index ->
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    clients[index].read { _, _ -> "foreground-$index" }
+                }
+            }
+            assertEquals(listOf("foreground-0", "foreground-1"), withTimeout(2_000) { foreground.awaitAll() })
+            repairs.drop(2).forEach { it.cancelAndJoin() }
+            release.countDown()
+            repairs.take(2).awaitAll()
+            assertEquals("reused", withTimeout(2_000) { clients.first().readBackground { _, _ -> "reused" } })
+        } finally {
+            release.countDown()
+            repairs.forEach { it.cancelAndJoin() }
+        }
+    }
+
     @Test fun preservesEveryCookieHeaderRegardlessOfHeaderCasing() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().addHeader("set-cookie", "VISITOR_INFO1_LIVE=visitor; Path=/")
@@ -83,6 +113,57 @@ class MediaClientTest {
             active.forEach { it.cancel() }
             pending.forEach { it.cancel() }
         }
+    }
+
+    @Test fun anIdempotentReadUsesItsFirstAdmissionBeforeLaterSlowReads() = runBlocking {
+        val entered = CountDownLatch(3)
+        val captured = CountDownLatch(1)
+        val finishCapture = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val reads = client()
+        val active = (0 until 3).map {
+            async(start = CoroutineStart.UNDISPATCHED) {
+                reads.read { _, _ ->
+                    entered.countDown()
+                    check(release.await(5, TimeUnit.SECONDS))
+                }
+            }
+        }
+        var later: kotlinx.coroutines.Deferred<Unit>? = null
+        val contexts = java.util.concurrent.atomic.AtomicInteger()
+        val client = MediaClient(OkHttpClient()) {
+            if (contexts.incrementAndGet() == 1) {
+                captured.countDown()
+                check(finishCapture.await(5, TimeUnit.SECONDS))
+            }
+            RequestContext()
+        }
+        val read = async(start = CoroutineStart.UNDISPATCHED) { client.readIdempotent { _, _ -> "ready" } }
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertTrue(captured.await(5, TimeUnit.SECONDS))
+            later = async(start = CoroutineStart.UNDISPATCHED) {
+                reads.read { _, _ -> check(release.await(5, TimeUnit.SECONDS)); Unit }
+            }
+            finishCapture.countDown()
+            assertEquals("ready", withTimeout(1_000) { read.await() })
+        } finally {
+            finishCapture.countDown()
+            release.countDown()
+            read.cancel()
+            later?.cancel()
+            active.forEach { it.cancel() }
+        }
+    }
+
+    @Test fun acquiringAnIdempotentReadsContextNeverRetries() = runBlocking {
+        var contexts = 0
+        val failure = RequestError(RequestFailure.TRANSPORT, "transport_connect")
+        val client = MediaClient(OkHttpClient()) { contexts++; throw MediaException(failure) }
+        val error = runCatching { client.readIdempotent<Unit> { _, _ -> fail("Context acquisition failed") } }
+            .exceptionOrNull() as MediaException
+        assertEquals(failure, error.failure)
+        assertEquals(1, contexts)
     }
 
     @Test fun redirectsReachTheCoreWithoutFollowingTheChallenge() = runBlocking {

@@ -27,12 +27,18 @@ data class ExploreSection(
     val nextKey: String? = null,
     val append: AppendState = AppendState.Idle,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
-)
+    val emptyAutoLoads: Int = 0,
+) {
+    val automaticPagingPaused: Boolean get() = emptyAutoLoads >= 3
+}
 
 sealed interface ExploreContent {
     data object Loading : ExploreContent
     /** [append] tracks the page tail; each shelf tracks its own on [ExploreSection.append]. */
-    data class Ready(val page: ExplorePage, val append: AppendState = AppendState.Idle) : ExploreContent
+    data class Ready(val page: ExplorePage, val append: AppendState = AppendState.Idle,
+        val emptyAutoLoads: Int = 0) : ExploreContent {
+        val automaticPagingPaused: Boolean get() = emptyAutoLoads >= 3
+    }
     data object Failed : ExploreContent
 }
 
@@ -60,6 +66,8 @@ sealed interface ExploreAction {
     data class OpenPlaylist(val playlistId: String) : ExploreAction
     /** Appends the next page of the current category; also retries a failed tail. */
     data object LoadMore : ExploreAction
+    data object AutomaticLoadMore : ExploreAction
     /** Appends the next items of the shelf at [index]; also retries a failed shelf append. */
     data class LoadShelf(val index: Int) : ExploreAction
+    data class AutomaticLoadShelf(val index: Int) : ExploreAction
 }

@@ -38,10 +38,11 @@ data class DlnaUiState(
     val failure: CastFailureReport? = null,
 )
 
-/** Renderer discovery, transport and playback commands. */
 interface DlnaEngine {
     suspend fun search(timeoutMs: Long): List<DLNACast.Device>
     suspend fun cast(device: DLNACast.Device, url: String, title: String, mimeType: String): Boolean
+    /** Confirm the newly opened media before publishing controls or sending a seek/pause. */
+    suspend fun awaitMediaReady(url: String) = Unit
     suspend fun play(): Boolean
     suspend fun pause(): Boolean
     suspend fun stop(): Boolean
@@ -51,7 +52,6 @@ interface DlnaEngine {
     fun clearProgressCache()
 }
 
-/** Owns one renderer session and discovers devices while the picker is open. */
 @UnstableApi
 class DlnaController(
     private val appContext: Context,
@@ -92,6 +92,8 @@ class DlnaController(
     }
 
     fun remotePlayer(): Player? = if (_state.value.session) player as? Player else null
+
+    fun selectedHost(): String? = endpoints[selectedId]?.id?.let { DlnaDescription.location(it)?.host }
 
     /** DLNA discovery is SSDP: search bursts only while the picker is open. */
     fun setDiscoveryEnabled(enabled: Boolean) {
@@ -138,13 +140,11 @@ class DlnaController(
     }
 
     /**
-     * Pushes the muxed [source] at [streamUrl] onto the selected renderer.
-     * DLNA has no session handshake, so the cast itself is the connection;
-     * selecting a route ([selectDevice]) must happen first. A [positionMs]
-     * resume lands as a follow-up seek because SetAVTransportURI always
-     * starts at 0.
+     * DLNA has no session handshake — the cast itself is the connection, so [selectDevice]
+     * must run first. A [positionMs] resume lands as a follow-up seek because
+     * SetAVTransportURI always starts at 0.
      */
-    suspend fun startCasting(source: CastSource, positionMs: Long, streamUrl: String): Boolean {
+    suspend fun startCasting(source: CastSource, positionMs: Long, streamUrl: String, autoplay: Boolean = true): Boolean {
         initialize()
         val device = endpoints[selectedId]
         if (device == null) {
@@ -156,29 +156,48 @@ class DlnaController(
         val generation = ++sessionGeneration
         loadJob?.cancel()
         pollJob?.cancel()
+        // Fence commands from the previous media before the first transport suspension.
+        // A queued Pause can otherwise return "old session" while a quality reload is in
+        // flight and incorrectly fail the still-old remote player's generation.
+        val pendingPlayer = player
+        pendingPlayer?.loading(source, positionMs.coerceAtLeast(0), autoplay)
         lastRemotePosition = positionMs.coerceAtLeast(0)
+        var stage = "load"
         val started = attempt {
             coroutineScope {
                 val pending = async {
-                    withTimeout(COMMAND_TIMEOUT_MS) {
-                        commands.withLock {
-                            if (generation != sessionGeneration) return@withLock false
-                            engine.clearProgressCache()
-                            transportPending = true
-                            val ok = engine.cast(device, streamUrl, source.title,
+                    commands.withLock {
+                        if (generation != sessionGeneration) return@withLock false
+                        engine.clearProgressCache()
+                        transportPending = true
+                        val ok = withTimeout(LOAD_TIMEOUT_MS) {
+                            engine.cast(device, streamUrl, source.title,
                                 source.video?.mimeType?.takeIf(String::isNotBlank) ?: "video/mp4")
-                            if (ok && generation == sessionGeneration && positionMs > 0) {
+                        }
+                        if (ok && generation == sessionGeneration) {
+                            stage = "media_ready"
+                            withTimeout(READY_TIMEOUT_MS) { engine.awaitMediaReady(streamUrl) }
+                        }
+                        if (ok && generation == sessionGeneration && positionMs > 0) {
+                            stage = "resume_seek"
+                            withTimeout(COMMAND_TIMEOUT_MS) {
                                 check(engine.seek(positionMs)) { "Renderer rejected resume position" }
                             }
-                            ok && generation == sessionGeneration
                         }
+                        if (ok && generation == sessionGeneration && !autoplay) {
+                            stage = "pause"
+                            withTimeout(COMMAND_TIMEOUT_MS) {
+                                check(engine.pause()) { "Renderer rejected paused playback" }
+                            }
+                        }
+                        ok && generation == sessionGeneration
                     }
                 }
                 loadJob = pending
                 try { pending.await() } finally { if (loadJob === pending) loadJob = null }
             }
         }.onFailure {
-            reportFailure(it, source.videoId, "start")
+            reportFailure(it, source.videoId, stage)
             AppLog.event(AppLog.Category.CAST, "dlna_cast_failed",
                 failure = it, context = DiagnosticContext(videoId = source.videoId))
         }.getOrDefault(false)
@@ -194,7 +213,7 @@ class DlnaController(
         lastDevice = device
         val p = player ?: playerFactory(scope, sessionEngine(), ::reloadMedia)
         player = p
-        p?.loading(source, positionMs.coerceAtLeast(0))
+        if (p !== pendingPlayer) p?.loading(source, positionMs.coerceAtLeast(0), autoplay)
         _state.update { it.copy(session = true, deviceName = device.name) }
         startPolling(generation, p)
         AppLog.event(AppLog.Category.CAST, "dlna_cast_started",
@@ -256,10 +275,8 @@ class DlnaController(
         if (failed) onSessionFailed?.invoke() else onSessionEnded?.invoke()
     }
 
-    /**
-     * Stops the renderer, clears the session state (callbacks fire only via
-     * the poll's echo path), and returns the last known remote position.
-     */
+    /** Stops the renderer and returns the last known remote position (session callbacks fire
+     *  only via the poll's echo path). */
     fun stopCasting(): Long {
         val hadSession = transportPending || player != null || loadJob != null
         transportPending = false
@@ -314,17 +331,28 @@ class DlnaController(
         val device = lastDevice ?: return
         val generation = sessionGeneration
         scope.launch {
+            var stage = "reload"
             val ok = attempt {
-                withTimeout(COMMAND_TIMEOUT_MS) { commands.withLock {
+                commands.withLock {
                     if (generation != sessionGeneration) return@withLock false
                     engine.clearProgressCache()
-                    val started = engine.cast(device, url, source.title,
-                        source.video?.mimeType?.takeIf(String::isNotBlank) ?: "video/mp4")
-                    if (started && generation == sessionGeneration && startMs > 0) check(engine.seek(startMs))
+                    val started = withTimeout(LOAD_TIMEOUT_MS) {
+                        engine.cast(device, url, source.title,
+                            source.video?.mimeType?.takeIf(String::isNotBlank) ?: "video/mp4")
+                    }
+                    if (started && generation == sessionGeneration) {
+                        stage = "media_ready"
+                        withTimeout(READY_TIMEOUT_MS) { engine.awaitMediaReady(url) }
+                    }
+                    if (generation != sessionGeneration) return@withLock false
+                    if (started && startMs > 0) {
+                        stage = "resume_seek"
+                        withTimeout(COMMAND_TIMEOUT_MS) { check(engine.seek(startMs)) }
+                    }
                     started
-                } }
+                }
             }.onFailure {
-                reportFailure(it, source.videoId, "reload")
+                reportFailure(it, source.videoId, stage)
                 AppLog.event(AppLog.Category.CAST, "dlna_reload_failed",
                     failure = it, context = DiagnosticContext(videoId = source.videoId))
             }.getOrDefault(false)
@@ -356,11 +384,8 @@ class DlnaController(
         override suspend fun stop() = command { engine.stop() }
     }
 
-    /**
-     * A local-network change invalidates the old socket factory and usually the
-     * renderer address, so an in-flight session is ended explicitly (with a
-     * report) instead of continuing against a dead connection.
-     */
+    /** A local-network change invalidates the socket factory and usually the renderer address:
+     *  end the in-flight session (with a report) instead of continuing on a dead connection. */
     internal fun onLocalNetworkChanged() {
         scope.launch {
             val generation = sessionGeneration
@@ -398,7 +423,11 @@ class DlnaController(
         private const val SEARCH_INTERVAL_MS = 15_000L
         private const val POLL_INTERVAL_MS = 1_000L
         private const val COMMAND_TIMEOUT_MS = 10_000L
-        private const val MAX_INACTIVE_POLLS = 15
+        // Description, SetURI and Play each have their own HTTP deadline. A slow renderer
+        // must not spend the entire resume/pause budget merely opening its media.
+        private const val LOAD_TIMEOUT_MS = 30_000L
+        private const val READY_TIMEOUT_MS = 25_000L
+        private const val MAX_INACTIVE_POLLS = 30
 
         /** Test timing seam: poll cadence used by DlnaControllerTest. */
         internal const val POLL_FOR_TEST_MS = POLL_INTERVAL_MS

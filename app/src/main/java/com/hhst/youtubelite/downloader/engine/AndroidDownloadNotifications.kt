@@ -17,6 +17,7 @@ import com.hhst.youtubelite.downloader.ui.DownloadActionReceiver
 import com.hhst.youtubelite.downloader.ui.DownloadActions
 import com.hhst.youtubelite.extractor.Promise
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -130,17 +131,16 @@ class DownloadNotificationWatcher(
     private val coordinator: DownloadCoordinator,
     private val repository: DownloadRepository,
     private val controller: DownloadNotificationController,
+    private val scope: CoroutineScope = Promise.DEFAULT_SCOPE,
 ) {
     private var job: Job? = null
 
     fun start() {
         if (job != null) return
-        job = Promise.DEFAULT_SCOPE.launch {
+        job = scope.launch {
             var restoring = true
             coordinator.observeDownloads(DownloadFilter()).distinctUntilChanged().collect { snaps ->
-                val batchIds = snaps.mapNotNull { snap ->
-                    coordinator.batchIdForTask(snap.task.id)
-                }.distinct()
+                val batchIds = snaps.mapNotNull { it.batchId }.distinct()
                 batchIds.forEach { batchId ->
                     val view = repository.transact { batchView(batchId) } ?: return@forEach
                     if (restoring) controller.restore(view)

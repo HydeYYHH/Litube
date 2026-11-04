@@ -44,12 +44,14 @@ class MediaResponseRecoveryAndroidTest {
     @Test fun refusedCaptionsPreserveThePausedPosition() = exercise("text/html", captions = true, pause = true)
     @Test fun missingHlsManifestChangesSourceAndDecodes() = exercise("text/html", missingManifest = true)
     @Test fun persistentlyMissingHlsManifestStopsAfterOneFreshExtraction() = exercise("text/html", missingManifest = true, persistent = true)
+    @Test fun closedTlsConnectionUsesExistingManifestWithoutRefreshingTheClient() = exercise("", transport = true)
 
     private fun exercise(type: String, persistent: Boolean = false, pause: Boolean = false, captions: Boolean = false,
-                         missingManifest: Boolean = false) {
+                         missingManifest: Boolean = false, transport: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
-        val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
+        val audio = instrumentation.context.assets.open(if (transport) "player/quality-recovery/720.ts" else "player/audio-original/audio.ts").use { it.readBytes() }
+        val dashAudio = if (transport) instrumentation.context.assets.open("player/prefetch/audio.mp4").use { it.readBytes() } else null
         val rejected = AtomicInteger()
         lateinit var engine: PlaybackEngine
         val server = MockWebServer().apply {
@@ -69,6 +71,19 @@ class MediaResponseRecoveryAndroidTest {
                         MockResponse().setResponseCode(404).setHeader("Content-Type", type).setBody("Not found")
                     }
                     "/audio.ts" -> MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(audio))
+                    "/dash-audio.mp4" -> {
+                        val bytes = requireNotNull(dashAudio)
+                        val range = request.requestUrl?.queryParameter("range")
+                            ?: request.getHeader("Range")?.removePrefix("bytes=") ?: "0-"
+                        val from = range.substringBefore('-').toInt()
+                        val to = range.substringAfter('-').toIntOrNull()?.coerceAtMost(bytes.lastIndex) ?: bytes.lastIndex
+                        if (from > to) MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */${bytes.size}")
+                        else MockResponse().setResponseCode(206).setHeader("Content-Type", "audio/mp4")
+                            .setHeader("Content-Range", "bytes $from-$to/${bytes.size}")
+                            .setBody(Buffer().write(bytes, from, to - from + 1))
+                            // Let the video TLS failure select HLS before this independent audio load completes.
+                            .setHeadersDelay(1, java.util.concurrent.TimeUnit.SECONDS)
+                    }
                     else -> MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl").setBody("""
                         #EXTM3U
                         #EXT-X-TARGETDURATION:21
@@ -98,6 +113,19 @@ class MediaResponseRecoveryAndroidTest {
             hlsUrl = server.url("/master.m3u8").toString()
             hlsRequestPlan = MediaRequestPlan(session, StreamClient.VISIONOS, MediaProtocol.HLS, MediaRange.NONE)
             if (captions) subtitles = listOf(Subtitle(server.url("/refused.vtt").toString(), "en", mimeType = "text/vtt"))
+        }
+        if (transport) {
+            bad.hlsUrl = good.hlsUrl; bad.hlsRequestPlan = good.hlsRequestPlan
+            // Adaptive DASH requires separate video and audio formats; a ranged muxed itag 18 would be bypassed in favor of HLS and never exercise the TLS failure.
+            bad.formats = listOf(
+                Format(url = refusedUrl, height = 360, width = 640, itag = 134, videoOnly = true,
+                    codec = "avc1.42001e", mimeType = "video/mp4", requestPlan = plan,
+                    initStart = 0, initEnd = 31, indexStart = 32, indexEnd = 63),
+                Format(url = server.url("/dash-audio.mp4").toString(), itag = 140, audioOnly = true,
+                    codec = "mp4a.40.2", mimeType = "audio/mp4", bitrate = 64_000,
+                    sampleRate = 48_000, audioChannels = 1, requestPlan = plan,
+                    initStart = 0, initEnd = 731, indexStart = 732, indexEnd = 783, approxDurationMs = 4_000),
+            )
         }
         val plans = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
         val refreshes = AtomicInteger()
@@ -133,13 +161,23 @@ class MediaResponseRecoveryAndroidTest {
             override fun recoveryScope(): String = "error-doc"
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val http = OkHttpClient()
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            if (transport && chain.request().url.encodedPath == "/refused.mp4") {
+                rejected.incrementAndGet()
+                throw javax.net.ssl.SSLHandshakeException("connection closed").apply { initCause(java.io.EOFException("connection closed")) }
+            }
+            chain.proceed(chain.request())
+        }.build()
         val prefs = GlobalContext.get().get<ExtensionManager>()
         val previous = listOf(PreferenceKeys.SKIP_SPONSORS, PreferenceKeys.SKIP_SELF_PROMO,
             PreferenceKeys.SKIP_POI_HIGHLIGHT).associateWith(prefs::isEnabled)
         var player: ExoPlayer? = null
+        var surface: android.view.SurfaceView? = null
         try {
             previous.keys.forEach { prefs.setEnabled(it, false) }
+            if (transport) activity.scenario.onActivity { host ->
+                surface = android.view.SurfaceView(host).also(host::setContentView)
+            }
             instrumentation.runOnMainSync {
                 val cache = MemoryJsonCache().apply {
                     if (captions) put("player:subtitle_language", "en|manual", 60_000)
@@ -148,6 +186,7 @@ class MediaResponseRecoveryAndroidTest {
                     MediaSourceResolver(PlayerDataSource.create(app, http, plans)), cache, prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
+                if (transport) { engine.setVideoSurface(surface); engine.setVideoVisible(true) }
                 engine.play("https://www.youtube.com/watch?v=errorDoc001&t=5")
             }
             var settled = false
@@ -157,16 +196,16 @@ class MediaResponseRecoveryAndroidTest {
                     val current = requireNotNull(player)
                     current.audioDecoderCounters?.ensureUpdated()
                     settled = if (persistent) engine.snapshot.value.error != null else
-                        (if (captions) rejected.get() > 0 && engine.snapshot.value.subtitleKey == null else refreshes.get() > 0) &&
+                        (if (transport) engine.snapshot.value.firstFrameRendered else if (captions) rejected.get() > 0 && engine.snapshot.value.subtitleKey == null else refreshes.get() > 0) &&
                         current.playbackState == Player.STATE_READY &&
                         (pause || current.isPlaying && (current.audioDecoderCounters?.renderedOutputBufferCount ?: 0) > 0)
                 }
                 if (!settled) Thread.sleep(50)
             }
             assertTrue("Recovery did not settle: ${engine.snapshot.value}", settled)
-            assertEquals("Only refused media sources need a fresh extraction", if (captions) 0 else 1, refreshes.get())
-            if (captions) assertTrue(rejected.get() in 1..4) else assertEquals(if (persistent) 2 else 1, rejected.get())
-            assertEquals(if (captions) 0 else if (persistent) 2 else 1, feedback.size)
+            assertEquals("Transport fallback must reuse the issued manifest", if (captions || transport) 0 else 1, refreshes.get())
+            assertEquals(if (persistent) 2 else 1, rejected.get())
+            assertEquals(if (captions || transport) 0 else if (persistent) 2 else 1, feedback.size)
             instrumentation.runOnMainSync {
                 if (persistent) {
                     assertNotNull(engine.snapshot.value.error)
@@ -180,6 +219,7 @@ class MediaResponseRecoveryAndroidTest {
                 } else {
                     assertNull(engine.snapshot.value.error)
                     assertNull(engine.snapshot.value.failureReport)
+                    if (transport) assertEquals(720, requireNotNull(player).videoFormat?.height)
                     assertTrue("Recovery lost the requested position", requireNotNull(player).currentPosition >= 5_000)
                     assertEquals(!pause, engine.snapshot.value.userWantsPlay)
                     assertEquals(!pause, requireNotNull(player).isPlaying)

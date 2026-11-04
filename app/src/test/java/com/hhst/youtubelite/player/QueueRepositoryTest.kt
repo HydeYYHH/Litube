@@ -74,7 +74,6 @@ class QueueRepositoryTest {
         val repo = QueueRepository(MemJsonCache())
         repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
         assertEquals(vid("b"), repo.nextStrict(vid("a"))?.videoId)
-        // Tail: navigation stops instead of looping back to the head.
         assertNull(repo.nextStrict(vid("c")))
         assertNull(repo.previous(vid("a")))
         assertEquals(vid("a"), repo.previous(vid("b"))?.videoId)
@@ -95,7 +94,7 @@ class QueueRepositoryTest {
         repo.add(item("a")); repo.add(item("b")); repo.add(item("c"))
         repo.move(0, 2)
         assertEquals(listOf(vid("b"), vid("c"), vid("a")), repo.state.value.items.map { it.videoId })
-        repo.move(5, 0) // out of bounds: no-op
+        repo.move(5, 0)
         assertEquals(listOf(vid("b"), vid("c"), vid("a")), repo.state.value.items.map { it.videoId })
     }
 
@@ -178,7 +177,6 @@ class QueueRepositoryTest {
         repeat(60) { repo.addNext(item("v$it")) }
         assertEquals(50, repo.state.value.items.size)
         assertTrue(repo.state.value.items.any { it.videoId == playing.videoId })
-        // The most recent "play next" target sits right after the playing item.
         assertEquals(playing.videoId, repo.state.value.items.first().videoId)
         assertEquals(vid("v59"), repo.state.value.items[1].videoId)
     }
@@ -241,8 +239,6 @@ class QueueRepositoryTest {
         assertTrue(repo.state.value.enabled)
         assertTrue(repo.state.value.items.isEmpty())
     }
-
-    // -- identity isolation --
 
     private val accountA = QueueOwner.account("acct-A")
     private val accountB = QueueOwner.account("acct-B")

@@ -13,6 +13,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaCommentsRepositoryTest {
+    @Test fun newestUsesTheOpeningSortKeyWithoutFetchingTopAndKeepsTheCreationToken() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"engagementPanelSectionListRenderer":{"panelIdentifier":"engagement-panel-comments-section","content":{"continuationEndpoint":{"continuationCommand":{"token":"top-comments"}}}},"sortFilterSubMenuRenderer":{"subMenuItems":[{"title":"Newest first","selected":false,"serviceEndpoint":{"continuationCommand":{"token":"newest"}}}]},"createCommentEndpoint":{"createCommentParams":"opening-create-key"}}"""))
+            server.enqueue(MockResponse().setBody("""{"continuationContents":{"itemSectionContinuation":{"contents":[{"commentRenderer":{"commentId":"newest-comment","contentText":{"simpleText":"Newest"}}}]}}}"""))
+            server.enqueue(MockResponse().setBody("""{"commentRenderer":{"commentId":"created","contentText":{"simpleText":"Hello"}}}"""))
+            val transport = OkHttpClient.Builder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().url(server.url(chain.request().url.encodedPath)).build())
+            }.build()
+            val repository = MediaCommentsRepository(MediaClient(transport) { RequestContext(accessToken = "access", generation = 7) })
+            val target = CommentTarget.Video("abcdefghijk")
+            val page = repository.comments(target, CommentSort.Newest, null)
+            assertEquals(listOf("newest-comment"), page.threads.map { it.id })
+            assertFalse(page.sortFallback)
+            assertEquals(2, server.requestCount)
+            assertTrue(server.takeRequest().body.readUtf8().contains("\"videoId\":\"abcdefghijk\""))
+            val selected = server.takeRequest().body.readUtf8()
+            assertTrue(selected.contains("\"continuation\":\"newest\""))
+            assertFalse(selected.contains("top-comments"))
+            repository.perform(CommentNavigationRequest.SubmitComment(target, "Hello"))
+            assertTrue(server.takeRequest().body.readUtf8().contains("\"createCommentParams\":\"opening-create-key\""))
+            assertEquals(3, server.requestCount)
+        }
+    }
+
     @Test fun aVideoReadWithoutCreationTokensCanSubmitExactlyOnce() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"engagementPanelSectionListRenderer":{"panelIdentifier":"engagement-panel-comments-section","content":{"continuationEndpoint":{"continuationCommand":{"token":"comments"}}}}}"""))

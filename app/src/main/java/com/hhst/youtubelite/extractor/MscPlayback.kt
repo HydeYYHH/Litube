@@ -24,6 +24,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure
 import com.liskovsoft.youtubeapi.videoinfo.V2.TokenPurpose
 import com.liskovsoft.youtubeapi.videoinfo.V2.WebSession
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadWatch
+import com.liskovsoft.youtubeapi.videoinfo.V2.transportError
 import java.io.IOException
 
 /**
@@ -38,8 +39,9 @@ class MscPlayback(
     private val onAnonymousVisitor: (String?, Long) -> Unit = { _, _ -> },
     private val sharedWatchReads: com.hhst.youtubelite.data.media.SharedWatchReads? = null,
 ) {
-    private class Task(val context: ExtractionContext, val videoId: String) {
+    private class Task(var context: ExtractionContext, val videoId: String) {
         val attempts = mutableListOf<PlayerLoadAttempt>()
+        fun webContext(): ExtractionContext = context.withWebConfiguration().also { context = it }
     }
 
     private val active = ThreadLocal<Task?>()
@@ -50,6 +52,10 @@ class MscPlayback(
         solver = SolverAdapter(),
         tokens = TokenAdapter(),
         scripts = ScriptProvider(),
+        // Ordinary VOD can start from direct DASH without paying for a web media token and
+        // remote HLS playlists. Keep the account-bearing clients in the same fallback queue:
+        // content that needs them still resolves with the original account context.
+        queues = com.liskovsoft.youtubeapi.videoinfo.V2.PlayerClientQueues(PlayerClient.VISIONOS),
         onAttempt = { attempt ->
             active.get()?.let { task ->
                 task.attempts += attempt
@@ -60,7 +66,6 @@ class MscPlayback(
         },
     )
 
-    /** One mapped result of a core playback load. */
     class Resolved(val metadata: Metadata, val stream: Stream)
 
     fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean,
@@ -79,9 +84,19 @@ class MscPlayback(
             val request = requestContext(context)
             fun failure(error: RequestError) = PlaybackResolutionException(error, PlaybackResolutionDiagnostics(
                 if (request.signedIn) "AUTHENTICATED" else "ANONYMOUS",
-                context.session.configurationSource, context.session.networkGeneration, task.attempts.takeLast(12)))
-            val loaded = session.load(videoId, request, preference, fresh = fresh,
-                includeMuxedFloor = context.catalog || fresh, deferred = deferred.map(::toPlayerClient).toSet())
+                task.context.session.configurationSource, task.context.session.networkGeneration, task.attempts.takeLast(12)))
+            fun load() = session.load(videoId, request, preference, fresh = fresh,
+                includeMuxedFloor = context.catalog || fresh, deferred = deferred.map(::toPlayerClient).toSet(),
+                cacheNamespace = playbackCacheNamespace(context))
+            var loaded = load()
+            context.check()
+            if (!fresh && loaded.error?.kind == RequestFailure.CANCELLED && task.attempts.isEmpty()) {
+                // MSC can share work across different extraction demands. A cancelled
+                // speculative owner must not cancel this still-current foreground task.
+                context.diagnostics.event("stream-shared-owner", "MSC", "CANCELLED_RESTART", 0, 0)
+                loaded = load()
+                context.check()
+            }
             if (!loaded.ok) throw failure(
                 loaded.error ?: RequestError(RequestFailure.UNSUPPORTED, "no_playable_source"))
             val value = loaded.value!!
@@ -95,9 +110,30 @@ class MscPlayback(
                 throw failure(
                     RequestError(RequestFailure.UNSUPPORTED, "sabr_only", detail = answer.status))
             }
-            return Resolved(mapMetadata(videoId, answer), mapStream(value, context))
+            // Cached loads may skip the script adapter that normally prepares this identity.
+            if (value.client !in setOf(PlayerClient.VISIONOS, PlayerClient.ANDROID_VR)) task.webContext()
+            val stream = mapStream(value, task.context)
+            // A playable fallback (notably muxed HLS) can omit the audio catalog.
+            // Catalog reads may probe one other client; startup never waits for it.
+            if (context.catalog && !answer.live && stream.namedAudioTracks() < 2) {
+                val alternate = if (value.client == PlayerClient.VISIONOS) PlayerClient.WEB_SAFARI else PlayerClient.VISIONOS
+                val supplement = session.load(videoId, request, preference, fresh = false,
+                    excluded = PlayerClient.entries.filter { it != alternate }.toSet(), includeMuxedFloor = false,
+                    cacheNamespace = playbackCacheNamespace(context))
+                supplement.value?.takeIf { supplement.ok && it.answer?.live == false }?.let {
+                    val extra = mapStream(it, task.context)
+                    stream.formats = (stream.formats + extra.formats).distinctBy { format -> format.url }
+                }
+            }
+            return Resolved(mapMetadata(videoId, answer), stream)
         }
     }
+
+    private fun Stream.namedAudioTracks(): Int = formats.filter { it.audioOnly }
+        .mapNotNull { it.audioTrackId ?: it.audioLocale ?: it.audioTrackName }.distinct().size
+
+    private fun playbackCacheNamespace(context: ExtractionContext): String =
+        "${context.session.key}:${context.session.networkGeneration}"
 
     fun chapters(videoId: String, context: ExtractionContext): List<Chapter> {
         withTask(Task(context, videoId)) {
@@ -138,14 +174,17 @@ class MscPlayback(
         )
     }
 
-    // -- transport --
-
-    /** Translates core requests onto the task's bounded, browser-aware transport. */
     private inner class HttpClientBridge : HttpClient {
         override fun execute(request: HttpRequest): HttpReply {
             val task = active.get() ?: throw IOException("playback_bridge_idle")
             val context = task.context
-            val headers = request.headers.mapValues { listOf(it.value) }
+            val headers = request.headers.toMutableMap().apply {
+                // WEB tokens are minted under the captured browser identity. Do not send
+                // /player with a hardcoded desktop UA and then read media with another UA.
+                if (get("User-Agent") == com.liskovsoft.youtubeapi.videoinfo.V2.playerUserAgent(PlayerClient.WEB)) {
+                    put("User-Agent", StreamClient.WEB.userAgent(context.session))
+                }
+            }.mapValues { listOf(it.value) }
             val response = if (request.method == "POST")
                 context.post(request.url, headers, request.body.toByteArray())
             else context.get(request.url, headers)
@@ -153,8 +192,6 @@ class MscPlayback(
                 response.responseHeaders.mapValues { it.value.joinToString(", ") })
         }
     }
-
-    // -- adapters --
 
     internal inner class SolverAdapter : PlayerSolver {
         override fun solve(request: PlayerChallengeRequest): PlayerChallenge {
@@ -167,9 +204,9 @@ class MscPlayback(
     internal inner class TokenAdapter : PlayerTokenProvider {
         override fun token(request: PlayerTokenRequest): PlayerToken? {
             val task = active.get() ?: return null
-            val context = task.context
             val client = mapClient(request.client)
             if (!client.webTokens) return null
+            val context = task.webContext()
             val purpose = when (request.purpose) {
                 TokenPurpose.PLAYER -> PoTokenMinter.Purpose.PLAYER
                 TokenPurpose.MEDIA -> PoTokenMinter.Purpose.GVS
@@ -202,19 +239,20 @@ class MscPlayback(
 
     internal inner class ScriptProvider : PlayerScriptProvider {
         override fun cacheKey(videoId: String, context: RequestContext): String? =
-            active.get()?.context?.session?.playerUrl
+            active.get()?.context?.session?.let { it.playerUrl ?: it.key.takeIf { _ -> it.nativeBootstrap } }
 
         override fun script(videoId: String, context: RequestContext, fresh: Boolean): ReadResult<PlayerScript> {
             val task = active.get()
                 ?: return ReadResult(error = RequestError(RequestFailure.TRANSPORT, "playback_bridge_idle"))
-            val playerUrl = task.context.session.playerUrl
+            val web = task.webContext()
+            val playerUrl = web.session.playerUrl
                 ?: return ReadResult(error = RequestError(RequestFailure.TRANSPORT, "missing_player_script"))
             return try {
-                val source = solver.playerScript(playerUrl, task.context)
+                val source = solver.playerScript(playerUrl, web)
                 if (source.isBlank()) ReadResult(error = RequestError(RequestFailure.TRANSPORT, "empty_player_script"))
                 else ReadResult(PlayerScript(playerUrl, source))
-            } catch (_: IOException) {
-                ReadResult(error = RequestError(RequestFailure.TRANSPORT, "player_script_failed"))
+            } catch (failure: IOException) {
+                ReadResult(error = transportError(failure))
             }
         }
     }
@@ -226,6 +264,7 @@ class MscPlayback(
             PlayerClient.WEB_EMBED -> StreamClient.WEB_EMBED
             PlayerClient.WEB_SAFARI -> StreamClient.WEB_SAFARI
             PlayerClient.TV -> StreamClient.TV
+            PlayerClient.TV_TIZEN -> StreamClient.TV_TIZEN
             PlayerClient.ANDROID_VR -> StreamClient.ANDROID_VR
         }
 
@@ -235,6 +274,7 @@ class MscPlayback(
             StreamClient.WEB_EMBED -> PlayerClient.WEB_EMBED
             StreamClient.WEB_SAFARI -> PlayerClient.WEB_SAFARI
             StreamClient.TV -> PlayerClient.TV
+            StreamClient.TV_TIZEN -> PlayerClient.TV_TIZEN
             StreamClient.ANDROID_VR -> PlayerClient.ANDROID_VR
         }
 
@@ -263,7 +303,21 @@ class MscPlayback(
 
 /** Core resolution failure with its protocol-level error, for recovery classification. */
 class PlaybackResolutionException(val error: RequestError, val diagnostics: PlaybackResolutionDiagnostics? = null) :
-    IOException("${error.kind.name}:${error.code}")
+    IOException("${error.kind.name}:${error.code}") {
+    /** Evaluated only after the normal client queue failed, including authorized fallbacks. */
+    val paymentRequired: Boolean get() {
+        val attempts = diagnostics?.attempts.orEmpty()
+        if (error.kind != RequestFailure.UNSUPPORTED || attempts.any {
+                it.status == "OK" || it.error?.kind == RequestFailure.AUTH || it.error?.status in listOf(401, 403)
+            }) return false
+        val paid = attempts.filter { it.restriction == com.liskovsoft.youtubeapi.videoinfo.V2.PlayerAccessRestriction.PAYMENT_REQUIRED }
+        val login = attempts.filter { it.restriction == com.liskovsoft.youtubeapi.videoinfo.V2.PlayerAccessRestriction.LOGIN_REQUIRED }
+        // An authenticated denial can establish payment even when an anonymous
+        // client requested age/sign-in verification. A real auth failure cannot.
+        return login.none { it.authenticated } &&
+            (paid.any { it.authenticated } || (paid.isNotEmpty() && login.isEmpty()))
+    }
+}
 
 data class PlaybackResolutionDiagnostics(val accountState: String, val configurationSource: String,
     val networkGeneration: Long, val attempts: List<PlayerLoadAttempt>)

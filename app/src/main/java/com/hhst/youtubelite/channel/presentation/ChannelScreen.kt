@@ -1,6 +1,14 @@
 package com.hhst.youtubelite.channel.presentation
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -15,6 +23,8 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -32,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -74,6 +86,8 @@ import com.hhst.youtubelite.ui.design.appDescription
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 private val SubscribeForeground = Color(0xFFF1F1F1)
 
@@ -85,16 +99,17 @@ fun ChannelScreen(
     onAction: (ChannelAction) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    postInteractions: com.hhst.youtubelite.post.presentation.PostCardInteractions? = null,
 ) {
+    val appBar = rememberAppBarCollapseState(state.channelId, enabled = state.overlay == ChannelOverlay.None && state.content is ChannelContent.Ready)
     AppTheme {
         val hideShorts = LocalHideShorts.current
         LaunchedEffect(hideShorts, state.selectedTab) {
             if (hideShorts && state.selectedTab == ChannelTab.Shorts) onAction(ChannelAction.SelectTab(ChannelTab.Home))
         }
-        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("channel-page")) {
+        BoxWithConstraints(modifier.fillMaxSize().nestedScroll(appBar.connection).background(DesignTokens.Background).testTag("channel-page")) {
             val width = maxWidth.value
             val height = maxHeight.value
-            // Each tab owns a list state that survives tab switches and activity recreation.
             val homeState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val videosState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val searchState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
@@ -104,6 +119,8 @@ fun ChannelScreen(
             val liveState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val postsState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
             val postState = rememberSaveableStateHolder()
+            // Every tab has its own list, but the tab strip is one continuous control.
+            val tabBarState = rememberChannelTabBarState()
             fun listFor(tab: ChannelTab) = when (tab) {
                 ChannelTab.Search -> searchState
                 ChannelTab.Home -> homeState
@@ -137,42 +154,71 @@ fun ChannelScreen(
                 }
             }
             Column(Modifier.fillMaxSize().then(if (state.overlay != ChannelOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-                ChannelTopBar(state, onBack, onAction)
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when (val content = state.content) {
-                        ChannelContent.Loading -> ChannelSkeleton(width)
-                        ChannelContent.Failed -> if (state.verification != null) VerificationCard(
-                            state.verification,
-                            onVerify = { onAction(ChannelAction.OpenVerification(state.verification!!.challengeUrl)) },
-                            onDismiss = { onAction(ChannelAction.DismissVerification) },
-                            modifier = Modifier.testTag("channel-verification"),
-                        ) else ChannelFailed(onAction)
-                        is ChannelContent.Ready -> when (state.selectedTab) {
-                            ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction,
-                                state.searchResults, canPage = state.searchNextKey != null, append = state.searchAppend)
-                            ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction)
-                            ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, state.playlists, onAction,
-                                canPage = state.playlistsNextKey != null, append = state.playlistsAppend)
-                            ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction,
-                                production = state.production, canPage = state.shortsNextKey != null, append = state.shortsAppend)
-                            ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction,
-                                canPage = state.liveNextKey != null, append = state.liveAppend)
-                            ChannelTab.Posts -> postState.SaveableStateProvider(state.channelId) {
-                                ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction,
-                                    production = state.production, canPage = state.postsNextKey != null, append = state.postsAppend)
+                CollapsingAppBar(appBar) {
+                    ChannelTopBar(state, onBack, onAction)
+
+                }
+                val sectionLoading = when (state.selectedTab) {
+                    ChannelTab.Videos -> state.videosTab is ChannelSection.Loading
+                    ChannelTab.Playlists -> state.playlists is ChannelSection.Loading
+                    ChannelTab.Shorts -> state.shorts is ChannelSection.Loading
+                    ChannelTab.Live -> state.live is ChannelSection.Loading
+                    ChannelTab.Posts -> state.posts is ChannelSection.Loading
+                    ChannelTab.Search -> state.searchResults is ChannelSection.Loading
+                    else -> false
+                }
+                CompositionLocalProvider(LocalChannelTabBarState provides tabBarState) {
+                    RefreshableContent(value = state,
+                        refreshing = state.content == ChannelContent.Loading || state.content is ChannelContent.Ready && sectionLoading,
+                        onRefresh = {
+                            onAction(when {
+                                state.content !is ChannelContent.Ready -> ChannelAction.Retry
+                                state.selectedTab == ChannelTab.Home -> ChannelAction.Retry
+                                state.selectedTab == ChannelTab.Search -> if (state.searchResults != null && state.submittedQuery.isNotBlank())
+                                    ChannelAction.RetrySearch else ChannelAction.Retry
+                                else -> ChannelAction.RetrySection(state.selectedTab)
+                            })
+                        }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                        enabled = state.overlay == ChannelOverlay.None,
+                        contentKey = listOf(state.channelId, state.selectedTab, state.submittedQuery, state.shortsSort, state.liveSort, state.playlistSort),
+                        tag = "channel-refresh",
+                        canPull = { !listFor(state.selectedTab).canScrollBackward }) { state ->
+                        when (val content = state.content) {
+                            ChannelContent.Loading -> ChannelSkeleton(width)
+                            ChannelContent.Failed -> if (state.verification != null) VerificationCard(
+                                state.verification,
+                                onVerify = { onAction(ChannelAction.OpenVerification(state.verification!!.challengeUrl)) },
+                                onDismiss = { onAction(ChannelAction.DismissVerification) },
+                                modifier = Modifier.testTag("channel-verification"),
+                            ) else ChannelFailed(onAction)
+                            is ChannelContent.Ready -> when (state.selectedTab) {
+                                ChannelTab.Search -> ChannelSearchTab(content.page, width, height, searchState, state.searchQuery, state.submittedQuery, onAction,
+                                    state.searchResults, canPage = state.searchNextKey != null, append = state.searchAppend, subscribePending = state.subscribePending)
+                                ChannelTab.Home -> ChannelHomeTab(content.page, width, homeState, onAction, state.subscribePending)
+                                ChannelTab.Playlists -> ChannelPlaylistsTab(content.page, width, height, playlistsState, state.playlistSort, state.playlists, onAction,
+                                    canPage = state.playlistsNextKey != null, append = state.playlistsAppend, subscribePending = state.subscribePending)
+                                ChannelTab.Shorts -> ChannelShortsTab(content.page, state.shorts, state.shortsSort, width, shortsState, onAction,
+                                    production = state.production, canPage = state.shortsNextKey != null, append = state.shortsAppend, subscribePending = state.subscribePending)
+                                ChannelTab.Live -> ChannelLiveTab(content.page, state.live, state.liveSort, width, liveState, onAction,
+                                    canPage = state.liveNextKey != null, append = state.liveAppend, subscribePending = state.subscribePending)
+                                ChannelTab.Posts -> postState.SaveableStateProvider(state.channelId) {
+                                    ChannelPostsTab(content.page, state.posts, width, postsState, state.expandedPosts, onAction,
+                                        production = state.production, canPage = state.postsNextKey != null, append = state.postsAppend, subscribePending = state.subscribePending,
+                                        postInteractions = postInteractions)
+                                }
+                                else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend, state.videosTab, state.subscribePending)
                             }
-                            else -> ChannelVideosTab(content.page, width, videosState, onAction, state.videosAppend, state.videosTab)
+                        }
+                        state.verification?.let { challenge ->
+                            VerificationBanner(challenge,
+                                onVerify = { onAction(ChannelAction.OpenVerification(challenge.challengeUrl)) },
+                                onDismiss = { onAction(ChannelAction.DismissVerification) },
+                                modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .testTag("channel-verification-banner"))
                         }
                     }
-                    state.verification?.let { challenge ->
-                        VerificationBanner(challenge,
-                            onVerify = { onAction(ChannelAction.OpenVerification(challenge.challengeUrl)) },
-                            onDismiss = { onAction(ChannelAction.DismissVerification) },
-                            modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
-                                .testTag("channel-verification-banner"))
-                    }
                 }
-                ChannelNavigationBar(onAction)
+                ChannelNavigationBar(state.signedIn, onAction)
             }
             if (state.overlay == ChannelOverlay.About && state.content is ChannelContent.Ready)
                 ChannelAboutPanel(state.content.page.profile, width, height, onAction, aboutScroll)
@@ -187,20 +233,20 @@ fun ChannelScreen(
 private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, state: LazyListState,
     sort: ChannelPlaylistSort, playlists: ChannelSection<List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>>,
     onAction: (ChannelAction) -> Unit,
-    canPage: Boolean = false, append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle) {
+    canPage: Boolean = false, append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    subscribePending: Boolean = false,
+) {
     val viewport = rememberUpdatedState(width)
     // "Last video added" only exists when the source carries update dates; otherwise the
     // control would present server order as a sort it cannot perform.
     val rows = (playlists as? ChannelSection.Ready)?.value.orEmpty()
-    val canSortByUpdate = rows.any { it.updatedDays != null }
-    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
-            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadPlaylistsNext)
+    val canSortByUpdate = remember(rows) { rows.any { it.updatedDays != null } }
+    val sorted = remember(rows, sort) {
+        if (sort == ChannelPlaylistSort.LastVideo) rows.sortedBy { it.updatedDays ?: Int.MAX_VALUE } else rows
     }
+    ObserveChannelPagination(state, canPage, append) { onAction(ChannelAction.LoadPlaylistsNext) }
     LazyColumn(Modifier.fillMaxSize().testTag("channel-playlists-list"), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Playlists, onAction) }
         if (canSortByUpdate) item {
             val fieldHeight = maxOf(50.dp, with(androidx.compose.ui.platform.LocalDensity.current) { 14.sp.toDp() } + 28.dp)
@@ -217,8 +263,7 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
                 if (rows.isEmpty()) item {
                     AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
                 }
-                val sorted = if (sort == ChannelPlaylistSort.LastVideo) rows.sortedBy { it.updatedDays ?: Int.MAX_VALUE } else rows
-                items(sorted, key = { it.id }) { playlist ->
+                items(sorted, key = { it.id }, contentType = { "playlist" }) { playlist ->
                     com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
                         { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
                         if (width >= 931f || width >= 550f && width <= height) 40f else 48f)
@@ -266,8 +311,8 @@ private fun ChannelTabStatus(tab: ChannelTab, section: ChannelSection<*>, onActi
 }
 
 @Composable
-private fun ChannelNavigationBar(onAction: (ChannelAction) -> Unit) {
-    BrowseNavigationBar("channel") { destination ->
+private fun ChannelNavigationBar(signedIn: Boolean, onAction: (ChannelAction) -> Unit) {
+    BrowseNavigationBar("channel", signedIn) { destination ->
         onAction(ChannelAction.SelectDestination(ChannelDestination.valueOf(destination.name)))
     }
 }
@@ -292,42 +337,77 @@ private fun ChannelTopBar(state: ChannelUiState, onBack: () -> Unit, onAction: (
     }
 }
 
+private class ChannelTabBarState(val scroll: ScrollState) {
+    var viewport by mutableIntStateOf(0)
+    val bounds = mutableStateMapOf<ChannelTab, Pair<Int, Int>>()
+    val indicatorLeft = Animatable(0f)
+    val indicatorWidth = Animatable(0f)
+    var indicatorPositioned = false
+}
+
+private val LocalChannelTabBarState = staticCompositionLocalOf<ChannelTabBarState?> { null }
+
+@Composable
+private fun rememberChannelTabBarState(): ChannelTabBarState {
+    val scroll = rememberScrollState()
+    return remember(scroll) { ChannelTabBarState(scroll) }
+}
+
 @Composable
 internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Unit) {
-    val scroll = rememberScrollState()
-    var viewport by remember { mutableIntStateOf(0) }
-    val bounds = remember { mutableStateMapOf<ChannelTab, Pair<Int, Int>>() }
-    LaunchedEffect(selected, bounds[selected], viewport) {
+    val strip = LocalChannelTabBarState.current ?: rememberChannelTabBarState()
+    val scroll = strip.scroll
+    val bounds = strip.bounds
+    val viewport = strip.viewport
+    val motionScale = LocalMotionScale.current
+    LaunchedEffect(selected, bounds[selected], viewport, motionScale) {
         val (left, right) = bounds[selected] ?: return@LaunchedEffect
         if (viewport == 0) return@LaunchedEffect
-        when {
-            left < scroll.value -> scroll.scrollTo(left)
-            right > scroll.value + viewport -> scroll.scrollTo(right - viewport)
+        if (!strip.indicatorPositioned || motionScale <= 0f) {
+            strip.indicatorLeft.snapTo(left.toFloat())
+            strip.indicatorWidth.snapTo((right - left).toFloat())
+            strip.indicatorPositioned = true
+        }
+        coroutineScope {
+            launch { strip.indicatorLeft.animateTo(left.toFloat(), tween(motionDuration(220, motionScale), easing = LinearOutSlowInEasing)) }
+            launch { strip.indicatorWidth.animateTo((right - left).toFloat(), tween(motionDuration(220, motionScale), easing = LinearOutSlowInEasing)) }
+            val scrollTarget = when {
+                left < scroll.value -> left
+                right > scroll.value + viewport -> right - viewport
+                else -> null
+            }
+            if (scrollTarget != null) {
+                if (motionScale <= 0f) scroll.scrollTo(scrollTarget)
+                else scroll.animateScrollTo(scrollTarget, tween(motionDuration(220, motionScale), easing = LinearOutSlowInEasing))
+            }
         }
     }
+    val ink = DesignTokens.Ink
     Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("channel-tabbar")) {
-        Row(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
-            .onSizeChanged { viewport = it.width }
-            .horizontalScroll(scroll).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
-            Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
-            ChannelTab.entries.filterNot { LocalHideShorts.current && it == ChannelTab.Shorts }.forEach { tab ->
-                val isSelected = tab == selected
-                Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
-                    .widthIn(min = ChannelLayout.TabMinWidth.dp)
-                    .onGloballyPositioned {
-                        val left = it.positionInParent().x.toInt()
-                        bounds[tab] = left to left + it.size.width
-                    }.testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
-                    .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
-                    contentAlignment = Alignment.Center) {
-                    AppText(tab.label, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,
-                        color = if (isSelected) DesignTokens.Ink else DesignTokens.Secondary)
-                    if (isSelected) {
-                        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                            .height(ChannelLayout.TabUnderlineHeight.dp).background(DesignTokens.Ink))
+        Box(Modifier.fillMaxWidth().height(ChannelLayout.TabBarHeight.dp)
+            .onSizeChanged { strip.viewport = it.width }
+            .horizontalScroll(scroll).testTag("channel-tabs-row")) {
+            Canvas(Modifier.matchParentSize()) {
+                drawRect(ink, topLeft = Offset(strip.indicatorLeft.value, size.height - ChannelLayout.TabUnderlineHeight.dp.toPx()),
+                    size = Size(strip.indicatorWidth.value, ChannelLayout.TabUnderlineHeight.dp.toPx()))
+            }
+            Row(Modifier.height(ChannelLayout.TabBarHeight.dp), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
+                ChannelTab.entries.filterNot { LocalHideShorts.current && it == ChannelTab.Shorts }.forEach { tab ->
+                    val isSelected = tab == selected
+                    Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
+                        .widthIn(min = ChannelLayout.TabMinWidth.dp)
+                        .onGloballyPositioned {
+                            val left = it.positionInParent().x.toInt()
+                            bounds[tab] = left to left + it.size.width
+                        }.testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
+                        .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
+                        contentAlignment = Alignment.Center) {
+                        AppText(tab.label, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,
+                            color = if (isSelected) DesignTokens.Ink else DesignTokens.Secondary)
                     }
+                    Spacer(Modifier.width(ChannelLayout.TabsGap.dp))
                 }
-                Spacer(Modifier.width(ChannelLayout.TabsGap.dp))
             }
         }
         Box(Modifier.fillMaxWidth().height(ChannelLayout.TabBarBorder.dp).background(DesignTokens.Ghost))
@@ -345,10 +425,13 @@ private fun ChannelHomeTab(
     width: Float,
     state: LazyListState,
     onAction: (ChannelAction) -> Unit,
+    subscribePending: Boolean = false,
 ) {
-    val shelves = page.homeShelves.ifEmpty {
-        page.videos.filter { it.homeShelf }.takeIf { it.isNotEmpty() }
-            ?.let { listOf(com.hhst.youtubelite.channel.domain.ChannelHomeShelf("", videos = it)) }.orEmpty()
+    val shelves = remember(page.homeShelves, page.videos) {
+        page.homeShelves.ifEmpty {
+            page.videos.filter { it.homeShelf }.takeIf { it.isNotEmpty() }
+                ?.let { listOf(com.hhst.youtubelite.channel.domain.ChannelHomeShelf("", videos = it)) }.orEmpty()
+        }
     }
     val viewport = rememberUpdatedState(width)
     LazyColumn(
@@ -356,7 +439,7 @@ private fun ChannelHomeTab(
         modifier = Modifier.fillMaxSize().testTag("channel-home-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         // The sampled page scrolls the tab row with the channel header and pins it once
         // the header is gone, so tabs stay reachable from every scroll depth.
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Home, onAction) }
@@ -377,6 +460,11 @@ private fun ChannelHomeTab(
                     ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction)
                 }
             }
+            items(shelf.playlists, key = { "$index:playlist:${it.id}" }) { playlist ->
+                com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
+                    { onAction(ChannelAction.OpenPlaylist(playlist.id)) },
+                    { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) }, ChannelLayout.menuSize(viewport.value))
+            }
         }
     }
 }
@@ -389,25 +477,19 @@ private fun ChannelVideosTab(
     onAction: (ChannelAction) -> Unit,
     append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     videosTab: ChannelSection<Unit> = ChannelSection.Ready(Unit),
+    subscribePending: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
     val canPage = page.videosNextKey != null
-    val nearEnd by remember {
-        androidx.compose.runtime.derivedStateOf {
-            val info = state.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - 4
-        }
-    }
-    LaunchedEffect(nearEnd, canPage, append) {
-        if (nearEnd && canPage && append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadVideosNext)
-    }
+    val columns = ChannelLayout.gridColumns(width)
+    val videoRows = remember(page.videos, columns) { page.videos.chunked(columns) }
+    ObserveChannelPagination(state, canPage, append) { onAction(ChannelAction.LoadVideosNext) }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-videos-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Videos, onAction) }
         if (videosTab !is ChannelSection.Ready) {
             // A deferred first read reports here; the header above is already usable.
@@ -415,17 +497,17 @@ private fun ChannelVideosTab(
         } else if (page.videos.isEmpty()) {
             item { ChannelNoVideos() }
         } else {
-            val columns = ChannelLayout.gridColumns(viewport.value)
             if (columns == 1) {
-                items(page.videos, key = { it.id }) { video ->
+                items(page.videos, key = { it.id }, contentType = { "video" }) { video ->
                     Box(Modifier.padding(horizontal = ChannelLayout.ListRowInset.dp)) {
                         ChannelVideoRow(video, ChannelLayout.menuSize(viewport.value).dp, onAction)
                     }
                 }
             } else {
                 items(
-                    page.videos.chunked(columns),
-                    key = { row -> row.joinToString("-") { it.id } },
+                    videoRows,
+                    key = { row -> row.first().id },
+                    contentType = { "video-row" },
                 ) { row ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = ChannelLayout.PageInset.dp),
                         horizontalArrangement = Arrangement.spacedBy(ChannelLayout.PageInset.dp)) {
@@ -532,7 +614,9 @@ private fun BylineIdentity(text: String, fontSize: Int) {
 }
 
 @Composable
-internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAction) -> Unit) {
+internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAction) -> Unit,
+    subscribePending: Boolean = false,
+) {
     val profile = page.profile
     val wide = ChannelLayout.wide(width)
     val compact = width < 600f
@@ -552,7 +636,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
                     if (wide) {
                         ChannelDetails(profile, width, onAction)
                         Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                        ChannelSubscribe(true, onAction, profile.subscribed == true)
+                        ChannelSubscribe(true, onAction, profile.subscribed == true, subscribePending, profile.channelId)
                     } else ChannelDescription(profile.description, width, onAction)
                 }
             }
@@ -562,7 +646,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
             Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
                 ChannelDetails(profile, width, onAction)
                 Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                ChannelSubscribe(false, onAction, profile.subscribed == true)
+                ChannelSubscribe(false, onAction, profile.subscribed == true, subscribePending, profile.channelId)
             }
         } else if (!wide) {
             Column(Modifier.padding(horizontal = ChannelLayout.PageInset.dp)) {
@@ -571,7 +655,7 @@ internal fun ChannelHeader(page: ChannelPage, width: Float, onAction: (ChannelAc
                     ChannelLinks(profile, width, onAction)
                 }
                 Spacer(Modifier.height(ChannelLayout.linksSubscribeGap(width).dp))
-                ChannelSubscribe(false, onAction, profile.subscribed == true)
+                ChannelSubscribe(false, onAction, profile.subscribed == true, subscribePending, profile.channelId)
             }
         }
         Spacer(Modifier.height(ChannelLayout.subscribeTabBarGap(width).dp))
@@ -583,8 +667,6 @@ private fun ChannelIdentity(page: ChannelPage, width: Float) {
     val profile = page.profile
     val fontSize = ChannelLayout.identityFontSize(width).toInt()
     Column(Modifier.fillMaxWidth().testTag("channel-identity")) {
-        ChannelName(profile.name, width)
-        Spacer(Modifier.height(ChannelLayout.identityNameGap(width).dp))
         val stats = listOf(profile.subscribers, profile.videoCount).filter { it.isNotBlank() }
         if (ChannelLayout.mergesIdentityRows(width)) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
@@ -688,7 +770,10 @@ private fun ChannelLinks(profile: ChannelProfile, width: Float, onAction: (Chann
 }
 
 @Composable
-private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, subscribed: Boolean = false) {
+private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, subscribed: Boolean = false, pending: Boolean = false, channelId: String = "") {
+    val subscriptionAction = com.hhst.youtubelite.ui.design.rememberSubscriptionAction(subscribed, !pending, channelId) {
+        onAction(ChannelAction.Subscribe)
+    }
     val foreground = if (DesignTokens.Background == Color.White) SubscribeForeground else DesignTokens.Background
     val subscribedBackground = if (DesignTokens.Background == Color.White) SubscribeForeground else DesignTokens.Surface
     Box(Modifier
@@ -696,11 +781,12 @@ private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, s
         .height(ChannelLayout.SubscribeHeight.dp)
         .clip(RoundedCornerShape(ChannelLayout.SubscribeRadius.dp))
         .background(if (subscribed) subscribedBackground else DesignTokens.Ink)
-        .clickable(role = Role.Button) { onAction(ChannelAction.Subscribe) }
+        .clickable(enabled = !pending, role = Role.Button) { subscriptionAction() }
         .testTag("channel-subscribe"),
         contentAlignment = Alignment.Center) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppText(if (subscribed) "Subscribed" else "Subscribe", size = 14, line = 18, weight = FontWeight.Medium,
+            if (pending) com.hhst.youtubelite.ui.design.ActionProgress(color = if (subscribed) DesignTokens.Ink else foreground)
+            else AppText(stringResource(if (subscribed) R.string.subscribed else R.string.subscribe), size = 14, line = 18, weight = FontWeight.Medium,
                 color = if (subscribed) DesignTokens.Ink else foreground)
         }
     }

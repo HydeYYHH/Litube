@@ -13,11 +13,7 @@ internal object CacheTtl {
     val CHAPTERS_MS: Long = TimeUnit.HOURS.toMillis(6)
 }
 
-/**
- * Persistent cache for [Metadata], [Stream], and [ChapterList].
- *
- * Stream URLs expire sooner (~2 min) than metadata and chapters (~6 h).
- */
+/** Stream URLs expire sooner (~2 min) than metadata and chapters (~6 h). */
 interface Cache {
     fun getMetadata(videoId: String): Metadata?
     fun putMetadata(videoId: String, metadata: Metadata)
@@ -30,7 +26,6 @@ interface Cache {
     fun putChapters(videoId: String, chapters: ChapterList)
 }
 
-/** [Cache] backed by [JsonCache] (SharedPreferences-backed [PreferenceJsonCache] in production). */
 class DiskCache(
     private val store: JsonCache,
 ) : Cache {

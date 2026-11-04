@@ -46,14 +46,14 @@ class HomeScreenshotAndroidTest {
         }
         val phone = compose.onNodeWithTag("skeleton-thumb-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(0f, phone.left, 0.5f)
-        assertEquals(48f, phone.top, 0.5f)
+        assertEquals(98f, phone.top, 0.5f)
         assertEquals(390f, phone.width, 0.5f)
         assertEquals(219.375f, phone.height, 0.6f)
         compose.runOnIdle { width = 1280 }
         val wide = compose.onNodeWithTag("skeleton-thumb-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val third = compose.onNodeWithTag("skeleton-thumb-2", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(16f, wide.left, 0.5f)
-        assertEquals(64f, wide.top, 0.5f)
+        assertEquals(110f, wide.top, 0.5f)
         assertEquals(404.917f, wide.width, 0.6f)
         assertEquals(857.833f, third.left, 0.6f)
     }

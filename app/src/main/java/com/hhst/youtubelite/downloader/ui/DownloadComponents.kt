@@ -2,6 +2,9 @@ package com.hhst.youtubelite.downloader.ui
 
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import com.hhst.youtubelite.ui.components.AppCheckbox
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.DownloadPhase
@@ -142,13 +146,19 @@ fun DownloadItemRow(
     item: DownloadItemUiState,
     onOpen: () -> Unit,
     onAction: (DownloadRowAction) -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
 ) {
     var moreExpanded by remember(item.itemId ?: item.taskId) { mutableStateOf(false) }
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = DownloadTokens.MinTouch)
-            .clickable(onClick = onOpen)
+            .combinedClickable(onClick = { if (selectionMode) haptic(); onOpen() }, onLongClick = onLongClick)
+            .semantics { if (selectionMode) this.selected = selected }
+            .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else androidx.compose.ui.graphics.Color.Transparent)
             .padding(horizontal = DownloadTokens.PageInset, vertical = 8.dp),
     ) {
         val stacked = maxWidth < 320.dp || LocalDensity.current.fontScale > 1.3f
@@ -180,9 +190,10 @@ fun DownloadItemRow(
                     )
                     if (!stacked) DownloadRowDetails(item, stacked = false)
                 }
+                if (selectionMode) AppCheckbox(selected, { onOpen() })
                 val actions = DownloadPresentation.actionsFor(item)
                 val moreLabel = stringResource(R.string.download_more_actions)
-                Box {
+                if (!selectionMode) Box {
                     IconButton(
                         onClick = { moreExpanded = true },
                         modifier = Modifier
@@ -201,7 +212,7 @@ fun DownloadItemRow(
                         onDismissRequest = { moreExpanded = false },
                         modifier = Modifier.widthIn(min = 200.dp, max = 280.dp).heightIn(max = 360.dp),
                         shape = RoundedCornerShape(12.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = AppStyle.Panel,
                         shadowElevation = 4.dp,
                         tonalElevation = 0.dp,
                     ) {
@@ -305,7 +316,7 @@ private fun overflowMarquee(): Modifier = if (com.hhst.youtubelite.ui.design.Loc
 } else Modifier.fillMaxWidth()
 
 @Composable
-private fun actionLabel(action: DownloadRowAction): String = stringResource(
+internal fun actionLabel(action: DownloadRowAction): String = stringResource(
     when (action) {
         DownloadRowAction.PAUSE -> R.string.action_pause
         DownloadRowAction.RESUME -> R.string.download_resume
@@ -330,7 +341,7 @@ private fun failureCopy(reason: String): String = when {
     else -> reason
 }
 
-private fun actionIcon(action: DownloadRowAction): Int = when (action) {
+internal fun actionIcon(action: DownloadRowAction): Int = when (action) {
     DownloadRowAction.PAUSE -> R.drawable.ic_pause
     DownloadRowAction.RESUME -> R.drawable.ic_play
     DownloadRowAction.RETRY, DownloadRowAction.REDOWNLOAD -> R.drawable.ic_replay

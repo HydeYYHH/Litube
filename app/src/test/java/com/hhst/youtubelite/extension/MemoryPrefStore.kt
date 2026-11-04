@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.extension
 
-/** In-memory [PrefStore] for tests. */
 class MemoryPrefStore : PrefStore {
     private val bools = mutableMapOf<String, Boolean>()
     private val longs = mutableMapOf<String, Long>()

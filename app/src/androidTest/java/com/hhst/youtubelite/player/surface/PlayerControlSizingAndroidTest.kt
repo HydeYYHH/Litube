@@ -187,7 +187,10 @@ class PlayerControlSizingAndroidTest {
                 .performScrollTo().performTouchInput { click() }
             compose.onNodeWithTag("player-dialog-quality").assertIsDisplayed()
             compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertDoesNotExist()
-            compose.onNodeWithContentDescription(compose.activity.getString(R.string.close)).performTouchInput { click() }
+            val qualityBeforeDismiss = calls["onQuality"] ?: 0
+            compose.onNodeWithTag("player-dialog-scrim").performTouchInput { click(Offset(8f, 8f)) }
+            compose.onNodeWithTag("player-dialog-quality").assertDoesNotExist()
+            compose.runOnIdle { assertEquals(qualityBeforeDismiss, calls["onQuality"] ?: 0) }
             more.performTouchInput { click() }
             compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
                 .performScrollTo().performTouchInput { click() }
@@ -203,8 +206,7 @@ class PlayerControlSizingAndroidTest {
             val oldSpeed = calls["onSpeed"] ?: 0
             compose.onNodeWithText("1.5x").performScrollTo().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldSpeed + 1, calls["onSpeed"]) }
-            // Chapters and skippable segments live in the info band behind the
-            // chapter chip; with neither present the entry stays hidden.
+            // Chapters and skippable segments live in the info band behind the chapter chip; with neither present the entry stays hidden.
             compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
             compose.waitForIdle()
         }
@@ -328,7 +330,10 @@ class PlayerControlSizingAndroidTest {
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.playback_end_next)).performScrollTo().performClick()
         compose.onNodeWithTag("player-dialog-end-behavior").assertIsDisplayed()
-        compose.onNodeWithContentDescription(compose.activity.getString(R.string.close)).performClick()
+        val loopBeforeDismiss = calls["onLoopMode"] ?: 0
+        compose.onNodeWithTag("player-dialog-scrim").performTouchInput { click(Offset(8f, 8f)) }
+        compose.onNodeWithTag("player-dialog-end-behavior").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(loopBeforeDismiss, calls["onLoopMode"] ?: 0) }
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.cast)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.queue)).performScrollTo().performClick()

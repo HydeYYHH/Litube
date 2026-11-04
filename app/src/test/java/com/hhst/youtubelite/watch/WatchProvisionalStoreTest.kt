@@ -17,7 +17,6 @@ class WatchProvisionalStoreTest {
         repeat(40) { index ->
             WatchProvisionalStore.put(WatchProvisional(videoId = "v$index", title = "t$index"))
         }
-        // The oldest entries fell off; a recent one is still consumable.
         assertNull(WatchProvisionalStore.consume("v0"))
         assertEquals("t39", WatchProvisionalStore.consume("v39")?.title)
         WatchProvisionalStore.put(WatchProvisional(videoId = "v1", title = "latest"))

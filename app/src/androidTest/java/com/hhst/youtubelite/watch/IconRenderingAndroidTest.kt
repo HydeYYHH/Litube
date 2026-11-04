@@ -23,6 +23,33 @@ import org.junit.Test
 class IconRenderingAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun playbackAndMenuGlyphsHaveHollowInteriorsInBothRenderers() {
+        val glyphs = listOf(
+            Triple(AppIcon.Play, com.hhst.youtubelite.R.drawable.ic_play, 10 to 12),
+            Triple(AppIcon.Pause, com.hhst.youtubelite.R.drawable.ic_pause, 8 to 12),
+            Triple(AppIcon.Delete, com.hhst.youtubelite.R.drawable.ic_delete, 12 to 12),
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(2f, 1f)) {
+                Row(Modifier.background(Color.White)) {
+                    glyphs.forEach { (icon, resource, _) ->
+                        AppIcon(icon, Modifier.testTag("app-${icon.name}"), color = Color.Black)
+                        androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(resource), null,
+                            Modifier.size(24.dp).testTag("xml-${icon.name}"), tint = Color.Black)
+                    }
+                }
+            }
+        }
+        glyphs.forEach { (icon, _, center) ->
+            for (prefix in listOf("app", "xml")) {
+                val pixels = compose.onNodeWithTag("$prefix-${icon.name}").captureToImage().toPixelMap()
+                assertTrue("$prefix ${icon.name} interior", pixels[center.first * 2, center.second * 2].red > .9f)
+                val dark = (0 until pixels.width).sumOf { x -> (0 until pixels.height).count { y -> pixels[x, y].red < .5f } }
+                assertTrue("$prefix ${icon.name} outline must remain visible", dark > 100)
+            }
+        }
+    }
+
     @Test fun playlistBadgeRetainsAllThreeLinesAtItsSourceSize() {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {

@@ -2,8 +2,7 @@ package com.hhst.youtubelite.watch.chat
 
 import com.hhst.youtubelite.watch.domain.WatchVideo
 
-/** Which chat surface the comments affordance opens for the current page. */
-data class LiveChatTarget(val key: String, val replay: Boolean)
+data class LiveChatTarget(val key: String, val replay: Boolean, val messageParams: String? = null)
 
 /** Archived chat does not replace the video's comments. */
 fun liveChatTarget(
@@ -17,5 +16,6 @@ fun liveChatTarget(
     if (!commentsOpen || searchOpen || fullscreen || pip) return null
     if (!playerLive && video?.live != true) return null
     val key = video?.chatKey?.takeIf { it.isNotBlank() } ?: return null
-    return LiveChatTarget(key, replay = false)
+    return LiveChatTarget(key, replay = false,
+        messageParams = com.liskovsoft.youtubeapi.videoinfo.V2.chatMessageParameters(video.id, video.channelId))
 }

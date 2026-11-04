@@ -8,7 +8,6 @@ import com.hhst.youtubelite.watch.domain.WatchRepository
 import com.hhst.youtubelite.watch.domain.WatchVideo
 import kotlinx.coroutines.delay
 
-/** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureWatchRepository(
     private val scenario: WatchScenario = WatchScenario.Content,
     /** Debug instrumentation seam; the default keeps every fixture chatKey null and goldens stable. */

@@ -3,6 +3,10 @@ package com.hhst.youtubelite.player.surface
 import androidx.compose.ui.platform.testTag
 
 import androidx.compose.animation.AnimatedVisibility
+import com.hhst.youtubelite.ui.design.AppMotion
+import com.hhst.youtubelite.ui.design.LocalMotionScale
+import com.hhst.youtubelite.ui.design.motionDuration
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -45,14 +50,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -62,6 +69,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -95,6 +106,7 @@ fun PlayerIconButton(
     enabled: Boolean = true,
     iconSize: Int = PlayerUi.CHROME_ICON_DP,
     onLongClick: (() -> Unit)? = null,
+    loading: Boolean = false,
 ) {
     val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     val interaction = remember { MutableInteractionSource() }
@@ -122,7 +134,9 @@ fun PlayerIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
+        if (loading) {
+            PlaybackLoadingIndicator(Modifier.size(iconSize.dp), tint)
+        } else Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
             tint = tint.copy(alpha = if (enabled) 0.92f else 0.35f),
@@ -131,7 +145,16 @@ fun PlayerIconButton(
     }
 }
 
-/** Playback title and primary controls. */
+@Composable
+internal fun PlaybackLoadingIndicator(modifier: Modifier = Modifier, color: Color = Color.White) {
+    val description = stringResource(R.string.a11y_loading)
+    CircularProgressIndicator(
+        color = color,
+        strokeWidth = 3.dp,
+        modifier = modifier.testTag("player-buffering").semantics { contentDescription = description },
+    )
+}
+
 @Composable
 fun TopBar(
     state: PlayerUiState,
@@ -240,13 +263,15 @@ fun CenterControls(
     skipSizeDp: Int = 48,
     gapDp: Int = 12,
 ) {
+    if (state.notice != null) return
+    val action = PlayerUi.playPauseAction(state)
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         PlayerIconButton(
-            icon = R.drawable.ic_previous,
+            icon = R.drawable.ic_player_previous,
             contentDescription = stringResource(R.string.action_previous),
             onClick = onPrevious,
             enabled = state.hasPrevious,
@@ -265,38 +290,19 @@ fun CenterControls(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (state.error == null && (!state.prepared || state.loading ||
-                    (state.userWantsPlay && !state.firstFrameRendered && !state.casting &&
-                        (state.videoWidth > 0 || state.videoItag != null || state.qualities.isNotEmpty())))) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(minOf(36, playSizeDp - 16).dp).testTag("player-buffering"),
-                )
+            if (action == PlayerUi.PlayPauseAction.Loading) {
+                PlaybackLoadingIndicator(Modifier.size(minOf(36, playSizeDp - 16).dp))
             } else {
-                val replay = state.ended && !state.isPlaying
                 Icon(
-                    painter = painterResource(
-                        when {
-                            state.isPlaying -> R.drawable.ic_pause
-                            replay -> R.drawable.ic_replay
-                            else -> R.drawable.ic_play
-                        },
-                    ),
-                    contentDescription = stringResource(
-                        when {
-                            state.isPlaying -> R.string.action_pause
-                            replay -> R.string.action_replay
-                            else -> R.string.action_play
-                        },
-                    ),
+                    painter = painterResource(action.playerIcon),
+                    contentDescription = stringResource(action.label),
                     tint = Color.White,
                     modifier = Modifier.size((playSizeDp * 0.65f).dp),
                 )
             }
         }
         PlayerIconButton(
-            icon = R.drawable.ic_next,
+            icon = R.drawable.ic_player_next,
             contentDescription = stringResource(R.string.action_next),
             onClick = onNext,
             enabled = state.hasNext,
@@ -473,8 +479,8 @@ fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier 
     SideEffect { if (hint != null) lastText = hint }
     AnimatedVisibility(
         visible = hint != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+        exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
         modifier = modifier,
     ) {
         Text(
@@ -488,7 +494,6 @@ fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier 
     }
 }
 
-/** Chromecast + link-cast banners. */
 @Composable
 fun CastStatusBanners(
     casting: Boolean,
@@ -628,7 +633,7 @@ fun LockAffordance(
  * Compact in-app mini-player chrome.
  *
  * Background tap toggles chrome; the center restore button returns to watch.
- * Drag / pinch are handled on the background layer so control buttons stay tappable.
+ * Drag / pinch intercept movement before the controls, while ordinary taps reach buttons.
  */
 @Composable
 fun MiniPlayerChrome(
@@ -642,17 +647,33 @@ fun MiniPlayerChrome(
     modifier: Modifier = Modifier,
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val playPauseAction = PlayerUi.playPauseAction(state)
     val handle = LocalMiniPlayerHandle.current
+    val collapsedSide = handle?.collapsedSide
+    val suppressControls = handle?.interacting == true || collapsedSide != null
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .then(if (handle != null) Modifier.miniPlayerInteract(handle) else Modifier),
     ) {
+        if (collapsedSide != null) {
+            Box(Modifier.align(if (collapsedSide == MiniPlayerLayout.CollapsedSide.LEFT) AbsoluteAlignment.CenterRight else AbsoluteAlignment.CenterLeft)
+                .width(MiniPlayerLayout.COLLAPSED_PEEK_DP.dp).fillMaxHeight()
+                .background(Color(0xE6303030))
+                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.action_expand_miniplayer),
+                    onClick = { handle?.tap?.invoke() })
+                .testTag("mini-expand"), contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.action_expand_miniplayer),
+                    tint = Color.White, modifier = Modifier.size(24.dp)
+                        .rotate(if (collapsedSide == MiniPlayerLayout.CollapsedSide.RIGHT) 180f else 0f))
+            }
+        }
         val gap = MiniPlayerLayout.controlGap(maxWidth.value.toInt(), screenWidthDp)
         AnimatedVisibility(
-            visible = state.controlsVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = !suppressControls && (state.controlsVisible || playPauseAction == PlayerUi.PlayPauseAction.Loading),
+            modifier = if (suppressControls) Modifier.clearAndSetSemantics {} else Modifier,
+            enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+            exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
         ) {
             Box(Modifier.fillMaxSize()) {
                 Box(
@@ -664,6 +685,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_queue,
                     contentDescription = stringResource(R.string.queue),
                     onClick = onQueue,
+                    enabled = !suppressControls,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .size(48.dp),
@@ -673,6 +695,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_close,
                     contentDescription = stringResource(R.string.close),
                     onClick = onClose,
+                    enabled = !suppressControls,
                     tint = Color.White,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -683,6 +706,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_fullscreen,
                     contentDescription = stringResource(R.string.action_restore_watch),
                     onClick = onRestore,
+                    enabled = !suppressControls,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .size(40.dp),
@@ -695,29 +719,29 @@ fun MiniPlayerChrome(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     PlayerIconButton(
-                        icon = R.drawable.ic_previous,
+                        icon = R.drawable.ic_player_previous,
                         contentDescription = stringResource(R.string.action_previous),
                         onClick = onPrevious,
-                        enabled = state.hasPrevious,
+                        enabled = state.hasPrevious && !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_SIDE_DP.dp),
                         iconSize = 20,
                     )
                     Spacer(Modifier.width(gap.dp))
                     PlayerIconButton(
-                        icon = if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-                        contentDescription = stringResource(
-                            if (state.isPlaying) R.string.action_pause else R.string.action_play,
-                        ),
+                        icon = playPauseAction.playerIcon,
+                        contentDescription = stringResource(playPauseAction.label),
+                        loading = playPauseAction == PlayerUi.PlayPauseAction.Loading,
                         onClick = onPlayPause,
+                        enabled = !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_PLAY_DP.dp),
                         iconSize = 24,
                     )
                     Spacer(Modifier.width(gap.dp))
                     PlayerIconButton(
-                        icon = R.drawable.ic_next,
+                        icon = R.drawable.ic_player_next,
                         contentDescription = stringResource(R.string.action_next),
                         onClick = onNext,
-                        enabled = state.hasNext,
+                        enabled = state.hasNext && !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_SIDE_DP.dp),
                         iconSize = 20,
                     )
@@ -743,7 +767,9 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
         .pointerInput(handle) {
             awaitEachGesture {
                 try {
-                val down = awaitFirstDown(requireUnconsumed = true)
+                // Initial pass observes button presses and takes ownership as
+                // soon as movement crosses slop, before any child handles it.
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 handle.begin()
                 val slop = viewConfiguration.touchSlop
                 var dragging = false
@@ -754,9 +780,12 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 var backgroundTap = false
                 val start = rootPos(down)
                 do {
-                    val event = awaitPointerEvent()
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.any { it.isConsumed }) {
+                        handle.cancel()
+                        return@awaitEachGesture
+                    }
                     val pressed = event.changes.filter { it.pressed }
-                    backgroundTap = event.changes.any { !it.isConsumed }
                     if (pressed.size >= 2) {
                         val p0 = rootPos(pressed[0])
                         val p1 = rootPos(pressed[1])
@@ -765,8 +794,10 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                             (p0.y - p1.y).toDouble(),
                         ).toFloat()
                         if (pinchStartDist <= 0f) pinchStartDist = dist
-                        if (dist > 0f && pinchStartDist > 0f) {
+                        if (dist > 0f && pinchStartDist > 0f &&
+                            (pinching || abs(dist - pinchStartDist) > slop)) {
                             pinching = true
+                            handle.interacting = true
                             dragging = false
                             pressed.forEach { it.consume() }
                             handle.pinchScale(dist / pinchStartDist)
@@ -776,15 +807,20 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                         val delta = current - start
                         if (!dragging && (abs(delta.x) > slop || abs(delta.y) > slop)) {
                             dragging = true
+                            handle.interacting = true
                         }
                         if (dragging) {
                             pressed[0].consume()
                             handle.dragFromStart(delta.x, delta.y)
                         }
                     }
-                    event.changes.forEach { change ->
-                        if ((dragging || pinching) && change.positionChanged()) change.consume()
-                    }
+                    // Consume UP too, even with no position change: a drag
+                    // release must never click a control beneath the finger.
+                    if (dragging || pinching) event.changes.forEach { it.consume() }
+                    // Children handle ordinary taps in Main before the parent
+                    // decides whether an unhandled tap toggles the chrome.
+                    val mainEvent = awaitPointerEvent(PointerEventPass.Main)
+                    backgroundTap = mainEvent.changes.none { it.isConsumed }
                 } while (event.changes.any { it.pressed })
                 when {
                     dragging || pinching -> {

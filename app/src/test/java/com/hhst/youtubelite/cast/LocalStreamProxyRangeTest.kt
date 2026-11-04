@@ -16,12 +16,6 @@ import java.io.ByteArrayInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Pure helpers of [LocalStreamProxy] (companion functions): RFC 7233 range
- * parsing and per-receiver chunk sizing. Also the state-ownership regression
- * for content-length backfill: a request snapshot taken under an old configure
- * must never mutate the table published by a newer configure.
- */
 class LocalStreamProxyRangeTest {
 
     private val unset: Long = -1L // C.LENGTH_UNSET as a long

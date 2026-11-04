@@ -3,8 +3,8 @@ package com.hhst.youtubelite.player.service
 import com.hhst.youtubelite.diagnostics.*
 
 import android.app.Notification
+import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicLong
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -30,9 +30,10 @@ import androidx.media3.session.MediaStyleNotificationHelper
 import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.YoutubeThumbnail
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.RejectedExecutionException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import androidx.core.graphics.scale
 
 /**
@@ -47,8 +48,26 @@ import androidx.core.graphics.scale
 @UnstableApi
 class PlaybackService : Service() {
 
+    private val binder = LocalBinder(this)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val artworkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val artworkRequests = LatestArtworkRequest<String, Bitmap>(
+        scope = artworkScope,
+        load = { fetchThumbnail(it) },
+        publish = { url, art ->
+            if (destroyed || hidden) {
+                if (!art.isRecycled) art.recycle()
+            } else {
+                val previous = lastArt
+                lastArt = art
+                lastArtUrl = url
+                val playing = (routingPlayer ?: player)?.isPlaying == true
+                notificationManager?.notify(NOTIFICATION_ID, buildNotification(playing))
+                if (previous != null && previous !== art && !previous.isRecycled) previous.recycle()
+            }
+        },
+        discard = { if (!it.isRecycled) it.recycle() },
+    )
 
     private var notificationManager: NotificationManager? = null
     private var session: MediaSession? = null
@@ -58,10 +77,6 @@ class PlaybackService : Service() {
     private var lastAuthor: String? = null
     private var lastArt: Bitmap? = null
     private var lastArtUrl: String? = null
-    /** URL whose art fetch is queued but not finished; dedupes repeated show()s. */
-    private var pendingArtUrl: String? = null
-    /** Monotonic token; only the newest art fetch may apply its bitmap. */
-    private val artSeq = AtomicLong()
     @Volatile
     private var destroyed = false
 
@@ -76,6 +91,9 @@ class PlaybackService : Service() {
     @Volatile
     private var hidden = false
 
+    // A bound service can hide and show again with the same wrapper before queued commands run.
+    private var commandEpoch = 0L
+
     private var queueHasNext = false
     private var queueHasPrevious = false
     private var lastShowAsPlaying = false
@@ -83,11 +101,17 @@ class PlaybackService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? {
         AppLog.event(AppLog.Category.APP, "playback_service_bound")
-        return LocalBinder()
+        return binder
     }
 
-    inner class LocalBinder : Binder() {
-        fun getService(): PlaybackService = this@PlaybackService
+    // Android can retain the published Binder in native code after onDestroy.
+    // A nested class avoids an implicit outer reference that would retain the service.
+    class LocalBinder internal constructor(service: PlaybackService) : Binder() {
+        private val service = WeakReference(service)
+
+        fun getService(): PlaybackService? = service.get()
+
+        internal fun clear() = service.clear()
     }
 
     override fun onCreate() {
@@ -116,9 +140,9 @@ class PlaybackService : Service() {
         if (session == null) startForegroundSafely(placeholderNotification())
         if (intent?.action != null) {
             when (intent.action) {
-                ACTION_PLAY_PAUSE -> PlaybackCommandRouter.playPause()
-                ACTION_PREVIOUS -> PlaybackCommandRouter.previous()
-                ACTION_NEXT -> PlaybackCommandRouter.next()
+                ACTION_PLAY_PAUSE -> dispatchCommand(command = PlaybackCommandRouter::playPause)
+                ACTION_PREVIOUS -> dispatchCommand(command = PlaybackCommandRouter::previous)
+                ACTION_NEXT -> dispatchCommand(command = PlaybackCommandRouter::next)
                 // Swiping the (paused) notification away ends playback — the
                 // delete intent only fires while not ongoing.
                 ACTION_CANCELLED -> {
@@ -134,18 +158,29 @@ class PlaybackService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Capture ownership when received; the router checks it again before execution. */
+    private fun dispatchCommand(owner: Player? = routingPlayer, command: (() -> Boolean) -> Unit) {
+        val epoch = commandEpoch
+        command { owner != null && routingPlayer === owner && !hidden && !destroyed && commandEpoch == epoch }
+    }
+
     /**
      * Session player that routes the app-level transport (queue next/previous,
-     * play/pause while casting) instead of driving the wrapped local player,
+     * play/pause/stop while casting) instead of driving the wrapped local player,
      * whose single MediaItem makes seekToNext/Previous no-ops.
      */
     private inner class QueueRoutingPlayer(wrapped: Player) : ForwardingPlayer(wrapped) {
-        override fun play() = PlaybackCommandRouter.play()
-        override fun pause() = PlaybackCommandRouter.pause()
-        override fun seekToNext() = PlaybackCommandRouter.next()
-        override fun seekToNextMediaItem() = PlaybackCommandRouter.next()
-        override fun seekToPrevious() = PlaybackCommandRouter.previous()
-        override fun seekToPreviousMediaItem() = PlaybackCommandRouter.previous()
+        private fun dispatch(command: (() -> Boolean) -> Unit) {
+            dispatchCommand(this, command)
+        }
+
+        override fun play() = dispatch(PlaybackCommandRouter::play)
+        override fun pause() = dispatch(PlaybackCommandRouter::pause)
+        override fun stop() = dispatch(PlaybackCommandRouter::stop)
+        override fun seekToNext() = dispatch(PlaybackCommandRouter::next)
+        override fun seekToNextMediaItem() = dispatch(PlaybackCommandRouter::next)
+        override fun seekToPrevious() = dispatch(PlaybackCommandRouter::previous)
+        override fun seekToPreviousMediaItem() = dispatch(PlaybackCommandRouter::previous)
 
         // Headset/system media controls derive their buttons from this set;
         // a single-item ExoPlayer does not advertise next/previous, so the
@@ -176,6 +211,7 @@ class PlaybackService : Service() {
     fun attach(player: Player) {
         if (destroyed) return
         if (this.player === player && session != null) return
+        commandEpoch++
         this.player = player
         session?.release()
         commandListeners.clear()
@@ -215,46 +251,13 @@ class PlaybackService : Service() {
         val playing = lastShowAsPlaying || (routingPlayer ?: player)?.isPlaying == true
         lastShowAsPlaying = playing
         startForegroundSafely(buildNotification(playing))
-        // Skip when the art is current OR a fetch for this URL is already
-        // queued: onLoaded fires per load (and again after the oEmbed title
-        // swap), so without the pending check a slow fetch would pile up one
-        // executor task per show() for the same URL.
-        if ((thumbnailUrl == lastArtUrl && lastArt != null) || thumbnailUrl == pendingArtUrl) return
-        try {
-            pendingArtUrl = thumbnailUrl
-            // Supersession token: only the newest requested fetch may apply
-            // its art — a slow fetch for the PREVIOUS video completing late
-            // must not revert the notification to the old thumbnail.
-            val seq = artSeq.incrementAndGet()
-            executor.execute {
-                val art = fetchThumbnail(thumbnailUrl)
-                if (pendingArtUrl == thumbnailUrl) pendingArtUrl = null
-                if (art == null) return@execute
-                if (destroyed || seq != artSeq.get()) {
-                    if (!art.isRecycled) art.recycle()
-                    return@execute
-                }
-                mainHandler.post {
-                    if (destroyed || hidden || seq != artSeq.get()) {
-                        if (!art.isRecycled) art.recycle()
-                        return@post
-                    }
-                    val previous = lastArt
-                    lastArt = art
-                    lastArtUrl = thumbnailUrl
-                    val nowPlaying = (routingPlayer ?: player)?.isPlaying == true
-                    notificationManager?.notify(NOTIFICATION_ID, buildNotification(nowPlaying))
-                    if (previous != null && previous !== art && !previous.isRecycled) {
-                        previous.recycle()
-                    }
-                }
-            }
-        } catch (_: RejectedExecutionException) {
-            pendingArtUrl = null
+        if (thumbnailUrl == null || (thumbnailUrl == lastArtUrl && lastArt != null)) {
+            artworkRequests.cancel()
+            return
         }
+        artworkRequests.submit(thumbnailUrl)
     }
 
-    /** Rebuilds the notification from the current player state. */
     fun refresh(showAsPlaying: Boolean? = null) {
         // hidden: between hide() and onDestroy a queued notification action
         // can still deliver to onStartCommand — re-posting the cancelled
@@ -275,13 +278,13 @@ class PlaybackService : Service() {
         // Reject late thumbnail posts now (see [hidden]); removeCallbacks in
         // onDestroy may run after the queued post has already fired.
         hidden = true
+        commandEpoch++
+        artworkRequests.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         notificationManager?.cancel(NOTIFICATION_ID)
         recycleArt()
         stopSelf()
     }
-
-    // -- notification --
 
     /**
      * Notification tap returns to the media's own context: Shorts audio
@@ -333,7 +336,6 @@ class PlaybackService : Service() {
                 ),
             )
 
-        // Session-driven media buttons: prev/play-pause/next mirror queue nav.
         var playPauseIndex = 0
         if (queueHasPrevious) {
             builder.addAction(
@@ -375,7 +377,6 @@ class PlaybackService : Service() {
             .build()
     }
 
-    /** Button intent targeting this service; [onStartCommand] routes it to the router. */
     private fun sessionButtonIntent(command: Int): PendingIntent {
         val action = when (command) {
             Player.COMMAND_SEEK_TO_PREVIOUS -> ACTION_PREVIOUS
@@ -413,11 +414,9 @@ class PlaybackService : Service() {
         }
     }
 
-    // -- thumbnail --
-
-    private fun fetchThumbnail(url: String?): Bitmap? {
+    private suspend fun fetchThumbnail(url: String?): Bitmap? {
         if (destroyed) return null
-        val original = YoutubeThumbnail.fetch(url) ?: return null
+        val original = YoutubeThumbnail.await(url) ?: return null
         if (destroyed) return null
         val size = minOf(original.width, original.height)
         if (size <= 0) return null
@@ -457,8 +456,10 @@ class PlaybackService : Service() {
     override fun onDestroy() {
         AppLog.event(AppLog.Category.APP, "playback_service_destroyed")
         destroyed = true
+        commandEpoch++
+        binder.clear()
         mainHandler.removeCallbacksAndMessages(null)
-        executor.shutdownNow()
+        artworkScope.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         session?.release()
         session = null

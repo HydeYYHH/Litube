@@ -24,10 +24,9 @@ import org.koin.core.context.GlobalContext
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Real navigation chain auto-PiP: a source screen launching Watch holds
- * auto-PiP only for the handoff; once Watch owns the foreground and reports
- * player eligibility, leaving the app enters PiP — auto-enter params on
- * API 31+, the leave hint on API 26-30. Skipped where PiP is unsupported.
+ * Real navigation chain auto-PiP: a source screen launching Watch holds auto-PiP only for the handoff;
+ * once Watch owns the foreground and reports player eligibility, leaving the app enters PiP — auto-enter
+ * params on API 31+, the leave hint on API 26-30. Skipped where PiP is unsupported.
  */
 class PipNavigationChainAndroidTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
@@ -70,7 +69,6 @@ class PipNavigationChainAndroidTest {
                 // suppression window, so give it time to lapse.
                 SystemClock.sleep(2_000)
             }
-            // Leave the app the way the user does: home.
             context.startActivity(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

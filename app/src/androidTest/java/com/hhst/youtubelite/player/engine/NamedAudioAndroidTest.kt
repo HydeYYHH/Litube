@@ -33,7 +33,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Verifies audio identity across source changes. */
 class NamedAudioAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
 
@@ -41,7 +40,7 @@ class NamedAudioAndroidTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1")
-        val id = args.getString("videoId") ?: "0e3GPea1Tyg"
+        val id = args.getString("videoId") ?: "zIN0foYC6_Y"
         val app = instrumentation.targetContext
         val engine = GlobalContext.get().get<PlaybackApi>() as PlaybackEngine
         val scenario = ActivityScenario.launch<WatchActivity>(
@@ -52,14 +51,24 @@ class NamedAudioAndroidTest {
                 GlobalContext.get().get<PlayerViewModel>().openVideo(id)
             }
             var ready = false
+            var menuOpened = false
             val deadline = SystemClock.elapsedRealtime() + 60_000
             while (!ready && SystemClock.elapsedRealtime() < deadline) {
-                instrumentation.runOnMainSync { ready = engine.snapshot.value.videoId == id && player.isPlaying && engine.snapshot.value.audioTracks.size > 1 }
+                instrumentation.runOnMainSync {
+                    if (!menuOpened && engine.snapshot.value.videoId == id && player.isPlaying) {
+                        engine.onAudioMenuOpened()
+                        menuOpened = true
+                    }
+                    ready = engine.snapshot.value.videoId == id && player.isPlaying && engine.snapshot.value.audioTracks.size > 1
+                }
                 if (!ready) Thread.sleep(100)
             }
             var sourceEvidence: Map<String, Any?> = emptyMap()
+            var audioFormats: List<Format> = emptyList()
             instrumentation.runOnMainSync {
                 val stream = engine.javaClass.getDeclaredField("currentStream").apply { isAccessible = true }.get(engine) as? Stream
+                val supplement = engine.javaClass.getDeclaredField("audioSupplement").apply { isAccessible = true }.get(engine) as? Pair<*, *>
+                audioFormats = stream?.formats.orEmpty() + (supplement?.second as? Stream)?.formats.orEmpty()
                 val manifest = player.currentManifest as? androidx.media3.exoplayer.hls.HlsManifest
                 sourceEvidence = mapOf(
                     "hlsClient" to stream?.hlsRequestPlan?.client?.name,
@@ -82,11 +91,12 @@ class NamedAudioAndroidTest {
                 "selected" to engine.snapshot.value.audioTrackKey, "error" to engine.snapshot.value.error,
                 "source" to sourceEvidence)))
             assertTrue("Real multilingual video did not become playable: ${engine.snapshot.value}", ready)
-            val original = engine.snapshot.value.audioTrackKey
+            val original = engine.snapshot.value.audioTrackKey ?: audioFormats.firstOrNull(AudioTrackIdentity::isOriginal)
+                ?.let(AudioTrackIdentity::key)
             assertNotNull("Original identity must be known", original)
             val originalChoice = engine.snapshot.value.audioTracks.single { it.key == original }
             assertTrue("Expected original audio: $originalChoice",
-                engine.snapshot.value.audioFormat?.let(AudioTrackIdentity::isOriginal) == true ||
+                audioFormats.any { AudioTrackIdentity.key(it) == original && AudioTrackIdentity.isOriginal(it) } ||
                     originalChoice.label.contains("original", ignoreCase = true))
             val dub = engine.snapshot.value.audioTracks.first { it.key != original }
             instrumentation.runOnMainSync { engine.setAudioTrack(dub.key) }
@@ -105,6 +115,10 @@ class NamedAudioAndroidTest {
                 if (!switched) Thread.sleep(100)
             }
             assertTrue("Live dub failed", switched)
+            instrumentation.runOnMainSync {
+                val activeStream = engine.javaClass.getDeclaredField("currentStream").apply { isAccessible = true }.get(engine) as Stream
+                assertTrue("Selected dub must remain in the active catalog", AudioTrackIdentity.matchingFormats(activeStream.formats, dub.key).isNotEmpty())
+            }
             instrumentation.runOnMainSync { engine.setAudioTrack(null) }
             var returned = false
             val returnDeadline = SystemClock.elapsedRealtime() + 20_000

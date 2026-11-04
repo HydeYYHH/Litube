@@ -1,6 +1,10 @@
 package com.hhst.youtubelite.ui.design
 
 import androidx.compose.foundation.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +21,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -34,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.R
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun SearchPanel(
@@ -56,6 +62,11 @@ internal fun SearchPanel(
     val focusManager = LocalFocusManager.current
     val fieldHeight = maxOf(32.dp, with(LocalDensity.current) { 22.sp.toDp() })
     val toolbarHeight = maxOf(48.dp, fieldHeight)
+    val motionScale = LocalMotionScale.current
+    val reveal = remember { Animatable(if (motionScale <= 0f) 1f else 0f) }
+    val scope = rememberCoroutineScope()
+    val currentOnClose by rememberUpdatedState(onClose)
+    var closing by remember { mutableStateOf(false) }
     /**
      * Closing only clears focus and hands the event to the host; the IME hides
      * through [onDispose]. An explicit hide here must not be issued while the
@@ -63,12 +74,29 @@ internal fun SearchPanel(
      * older APIs): that synchronous call can wedge the main thread before
      * [onClose] runs, leaving the overlay stuck open.
      */
-    val close: () -> Unit = { focusManager.clearFocus(); onClose() }
-    LaunchedEffect(Unit) { focus.requestFocus(); keyboard?.show() }
+    val close: () -> Unit = {
+        if (!closing) {
+            closing = true
+            focusManager.clearFocus()
+            scope.launch {
+                reveal.animateTo(0f, tween(motionDuration(80, motionScale)))
+                currentOnClose()
+            }
+        }
+    }
+    BackHandler(onBack = close)
+    LaunchedEffect(Unit) {
+        if (!closing) { focus.requestFocus(); keyboard?.show() }
+        reveal.animateTo(1f, tween(motionDuration(100, motionScale), easing = LinearOutSlowInEasing))
+    }
     DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
-    Box(Modifier.fillMaxSize().padding(top = toolbarHeight).background(DesignTokens.Scrim)
+    Box(Modifier.fillMaxSize().padding(top = toolbarHeight).graphicsLayer { alpha = reveal.value }
+        .background(DesignTokens.Scrim)
         .clickable(onClick = close).appDescription(R.string.a11y_close_search))
-    Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
+    Column(Modifier.fillMaxWidth().graphicsLayer {
+        alpha = reveal.value
+        translationY = -4.dp.toPx() * (1f - reveal.value)
+    }.background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
         Row(Modifier.fillMaxWidth().height(toolbarHeight).background(
             if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Surface), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = close, modifier = Modifier.testTag("search-panel-back"))

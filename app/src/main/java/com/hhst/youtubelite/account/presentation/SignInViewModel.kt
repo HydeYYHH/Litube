@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Drives the device-code flow: fetch a code, poll while the user confirms, commit the session. */
 class SignInViewModel(private val service: SignInService) : ViewModel() {
     private val _uiState = MutableStateFlow<SignInUiState>(SignInUiState.Loading)
     val uiState: StateFlow<SignInUiState> = _uiState.asStateFlow()

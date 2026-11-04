@@ -39,11 +39,9 @@ class SignInLifecycleAndroidTest {
         try {
             auth.write(key, "test-value")
             assertEquals("test-value", auth.read(key))
-            // The backing file must never contain the plaintext credential.
             val prefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/media-auth.xml")
             assertTrue(prefsFile.exists())
             assertFalse(prefsFile.readText().contains("test-value"))
-            // And the store is excluded from both backup rule sets.
             fun ruleText(name: String): String {
                 val id = context.resources.getIdentifier(name, "xml", context.packageName)
                 val parser = context.resources.getXml(id)

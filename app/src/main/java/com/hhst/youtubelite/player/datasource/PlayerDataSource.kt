@@ -41,7 +41,7 @@ class PlayerDataSource private constructor(
     /** Planned HTTP factory for live manifests/chunks; never cached. */
     val live: DataSource.Factory,
     private val manifestFactory: ((MediaRequestPlan?) -> DataSource.Factory)? = null,
-    private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
+    private val formatFactory: ((List<Format>, Boolean, Boolean, (() -> Unit)?) -> DataSource.Factory)? = null,
     private val hlsFactory: ((MediaRequestPlan) -> HlsDataSourceFactory)? = null,
     private val hlsMediaFactory: ((MediaRequestPlan) -> CacheDataSource)? = null,
 ) {
@@ -49,7 +49,7 @@ class PlayerDataSource private constructor(
         fun scoped(factory: DataSource.Factory) = DataSource.Factory { DiagnosticDataSource(factory.createDataSource(), context) }
         return PlayerDataSource(scoped(ytDash), scoped(ytProgressive), scoped(ytLiveProgressive), scoped(live),
             manifestFactory = { scoped(manifest(it)) },
-            formatFactory = { formats, dash, cached -> scoped(this.formats(formats, dash, cached)) },
+            formatFactory = { formats, dash, cached, slow -> scoped(this.formats(formats, dash, cached, slow)) },
             hlsFactory = { plan -> val original = vodHls(plan); HlsDataSourceFactory { type ->
                 DiagnosticDataSource(original.createDataSource(type), context, type)
             } },
@@ -57,8 +57,16 @@ class PlayerDataSource private constructor(
     }
     fun manifest(plan: MediaRequestPlan?): DataSource.Factory =
         if (plan != null) manifestFactory?.invoke(plan) ?: live else live
-    fun formats(formats: List<Format>, dash: Boolean = true, cached: Boolean = true): DataSource.Factory =
-        formatFactory?.invoke(formats, dash, cached) ?: if (dash) ytDash else if (cached) ytProgressive else ytLiveProgressive
+    fun formats(formats: List<Format>, dash: Boolean = true, cached: Boolean = true,
+                onSlowInitialRead: (() -> Unit)? = null): DataSource.Factory =
+        formatFactory?.invoke(formats, dash, cached, onSlowInitialRead) ?: if (dash) ytDash else if (cached) ytProgressive else ytLiveProgressive
+
+    fun withSlowInitialRead(listener: () -> Unit): PlayerDataSource = PlayerDataSource(
+        ytDash, ytProgressive, ytLiveProgressive, live,
+        manifestFactory = { manifest(it) },
+        formatFactory = { formats, dash, cached, slow -> this.formats(formats, dash, cached, slow ?: listener) },
+        hlsFactory = { vodHls(it) }, hlsMediaFactory = { requireNotNull(vodHlsMedia(it)) },
+    )
     fun vodHls(plan: MediaRequestPlan?): HlsDataSourceFactory =
         if (plan != null) hlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
         else DefaultHlsDataSourceFactory(live)
@@ -73,7 +81,6 @@ class PlayerDataSource private constructor(
         private const val CACHE_DIR = "player"
         private const val CACHE_BYTES = 512L * 1024 * 1024
         private const val CACHE_SINK_FRAGMENT_BYTES = 2L * 1024 * 1024
-        /** Progressive media read-ahead chunk size. */
         const val PROGRESSIVE_LOAD_INTERVAL_BYTES = 128 * 1024
 
         @Volatile
@@ -116,10 +123,11 @@ class PlayerDataSource private constructor(
                 ytLiveProgressive = youtubeFactory(http, range = false, rn = true).setMediaRequests(plans),
                 live = liveUpstream,
                 manifestFactory = { plan -> youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan) },
-                formatFactory = { formats, dash, cached ->
+                formatFactory = { formats, dash, cached, slow ->
                     val byUrl = formats.associateBy { it.url }
                     val upstream = youtubeFactory(http, range = dash, rn = false).setMediaRequests(plans)
                         .setPlanResolver { url -> byUrl[url]?.requestPlan }
+                        .setSlowInitialReadListener(slow.takeIf { dash })
                     if (!cached) upstream else maybeCache(context, upstream, CacheKeyFactory { spec ->
                         byUrl[spec.uri.toString()]?.let(YoutubePlaybackCacheKey::of)
                             ?: VIDEO_PLAYBACK_CACHE_KEY.buildCacheKey(spec)
@@ -156,7 +164,6 @@ class PlayerDataSource private constructor(
                 .setRangeParameterEnabled(range)
                 .setRnParameterEnabled(rn)
 
-        /** Cache-backed HLS media factory for [plan]; keys match playback's `hls:v1:` keys. */
         private fun hlsMediaCache(
             context: Context,
             http: OkHttpClient,

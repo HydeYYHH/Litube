@@ -3,7 +3,6 @@ package com.hhst.youtubelite.watch.domain
 import com.hhst.youtubelite.channel.domain.ChannelVideo
 import com.hhst.youtubelite.home.domain.FeedItem
 import com.hhst.youtubelite.library.domain.HistoryEntry
-import com.hhst.youtubelite.notifications.domain.NotificationItem
 import com.hhst.youtubelite.playlist.domain.PlaylistEntry
 import com.hhst.youtubelite.search.domain.SearchResult
 
@@ -77,9 +76,4 @@ fun HistoryEntry.toProvisional() = WatchProvisional(
 fun WatchRelated.toProvisional() = WatchProvisional(
     videoId = id, title = title, channel = channel, channelId = channelId, avatar = avatar,
     artwork = artwork, views = views, age = age, duration = duration, progress = progress,
-)
-
-fun NotificationItem.toProvisional() = WatchProvisional(
-    videoId = videoId.orEmpty(), title = text, channel = author, channelId = channelId,
-    avatar = avatar, artwork = artwork, age = age,
 )

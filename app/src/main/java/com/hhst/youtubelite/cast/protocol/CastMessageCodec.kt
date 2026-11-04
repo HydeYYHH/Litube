@@ -10,19 +10,16 @@ import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
 /**
- * Wire codec for the one protobuf message CASTV2 uses ([CastMessage]), plus the stream
- * framing (a 4-byte big-endian length prefix before each encoded message). Implemented directly
- * because a protobuf runtime is unnecessary for a single seven-field message. The decoder
- * skips unknown fields so receiver-side additions cannot break parsing. Malformed or truncated input
- * throws [IOException]; callers treat that as a failed channel, not as a crash.
+ * Wire codec for the one protobuf message CASTV2 uses ([CastMessage]), plus the stream framing
+ * (a 4-byte big-endian length prefix before each encoded message). Implemented directly: a
+ * protobuf runtime is unnecessary for a single seven-field message. The decoder skips unknown
+ * fields so receiver-side additions cannot break parsing. Malformed or truncated input throws
+ * [IOException]; callers treat that as a failed channel, not a crash.
  */
 object CastMessageCodec {
 
-    /**
-     * Frame size sanity cap. The Cast spec caps messages at 64 KB; anything bigger in the length
-     * prefix means garbage/desync on the socket, and rejecting it early avoids allocating an
-     * attacker-or-corruption-sized buffer (OOM guard).
-     */
+    /** Frame size sanity cap: the Cast spec caps messages at 64 KB; anything larger means
+     *  garbage/desync, and rejecting early avoids allocating a corruption-sized buffer. */
     private const val MAX_MESSAGE_BYTES = 64 * 1024
 
     private const val WIRE_VARINT = 0
@@ -37,10 +34,6 @@ object CastMessageCodec {
     private const val FIELD_PAYLOAD_TYPE = 5
     private const val FIELD_PAYLOAD_UTF8 = 6
     private const val FIELD_PAYLOAD_BINARY = 7
-
-    // ---------------------------------------------------------------------------------
-    // Protobuf encode
-    // ---------------------------------------------------------------------------------
 
     /** Encode to protobuf bytes (no length prefix). */
     fun encode(message: CastMessage): ByteArray {
@@ -80,10 +73,6 @@ object CastMessageCodec {
         }
         out.write(remaining.toInt())
     }
-
-    // ---------------------------------------------------------------------------------
-    // Protobuf decode
-    // ---------------------------------------------------------------------------------
 
     /** Decode protobuf bytes (no length prefix). Throws [IOException] on malformed input. */
     fun decode(data: ByteArray): CastMessage {
@@ -227,10 +216,6 @@ object CastMessageCodec {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // Stream framing (4-byte big-endian length prefix)
-    // ---------------------------------------------------------------------------------
-
     /** Write one framed message. Does NOT flush - the channel owns flushing/batching. */
     fun writeFramed(out: OutputStream, message: CastMessage) {
         val body = encode(message)
@@ -251,7 +236,7 @@ object CastMessageCodec {
     fun readFramed(input: InputStream): CastMessage? {
         val first = input.read()
         if (first < 0) {
-            return null // clean close between frames
+            return null
         }
         val length = (first shl 24) or
             (readByteOrThrow(input) shl 16) or

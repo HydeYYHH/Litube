@@ -6,15 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.home.domain.FeedMenuAction
 import com.hhst.youtubelite.home.domain.FeedMenuKind
+import com.hhst.youtubelite.home.domain.withMissingDisplayFrom
 import com.hhst.youtubelite.subscriptions.data.SubscriptionsFilter
 import com.hhst.youtubelite.subscriptions.data.SubscriptionsRepository
 import com.hhst.youtubelite.subscriptions.data.SubscriptionsScenario
 import com.hhst.youtubelite.subscriptions.data.subscriptionsSignedOutPrompt
 import com.hhst.youtubelite.subscriptions.domain.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -22,9 +21,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.ContinuationHistory
 
-/** Hosts the subscriptions feed and its channel list. */
 class SubscriptionsViewModel(
     private val repository: SubscriptionsRepository,
     private val savedState: SavedStateHandle,
@@ -33,8 +34,13 @@ class SubscriptionsViewModel(
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
 ) : ViewModel() {
+    private val readChannels = savedState.get<ArrayList<String>>("readChannels").orEmpty().toMutableSet()
     private val _uiState = MutableStateFlow(
         SubscriptionsUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "",
+            selectedChannel = savedState.get<String>("selectedChannelId")?.let { id ->
+                SubscribedChannel(id, savedState["selectedChannelName"] ?: "", savedState["selectedChannelAvatar"] ?: "", "",
+                    subscriptionParams = savedState["selectedChannelParams"])
+            },
             overlay = when (savedState.get<String>("overlay")) {
                 "search" -> SubscriptionsOverlay.Search
                 "channels" -> SubscriptionsOverlay.Channels
@@ -62,11 +68,16 @@ class SubscriptionsViewModel(
     private var pageJob: Job? = null
     private var channelsJob: Job? = null
     private var menuJob: Job? = null
+    private var menuRevision = 0L
+    private var sessionEpoch = 0L
+    val writes = com.hhst.youtubelite.core.WriteFeedback()
     private var feedbackJob: Job? = null
     private var generation = 0
     /** Channel reads follow the account, not the chip: a feed refresh never invalidates them. */
     private var channelsGeneration = 0
     private var channelsReadAt: Long? = null
+    private val feedContinuations = ContinuationHistory()
+    private val channelContinuations = ContinuationHistory()
 
     fun onForeground() {
         if (scenario != SubscriptionsScenario.Content || channelsJob?.isActive == true) return
@@ -85,13 +96,16 @@ class SubscriptionsViewModel(
         }
     }
 
-    private var sessionKey: Long? = null
+    private var sessionKey: Long? = savedState["subscriptionsSession"]
 
     fun updateSession(value: Boolean, key: Long? = null) {
         val changed = key != null && sessionKey != null && sessionKey != key
         sessionKey = key
+        savedState["subscriptionsSession"] = key
         if (signedIn == value && !changed) return
         signedIn = value
+        sessionEpoch++
+        writes.reset()
         ++generation
         ++channelsGeneration
         loadJob?.cancel()
@@ -99,9 +113,13 @@ class SubscriptionsViewModel(
         channelsJob?.cancel()
         // The previous session's deferred menu reads and feedback writes must not survive.
         menuJob?.cancel()
-        feedbackJob?.cancel()
-        saveSheet?.close()
-        _uiState.update { it.copy(signedIn = value, channels = SubscriptionsChannels.Loading,
+        feedbackJob?.cancel(); feedbackJob = null
+        saveSheet?.resetSession()
+        showOverlay(SubscriptionsOverlay.None)
+        readChannels.clear()
+        savedState["readChannels"] = arrayListOf<String>()
+        saveSelectedChannel(null)
+        _uiState.update { it.copy(signedIn = value, selectedChannel = null, channels = SubscriptionsChannels.Loading, verification = null,
             content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
         if (value) {
             refresh(SubscriptionsFilter.from(uiState.value.selectedChip))
@@ -131,7 +149,8 @@ class SubscriptionsViewModel(
                 navigation.trySend(SubscriptionsNavigationRequest.Search(action.query))
             }
             is SubscriptionsAction.SelectChip -> {
-                if (SubscriptionsFilter.from(action.chip) !in repository.supportedFilters) return
+                if (action.chip == _uiState.value.selectedChip ||
+                    SubscriptionsFilter.from(action.chip) !in repository.supportedFilters) return
                 savedState["chip"] = action.chip.name
                 _uiState.update { it.copy(selectedChip = action.chip) }
                 refresh(SubscriptionsFilter.from(action.chip))
@@ -145,6 +164,7 @@ class SubscriptionsViewModel(
             SubscriptionsAction.LoadMoreChannels -> loadMoreChannels()
             is SubscriptionsAction.OpenVideo -> navigation.trySend(SubscriptionsNavigationRequest.Watch(action.videoId))
             is SubscriptionsAction.OpenChannel -> navigation.trySend(SubscriptionsNavigationRequest.Channel(action.channelId))
+            is SubscriptionsAction.SelectChannel -> selectChannel(action.channelId)
             is SubscriptionsAction.OpenMenu -> {
                 showOverlay(SubscriptionsOverlay.Menu(action.videoId))
                 loadMenu(action.videoId)
@@ -174,7 +194,35 @@ class SubscriptionsViewModel(
         }
     }
 
+    private fun saveSelectedChannel(channel: SubscribedChannel?) {
+        savedState["selectedChannelId"] = channel?.channelId
+        savedState["selectedChannelName"] = channel?.name
+        savedState["selectedChannelAvatar"] = channel?.avatar
+        savedState["selectedChannelParams"] = channel?.subscriptionParams
+    }
+
+    private fun selectChannel(channelId: String?) {
+        if (!signedIn || channelId == _uiState.value.selectedChannel?.channelId) return
+        val channels = _uiState.value.channels as? SubscriptionsChannels.Ready
+        val channel = if (channelId == null) null else channels?.channels?.firstOrNull { it.channelId == channelId } ?: return
+        if (channel != null) readChannels.add(channel.channelId)
+        savedState["readChannels"] = ArrayList(readChannels)
+        saveSelectedChannel(channel)
+        savedState["chip"] = SubscriptionsChip.All.name
+        showOverlay(SubscriptionsOverlay.None)
+        _uiState.update { state ->
+            state.copy(selectedChannel = channel?.copy(hasNewContent = false), selectedChip = SubscriptionsChip.All,
+                verification = null,
+                channels = channels?.copy(channels = channels.channels.map {
+                    if (it.channelId == channelId) it.copy(hasNewContent = false) else it
+                }) ?: state.channels)
+        }
+        refresh(SubscriptionsFilter.All)
+    }
+
     private fun showOverlay(next: SubscriptionsOverlay) {
+        menuRevision++
+        menuJob?.cancel()
         savedState["overlay"] = when (next) {
             SubscriptionsOverlay.None -> "none"
             SubscriptionsOverlay.Search -> "search"
@@ -200,6 +248,7 @@ class SubscriptionsViewModel(
             try {
                 val page = repository.subscribedChannelsPage()
                 if (request == channelsGeneration) {
+                    channelContinuations.clear()
                     channelsReadAt = clock()
                     _uiState.update { it.copy(channels = readyChannels(emptyList(), page)) }
                 }
@@ -220,6 +269,8 @@ class SubscriptionsViewModel(
      * stable within each group.
      */
     private fun loadMoreChannels() {
+        // A quiet refresh still paints the old directory, but its cursor belongs to that old read.
+        if (channelsJob?.isActive == true) return
         val ready = _uiState.value.channels as? SubscriptionsChannels.Ready ?: return
         val cursor = ready.nextKey ?: return
         if (ready.append == AppendState.Loading) return
@@ -229,9 +280,10 @@ class SubscriptionsViewModel(
             try {
                 val page = repository.subscribedChannelsPage(cursor)
                 if (request != channelsGeneration) return@launch
+                val nextKey = channelContinuations.nextAfter(cursor, page.nextKey)
                 _uiState.update {
                     val current = it.channels as? SubscriptionsChannels.Ready ?: return@update it
-                    it.copy(channels = readyChannels(current.channels, page))
+                    it.copy(channels = readyChannels(current.channels, page.copy(nextKey = nextKey)))
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -253,7 +305,14 @@ class SubscriptionsViewModel(
             byId[next.channelId] = if (previous == null) next
             else previous.copy(hasNewContent = previous.hasNewContent || next.hasNewContent)
         }
-        val merged = byId.values.toList().sortedByDescending { it.hasNewContent }
+        // Keep the consumed marker hidden while an in-flight/stale directory still
+        // reports it. Once the server clears it, a subsequent new update can badge again.
+        page.channels.groupBy { it.channelId }.forEach { (id, entries) ->
+            if (entries.none { it.hasNewContent }) readChannels.remove(id)
+        }
+        savedState["readChannels"] = ArrayList(readChannels)
+        val merged = byId.values.map { if (it.channelId in readChannels) it.copy(hasNewContent = false) else it }
+            .sortedByDescending { it.hasNewContent }
         return SubscriptionsChannels.Ready(merged, page.nextKey, AppendState.Idle)
     }
 
@@ -262,11 +321,14 @@ class SubscriptionsViewModel(
         loadJob?.cancel()
         pageJob?.cancel()
         val request = ++generation
+        val channel = _uiState.value.selectedChannel
         _uiState.update { it.copy(content = SubscriptionsContent.Loading, menuLoading = false, menuFailed = false) }
         loadJob = viewModelScope.launch {
             try {
-                val page = repository.subscriptions(filter)
+                val page = if (channel == null) repository.subscriptions(filter)
+                    else repository.channelSubscriptions(channel, filter)
                 if (request == generation) {
+                    feedContinuations.clear()
                     _uiState.update { it.copy(content = SubscriptionsContent.Feed(page)) }
                     // A filter can empty the first page while the server keeps going.
                     continuePastEmptyPage(autoLoads = 0)
@@ -301,19 +363,26 @@ class SubscriptionsViewModel(
         if (automatic && autoLoads > MAX_EMPTY_AUTO_LOADS) return
         val request = generation
         val filter = SubscriptionsFilter.from(_uiState.value.selectedChip)
+        val channel = _uiState.value.selectedChannel
         _uiState.update { it.copy(content = current.copy(append = AppendState.Loading)) }
         pageJob = viewModelScope.launch {
             try {
-                val page = repository.subscriptions(filter, current.page.nextKey)
+                val page = if (channel == null) repository.subscriptions(filter, current.page.nextKey)
+                    else repository.channelSubscriptions(channel, filter, current.page.nextKey)
                 if (request != generation) return@launch
+                val nextKey = feedContinuations.nextAfter(current.page.nextKey, page.nextKey)
                 var combinedEmpty = true
                 _uiState.update { state ->
                     val existing = (state.content as? SubscriptionsContent.Feed)?.page ?: return@update state
-                    val combined = (existing.items + page.items).distinctBy { it.id }
+                    val unique = linkedMapOf<String, com.hhst.youtubelite.home.domain.FeedItem.Video>()
+                    (existing.items + page.items).forEach { row ->
+                        unique[row.id] = unique[row.id]?.withMissingDisplayFrom(row) ?: row
+                    }
+                    val combined = unique.values.toList()
                     combinedEmpty = combined.isEmpty()
                     state.copy(content = SubscriptionsContent.Feed(existing.copy(
                         items = combined,
-                        nextKey = page.nextKey.takeUnless { it == current.page.nextKey },
+                        nextKey = nextKey,
                     ), emptyAutoLoads = if (combinedEmpty) autoLoads else 0))
                 }
                 if (combinedEmpty) continuePastEmptyPage(autoLoads)
@@ -357,6 +426,10 @@ class SubscriptionsViewModel(
         if (!_uiState.value.live || !signedIn) return
         if (sessionKey != null && video.feedbackGeneration != sessionKey) return
         menuJob?.cancel()
+        val revision = ++menuRevision
+        val requestGeneration = generation
+        val requestSession = sessionEpoch
+        fun ownsMenu() = revision == menuRevision && requestGeneration == generation && requestSession == sessionEpoch
         if (video.menuEndpoint == null) {
             _uiState.update { it.copy(menuLoading = false, menuFailed = false) }
             return
@@ -365,6 +438,8 @@ class SubscriptionsViewModel(
         menuJob = viewModelScope.launch {
             try {
                 val resolved = repository.menu(video)
+                currentCoroutineContext().ensureActive()
+                if (!ownsMenu()) return@launch
                 _uiState.update { current ->
                     if ((current.overlay as? SubscriptionsOverlay.Menu)?.videoId != videoId) return@update current
                     if (sessionKey != null && resolved.feedbackGeneration != sessionKey) return@update current
@@ -379,7 +454,7 @@ class SubscriptionsViewModel(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
                 _uiState.update { current ->
-                    if ((current.overlay as? SubscriptionsOverlay.Menu)?.videoId != videoId) current
+                    if (!ownsMenu() || (current.overlay as? SubscriptionsOverlay.Menu)?.videoId != videoId) current
                     else current.copy(menuLoading = false, menuFailed = true)
                 }
             }
@@ -397,11 +472,14 @@ class SubscriptionsViewModel(
         }
         if (token.isNullOrBlank()) return
         val request = generation
+        val requestSession = sessionEpoch
+        fun ownsFeedback() = request == generation && requestSession == sessionEpoch
         showOverlay(SubscriptionsOverlay.None)
-        feedbackJob = viewModelScope.launch {
+        feedbackJob = writes.launch(viewModelScope) {
             try {
                 repository.feedback(video, action)
-                if (generation != request || sessionKey != video.feedbackGeneration) return@launch
+                currentCoroutineContext().ensureActive()
+                if (!ownsFeedback()) return@launch
                 _uiState.update { state ->
                     val feed = state.content as? SubscriptionsContent.Feed ?: return@update state
                     state.copy(content = feed.copy(page = feed.page.copy(items = feed.page.items.filterNot {
@@ -411,15 +489,14 @@ class SubscriptionsViewModel(
                 }
                 notices.trySend(AppNotice.Message("Removed from recommendations"))
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-            catch (error: Exception) { notices.trySend(com.hhst.youtubelite.diagnostics.writeFailureNotice(
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { if (ownsFeedback()) notices.trySend(AppNotice.SignIn) }
+            catch (error: Exception) { if (ownsFeedback()) notices.trySend(com.hhst.youtubelite.diagnostics.writeFailureNotice(
                 "subscriptions_feedback_${action.name.lowercase()}", error,
                 mapOf("video_id" to videoId, "channel_id" to video.channelId),
                 message = "Couldn't update recommendations. Try again.")) }
         }
     }
 
-    /** The panel menu mirrors the home feed menu kinds. */
     val menuKind: FeedMenuKind = FeedMenuKind.Video
 
     companion object {

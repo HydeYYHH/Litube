@@ -24,10 +24,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Request-count coverage for the identity-scoped watch cache: reopening a page
- * (mini-player return, recreation, back-and-forth) costs zero network reads.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CachedWatchRepositoryTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
@@ -86,7 +82,6 @@ class CachedWatchRepositoryTest {
         val repo = CachedWatchRepository(delegate, identity = { 0L })
         assertEquals("Title a-1", repo.watch("a").video.title)
         assertEquals("Title a-2", repo.watchFresh("a").video.title)
-        // The fresh result becomes the cached one: no third read.
         assertEquals("Title a-2", repo.watch("a").video.title)
         assertEquals(listOf("a", "a"), delegate.calls)
     }
@@ -109,7 +104,6 @@ class CachedWatchRepositoryTest {
         repo.watch("b")
         repo.watch("c")
         assertEquals(listOf("a", "b", "c"), delegate.calls)
-        // "a" was evicted; "c" stayed.
         repo.watch("c")
         repo.watch("a")
         assertEquals(listOf("a", "b", "c", "a"), delegate.calls)

@@ -45,8 +45,7 @@ class EmbeddedBoundsAndroidTest {
         fun check(left: Int, width: Int) {
             compose.waitForIdle()
             val rect = compose.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
-            // The compose root cannot exceed the physical window: a 400 dp
-            // window on a 440 dpi screen is capped at the device width.
+            // The compose root cannot exceed the physical window: a 400dp window on a 440dpi screen is capped at the device width.
             val cap = compose.onNodeWithTag("root").fetchSemanticsNode().boundsInRoot.width
             assertEquals(left * density, rect.left, 1.5f)
             assertEquals(minOf(width * density, cap), rect.width, 1.5f)

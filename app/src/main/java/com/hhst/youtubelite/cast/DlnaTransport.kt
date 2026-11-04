@@ -5,7 +5,12 @@ import com.yinnho.upnpcast.DLNACast
 import java.io.IOException
 import java.io.ByteArrayOutputStream
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -24,8 +29,11 @@ internal class DlnaTransport(private val client: OkHttpClient) {
     var renderer: DlnaRenderer? = null
         private set
 
+    fun close() { client.connectionPool.evictAll() }
+
     suspend fun describe(location: HttpUrl): DlnaRenderer? {
-        val request = Request.Builder().url(location).header("User-Agent", "Litube/1.0 UPnP/1.1").build()
+        val request = Request.Builder().url(location).header("User-Agent", "Litube/1.0 UPnP/1.1")
+            .header("Connection", "close").build()
         val (status, bytes) = read(request, "description")
         return try {
             DlnaDescription.parse(bytes, location)
@@ -47,7 +55,60 @@ internal class DlnaTransport(private val client: OkHttpClient) {
     }
 
     suspend fun play(): Boolean { action("Play", "<Speed>1</Speed>"); return true }
+
+    /** SetURI/Play can acknowledge before opening the media (notably Kodi). Track duration
+     * may legally be zero/NOT_IMPLEMENTED; track URIs can be omitted or rewritten by TVs.
+     * Prefer a matching track, with stable PLAYING as the fallback for incomplete metadata. */
+    suspend fun awaitMediaReady(url: String, timeoutMs: Long = 20_000) {
+        var observed: DLNACast.PlaybackState? = null
+        val ready = withTimeoutOrNull(timeoutMs) {
+            var playingSince: Long? = null
+            while (true) {
+                observed = state()
+                if (observed == DLNACast.PlaybackState.PLAYING) {
+                    val since = playingSince ?: System.nanoTime().also { playingSince = it }
+                    // Position information is a hint, not a prerequisite for playback control.
+                    val track = try {
+                        withTimeoutOrNull(1_000) { action("GetPositionInfo")["TrackURI"] }
+                    } catch (_: IOException) { null }
+                    val stableMs = (System.nanoTime() - since) / 1_000_000
+                    val identified = track.isNullOrBlank() || track == "NOT_IMPLEMENTED" || track == url
+                    if (stableMs >= if (identified) 500 else 2_000) return@withTimeoutOrNull true
+                } else playingSince = null
+                delay(150)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            false
+        }
+        if (ready != true) throw DlnaRequestException("media_ready", requireNotNull(renderer).control,
+            detail = "Playback did not become ready within ${timeoutMs} ms; transport=$observed")
+    }
     suspend fun pause(): Boolean { action("Pause"); return true }
+
+    /** Some renderers accept Pause before a late media-open/seek callback resumes playback.
+     * Confirm a stable paused state and retry only while the renderer still reports PLAYING. */
+    suspend fun pauseAndConfirm(): Boolean = withTimeout(4_000) {
+        pause()
+        var lastRequest = System.nanoTime()
+        var pausedSince: Long? = null
+        while (true) {
+            delay(150)
+            val observed = state()
+            val now = System.nanoTime()
+            if (observed == DLNACast.PlaybackState.PAUSED) {
+                val since = pausedSince ?: now.also { pausedSince = it }
+                if (now - since >= 500_000_000L) return@withTimeout true
+            } else {
+                pausedSince = null
+                if (observed == DLNACast.PlaybackState.PLAYING && now - lastRequest >= 500_000_000L) {
+                    pause()
+                    lastRequest = System.nanoTime()
+                }
+            }
+        }
+        @Suppress("UNREACHABLE_CODE")
+        false
+    }
     suspend fun stop(): Boolean {
         if (renderer == null) return false
         action("Stop")
@@ -56,16 +117,53 @@ internal class DlnaTransport(private val client: OkHttpClient) {
     suspend fun seek(positionMs: Long): Boolean {
         val seconds = positionMs.coerceAtLeast(0) / 1000
         val time = String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+        val parameters = "<Unit>REL_TIME</Unit><Target>$time</Target>"
+        try {
+            seekAction(parameters)
+            return true
+        } catch (error: DlnaRequestException) {
+            if (error.code !in setOf("501", "701")) throw error
+            val paused = try { state() == DLNACast.PlaybackState.PAUSED } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (stateError: Exception) {
+                error.addSuppressed(stateError)
+                throw error
+            }
+            if (!paused) throw error
+        }
+        // Kodi rejects Seek unless PLAYING, including while PAUSED_PLAYBACK. Only after an
+        // explicit state-related rejection, resume for the seek and restore the user's pause.
+        var failure: Throwable? = null
+        try {
+            play()
+            withTimeout(3_000) {
+                while (state() != DLNACast.PlaybackState.PLAYING) delay(100)
+            }
+            seekAction(parameters)
+        } catch (error: Throwable) {
+            failure = error
+            throw error
+        } finally {
+            try {
+                withContext(NonCancellable) { pause() }
+            } catch (pauseError: Exception) {
+                if (failure == null) throw pauseError
+                failure.addSuppressed(pauseError)
+            }
+        }
+        return true
+    }
+
+    private suspend fun seekAction(parameters: String) {
         repeat(3) { attempt ->
             try {
-                action("Seek", "<Unit>REL_TIME</Unit><Target>$time</Target>")
-                return true
+                action("Seek", parameters)
+                return
             } catch (error: DlnaRequestException) {
                 if (error.code !in setOf("701", "711") || attempt == 2) throw error
                 delay(250L * (attempt + 1))
             }
         }
-        return false
     }
     suspend fun progress(): Pair<Long, Long>? {
         val values = action("GetPositionInfo")
@@ -89,6 +187,9 @@ internal class DlnaTransport(private val client: OkHttpClient) {
             "$parameters</u:$name></s:Body></s:Envelope>"
         val request = Request.Builder().url(target.control)
             .header("SOAPAction", "\"${target.serviceType}#$name\"")
+            // Many embedded renderers close SOAP sockets without advertising it. Do not reuse
+            // a description/SetURI socket for Play (or replay a POST after a stale-socket EOF).
+            .header("Connection", "close")
             .post(body.toRequestBody("text/xml; charset=utf-8".toMediaType())).build()
         val (status, bytes) = read(request, name)
         return try {

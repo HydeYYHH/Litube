@@ -34,17 +34,18 @@ class LiveChatViewModelTest {
         var sendError: Exception? = null
         val sent = mutableListOf<Pair<String, String>>()
         var listenCalls = 0
+        var initialSendParams: String? = "send-params"
         var sendGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
         override suspend fun listen(key: String, onPage: (ChatPage) -> Unit) {
             listenCalls++
             listenError?.let { throw it }
-            onPage(ChatPage(emptyList(), emptyList(), null, 1000, sendParams = "send-params"))
+            onPage(ChatPage(emptyList(), emptyList(), null, 1000, sendParams = initialSendParams))
             while (pages.isNotEmpty()) onPage(pages.removeFirst())
             awaitCancellation()
         }
 
-        override suspend fun send(key: String, text: String) {
+        override suspend fun send(continuation: String, key: String, text: String) {
             sendError?.let { throw it }
             sendGate?.await()
             sent += key to text
@@ -140,7 +141,54 @@ class LiveChatViewModelTest {
         assertEquals("hello", vm.uiState.value.draft)
         assertFalse(vm.uiState.value.sending)
         val notice = withTimeoutOrNull(1_000) { vm.actionNotices.first() }
-        assertTrue(notice is AppNotice.Message)
+        assertTrue(notice is AppNotice.Failure)
+        vm.close()
+    }
+
+    @Test fun webAuthorizationIsLazyKeepsDraftAndNeverAutomaticallyPosts() = runTest {
+        val gateway = FakeGateway().apply { sendError = ChatAuthorizationRequiredException() }
+        val vm = LiveChatViewModel(gateway)
+        val requests = mutableListOf<Long>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.authorizationRequests.collect { requests += it } }
+        vm.open("key")
+        advanceUntilIdle()
+        assertTrue(requests.isEmpty())
+        vm.onAction(LiveChatAction.DraftChanged("keep this draft"))
+        advanceUntilIdle()
+        assertTrue(requests.isEmpty())
+        vm.onAction(LiveChatAction.Send)
+        advanceUntilIdle()
+        assertEquals(1, requests.size)
+        assertTrue(vm.authorizationIsCurrent(requests.single()))
+        assertEquals("keep this draft", vm.uiState.value.draft)
+        assertTrue(vm.uiState.value.signedIn)
+        assertFalse(vm.uiState.value.sending)
+        gateway.sendError = null
+        advanceUntilIdle()
+        assertTrue(gateway.sent.isEmpty())
+        vm.onAction(LiveChatAction.Send)
+        advanceUntilIdle()
+        assertEquals(listOf("send-params" to "keep this draft"), gateway.sent)
+        vm.close()
+        assertFalse(vm.authorizationIsCurrent(requests.single()))
+    }
+
+    @Test fun aRestrictedChatPreservesTheDraftAndExplainsTheRestriction() = runTest {
+        val gateway = FakeGateway().apply { sendError = ChatPostingRestrictedException("Subscribers-only mode") }
+        val vm = LiveChatViewModel(gateway)
+        vm.open("chat")
+        advanceUntilIdle()
+        vm.onAction(LiveChatAction.DraftChanged("keep this"))
+        vm.onAction(LiveChatAction.Send)
+        advanceUntilIdle()
+        assertEquals("Subscribers-only mode", vm.uiState.value.postingRestriction)
+        assertEquals("keep this", vm.uiState.value.draft)
+        assertEquals(AppNotice.Message("Subscribers-only mode"), vm.actionNotices.first())
+        gateway.sendError = null
+        vm.onAction(LiveChatAction.Send)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.postingRestriction)
+        assertEquals("", vm.uiState.value.draft)
         vm.close()
     }
 
@@ -234,7 +282,7 @@ class LiveChatViewModelTest {
                 onPage(page(message("one")))
                 awaitCancellation()
             }
-            override suspend fun send(key: String, text: String) { fail("No send params were provided") }
+            override suspend fun send(continuation: String, key: String, text: String) { fail("No send params were provided") }
         })
         vm.open("key")
         advanceUntilIdle()
@@ -242,6 +290,37 @@ class LiveChatViewModelTest {
         vm.onAction(LiveChatAction.DraftChanged("hello"))
         vm.onAction(LiveChatAction.Send)
         advanceUntilIdle()
+        vm.close()
+    }
+
+    @Test fun tvPollingUsesTheKnownBroadcastAddressAndPreservesPhotos() = runTest {
+        val gateway = FakeGateway().apply {
+            initialSendParams = null
+            pages += page(message("one").copy(photo = "https://yt4.ggpht.com/avatar=s64"))
+        }
+        val vm = LiveChatViewModel(gateway)
+        vm.open("continuation", "broadcast-address")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.canSend)
+        assertEquals("https://yt4.ggpht.com/avatar=s64",
+            (vm.uiState.value.content as LiveChatContent.Ready).messages.single().photo)
+        vm.updateSession(true, 2)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.canSend)
+        vm.onAction(LiveChatAction.DraftChanged("hello"))
+        vm.onAction(LiveChatAction.Send)
+        advanceUntilIdle()
+        assertEquals(listOf("broadcast-address" to "hello"), gateway.sent)
+        assertEquals("", vm.uiState.value.draft)
+        vm.close()
+    }
+
+    @Test fun endedPollingCannotReenablePostingWithBroadcastParams() = runTest {
+        val vm = LiveChatViewModel(EndingGateway(listOf(page(message("one")))))
+        vm.open("continuation", "broadcast-address")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.ended)
+        assertFalse(vm.uiState.value.canSend)
         vm.close()
     }
 
@@ -257,7 +336,7 @@ class LiveChatViewModelTest {
             replayPosition = positionMs()
             pages.forEach(onPage)
         }
-        override suspend fun send(key: String, text: String) = Unit
+        override suspend fun send(continuation: String, key: String, text: String) = Unit
     }
 
     @Test fun aFinishedLiveStreamKeepsItsTranscriptAndStopsPosting() = runTest {
@@ -299,10 +378,10 @@ class LiveChatViewModelTest {
                 replayPosition = positionMs()
                 onPage(page(message("replay")))
             }
-            override suspend fun send(key: String, text: String) = Unit
+            override suspend fun send(continuation: String, key: String, text: String) = Unit
         }
         val vm = LiveChatViewModel(gateway, signedIn = true)
-        vm.open("key")
+        vm.open("key", "broadcast-address")
         advanceUntilIdle()
         assertFalse(vm.uiState.value.ended)
         vm.openReplay("key") { 12_000L }
@@ -310,7 +389,6 @@ class LiveChatViewModelTest {
         val state = vm.uiState.value
         assertTrue(state.replay)
         assertTrue(state.ended)
-        // The live transcript survives the mode switch and the replay appends to it.
         assertEquals(listOf("live", "replay"), (state.content as LiveChatContent.Ready).messages.map { it.id })
         assertEquals(12_000L, gateway.replayPosition)
         vm.close()

@@ -41,20 +41,23 @@ data class ChannelPage(
     val videos: List<ChannelVideo>,
     val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
     val homeShelves: List<ChannelHomeShelf> = emptyList(),
-    /** Continuation for the videos tab; null when the server has no further page. */
     val videosNextKey: String? = null,
     /** The videos tab was not part of the landing read; it loads on demand. */
     val videosDeferred: Boolean = false,
     /** The playlists tab was not part of the landing read; it loads on demand. */
     val playlistsDeferred: Boolean = false,
+    /** Landing-page endpoints, scoped by the repository to this page's session. */
+    val readReference: ChannelReadReference? = null,
 )
 
-/** One server page of the videos tab. */
+/** Opaque, page-owned reference; it is never persisted or kept in a repository cache. */
+interface ChannelReadReference
+
 data class ChannelVideosPage(val videos: List<ChannelVideo>, val nextKey: String?)
 
-data class ChannelHomeShelf(val title: String, val description: String = "", val videos: List<ChannelVideo>)
+data class ChannelHomeShelf(val title: String, val description: String = "", val videos: List<ChannelVideo> = emptyList(),
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList())
 
-/** The channel grid uses the measured 2:3 poster with a 1px outer and 2px inner gutter. */
 data class ChannelShort(
     val id: String,
     val title: String,
@@ -85,10 +88,8 @@ data class ChannelLivePage(
     val all: List<ChannelLiveVideo> get() = current + past
 }
 
-/** One server page of the channel shorts tab. */
 data class ChannelShortsPage(val shorts: List<ChannelShort>, val nextKey: String? = null)
 
-/** One server page of the in-channel search. */
 data class ChannelSearchResults(val videos: List<ChannelVideo>, val nextKey: String? = null)
 
 interface ChannelRepository {
@@ -96,12 +97,14 @@ interface ChannelRepository {
 
     suspend fun shorts(channelId: String): ChannelShortsPage
 
-    /** Further shorts after [cursor]; finite tabs return an empty page. */
+    suspend fun shorts(channelId: String, opened: ChannelPage): ChannelShortsPage = shorts(channelId)
+
     suspend fun shortsNext(channelId: String, cursor: String): ChannelShortsPage = ChannelShortsPage(emptyList())
 
     suspend fun live(channelId: String): ChannelLivePage
 
-    /** Further live rows after [cursor]; finite tabs return an empty page. */
+    suspend fun live(channelId: String, opened: ChannelPage): ChannelLivePage = live(channelId)
+
     suspend fun liveNext(channelId: String, cursor: String): ChannelLivePage = ChannelLivePage()
 
     suspend fun posts(channelId: String): ChannelPostsPage
@@ -110,11 +113,12 @@ interface ChannelRepository {
     suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage =
         com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList())
 
-    /** Further playlists after [cursor]; finite tabs return an empty page. */
+    suspend fun playlists(channelId: String, opened: ChannelPage): com.hhst.youtubelite.library.domain.PlaylistCollectionPage =
+        playlists(channelId)
+
     suspend fun playlistsNext(channelId: String, cursor: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage =
         com.hhst.youtubelite.library.domain.PlaylistCollectionPage(emptyList())
 
-    /** Further posts after [cursor]; finite tabs return an empty page. */
     suspend fun postsNext(channelId: String, cursor: String): ChannelPostsPage = ChannelPostsPage(emptyList())
 
     /** True when the repository searches the channel on the server instead of filtering the first page. */
@@ -122,10 +126,11 @@ interface ChannelRepository {
 
     suspend fun searchVideos(channelId: String, query: String): ChannelSearchResults = ChannelSearchResults(emptyList())
 
-    /** Further in-channel search results after [cursor]. */
     suspend fun searchNext(channelId: String, cursor: String): ChannelSearchResults = ChannelSearchResults(emptyList())
 
     suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage = ChannelVideosPage(emptyList(), null)
+
+    suspend fun videos(channelId: String, opened: ChannelPage): ChannelVideosPage = videos(channelId, null as String?)
 }
 
 sealed interface ChannelSection<out T> {
@@ -181,7 +186,6 @@ data class ChannelUiState(
     val videosTab: ChannelSection<Unit> = ChannelSection.Ready(Unit),
     /** The playlists tab; Ready carries the rows, Loading/Failed are tab-local. */
     val playlists: ChannelSection<List<com.hhst.youtubelite.playlist.domain.PlaylistSummary>> = ChannelSection.Loading,
-    /** Server continuations and append states for the paginated sections. */
     val shortsNextKey: String? = null,
     val liveNextKey: String? = null,
     val postsNextKey: String? = null,
@@ -203,6 +207,7 @@ data class ChannelUiState(
     val production: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
+    val signedIn: Boolean = false,
 ) {
     val isLocalTab: Boolean
         get() = selectedTab in listOf(
@@ -216,7 +221,7 @@ data class ChannelUiState(
         )
 }
 
-enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), You("You") }
+enum class ChannelDestination(val label: String) { Home("Home"), Shorts("Shorts"), Subscriptions("Subscriptions"), You("You") }
 
 sealed interface ChannelNavigationRequest {
     data class Destination(val destination: ChannelDestination) : ChannelNavigationRequest
@@ -287,14 +292,12 @@ sealed interface ChannelAction {
     data class SelectPostMenu(val action: PostMenuAction) : ChannelAction
     data class PostFeedback(val identity: PostIdentity, val liked: Boolean) : ChannelAction
     data class PostComments(val identity: PostIdentity) : ChannelAction
-    /** Loads the next server page of the videos tab. */
     data object LoadVideosNext : ChannelAction
     data object LoadShortsNext : ChannelAction
     data object LoadLiveNext : ChannelAction
     data object LoadPostsNext : ChannelAction
     data object LoadPlaylistsNext : ChannelAction
     data object LoadSearchNext : ChannelAction
-    /** Re-runs a failed server channel search. */
     data object RetrySearch : ChannelAction
 }
 

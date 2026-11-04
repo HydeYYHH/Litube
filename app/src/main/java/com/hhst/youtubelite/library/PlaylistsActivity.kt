@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.library
 
+import com.hhst.youtubelite.ui.observeAccountChanges
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -41,7 +43,6 @@ import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.ui.design.SearchPanel
 import kotlinx.coroutines.launch
 
-/** Hosts the personal playlists collection page. */
 class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var collectionViewModel: CollectionViewModel
         private set
@@ -69,6 +70,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 return CollectionViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(), ) as T
             }
         })[CollectionViewModel::class.java]
+        if (!fixtures) observeAccountChanges(::syncSession)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 collectionViewModel.navigationRequests.collect { request ->
@@ -86,7 +88,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         // `else`: a new request type must fail to compile here.
                         is LibraryNavigationRequest.Watch, is LibraryNavigationRequest.Channel,
                         LibraryNavigationRequest.OpenHistory, LibraryNavigationRequest.OpenPlaylists,
-                        LibraryNavigationRequest.OpenNotifications, LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads,
+                        LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads,
                         is LibraryNavigationRequest.MenuAction, is LibraryNavigationRequest.Destination,
                         LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
                         LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit
@@ -124,6 +126,10 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onResume() {
         super.onResume()
+        syncSession()
+    }
+
+    private fun syncSession() {
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             com.hhst.youtubelite.data.media.MediaSession.snapshot().let { collectionViewModel.updateSession(it.signedIn, it.generation) }
         }

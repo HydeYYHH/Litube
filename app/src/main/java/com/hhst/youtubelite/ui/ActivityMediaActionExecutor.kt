@@ -9,7 +9,6 @@ import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.share.VideoShare
 import org.koin.java.KoinJavaComponent.getKoin
 
-/** The card actions a host activity executes for the unified More sheet. */
 enum class MediaActionKind(val label: String) {
     PlayNext("Play next"), Queue("Add to queue"), Download("Download"), OpenWith("Open with"),
     Share("Share"), CopyLink("Copy link"),

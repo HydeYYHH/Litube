@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.channel.presentation
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -22,6 +24,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import com.hhst.youtubelite.post.domain.PostDetailAction
+import com.hhst.youtubelite.post.presentation.PostCardInteractions
+import com.hhst.youtubelite.watch.domain.VideoRating
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,20 +56,25 @@ fun ChannelShortsTab(
     production: Boolean = false,
     canPage: Boolean = false,
     append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    subscribePending: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
-    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
-            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadShortsNext)
+    val columns = ChannelLayout.shortsColumns(width)
+    val rows = remember(section, sort, columns) {
+        val shorts = (section as? ChannelSection.Ready)?.value.orEmpty()
+        when (sort) {
+            ChannelSortOption.Latest -> shorts.sortedBy { it.order }
+            ChannelSortOption.Popular -> shorts.sortedByDescending { it.popularity }
+            ChannelSortOption.Oldest -> shorts.sortedByDescending { it.order }
+        }.chunked(columns)
     }
+    ObserveChannelPagination(state, canPage, append) { onAction(ChannelAction.LoadShortsNext) }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-shorts-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Shorts, onAction) }
         item {
             ChannelSortChips(ChannelTab.Shorts, sort) { onAction(ChannelAction.SortShorts(it)) }
@@ -73,16 +84,9 @@ fun ChannelShortsTab(
             ChannelSection.Empty -> item { SectionStatus(ChannelTab.Shorts, section, onAction) }
             ChannelSection.Failed -> item { SectionStatus(ChannelTab.Shorts, section, onAction) }
             is ChannelSection.Ready -> {
-                val sorted = when (sort) {
-                    ChannelSortOption.Latest -> section.value.sortedBy { it.order }
-                    ChannelSortOption.Popular -> section.value.sortedByDescending { it.popularity }
-                    ChannelSortOption.Oldest -> section.value.sortedByDescending { it.order }
-                }
-                val columns = ChannelLayout.shortsColumns(width)
                 val cardWidth = ChannelLayout.shortsCardWidth(width).dp
                 val cardHeight = (cardWidth.value * 1.5f).dp
-                val rows = sorted.chunked(columns)
-                items(rows.size) { rowIndex ->
+                items(rows.size, key = { "shorts-${rows[it].first().id}" }, contentType = { "shorts-row" }) { rowIndex ->
                     val row = rows[rowIndex]
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = ChannelLayout.ShortsOuterInset.dp, vertical = 0.dp)
@@ -161,20 +165,26 @@ fun ChannelLiveTab(
     onAction: (ChannelAction) -> Unit,
     canPage: Boolean = false,
     append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    subscribePending: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
-    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
-            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadLiveNext)
+    val columns = ChannelLayout.liveColumns(width)
+    val rows = remember(section, sort, columns) {
+        val live = (section as? ChannelSection.Ready)?.value
+        val past = when (sort) {
+            ChannelSortOption.Latest -> live?.past.orEmpty().sortedBy { it.order }
+            ChannelSortOption.Popular -> live?.past.orEmpty().sortedByDescending { it.popularity }
+            ChannelSortOption.Oldest -> live?.past.orEmpty().sortedByDescending { it.order }
+        }
+        (live?.current.orEmpty() + past).chunked(columns)
     }
+    ObserveChannelPagination(state, canPage, append) { onAction(ChannelAction.LoadLiveNext) }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-live-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Live, onAction) }
         item { ChannelSortChips(ChannelTab.Live, sort) { onAction(ChannelAction.SortLive(it)) } }
         when (section) {
@@ -182,19 +192,10 @@ fun ChannelLiveTab(
             ChannelSection.Empty -> item { SectionStatus(ChannelTab.Live, section, onAction) }
             ChannelSection.Failed -> item { SectionStatus(ChannelTab.Live, section, onAction) }
             is ChannelSection.Ready -> {
-                val live = section.value
-                val past = when (sort) {
-                    ChannelSortOption.Latest -> live.past.sortedBy { it.order }
-                    ChannelSortOption.Popular -> live.past.sortedByDescending { it.popularity }
-                    ChannelSortOption.Oldest -> live.past.sortedByDescending { it.order }
-                }
-                val items = if (past.isEmpty()) live.current else live.current + past
-                val columns = ChannelLayout.liveColumns(width)
                 val tile = ChannelLayout.liveTile(width)
                 val outer = if (columns == 1) 0.dp else ChannelLayout.LiveInset.dp
                 val duo = if (columns == 1) ChannelLayout.LiveInset.dp else 0.dp
-                val rows = items.chunked(columns)
-                items(rows.size) { rowIndex ->
+                items(rows.size, key = { "live-${rows[it].first().id}" }, contentType = { "live-row" }) { rowIndex ->
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = outer),
                         horizontalArrangement = Arrangement.spacedBy(ChannelLayout.LiveGap.dp),
@@ -300,32 +301,30 @@ fun ChannelPostsTab(
     production: Boolean = false,
     canPage: Boolean = false,
     append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    subscribePending: Boolean = false,
+    postInteractions: PostCardInteractions? = null,
 ) {
     val viewport = rememberUpdatedState(width)
-    androidx.compose.runtime.LaunchedEffect(state.layoutInfo.totalItemsCount, canPage, append) {
-        val info = state.layoutInfo
-        val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (info.totalItemsCount > 0 && last >= info.totalItemsCount - 4 && canPage &&
-            append == com.hhst.youtubelite.home.domain.AppendState.Idle) onAction(ChannelAction.LoadPostsNext)
-    }
+    ObserveChannelPagination(state, canPage, append) { onAction(ChannelAction.LoadPostsNext) }
     LazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize().testTag("channel-posts-list"),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { ChannelHeader(page, viewport.value, onAction) }
+        item { ChannelHeader(page, viewport.value, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Posts, onAction) }
         when (section) {
             ChannelSection.Loading -> item { SectionStatus(ChannelTab.Posts, section, onAction) }
             ChannelSection.Empty -> item { SectionStatus(ChannelTab.Posts, section, onAction) }
             ChannelSection.Failed -> item { SectionStatus(ChannelTab.Posts, section, onAction) }
-            is ChannelSection.Ready -> items(section.value.size, key = { section.value[it].identity.postId }) { index ->
+            is ChannelSection.Ready -> items(section.value.size, key = { section.value[it].identity.postId }, contentType = { "post" }) { index ->
                 val post = section.value[index]
                 PostCard(
                     post = post,
                     expanded = post.identity.postId in expandedPosts,
                     onAction = onAction,
                     production = production,
+                    interactions = postInteractions,
                 )
             }
         }
@@ -351,7 +350,15 @@ private fun PostCard(
     expanded: Boolean,
     onAction: (ChannelAction) -> Unit,
     production: Boolean = false,
+    interactions: PostCardInteractions? = null,
 ) {
+    val interaction = interactions?.posts?.get(post.identity.postId)
+    val rating = interaction?.post?.rating ?: VideoRating.None
+    val pending = interaction?.pendingAction
+    fun rate(liked: Boolean) {
+        if (interactions != null) interactions.perform(post.identity, if (liked) PostDetailAction.Like else PostDetailAction.Dislike)
+        else onAction(ChannelAction.PostFeedback(post.identity, liked))
+    }
     val open = { onAction(ChannelAction.OpenPost(post.identity)) }
     Column(Modifier.fillMaxWidth().testTag("channel-post-${post.identity.postId}")) {
         Row(
@@ -379,7 +386,7 @@ private fun PostCard(
         }
         var overflow by remember(post.identity) { mutableStateOf(false) }
         Box(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 12.dp)
+            Modifier.fillMaxWidth().animateContentSize(tween(180)).padding(horizontal = 12.dp).padding(top = 12.dp)
                 .testTag("channel-post-body-${post.identity.postId}"),
         ) {
             BasicText(
@@ -420,6 +427,13 @@ private fun PostCard(
                 )
             }
         }
+        (interaction?.post?.poll ?: post.poll)?.let { poll ->
+            com.hhst.youtubelite.post.presentation.PostPollChoices(poll, pending != null, Modifier.padding(start = 48.dp, top = 12.dp),
+                pendingOption = (pending as? PostDetailAction.Vote)?.option) {
+                if (interactions != null) interactions.perform(post.identity, PostDetailAction.Vote(it, !poll.options[it].selected))
+                else onAction(ChannelAction.OpenPost(post.identity))
+            }
+        }
         if (post.images.isNotEmpty()) {
             var imageIndex by rememberSaveable(post.identity.postId) { mutableIntStateOf(0) }
             Spacer(Modifier.height(12.dp))
@@ -427,8 +441,11 @@ private fun PostCard(
                 images = post.images,
                 selectedIndex = imageIndex,
                 onSelected = { imageIndex = it },
-                modifier = Modifier.clickable(role = Role.Button) { open() }
-                    .testTag("channel-post-images-${post.identity.postId}"),
+                onOpen = { index ->
+                    if (interactions?.openImages != null) interactions.openImages.invoke(post.images, index)
+                    else open()
+                },
+                modifier = Modifier.testTag("channel-post-images-${post.identity.postId}"),
             )
         }
         Row(
@@ -436,15 +453,21 @@ private fun PostCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AppIconButton(
-                AppIcon.Like, "Like post", modifier = Modifier.testTag("channel-post-like-${post.identity.postId}"),
+                AppIcon.Like, "Like post", modifier = Modifier.testTag("channel-post-like-${post.identity.postId}").semantics { selected = rating == VideoRating.Like },
                 diameter = 40.dp,
-            ) { onAction(ChannelAction.PostFeedback(post.identity, true)) }
-            AppText(post.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
+                enabled = pending == null, pending = pending == PostDetailAction.Like,
+                background = if (rating == VideoRating.Like) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+                color = if (rating == VideoRating.Like) DesignTokens.Red else DesignTokens.Ink,
+            ) { rate(true) }
+            AppText(interaction?.post?.likes ?: post.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
             AppIconButton(
                 AppIcon.Dislike, "Dislike post",
-                modifier = Modifier.testTag("channel-post-dislike-${post.identity.postId}"),
+                modifier = Modifier.testTag("channel-post-dislike-${post.identity.postId}").semantics { selected = rating == VideoRating.Dislike },
                 diameter = 40.dp,
-            ) { onAction(ChannelAction.PostFeedback(post.identity, false)) }
+                enabled = pending == null, pending = pending == PostDetailAction.Dislike,
+                background = if (rating == VideoRating.Dislike) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+                color = if (rating == VideoRating.Dislike) DesignTokens.Red else DesignTokens.Ink,
+            ) { rate(false) }
             Spacer(Modifier.weight(1f))
             Row(
                 Modifier.clickable(role = Role.Button) {

@@ -55,7 +55,13 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
             ShortsContent.Loading -> ShortsSkeleton()
-            ShortsContent.Failed -> Box(Modifier.fillMaxSize().background(DesignTokens.Background)) { LibraryError("shorts-error") { onAction(ShortsAction.Retry) } }
+            ShortsContent.Failed -> androidx.compose.runtime.CompositionLocalProvider(
+                com.hhst.youtubelite.ui.design.LocalAppColors provides com.hhst.youtubelite.ui.design.DarkAppPalette,
+            ) {
+                com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = true) {
+                    LibraryError("shorts-error") { onAction(ShortsAction.Retry) }
+                }
+            }
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 AppText("No Shorts available", color = Color.White, size = 16, line = 22)
             }
@@ -96,12 +102,16 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
     val currentSwipeStart by rememberUpdatedState(onSwipeStart)
     val currentSwipeCancel by rememberUpdatedState(onSwipeCancel)
     val currentSelectedId by rememberUpdatedState(state.currentItemId)
+    // End-of-playback selection moves the visible page along with the engine.
+    LaunchedEffect(state.currentItemId) {
+        val index = items.indexOfFirst { it.id == state.currentItemId }
+        if (index >= 0 && index != pagerState.settledPage) pagerState.scrollToPage(index)
+    }
     // Keyed on the pager only: hydration and appends mutate `items`, and a
     // restart here would replay SelectItem for the settled page.
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             currentItems.getOrNull(page)?.let { currentAction(ShortsAction.SelectItem(it.id)) }
-            // Prefetch the continuation before the pager runs out of pages.
             if (page >= currentItems.size - 3) currentAction(ShortsAction.LoadMore)
         }
     }
@@ -127,13 +137,15 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
     VerticalPager(state = pagerState, key = { items[it].id }, beyondViewportPageCount = 1,
         modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
         ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null,
+            showArtwork = videoContent == null,
             videoReady = page == pagerState.settledPage && isVideoReady(items[page].id),
             playbackControls = if (page == pagerState.settledPage) playbackControls?.let { controls ->
                 { id -> controls(id, !pagerState.isScrollInProgress && id == state.currentItemId) }
             } else null,
             rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
             subscribed = state.subscriptions[items[page].channelId] == true,
-            subscribePending = items[page].channelId in state.subscriptionsPending)
+            subscribePending = items[page].channelId in state.subscriptionsPending,
+            ratingPending = items[page].id in state.ratingsPending)
     }
     if (state.appendFailed) AppText(androidx.compose.ui.res.stringResource(R.string.retry),
         Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing)
@@ -146,20 +158,20 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
 
 @Composable
 private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
+    showArtwork: Boolean = true,
     videoReady: Boolean = false,
     playbackControls: (@Composable (String) -> Unit)? = null,
     rating: com.hhst.youtubelite.watch.domain.VideoRating = com.hhst.youtubelite.watch.domain.VideoRating.None,
-    subscribed: Boolean = false, subscribePending: Boolean = false, menuVisible: Boolean = true) {
+    subscribed: Boolean = false, subscribePending: Boolean = false, ratingPending: Boolean = false, menuVisible: Boolean = true) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
         videoContent?.invoke(item.id)
-        val coverAlpha by androidx.compose.animation.core.animateFloatAsState(
-            if (videoReady) 0f else 1f,
-            androidx.compose.animation.core.tween(com.hhst.youtubelite.ui.design.motionDuration(
-                140, com.hhst.youtubelite.ui.design.LocalMotionScale.current)), label = "ShortCover")
-        if (coverAlpha > 0f) com.hhst.youtubelite.ui.design.Artwork(item.artwork,
-            Modifier.fillMaxSize().graphicsLayer { alpha = coverAlpha }.background(Color.Black)
-                .testTag("short-cover-${item.id}").semantics { contentDescription = "Play ${item.title}" },
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+        if (!videoReady) {
+            val cover = Modifier.fillMaxSize().background(Color.Black).testTag("short-cover-${item.id}")
+            // Live pages only reveal decoder output, including neighbors during a swipe.
+            if (!showArtwork) Box(cover)
+            else com.hhst.youtubelite.ui.design.Artwork(item.artwork,
+                cover.semantics { contentDescription = "Play ${item.title}" }, contentScale = ContentScale.Fit)
+        }
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         playbackControls?.invoke(item.id)
@@ -173,7 +185,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
             .padding(end = 8.dp, bottom = minOf(76.dp, maxHeight / 5))
             .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             RailAction(AppIcon.Like, "Like ${item.title}", item.likes,
-                tinted = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like,
+                tinted = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like, pending = ratingPending,
                 onClick = { onAction(ShortsAction.Like(item.id)) })
             Spacer(Modifier.height(12.dp))
             RailAction(AppIcon.Comment, "Comments for ${item.title}", item.comments, onClick = {
@@ -186,7 +198,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
             .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState())) {
             Row(Modifier.heightIn(min = 40.dp).testTag("short-channel-${item.id}"),
                 verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.weight(1f, fill = false).clickable(role = Role.Button) {
+                Row(Modifier.weight(1f, fill = false).clickable(enabled = item.channelId.isNotBlank(), role = Role.Button) {
                     onAction(ShortsAction.OpenChannel(item.channelId))
                 }, verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF272727))
@@ -199,7 +211,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
                 SubscribeButton(subscribed, { onAction(ShortsAction.Subscribe(item.channelId)) },
                     Modifier.padding(start = 8.dp), enabled = item.channelId.isNotBlank(),
                     pending = subscribePending, onDarkSurface = true,
-                    testTag = "short-subscribe-${item.id}")
+                    testTag = "short-subscribe-${item.id}", channelId = item.channelId)
             }
             AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(top = 8.dp).testTag("short-title-${item.id}"),
                 size = 14, line = 20, color = Color.White, maxLines = 3)
@@ -209,14 +221,18 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
 }
 
 @Composable
-private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit, tinted: Boolean = false) {
+private fun RailAction(icon: AppIcon, description: String, label: String, onClick: () -> Unit, tinted: Boolean = false, pending: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AppIconButton(icon, description, diameter = 40.dp, color = if (tinted) DesignTokens.Red else Color.White, onClick = onClick)
+        Box(Modifier.size(40.dp).clickable(enabled = !pending, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
+            if (pending) com.hhst.youtubelite.ui.design.ActionProgress(color = Color.White)
+            else AppIcon(icon, color = if (tinted) DesignTokens.Red else Color.White)
+        }
         if (label.isNotEmpty()) {
             AppText(label, Modifier.testTag("rail-label-$description"), size = 12, line = 16,
                 weight = FontWeight.Medium, color = Color.White, maxLines = 1)
         } else {
-            // Keep the 60dp slot even when an action has no count label.
+            // Keep the rail row's height stable when an action has no count label.
             Spacer(Modifier.height(16.dp))
         }
     }

@@ -89,6 +89,7 @@ class PipAudioOnlyAndroidTest {
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
         var scenario: ActivityScenario<WatchActivity>? = null
         lateinit var host: WatchActivity
+        var observedPauseActionTitles: List<String>? = null
         fun await(condition: () -> Boolean) {
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 15_000
@@ -99,7 +100,7 @@ class PipAudioOnlyAndroidTest {
             if (!ready) {
                 var detail = ""
                 instrumentation.runOnMainSync {
-                    detail = "PiP condition timed out: destroyed=${host.isDestroyed}, audioOnly=${model.audioOnlyBackground}, inPip=${host.isInPictureInPictureMode}, playerState=${player.playbackState}, wantsPlay=${player.playWhenReady}, suppression=${player.playbackSuppressionReason}, tracks=${player.currentTracks.groups.map { it.type to it.isSelected }}, ui=${model.uiState.value}, auto=${PipAutoEnter.lastRequestedAutoEnter}, paramError=${PipAutoEnter.lastPushError}, ${engine.snapshot.value}"
+                    detail = "PiP condition timed out: destroyed=${host.isDestroyed}, audioOnly=${model.audioOnlyBackground}, inPip=${host.isInPictureInPictureMode}, playerState=${player.playbackState}, wantsPlay=${player.playWhenReady}, suppression=${player.playbackSuppressionReason}, tracks=${player.currentTracks.groups.map { it.type to it.isSelected }}, pauseActionTitles=$observedPauseActionTitles, ui=${model.uiState.value}, auto=${PipAutoEnter.lastRequestedAutoEnter}, paramError=${PipAutoEnter.lastPushError}, ${engine.snapshot.value}"
                 }
                 fail(detail)
             }
@@ -152,8 +153,21 @@ class PipAudioOnlyAndroidTest {
             actions().single { it.title == app.getString(R.string.action_next) }.actionIntent.send()
             await { engine.snapshot.value.videoId == "audioPip002" && player.isPlaying && model.uiState.value.isPlaying && selectedVideo() }
             prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
-            await { model.uiState.value.hasPrevious }
-            actions().single { it.title == app.getString(R.string.action_pause) }.actionIntent.send()
+            var pauseAction: RemoteAction? = null
+            await {
+                // Next can change readiness after an earlier isPlaying observation; capture the actual Pause action with its current playback state.
+                val currentActions = actions()
+                observedPauseActionTitles = currentActions.map { it.title.toString() }
+                val snapshot = engine.snapshot.value
+                val state = model.uiState.value
+                pauseAction = currentActions.singleOrNull { it.title == app.getString(R.string.action_pause) }
+                    .takeIf {
+                        snapshot.videoId == "audioPip002" && player.isPlaying && state.isPlaying &&
+                            selectedVideo() && state.hasPrevious && host.isInPictureInPictureMode
+                    }
+                pauseAction != null
+            }
+            checkNotNull(pauseAction).actionIntent.send()
             await { !player.isPlaying && !model.uiState.value.isPlaying }
             instrumentation.runOnMainSync { model.onSeek(0) }
             await { player.currentPosition < 1_000 }
@@ -202,8 +216,7 @@ class PipAudioOnlyAndroidTest {
             instrumentation.runOnMainSync { assertTrue(player.currentPosition >= position) }
             assertSame(player, engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine))
             DeviceEvidence.captureScene("issue-331-video-restored")
-            // Closing playback must end the audio-only session, so reopening the
-            // app does not revive a video the user explicitly stopped.
+            // Closing playback must end the audio-only session, so reopening the app does not revive a video the user explicitly stopped.
             instrumentation.runOnMainSync { model.playAudioOnlyInBackground() }
             instrumentation.runOnMainSync { model.onMiniClose() }
             await { !model.audioOnlyBackground && !model.uiState.value.visible && !player.isPlaying }

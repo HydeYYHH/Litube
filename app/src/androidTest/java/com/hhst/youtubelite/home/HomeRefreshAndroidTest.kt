@@ -102,7 +102,6 @@ class HomeRefreshAndroidTest {
                 }
             }
         }
-        // The first release starts the refresh; further releases are dropped by the host.
         repeat(2) {
             compose.onNodeWithTag("home-feed").performTouchInput {
                 swipe(Offset(center.x, 150f), Offset(center.x, 700f))

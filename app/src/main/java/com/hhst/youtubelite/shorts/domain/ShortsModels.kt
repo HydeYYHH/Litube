@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.shorts.domain
 
-/** One vertical short on the browse pager. */
+import com.hhst.youtubelite.watch.domain.VideoRating
+
 data class ShortItem(
     val id: String,
     val title: String,
@@ -16,7 +17,7 @@ data class ShortItem(
 data class ShortsPage(val items: List<ShortItem>, val nextKey: String? = null)
 
 /** Fills fields the feed left blank; ids and non-blank feed values win. */
-fun ShortItem.fillFrom(detail: ShortItem): ShortItem = copy(
+fun ShortItem.fillFrom(detail: ShortItem): ShortItem = if (id != detail.id) this else copy(
     title = title.ifBlank { detail.title },
     author = author.ifBlank { detail.author },
     channelId = channelId.ifBlank { detail.channelId },
@@ -27,16 +28,16 @@ fun ShortItem.fillFrom(detail: ShortItem): ShortItem = copy(
     avatar = avatar.ifBlank { detail.avatar },
 )
 
-/** Full per-item metadata from the watch read; feeds reporting and fills thin feed rows. */
 data class ShortDetail(
     val item: ShortItem,
-    /** Watch-page description text; null when the read carried none. */
     val description: String? = null,
     /** Server-side subscription state of the item's channel; null when the page didn't say. */
     val subscribed: Boolean? = null,
     /** Playback-tracking endpoints for watch-time reporting; feeds carry none. */
     val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
     val sessionGeneration: Long? = null,
+    /** The viewer's server rating; null when this read did not expose it. */
+    val rating: VideoRating? = null,
 )
 
 sealed interface ShortsContent {
@@ -60,7 +61,7 @@ data class ShortsUiState(
     val subscriptions: Map<String, Boolean> = emptyMap(),
     /** Channels with a subscription write in flight; their buttons ignore taps. */
     val subscriptionsPending: Set<String> = emptySet(),
-    /** Hydrated per-item metadata (bounded by the ViewModel); keyed by item id. */
+    val ratingsPending: Set<String> = emptySet(),
     val details: Map<String, ShortDetail> = emptyMap(),
 )
 
@@ -90,7 +91,6 @@ sealed interface ShortsAction {
     data object CloseMenu : ShortsAction
     data class OpenMenu(val itemId: String) : ShortsAction
     data class MenuSelected(val action: com.hhst.youtubelite.home.domain.FeedMenuAction) : ShortsAction
-    /** Production menu row: opens the shared save-to-playlist sheet for this item. */
     data class OpenSaveToPlaylist(val itemId: String) : ShortsAction
     data class Share(val itemId: String) : ShortsAction
     data class Like(val itemId: String) : ShortsAction
@@ -104,4 +104,4 @@ sealed interface ShortsAction {
  * live player state, not a recorded server menu — report/feedback stay out
  * because no Shorts path carries those write capabilities.
  */
-enum class ShortsMenuAction { Description, SaveToPlaylist, Captions, AudioTrack, PlaybackSpeed, Quality, Download, Share }
+enum class ShortsMenuAction { Description, SaveToPlaylist, Captions, AudioTrack, PlaybackSpeed, PlaybackOrder, Quality, Download, Share }

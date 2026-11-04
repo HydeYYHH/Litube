@@ -27,6 +27,8 @@ class WebSessionTest {
             val request = contextualQuery(query.copy(url = url), context)
             assertNull(request.headers["Cookie"])
             assertNull(request.headers["Authorization"])
+            assertNull(request.headers["Origin"])
+            assertNull(request.headers["X-Goog-PageId"])
         }
     }
     @Test fun sessionScopesSeparateAccountsAndAnonymousReads() {

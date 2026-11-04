@@ -100,6 +100,34 @@ class PlaybackLoadErrorAndroidTest {
         }
     }
 
+    @Test fun tinyInitializationReadsHaveABoundedConnectionBudget() {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE))
+            start()
+        }
+        val http = OkHttpClient()
+        val session = YoutubeWebSession("init-budget", WebAccount.ANONYMOUS, 0, null, null, null,
+            "visitor", "fixture-UA", 0, null, "fixture", JsonObject(emptyMap()), { "" })
+        val plan = MediaRequestPlan(session, StreamClient.VISIONOS, MediaProtocol.HTTPS, MediaRange.HEADER)
+        val source = YoutubeHttpDataSource.Factory(http, "fixture-UA")
+            .setMediaRequests(YoutubeMediaRequests({ true }, ExtractionDiagnostics()), plan).createDataSource()
+        val began = System.nanoTime()
+        try {
+            source.open(DataSpec.Builder().setUri(server.url("/init").toString()).setLength(1024).build())
+            fail("A silent initialization connection must time out")
+        } catch (expected: IOException) {
+            val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
+            assertTrue("The startup request used the full media timeout: $elapsed", elapsed in 5_000..10_000)
+            assertEquals(PlaybackRecovery.Reason.TRANSPORT_FAILED, PlaybackRecovery.classify(expected))
+            assertEquals("The data source must leave retries to source recovery", 1, server.requestCount)
+        } finally {
+            source.close()
+            http.connectionPool.evictAll()
+            http.dispatcher.executorService.shutdown()
+            server.shutdown()
+        }
+    }
+
     @Test fun anEarlyForbiddenSegmentRetriesTheSameSourceWhenItsWindowEnds() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
@@ -108,7 +136,8 @@ class PlaybackLoadErrorAndroidTest {
         val server = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.requestUrl?.encodedPath) {
-                    "/audio.ts" -> if (requests.incrementAndGet() == 1) MockResponse().setResponseCode(403) else {
+                    // The first refusal permits one quick probe; a second refusal must honor the announced window instead of hammering the same signed URL.
+                    "/audio.ts" -> if (requests.incrementAndGet() <= 2) MockResponse().setResponseCode(403) else {
                         secondRequestAt.set(System.nanoTime())
                         MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(audio))
                     }
@@ -153,7 +182,7 @@ class PlaybackLoadErrorAndroidTest {
             }
             assertTrue("The readiness retry did not settle", done.await(20, TimeUnit.SECONDS))
             assertNull(failure.get())
-            assertEquals("Only the refused segment should be retried", 2, requests.get())
+            assertEquals("Only one probe and one scheduled retry are allowed", 3, requests.get())
             assertTrue("Media3 retried before the readiness deadline", secondRequestAt.get() >= plan.availableAtNanos)
             instrumentation.runOnMainSync { assertEquals(Player.STATE_READY, player?.playbackState) }
         } finally {

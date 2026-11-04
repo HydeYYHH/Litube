@@ -28,7 +28,6 @@ class DownloadDirectories(private val root: File) {
     }
 
     companion object {
-        /** Root folder name for all download work under the cache dir. */
         const val WORK_DIR = "download"
 
         fun underCache(cacheDir: File): DownloadDirectories =

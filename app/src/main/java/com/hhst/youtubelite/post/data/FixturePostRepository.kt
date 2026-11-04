@@ -42,7 +42,6 @@ class FixturePostRepository(private val scenario: PostScenario = PostScenario.Co
             avatar = "bunny",
         )
 
-        /** Newest-first order is encoded by [order]; popular/oldest remain local re-orderings. */
         fun samplePosts(channelId: String): List<PostSummary> = listOf(
             PostSummary(
                 identity = PostIdentity(channelId, if (channelId == "studio") HOME_POST_ID else "community-1"),

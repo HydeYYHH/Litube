@@ -3,10 +3,9 @@ package com.hhst.youtubelite.core
 import androidx.test.platform.app.InstrumentationRegistry
 
 /**
- * Pins the window to the phone geometry (1170x2532 @ 480 = 390x844 dp) whose layouts the
- * phone-form host contracts were sampled against, restoring the previous
- * override afterwards. The shared suite window is the 1600x1200 matrix config,
- * where these classes would exercise the wide/rail layouts instead.
+ * Pins the window to the phone geometry (1170x2532 @ 480 = 390x844 dp) that the phone-form
+ * host contracts were sampled against, restoring the previous override afterwards. The
+ * shared suite window (1600x1200) would exercise the wide/rail layouts instead.
  */
 object PhoneWindow {
     private var size: String? = null

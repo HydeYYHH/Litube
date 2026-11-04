@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.hhst.youtubelite.ui.components.watchSheetHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -55,7 +59,6 @@ sealed interface PlayerSheet {
     data object Chapters : PlayerSheet
 }
 
-/** Dialog menus. */
 sealed interface PlayerDialog {
     data object EndBehavior : PlayerDialog
     data object Quality : PlayerDialog
@@ -189,27 +192,33 @@ fun PlayerSheetHost(
 internal fun PlayerModalSheet(
     onDismiss: () -> Unit,
     fullscreen: Boolean = false,
+    expanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (fullscreen) {
         FullscreenPlayerSheet(onDismiss, content)
         return
     }
-    val maxHeight = PlayerUi.sheetMaxHeightDp(LocalConfiguration.current.screenHeightDp).dp
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("player-modal-sheet"),
         sheetState = sheetState,
         sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
-        dragHandle = {
-            AppSheetHandle()
-        },
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight), content = content)
+        // Keep the sheet's anchor constraints at window size. Sizing its outer
+        // modifier would make Material calculate an expanded anchor at zero.
+        Column((if (expanded) Modifier.fillMaxHeight(.94f) else Modifier)
+            .fillMaxWidth().watchSheetHeight().navigationBarsPadding()) {
+            AppSheetHandle()
+            content()
+        }
     }
 }
 
@@ -328,7 +337,6 @@ private fun MoreSheet(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        SheetTitle(stringResource(R.string.more_options))
         onQuality?.let { MoreRow(R.drawable.ic_quality, stringResource(R.string.player_info_quality), it) }
         onSpeed?.let { MoreRow(R.drawable.ic_playback_speed, stringResource(R.string.info_playback_speed), it) }
         MoreRow(R.drawable.ic_track, stringResource(R.string.audio_track), onAudio)
@@ -432,20 +440,6 @@ private fun <T> OptionSheet(
             }
         }
     }
-}
-
-@Composable
-private fun SheetTitle(text: String) {
-    Text(
-        text = text,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        textAlign = TextAlign.Start,
-        fontSize = SettingsTokens.TitleSize.sp,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 @Composable

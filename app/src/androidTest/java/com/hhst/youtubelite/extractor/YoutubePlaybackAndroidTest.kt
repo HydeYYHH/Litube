@@ -62,6 +62,7 @@ class YoutubePlaybackAndroidTest {
             File(instrumentation.targetContext.filesDir, "production-playback-acceptance.json").writeText(
                 com.hhst.youtubelite.core.TestJson.any(mapOf("videoId" to id,
                     "elapsedMs" to SystemClock.elapsedRealtime() - started,
+                    "firstFrameMs" to state.diagnostics.firstFrameMs,
                     "firstFrame" to state.firstFrameRendered, "playing" to state.isPlaying,
                     "positionMs" to state.positionMs, "activeQuality" to state.activeQuality,
                     "error" to state.error, "failureReport" to state.failureReport?.text)))

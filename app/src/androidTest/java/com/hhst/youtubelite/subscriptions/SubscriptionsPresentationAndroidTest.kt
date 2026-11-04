@@ -36,6 +36,28 @@ import org.junit.Test
 class SubscriptionsPresentationAndroidTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun refreshedUpdatesBecomeVisibleAtTheStartOfTheChannelStrip() {
+        val original = (0 until 8).map { index ->
+            com.hhst.youtubelite.subscriptions.domain.SubscribedChannel("channel-$index", "Channel $index", "bunny", "")
+        }
+        val channels = mutableStateOf(original)
+        compose.setContent {
+            AppTheme {
+                Box(Modifier.requiredSize(390.dp, 800.dp)) {
+                    SubscriptionsScreen(SubscriptionsUiState(signedIn = true,
+                        channels = SubscriptionsChannels.Ready(channels.value),
+                        content = SubscriptionsContent.Feed(SubscriptionsPage(emptyList(), emptyList()))), {})
+                }
+            }
+        }
+        compose.onNodeWithTag("subs-strip-channel-0").assertIsDisplayed()
+        compose.runOnIdle {
+            channels.value = listOf(original.last().copy(hasNewContent = true)) + original.dropLast(1)
+        }
+        compose.onNodeWithTag("subs-strip-channel-7").assertIsDisplayed()
+        compose.onNodeWithTag("subs-new-channel-7", useUnmergedTree = true).assertIsDisplayed()
+    }
+
     @Test fun channelNavigationFitsDifferentScriptsAndLargeText() {
         val language = mutableStateOf("en")
         val fontScale = mutableStateOf(1f)

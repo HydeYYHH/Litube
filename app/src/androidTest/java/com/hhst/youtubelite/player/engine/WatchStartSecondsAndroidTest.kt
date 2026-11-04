@@ -85,10 +85,9 @@ class WatchStartSecondsAndroidTest {
             val pending = fixture.engine.javaClass.getDeclaredField("pendingExplicitStartMs")
                 .apply { isAccessible = true }
             try {
-                // First load never reaches first frame: the explicit start must
-                // survive for the retry (a real network retry re-extracts, which
-                // an offline fixture cannot resolve, so the field contract is
-                // asserted directly and playback recovery runs via play()).
+                // First load never reaches first frame: the explicit start must survive for the
+                // retry. A real network retry re-extracts, which an offline fixture cannot resolve,
+                // so the field contract is asserted directly and recovery runs via play().
                 fixture.mediaRefused = true
                 fixture.launch(expectFailure = true, startSeconds = 90L)
                 assertEquals(90_000L, pending.get(fixture.engine))

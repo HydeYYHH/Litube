@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.search
 
+import com.hhst.youtubelite.ui.observeAccountChanges
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -40,7 +42,6 @@ import com.hhst.youtubelite.watch.WatchActivity
 import kotlinx.coroutines.launch
 import com.hhst.youtubelite.ui.renderNotice
 
-/** Hosts the local results page and observes its navigation requests. */
 class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var searchViewModel: SearchResultsViewModel
         private set
@@ -71,6 +72,7 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves, if (fixtures) null else sources.avatars) as T
             }
         })[SearchResultsViewModel::class.java]
+        if (!fixtures) observeAccountChanges(::syncSession)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 searchViewModel.navigationRequests.collect { request ->
@@ -119,8 +121,10 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
         setAppContent {
             val state by searchViewModel.uiState.collectAsStateWithLifecycle()
+            com.hhst.youtubelite.ui.design.WriteProgressOverlay(searchViewModel.writes)
+            searchViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             val back: () -> Unit = {
-                if (searchViewModel.saveSheet?.state?.value != null) searchViewModel.saveSheet?.close()
+                if (searchViewModel.saveSheet?.state?.value != null) searchViewModel.saveSheet?.dismiss()
                 else if (state.overlay is SearchOverlay.ItemMenu || state.overlay is SearchOverlay.PlaylistMenu) searchViewModel.onAction(SearchAction.CloseItemMenu)
                 else if (state.searchOpen) searchViewModel.onAction(SearchAction.CloseSearch)
                 else if (state.filtersOpen) searchViewModel.onAction(SearchAction.CloseFilters)
@@ -139,12 +143,13 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     sheetState?.let { current ->
                         if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
                             draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
-                            onDismiss = sheet::close,
+                            onDismiss = sheet::dismiss,
                             onDraftChange = { sheet.draftChanged(it.title, it.description) },
                             onSubmit = sheet::submitNewPlaylist,
+                            pending = current.pending,
                         ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
                             playlists = emptyList(),
-                            onDismiss = sheet::close,
+                            onDismiss = sheet::dismiss,
                             onSelect = {},
                             onNewPlaylist = sheet::openNewPlaylist,
                             live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
@@ -169,6 +174,10 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onResume() {
         super.onResume()
+        syncSession()
+    }
+
+    private fun syncSession() {
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             val session = com.hhst.youtubelite.data.media.MediaSession.snapshot()
             searchViewModel.updateSession(session.signedIn, session.generation)

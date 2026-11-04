@@ -15,6 +15,23 @@ class YoutubeMediaRequestsTest {
     private fun session() = YoutubeWebSession("scope", WebAccount.AUTHENTICATED, 0, null, "user",
         "user||", "visitor", "actual-browser-UA", 1, null, "test", JsonObject(emptyMap()), { "SECRET_COOKIE" })
 
+    @Test fun anAnnouncedReadinessHoldDoesNotIssueAnExtraPostAfter403() {
+        val server = MockWebServer().apply { enqueue(MockResponse().setResponseCode(403)); start() }
+        val policy = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
+        val client = OkHttpClient.Builder().addInterceptor(policy.interceptor()).build()
+        try {
+            val plan = MediaRequestPlan(session(), StreamClient.VISIONOS, MediaProtocol.HTTPS,
+                MediaRange.QUERY, allowPostFallback = true, availableAfterMillis = 5_000)
+            client.newCall(policy.build(server.url("/videoplayback").toString(), plan)).execute().use {
+                assertEquals(403, it.code)
+            }
+            assertEquals(1, server.requestCount)
+        } finally {
+            client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
+            server.shutdown()
+        }
+    }
+
     @Test fun get403RetriesPostOnceAndRetainsProfileUa() {
         val server = MockWebServer()
         server.start()

@@ -12,7 +12,6 @@ import com.hhst.youtubelite.extractor.Format
 import androidx.media3.common.Format as MediaFormat
 import android.media.MediaFormat as PlatformFormat
 
-/** Filters source formats using decoder profiles, dimensions and frame rates. */
 object CodecCapabilities {
     internal class Decoder(val hardware: Boolean, val supports: (Format) -> Boolean)
 

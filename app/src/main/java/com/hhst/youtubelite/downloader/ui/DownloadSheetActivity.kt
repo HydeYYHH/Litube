@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.downloader.ui
 
+import com.hhst.youtubelite.ui.components.watchSheetHost
 import android.content.Context
 import androidx.compose.material3.ExperimentalMaterial3Api
 import android.content.Intent
@@ -43,7 +44,9 @@ class DownloadSheetActivity : ComponentActivity() {
         val snapshotId = intent.getStringExtra(DownloadUi.EXTRA_SNAPSHOT_ID)
         val snapshot = snapshotId?.let { DownloadUiSessions.get(this, it) }
         setContent {
-            AppTheme { NeutralControls {
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.hhst.youtubelite.ui.components.LocalSheetPlayerBottomFraction provides intent.getFloatExtra(EXTRA_PLAYER_BOTTOM, 0f),
+            ) { AppTheme { NeutralControls {
                 val vm = koinViewModel<DownloadViewModel>()
                 val snackbar = remember { SnackbarHostState() }
                 var result by remember { mutableStateOf<EnqueueResult?>(null) }
@@ -109,7 +112,7 @@ class DownloadSheetActivity : ComponentActivity() {
                             .padding(16.dp),
                     )
                 }
-            } }
+            } } }
         }
     }
 
@@ -125,6 +128,12 @@ class DownloadSheetActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val EXTRA_PLAYER_BOTTOM = "sheetPlayerBottomFraction"
+        private fun Intent.withWatchGeometry(context: Context): Intent = apply {
+            context.watchSheetHost()?.let { host ->
+                putExtra(EXTRA_PLAYER_BOTTOM, host.sheetPlayerBottomPx.toFloat() / host.sheetWindowHeightPx.coerceAtLeast(1))
+            }
+        }
         fun singleIntent(
             context: Context,
             videoId: String,
@@ -136,9 +145,11 @@ class DownloadSheetActivity : ComponentActivity() {
             .putExtra(DownloadUi.EXTRA_TITLE, title)
             .putExtra(DownloadUi.EXTRA_AUTHOR, author)
             .putExtra(DownloadUi.EXTRA_THUMBNAIL, thumbnailUrl)
+            .withWatchGeometry(context)
 
         fun batchIntent(context: Context, snapshotId: String): Intent =
             Intent(context, DownloadSheetActivity::class.java)
                 .putExtra(DownloadUi.EXTRA_SNAPSHOT_ID, snapshotId)
+                .withWatchGeometry(context)
     }
 }

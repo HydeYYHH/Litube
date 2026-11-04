@@ -34,9 +34,10 @@ internal fun SettingsToggle(
     onToggle: (String, Boolean) -> Unit,
 ) {
     val enabled = preferences[key] == true
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .toggleable(value = enabled, role = Role.Switch) { onToggle(key, it) }
+            .toggleable(value = enabled, role = Role.Switch) { haptic(); onToggle(key, it) }
             .testTag("settings-toggle-$key").padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

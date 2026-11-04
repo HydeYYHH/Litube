@@ -37,7 +37,9 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
     query: String, submitted: String, onAction: (ChannelAction) -> Unit,
     results: ChannelSection<List<ChannelVideo>>? = null,
     canPage: Boolean = false,
-    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle) {
+    append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    subscribePending: Boolean = false,
+) {
     val keyboard = LocalSoftwareKeyboardController.current
     val submit = { keyboard?.hide(); onAction(ChannelAction.SubmitSearch) }
     val videos = remember(page.videos, submitted, results) {
@@ -47,12 +49,16 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
             else -> emptyList()
         }
     }
+    val playlists = remember(page.playlists, submitted) {
+        page.playlists.filter { submitted.isBlank() || it.title.contains(submitted, ignoreCase = true) }
+    }
+    ObserveChannelPagination(listState, canPage, append) { onAction(ChannelAction.LoadSearchNext) }
     var appliedQuery by remember { mutableStateOf(submitted) }
     LaunchedEffect(submitted) {
         if (submitted != appliedQuery) { appliedQuery = submitted; listState.scrollToItem(1) }
     }
     LazyColumn(Modifier.fillMaxSize().testTag("channel-search-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { ChannelHeader(page, width, onAction) }
+        item { ChannelHeader(page, width, onAction, subscribePending) }
         stickyHeader("channel-tabbar") { ChannelTabBar(ChannelTab.Search, onAction) }
         item {
             Column(Modifier.fillMaxWidth().testTag("channel-search-form")) {
@@ -78,8 +84,7 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
                 Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
             }
         }
-        val playlists = page.playlists.filter { submitted.isBlank() || it.title.contains(submitted, ignoreCase = true) }
-        items(playlists, key = { "playlist-${it.id}" }) { playlist ->
+        items(playlists, key = { "playlist-${it.id}" }, contentType = { "playlist" }) { playlist ->
             com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
                 { onAction(ChannelAction.OpenPlaylist(playlist.id)) }, { onAction(ChannelAction.OpenPlaylistMenu(playlist.id)) },
                 if (width >= 931 || width >= 550 && width <= height) 40f else 48f)
@@ -98,7 +103,7 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
                 if (videos.isEmpty() && playlists.isEmpty()) item {
                     AppText("No results found", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
                 }
-                items(videos, key = { it.id }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
+                items(videos, key = { it.id }, contentType = { "video" }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
             }
         }
         if (canPage || append != com.hhst.youtubelite.home.domain.AppendState.Idle) item(key = "channel-search-append") {

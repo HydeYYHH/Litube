@@ -36,10 +36,7 @@ import org.junit.Rule
 import org.junit.Test
 import android.content.Context
 
-/**
- * Host-level checks for the watch page: home/search hand-off, typed-only actions,
- * state scenarios, and recreation. The page never navigates on its own.
- */
+/** Host-level watch page checks. The page never navigates on its own; actions only emit typed requests to the host. */
 class WatchScreenAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var home: ActivityScenario<HomeActivity>? = null
@@ -244,17 +241,22 @@ class WatchScreenAndroidTest {
 
         compose.onNodeWithTag("watch-topbar").assertDoesNotExist()
 
-        // Related videos open a new history entry.
+        // Recommendations reuse the Watch host, keeping its browse destination
+        // and player instead of stacking another Watch as its own backdrop.
+        lateinit var originalWatch: WatchActivity
+        watch?.onActivity { originalWatch = it }
         compose.onNodeWithTag("watch-thumb-harbour", useUnmergedTree = true)
             .performScrollTo().performClick()
         assertWatchRequest(WatchNavigationRequest.Watch("harbour"))
         compose.onNodeWithTag("watch-screen", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag("watch-title", useUnmergedTree = true)
             .assertTextEquals("City light trails — a night walk through the old harbour")
+        watch?.onActivity {
+            assertSame(originalWatch, it)
+            assertEquals("harbour", it.watchViewModel.uiState.value.videoId)
+        }
         backToLeaveWatch()
-        awaitReady()
-        compose.onNodeWithTag("watch-title", useUnmergedTree = true)
-            .assertTextEquals("Big Buck Bunny | A short film by the Blender Foundation")
+        compose.waitUntil(5_000) { originalWatch.isFinishing || originalWatch.isDestroyed }
     }
 
     @Test fun saveChooserAndNewPlaylistStayLocalUntilARequest() {
@@ -433,9 +435,8 @@ class WatchScreenAndroidTest {
     }
 
     @Test fun watchPageIsNativeAndStartsNoNetworkOrLegacyRuntime() {
-        // A previous suite class may have started the media runtime in this shared
-        // process; the contract is that opening this page does not start it, and
-        // first-visit traffic stays zero when the runtime is genuinely cold.
+        // A previous suite class may have started the media runtime in this shared process; the contract is
+        // that opening this page does not start it, and first-visit traffic stays zero when genuinely cold.
         val runtimeStartedBefore = (ApplicationProvider.getApplicationContext<Context>() as App).mediaRuntimeStarted
         val sent = TrafficStats.getUidTxBytes(Process.myUid())
         val received = TrafficStats.getUidRxBytes(Process.myUid())
@@ -472,8 +473,6 @@ class WatchScreenAndroidTest {
             channelId = "studio", artwork = "bunny", views = "1.2M views", age = "3 days ago",
             duration = "9:56",
         ))
-        // The Loading scenario keeps the page read in flight; the card summary is
-        // consumed from the store and painted instead of the bare skeleton.
         launchWatch("bunny", WatchScenario.Loading)
         compose.waitUntil(4_000) { nodeCount("watch-provisional") > 0 || nodeCount("watch-skeleton") > 0 }
         val provisionalCount = nodeCount("watch-provisional")

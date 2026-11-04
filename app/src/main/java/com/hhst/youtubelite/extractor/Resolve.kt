@@ -4,8 +4,6 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.PlaybackLoad
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerAnswer
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerFormat
 
-/** Maps one core playback load into the app's cached metadata and stream models. */
-
 internal fun mapMetadata(videoId: String, answer: PlayerAnswer): Metadata = Metadata().apply {
     val details = answer.details
     id = details?.videoId ?: videoId
@@ -21,20 +19,21 @@ internal fun mapStream(load: PlaybackLoad, context: ExtractionContext): Stream {
     val answer = requireNotNull(load.answer) { "stream mapping requires a successful answer" }
     val client = MscPlayback.mapClient(requireNotNull(load.client))
     val expiresAt = answer.expiresAtMs ?: Long.MAX_VALUE
+    val readyAfterMs = (answer.mediaAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0)
     fun wholeObjectPlan(protocol: MediaProtocol, resourceLength: Long = -1) =
         MediaRequestPlan(context.session, client, protocol, MediaRange.NONE,
             allowPostFallback = false, resourceLength = resourceLength, expiresAtMillis = expiresAt,
-            availableAfterMillis = if (protocol == MediaProtocol.HLS)
-                (answer.mediaAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0) else 0)
+            availableAfterMillis = if (protocol == MediaProtocol.HLS || protocol == MediaProtocol.DASH) readyAfterMs else 0)
 
     // Muxed formats may arrive as the ANDROID reel floor; their URLs answer to that identity.
     val floorClient = load.floorClient?.let(MscPlayback::mapClient) ?: client
     val formats = (answer.muxedFormats.asSequence().map {
         // Muxed itag 18 videoplayback ignores `range=` and serves Range headers.
-        it.toFormat(chunkPlan(it, context, floorClient, expiresAt, MediaRange.HEADER), muxed = true)
+        it.toFormat(chunkPlan(it, context, floorClient, expiresAt, MediaRange.HEADER,
+            if (floorClient == client) readyAfterMs else 0), muxed = true)
     } +
         answer.adaptiveFormats.asSequence().map {
-            it.toFormat(chunkPlan(it, context, client, expiresAt, MediaRange.QUERY), muxed = false)
+            it.toFormat(chunkPlan(it, context, client, expiresAt, MediaRange.QUERY, readyAfterMs), muxed = false)
         })
         .mapNotNull { it }
         .filter { it.url.isNotBlank() }
@@ -73,9 +72,10 @@ internal fun mapStream(load: PlaybackLoad, context: ExtractionContext): Stream {
 
 /** Media bytes are addressed as bounded `range=` windows on googlevideo. */
 private fun chunkPlan(format: PlayerFormat, context: ExtractionContext, client: StreamClient, expiresAt: Long,
-    range: MediaRange) =
+    range: MediaRange, readyAfterMs: Long = 0) =
     MediaRequestPlan(context.session, client, MediaProtocol.HTTPS, range,
-        allowPostFallback = true, resourceLength = format.contentLength ?: -1, expiresAtMillis = expiresAt)
+        allowPostFallback = true, resourceLength = format.contentLength ?: -1, expiresAtMillis = expiresAt,
+        availableAfterMillis = readyAfterMs)
 
 private fun PlayerFormat.toFormat(plan: MediaRequestPlan, muxed: Boolean): Format? {
     val url = url?.takeIf { it.isNotBlank() } ?: return null
@@ -134,8 +134,13 @@ private fun vttUrl(url: String): String {
     return base.substringBefore('?') + "?" + (query + "fmt=vtt").joinToString("&") + fragment
 }
 
-/** Stable object identity: itag + content length + audio xtags survive URL rotation. */
+/** Immutable object identity, including the media id and revision; size alone cannot identify it. */
 internal fun resourceIdentity(url: String, itag: Int?, contentLength: Long?): String {
+    val mediaId = MscPlayback.urlParameter("id", url)?.takeIf { it.isNotBlank() }
+    // Without an object id, two different videos can have the same itag, length and language.
+    // An exact signed URL is conservative but still lets a prefetch hand bytes to its playback.
+    if (mediaId == null || itag == null || itag <= 0) return YoutubeSessionProvider.digest("url:$url")
+    val revision = MscPlayback.urlParameter("lmt", url).orEmpty()
     val xtags = MscPlayback.urlParameter("xtags", url).orEmpty()
-    return YoutubeSessionProvider.digest("${itag ?: 0}:${contentLength ?: -1}:$xtags")
+    return YoutubeSessionProvider.digest("object:$mediaId:$itag:$revision:${contentLength ?: -1}:$xtags")
 }

@@ -4,12 +4,11 @@ import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.library.data.LibraryRepository
 import com.hhst.youtubelite.subscriptions.data.*
 import com.hhst.youtubelite.subscriptions.domain.*
-import com.hhst.youtubelite.notifications.data.NotificationsRepository
-import com.hhst.youtubelite.notifications.domain.*
 import com.hhst.youtubelite.explore.data.ExploreRepository
 import com.hhst.youtubelite.explore.domain.*
 import com.hhst.youtubelite.shorts.data.ShortsRepository
 import com.hhst.youtubelite.shorts.domain.*
+import com.hhst.youtubelite.watch.domain.VideoRating
 import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import kotlinx.coroutines.async
 
@@ -73,8 +72,26 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
         device { it.restore(removed) }
     }
     override suspend fun setHistoryPaused(paused: Boolean) {
-        if (useDevice()) return device { it.pause(paused) }
-        historyWrite { context, http -> setWatchHistory(!paused, context, http).requireValue() }
+        val operation = LibraryOperation(local)
+        if (operation.device) return device { it.pause(paused) }
+        try {
+            client.desiredStateWrites.setState("history_recording", "paused", paused.toString(),
+                checkSource = operation::check,
+                write = { context, http ->
+                    operation.check()
+                    DesiredStateAttempt(setWatchHistory(!paused, context, operation.transport(http)).requireValue(), Unit)
+                },
+                observe = { context, http ->
+                    operation.check()
+                    val result = loadWatchHistoryManagement(context, operation.transport(http))
+                    if (result.ok) ReadResult(DesiredStateRead(result.value?.paused?.toString(), Unit))
+                    else ReadResult(error = result.error)
+                }, onConfirmed = { operation.check() })
+        } catch (error: MediaException) {
+            if (error.failure.kind == RequestFailure.AUTH)
+                throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            throw error
+        }
     }
     override suspend fun clearHistory() {
         if (useDevice()) return device { it.clear() }
@@ -82,12 +99,15 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
     }
     private suspend fun historyWrite(block: (RequestContext, HttpClient) -> ActionReply) {
         try {
-            remote { context, http ->
+            remote(writing = true) { context, http ->
                 if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
                 block(context, http).requireConfirmation()
             }
         } catch (error: MediaException) {
-            if (error.failure.kind == RequestFailure.AUTH) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            if (error.failure.kind == RequestFailure.AUTH) {
+                if (error.failure.code == "session_changed") throw kotlinx.coroutines.CancellationException("Library session changed")
+                throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            }
             throw error
         }
     }
@@ -99,29 +119,53 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
         val page = loadLibrary(LibrarySection.PLAYLISTS, context, cursor, http = http).requireValue()
         PlaylistCollectionPage(page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.nextKey)
     }
-    private suspend fun <T> remote(block: (RequestContext, HttpClient) -> T): T {
+    private suspend fun <T> remote(writing: Boolean = false, block: (RequestContext, HttpClient) -> T): T {
         val operation = LibraryOperation(local)
         if (operation.device) throw kotlinx.coroutines.CancellationException("Library source changed")
-        return client.read { context, http ->
+        val execute: (RequestContext, HttpClient) -> T = { context, http ->
             operation.check()
             block(context, operation.transport(http)).also { operation.check() }
         }
+        return if (writing) client.write(execute) else client.read(execute)
     }
 
 }
 
 class MediaSubscriptionsRepository(private val client: MediaClient,
-    private val now: () -> Long = System::currentTimeMillis) : SubscriptionsRepository {
+    private val now: () -> Long = System::currentTimeMillis,
+    private val avatars: MediaAvatarDirectory? = null) : SubscriptionsRepository {
     private val menus = DeferredMenuCache(now)
+    private val initialBrowse = SharedSubscriptionsBrowse(now)
     // Today/Posts have no server-side lane: the subscriptions browse only filters by params we
     // don't have for those two, so they are hidden rather than offered and failed.
     override val supportedFilters = SubscriptionsFilter.entries.toSet() - SubscriptionsFilter.Today - SubscriptionsFilter.Posts
-    override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage = client.readIdempotent { context, http ->
+    override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage =
+        subscriptionPage(filter, continuation, null)
+
+    override suspend fun channelSubscriptions(channel: SubscribedChannel, filter: SubscriptionsFilter,
+                                             continuation: String?): SubscriptionsPage = subscriptionPage(filter, continuation, channel)
+
+    private suspend fun subscriptionPage(filter: SubscriptionsFilter, continuation: String?,
+                                         channel: SubscribedChannel?): SubscriptionsPage {
         if (filter == SubscriptionsFilter.Today || filter == SubscriptionsFilter.Posts)
             throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "subscription_filter_unavailable"))
-        val page = loadLibrary(LibrarySection.SUBSCRIPTIONS, context, continuation, http).requireValue()
-        val videos = page.items.filter { it.kind == "video" }.map(MediaItem::feedVideo)
-        SubscriptionsPage(when (filter) {
+        val params = channel?.let { it.subscriptionParams ?: subscriptionChannelParams(it.channelId) }
+        return if (params == null && continuation == null) initialRead(SharedSubscriptionsBrowse.Consumer.Feed) { context, http, opened ->
+            subscriptionPage(filter, channel, opened?.feed?.requireValue()
+                ?: loadBrowse(LibrarySection.SUBSCRIPTIONS.browseId, context, http = http).requireValue())
+        } else client.readIdempotent { context, http ->
+            if (!context.signedIn) throw MediaException(RequestError(RequestFailure.AUTH, "sign_in_required"))
+            subscriptionPage(filter, channel, loadBrowse(LibrarySection.SUBSCRIPTIONS.browseId, context, params, continuation, http).requireValue())
+        }
+    }
+
+    private fun subscriptionPage(filter: SubscriptionsFilter, channel: SubscribedChannel?, page: BrowsePage): SubscriptionsPage {
+        val videos = page.items.filter { it.kind == "video" }.map { item ->
+            val video = item.feedVideo().let { it.copy(avatar = it.avatar ?: avatars?.cached(it.channelId)) }
+            if (channel != null && (video.channelId.isBlank() || video.channelId == channel.channelId)) video.copy(channelId = channel.channelId,
+                author = video.author.ifBlank { channel.name }, avatar = video.avatar ?: channel.avatar) else video
+        }.filter { channel == null || it.channelId == channel.channelId }
+        return SubscriptionsPage(when (filter) {
             SubscriptionsFilter.Live -> videos.filter { it.live }
             SubscriptionsFilter.Unwatched -> videos.filter { it.progress == null || it.progress == 0f }
             SubscriptionsFilter.ContinueWatching -> videos.filter { (it.progress ?: 0f) > 0f }
@@ -132,12 +176,58 @@ class MediaSubscriptionsRepository(private val client: MediaClient,
     // The channel guide is its own read: a rejected guide request must not erase a usable feed.
     // The directory pages through the channels browse while the server keeps returning keys.
     override suspend fun subscribedChannelsPage(cursor: String?): com.hhst.youtubelite.subscriptions.domain.ChannelDirectoryPage =
-        client.readIdempotent { context, http ->
-            val page = loadSubscribedChannelsPage(context, cursor, http).requireValue()
-            com.hhst.youtubelite.subscriptions.domain.ChannelDirectoryPage(page.channels.map {
-                SubscribedChannel(it.id, it.title.orEmpty(), it.thumbnail.orEmpty(), "", hasNewContent = it.hasNewContent)
-            }, page.nextKey)
+        if (cursor == null) initialRead(SharedSubscriptionsBrowse.Consumer.Directory) { context, http, opened ->
+            directoryPage(if (opened == null) loadSubscribedChannelsPage(context, http = http).requireValue()
+                else loadSubscribedChannelsPage(context, opened, http).requireValue())
+        } else client.readIdempotent { context, http ->
+            directoryPage(loadSubscribedChannelsPage(context, cursor, http).requireValue())
         }
+
+    private fun directoryPage(page: com.liskovsoft.youtubeapi.videoinfo.V2.ChannelDirectoryPage) =
+        com.hhst.youtubelite.subscriptions.domain.ChannelDirectoryPage(page.channels.map {
+                SubscribedChannel(it.id, it.title.orEmpty(), it.thumbnail.orEmpty(), "", hasNewContent = it.hasNewContent,
+                    subscriptionParams = it.params)
+            }, page.nextKey)
+
+    private sealed interface InitialRead<out T> {
+        data class Value<T>(val value: T) : InitialRead<T>
+        data class Waiting(val ticket: SharedSubscriptionsBrowse.Ticket) : InitialRead<Nothing>
+    }
+
+    private suspend fun <T> initialRead(consumer: SharedSubscriptionsBrowse.Consumer,
+        read: (RequestContext, HttpClient, SubscriptionsBrowse?) -> T): T {
+        val attempt = client.readIdempotent { context, http ->
+            if (!context.signedIn) throw MediaException(RequestError(RequestFailure.AUTH, "sign_in_required"))
+            if (context.accessToken == null) return@readIdempotent InitialRead.Value(read(context, http, null))
+            val ticket = initialBrowse.acquire(consumer, context)
+            if (!ticket.owner) return@readIdempotent InitialRead.Waiting(ticket)
+            val opened = try {
+                loadSubscriptionsBrowse(context, http).requireValue().also { page ->
+                    avatars?.seed(page.channels.mapNotNull { channel ->
+                        channel.thumbnail?.takeIf(String::isNotBlank)?.let { channel.id to it }
+                    }.toMap())
+                    initialBrowse.complete(ticket, page)
+                }
+            } catch (error: Throwable) {
+                initialBrowse.failed(ticket)
+                throw error
+            }
+            InitialRead.Value(read(context, http, opened))
+        }
+        return when (attempt) {
+            is InitialRead.Value -> attempt.value
+            is InitialRead.Waiting -> {
+                // Await outside MediaClient: the second consumer holds no bounded
+                // media worker while the shared response is still on the wire.
+                val opened = attempt.ticket.result.await()
+                client.readIdempotent { context, http ->
+                    if (context != attempt.ticket.context)
+                        throw MediaException(RequestError(RequestFailure.AUTH, "session_changed"))
+                    read(context, http, opened ?: loadSubscriptionsBrowse(context, http).requireValue())
+                }
+            }
+        }
+    }
 
     override suspend fun menu(video: com.hhst.youtubelite.home.domain.FeedItem.Video): com.hhst.youtubelite.home.domain.FeedItem.Video {
         val endpoint = video.menuEndpoint ?: return video
@@ -156,7 +246,7 @@ class MediaSubscriptionsRepository(private val client: MediaClient,
     }
 
     override suspend fun feedback(video: com.hhst.youtubelite.home.domain.FeedItem.Video, action: com.hhst.youtubelite.home.domain.FeedMenuAction) {
-        client.read { context, http ->
+        client.write { context, http ->
             if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
             val token = when (action) {
                 com.hhst.youtubelite.home.domain.FeedMenuAction.NotInterested -> video.notInterestedToken
@@ -167,14 +257,6 @@ class MediaSubscriptionsRepository(private val client: MediaClient,
                 throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
             sendFeedback(token, context, http).requireValue()
         }
-    }
-}
-
-class MediaNotificationsRepository(private val client: MediaClient) : NotificationsRepository {
-    override suspend fun notifications() = client.read { context, http ->
-        val page = loadNotices(context, http = http).requireValue()
-        NotificationsPage(page.notices.mapIndexed { index, it -> NotificationItem("${it.videoId}:${it.published}:$index", "", it.author.orEmpty(), "",
-            it.message ?: it.title.orEmpty(), it.published.orEmpty(), it.thumbnail.orEmpty(), it.videoId) })
     }
 }
 
@@ -218,20 +300,11 @@ class MediaExploreRepository(private val client: MediaClient) : ExploreRepositor
 class MediaShortsRepository(private val client: MediaClient, private val startId: String? = null, private val channelId: String? = null) : ShortsRepository {
     override suspend fun shorts(): com.hhst.youtubelite.shorts.domain.ShortsPage {
         val started = android.os.SystemClock.elapsedRealtime()
-        val page = client.read { context, http ->
-            // An explicit seed is the primary read: it resolves first and independently, so a
-            // rejected global shorts feed (the seedless reel_watch_sequence is network-rejected
-            // on some networks) cannot block a valid seeded entry. When the seed itself fails,
-            // the whole read fails — the pager never quietly plays a different video.
-            if (startId != null) {
-                val video = loadWatch(startId, context, http = http).requireValue()
-                val seed = ShortItem(startId, video.title.orEmpty(), video.author.orEmpty(), video.channelId.orEmpty(),
-                    "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "", video.authorThumbnail.orEmpty())
-                ShortsPage(listOf(seed), INITIAL_CURSOR)
-            } else {
-                shortsPage(context, http, null)
-            }
-        }
+        // A known id can attach its video surface immediately. The playback pipeline decides
+        // playability; metadata failure must neither hold that surface nor replace the seed.
+        val page = if (startId != null) ShortsPage(listOf(ShortItem(
+            startId, "", "", "", "https://i.ytimg.com/vi/$startId/hqdefault.jpg", "", "", "",
+        )), INITIAL_CURSOR) else client.read { context, http -> shortsPage(context, http, null) }
         com.hhst.youtubelite.diagnostics.AppLog.event(com.hhst.youtubelite.diagnostics.AppLog.Category.PLAYER,
             "shorts_seed_read", mapOf("ms" to (android.os.SystemClock.elapsedRealtime() - started),
                 "seeded" to (startId != null), "items" to page.items.size))
@@ -257,6 +330,12 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
             page.subscribed,
             details?.tracking,
             context.generation,
+            when (page.rating) {
+                "LIKE" -> VideoRating.Like
+                "DISLIKE" -> VideoRating.Dislike
+                "INDIFFERENT" -> VideoRating.None
+                else -> null
+            },
         )
     }
 

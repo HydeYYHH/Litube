@@ -80,7 +80,7 @@ class PostDetailHostAndroidTest {
 
         compose.onNodeWithTag("post-detail-more").performClick()
         awaitNode("post-detail-menu")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         compose.waitUntil(5_000) { nodeCount("post-detail-menu") == 0 }
         compose.onNodeWithTag("post-detail-page").assertIsDisplayed()
@@ -96,8 +96,8 @@ class PostDetailHostAndroidTest {
 
         host.recreate()
         awaitNode("post-detail-page")
-        // The list may restore the scrolled-to-images position; await the element the
-        // assertion reads instead of the body, which can be above the composed window.
+        // The list may restore the scrolled-to-images position; await the element the assertion
+        // reads instead of the body, which can be above the composed window.
         awaitNode("post-image-counter")
         assertEquals("The selected image must survive recreation", swiped, counter())
     }

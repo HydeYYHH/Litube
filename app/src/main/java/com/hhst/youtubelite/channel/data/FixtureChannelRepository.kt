@@ -14,7 +14,6 @@ import com.hhst.youtubelite.post.domain.ChannelPostsPage
 import com.hhst.youtubelite.post.domain.PostSummary
 import kotlinx.coroutines.delay
 
-/** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureChannelRepository(private val scenario: ChannelScenario = ChannelScenario.Content) : ChannelRepository {
     override suspend fun channel(channelId: String): ChannelPage {
         delay(160)

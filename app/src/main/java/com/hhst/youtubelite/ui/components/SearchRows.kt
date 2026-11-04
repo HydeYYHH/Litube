@@ -9,7 +9,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hhst.youtubelite.data.media.MediaSearchSuggestions
-import com.hhst.youtubelite.data.media.SearchRowSet
 import kotlinx.coroutines.delay
 
 /**
@@ -28,9 +27,10 @@ class SearchRows(
 fun rememberSearchRows(source: MediaSearchSuggestions?, query: String): SearchRows? {
     source ?: return null
     val session by com.hhst.youtubelite.data.media.MediaSession.changes.collectAsStateWithLifecycle()
-    var rows by remember(source, query, session) { mutableStateOf(SearchRowSet(emptyList(), emptyList())) }
     var refreshTick by remember(source) { mutableIntStateOf(0) }
+    var rows by remember(source, query, session, refreshTick) { mutableStateOf(source.localRows(query)) }
     LaunchedEffect(source, query, refreshTick, session) {
+        if (query.isBlank()) return@LaunchedEffect
         delay(250)
         rows = source.rows(query)
     }

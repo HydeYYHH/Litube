@@ -34,6 +34,16 @@ class App : Application(), Configuration.Provider {
         super.onCreate()
         AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
+        com.hhst.youtubelite.core.YoutubeThumbnail.initialize(this)
+        // Restore only for this exact WebView and OS build. Playback need not initialize
+        // Chromium on the main thread just to read the same User-Agent on every cold open.
+        userAgentStamp()?.let { stamp ->
+            getSharedPreferences("webview-runtime", MODE_PRIVATE).let { saved ->
+                if (saved.getString("stamp", null) == stamp) {
+                    Constants.genuineUserAgent = saved.getString("user-agent", "").orEmpty()
+                }
+            }
+        }
         com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.PreferencesAuthStore(this)) {
             get<com.hhst.youtubelite.extension.ExtensionManager>()
                 .isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.PRIVATE_BROWSING)
@@ -43,6 +53,8 @@ class App : Application(), Configuration.Provider {
             androidContext(this@App)
             modules(appModule)
         }
+        // Home card warm-up still prepares the web fallback while browsing. A direct VOD
+        // cold-open must not start an unused JS runtime alongside its first media requests.
         registerActivityLifecycleCallbacks(com.hhst.youtubelite.player.PlaybackLifecycle())
         // Publish the persisted appearance before the first activity composes.
         get<com.hhst.youtubelite.extension.ExtensionManager>().let { prefs ->
@@ -50,11 +62,15 @@ class App : Application(), Configuration.Provider {
         }
     }
 
-    /** Initializes playback and download services when their entry points are opened. */
     @Synchronized fun startMediaRuntime() {
         if (mediaRuntimeStarted) return
-        Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
-        // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
+        if (Constants.genuineUserAgent.isBlank()) {
+            Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
+            userAgentStamp()?.let { stamp ->
+                getSharedPreferences("webview-runtime", MODE_PRIVATE).edit()
+                    .putString("stamp", stamp).putString("user-agent", Constants.genuineUserAgent).apply()
+            }
+        }
         com.hhst.youtubelite.core.PreferenceStore.app(this).let { kv ->
             if (!kv.getBool("youtube-engine-v1-migrated", false)) {
                 kv.keys().filter { it.startsWith("extractor:stream:") || it == "extractor:client_order" }
@@ -73,4 +89,10 @@ class App : Application(), Configuration.Provider {
         DownloadNetworkRestore.start(this)
         mediaRuntimeStarted = true
     }
+
+    private fun userAgentStamp(): String? = runCatching {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return@runCatching null
+        val provider = android.webkit.WebView.getCurrentWebViewPackage() ?: return@runCatching null
+        "${provider.packageName}:${androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(provider)}:${android.os.Build.FINGERPRINT}"
+    }.getOrNull()
 }

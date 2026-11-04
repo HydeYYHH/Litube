@@ -29,15 +29,14 @@ object MediaCombo {
         // Audio-only MP4 (m4a) via Mp4Muxer AAC track.
         Entry("M4A", null, MimeTypes.AUDIO_AAC,
             if (provenAacM4a) Status.ENABLED else Status.GATED),
-        // Muxer-listed; pending extract/mux/playback proof.
         Entry("MP4", MimeTypes.VIDEO_H265, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; VP9 is usually WEBM, not MP4.
+        // VP9 is usually WEBM, not MP4.
         Entry("MP4", MimeTypes.VIDEO_VP9, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; playback still hardware-gated.
+        // Playback still hardware-gated.
         Entry("MP4", MimeTypes.VIDEO_AV1, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; not an adaptive download target.
+        // Not an adaptive download target.
         Entry("MP4", MimeTypes.VIDEO_DOLBY_VISION, MimeTypes.AUDIO_AAC, Status.GATED),
-        // Muxer-listed; Opus is typically WEBM audio.
+        // Opus is typically WEBM audio.
         Entry("MP4", MimeTypes.VIDEO_H264, MimeTypes.AUDIO_OPUS, Status.GATED),
     )
 }

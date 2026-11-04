@@ -57,7 +57,7 @@ internal fun PlayerModalDialog(
                 contentAlignment = Alignment.Center) {
                 Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().heightIn(max = maxHeight).testTag(tag)
                     .pointerInput(Unit) { detectTapGestures {} },
-                    shape = AppStyle.MenuShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = AppStyle.MenuShape, color = AppStyle.Panel,
                     contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp) {
                     Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).padding(vertical = 8.dp), content = content)
                 }

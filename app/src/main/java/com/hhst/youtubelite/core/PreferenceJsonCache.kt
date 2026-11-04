@@ -5,7 +5,6 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 
-/** Expiring strings and serialized model records. */
 class PreferenceJsonCache(
     private val kv: PreferenceStore,
 ) : JsonCache {

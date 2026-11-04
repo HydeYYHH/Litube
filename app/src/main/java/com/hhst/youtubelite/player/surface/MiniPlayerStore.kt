@@ -2,9 +2,6 @@ package com.hhst.youtubelite.player.surface
 
 import com.hhst.youtubelite.core.PreferenceStore
 
-/**
- * Persists mini-player width and translation.
- */
 class MiniPlayerStore(
     private val kv: PreferenceStore,
 ) {

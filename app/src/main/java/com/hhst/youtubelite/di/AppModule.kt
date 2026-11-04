@@ -92,13 +92,15 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
-/** Application-scoped Koin module. */
 val appModule = module {
     // freshContext runs on the MediaClient pool: it may block on a token refresh.
     single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::freshContext) }
     single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots")) }
-    single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get()) }
-    // Session-owned watch progress reporting; activities publish metadata and attach playback.
+    single {
+        val postSessions = com.hhst.youtubelite.watch.chat.ChatWebSessionStore(
+            com.hhst.youtubelite.data.media.PreferencesAuthStore(androidContext()))
+        com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get(), get(), postSessions::context)
+    }
     single {
         com.hhst.youtubelite.data.media.PlaybackWatchReporting(get(), { get<com.hhst.youtubelite.data.media.ContentRepositories>().localLibrary }).also { reporting ->
             get<com.hhst.youtubelite.extension.ExtensionManager>().addOnChangedListener { key ->
@@ -166,12 +168,12 @@ val appModule = module {
             cookies = WebViewCookies,
             network = get(),
             wifiOnlyProvider = { prefs.wifiOnly() },
-            forbidden = ForbiddenRecovery { taskId, identity ->
-                get<DownloadResolverImpl>().recoverSource(taskId, identity)
+            forbidden = ForbiddenRecovery { taskId, generation, identity ->
+                get<DownloadResolverImpl>().recoverSource(taskId, generation, identity)
             },
             mediaRequests = get(),
-            fallback = ForbiddenRecovery { taskId, identity ->
-                get<DownloadResolverImpl>().backupSource(taskId, identity)
+            fallback = ForbiddenRecovery { taskId, generation, identity ->
+                get<DownloadResolverImpl>().backupSource(taskId, generation, identity)
             },
         )
     }
@@ -219,7 +221,6 @@ val appModule = module {
         )
     }
 
-    // Player
     single { PlayerDataSource.create(androidContext(), get<OkHttpClient>(), get()) }
     single {
         val meter = DefaultBandwidthMeter.getSingletonInstance(androidContext())

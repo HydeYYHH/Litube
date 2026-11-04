@@ -3,6 +3,7 @@
 package com.hhst.youtubelite.cast.protocol
 
 import android.util.Log
+import android.net.Network
 import com.hhst.youtubelite.diagnostics.CastDiagnosticTrace
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -15,22 +16,21 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * The receiver + media layer of the cast stack: launches a receiver app over a
- * [CastV2Channel] and drives media playback on it. The intended app is the Default Media
- * Receiver ([DEFAULT_MEDIA_RECEIVER_APP_ID]) fed a URL from the phone-side proxy.
+ * The receiver + media layer of the cast stack: launches a receiver app over a [CastV2Channel]
+ * and drives media playback on it. The intended app is the Default Media Receiver
+ * ([DEFAULT_MEDIA_RECEIVER_APP_ID]) fed a URL from the phone-side proxy.
  *
- * **Flow.** [start] opens the channel, connects to `receiver-0`, LAUNCHes the
- * app, waits for a RECEIVER_STATUS carrying the app's `transportId`, connects a second
- * virtual connection to that transportId and fires [Listener.onConnected]. Only then is
- * [load] meaningful; after LOAD the first MEDIA_STATUS supplies the `mediaSessionId`
- * every transport command (PLAY/PAUSE/SEEK/STOP) must carry.
+ * **Flow.** [start] opens the channel, connects to `receiver-0`, LAUNCHes the app, waits for a
+ * RECEIVER_STATUS carrying the app's `transportId`, connects a second virtual connection to that
+ * transportId and fires [Listener.onConnected]. Only then is [load] meaningful; after LOAD the
+ * first MEDIA_STATUS supplies the `mediaSessionId` every transport command must carry.
  *
  * **Position updates.** Receivers do NOT push MEDIA_STATUS continuously - only on state
- * transitions. A periodic media-namespace GET_STATUS (every 5s while a media session exists) keeps
- * [Listener.onMediaStatus] ticking so the phone-side overlay can show live position.
+ * transitions. A periodic media-namespace GET_STATUS (every 5s while a media session exists)
+ * keeps [Listener.onMediaStatus] ticking so the phone-side overlay can show live position.
  *
- * **Units.** All times crossing this API are **milliseconds**; the seconds-double wire
- * format is confined to [MediaStatus] and the JSON builders here.
+ * **Units.** All times crossing this API are **milliseconds**; the seconds-double wire format
+ * is confined to [MediaStatus] and the JSON builders here.
  *
  * **Threading.** All public control methods are safe from any thread (they queue onto the
  * channel's writer). Listener callbacks fire on the channel's reader thread or this session's
@@ -45,6 +45,7 @@ class CastV2Session(
     authenticator: CastV2Channel.Authenticator = CastV2Channel.Authenticator { socket, input, output ->
         CastDeviceAuth.authenticate(socket, input, output)
     },
+    network: Network? = null,
 ) {
 
     interface Listener {
@@ -76,7 +77,7 @@ class CastV2Session(
     }
 
     private var diagnostics = CastDiagnosticTrace()
-    private val channel = CastV2Channel(host, port, ChannelListener(), authenticator)
+    private val channel = CastV2Channel(host, port, ChannelListener(), authenticator, network)
 
     fun setDiagnostics(diagnostics: CastDiagnosticTrace) {
         this.diagnostics = diagnostics
@@ -123,10 +124,6 @@ class CastV2Session(
         channel.setDiagnostics(diagnostics)
     }
 
-    // ---------------------------------------------------------------------------------
-    // Lifecycle
-    // ---------------------------------------------------------------------------------
-
     /** Open the channel and launch the app. Call once; `onConnected` or a terminal error follows. */
     fun start() {
         diagnostics.phase("receiver_start_requested")
@@ -140,9 +137,9 @@ class CastV2Session(
     }
 
     /**
-     * Tear the session down. Sends a best-effort receiver STOP for this app session first. This
-     * sender owns the Default Media Receiver app, so leaving it up after disconnect would strand the TV on an
-     * idle splash screen.
+     * Tear the session down, sending a best-effort receiver STOP for this app session first:
+     * this sender owns the Default Media Receiver app, so leaving it up after disconnect would
+     * strand the TV on an idle splash screen.
      */
     fun close() {
         val currentSessionId = sessionId
@@ -155,19 +152,13 @@ class CastV2Session(
         channel.close() // queued behind the STOP on the writer; triggers onClosed via the listener
     }
 
-    // ---------------------------------------------------------------------------------
-    // Media control (valid once onConnected fired)
-    // ---------------------------------------------------------------------------------
-
     /**
      * Load a stream on the receiver and autoplay it.
      *
-     * @param contentUrl      what the receiver fetches (the phone-proxy manifest URL)
-     * @param contentType     MIME type, e.g. "application/dash+xml" or "video/mp4"
-     * @param title           shown on the receiver's loading/idle UI; null to skip metadata
-     * @param imageUrl        poster image for the receiver UI; null to skip
-     * @param startPositionMs where playback begins
-     * @param author          shown under the title on the receiver UI; null to skip
+     * @param contentUrl what the receiver fetches (the phone-proxy manifest URL)
+     * @param title      shown on the receiver's loading/idle UI; null to skip
+     * @param imageUrl   poster image for the receiver UI; null to skip
+     * @param author     shown under the title on the receiver UI; null to skip
      */
     fun load(
         contentUrl: String,
@@ -176,6 +167,7 @@ class CastV2Session(
         imageUrl: String?,
         startPositionMs: Long,
         author: String?,
+        autoplay: Boolean = true,
     ) {
         val transport = transportId
         if (transport == null) {
@@ -206,7 +198,7 @@ class CastV2Session(
                 put("type", "LOAD")
                 put("requestId", request)
                 put("media", media)
-                put("autoplay", true)
+                put("autoplay", autoplay)
                 put("currentTime", startPositionMs / 1000.0)
             }
             diagnostics.request("LOAD", request)
@@ -249,10 +241,6 @@ class CastV2Session(
     fun stop() {
         sendMediaCommand("STOP")
     }
-
-    // ---------------------------------------------------------------------------------
-    // Wire helpers
-    // ---------------------------------------------------------------------------------
 
     /** Receiver-namespace command to receiver-0 with a fresh requestId. */
     private fun sendReceiver(fill: (JSONObject) -> Unit) {
@@ -307,10 +295,6 @@ class CastV2Session(
             diagnostics.error("status_build_failed", e)
         }
     }
-
-    // ---------------------------------------------------------------------------------
-    // Inbound
-    // ---------------------------------------------------------------------------------
 
     private inner class ChannelListener : CastV2Channel.Listener {
         override fun onOpened() {
@@ -377,8 +361,7 @@ class CastV2Session(
             // Start the position poll now; it no-ops until a mediaSessionId exists.
             scheduleAtFixedDelay({ pollMediaStatus() }, MEDIA_POLL_INTERVAL_MS)
         } else if (app == null && connectedNotified && payload.optJSONObject("status") != null) {
-            // A status whose applications array no longer contains this app means
-            // the receiver stopped it. Close the session; this is not a transport error.
+            // A status without this app means the receiver stopped it: close the session, not a transport error.
             terminate { listener.onClosed() }
             channel.close()
         }
@@ -421,9 +404,8 @@ class CastV2Session(
             }
 
             "LOAD_FAILED", "LOAD_CANCELLED" -> {
-                // Not a channel death, but the integrator must know playback never started. The
-                // IDLE status keeps position/overlay consumers unstuck; onLoadFailed carries the
-                // actual failure signal (the session manager's auto-fallback hangs off it).
+                // Not a channel death, but the integrator must know playback never started;
+                // the session manager's auto-fallback hangs off onLoadFailed.
                 if (payload.optInt("requestId", loadRequestId) != loadRequestId) return
                 loadPending = false
                 dispatch { listener.onLoadFailed(type) }
@@ -432,10 +414,6 @@ class CastV2Session(
             else -> Unit
         }
     }
-
-    // ---------------------------------------------------------------------------------
-    // Scheduling + terminal-state helpers
-    // ---------------------------------------------------------------------------------
 
     private fun schedule(task: () -> Unit, delayMs: Long) {
         try {
@@ -488,15 +466,13 @@ class CastV2Session(
         /** MEDIA_STATUS poll period while a media session exists (positions are not pushed). */
         private const val MEDIA_POLL_INTERVAL_MS = 5_000L
 
-        /** Convenience factory: session against the Default Media Receiver. */
-        fun forDefaultMediaReceiver(host: String, port: Int, listener: Listener) =
-            CastV2Session(host, port, DEFAULT_MEDIA_RECEIVER_APP_ID, listener)
+        fun forDefaultMediaReceiver(host: String, port: Int, listener: Listener, network: Network? = null) =
+            CastV2Session(host, port, DEFAULT_MEDIA_RECEIVER_APP_ID, listener, network = network)
 
         /**
-         * Find an app entry by appId in a RECEIVER_STATUS payload
-         * (`{"type":"RECEIVER_STATUS","status":{"applications":[{...}]}}`) and return its ids.
-         * Returns null when the app is absent from the status (not launched or already
-         * stopped) or has no transportId yet (still starting).
+         * Finds an app entry in a RECEIVER_STATUS payload
+         * (`{"type":"RECEIVER_STATUS","status":{"applications":[{...}]}}`); returns null when the
+         * app is absent (not launched or already stopped) or has no transportId yet (still starting).
          */
         internal fun findApp(receiverStatusPayload: JSONObject, appId: String): AppSession? {
             val status = receiverStatusPayload.optJSONObject("status") ?: return null

@@ -30,6 +30,46 @@ class ShortsViewModelTest {
         assertEquals("short-1", content.page.items.first().id)
     }
 
+    @Test fun playbackEndAdvancesOnlyTheCurrentItemAndWaitsForPanelsToClose() = runTest {
+        val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, "short-1")
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.OpenComments("short-1"))
+        vm.onPlaybackEnded("short-1")
+        assertEquals("short-1", vm.uiState.value.currentItemId)
+        vm.onAction(ShortsAction.CloseComments)
+        vm.onPlaybackEnded("short-1")
+        assertEquals("short-2", vm.uiState.value.currentItemId)
+        vm.onPlaybackEnded("short-1")
+        assertEquals("short-2", vm.uiState.value.currentItemId)
+        vm.onAction(ShortsAction.SelectItem("short-8"))
+        vm.onPlaybackEnded("short-8")
+        assertEquals("short-8", vm.uiState.value.currentItemId)
+    }
+
+    @Test fun playbackEndWaitsForPaginationAndDoesNotOverrideASwipe() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<ShortsPage>()
+        val samples = FixtureShortsRepository.sample()
+        var requests = 0
+        val vm = ShortsViewModel(object : ShortsRepository {
+            override suspend fun shorts() = ShortsPage(samples.take(2), "next")
+            override suspend fun shortsNext(cursor: String): ShortsPage { requests++; return gate.await() }
+        }, SavedStateHandle(), ShortsScenario.Content, "short-2")
+        advanceUntilIdle()
+        vm.onPlaybackEnded("short-2")
+        runCurrent()
+        assertEquals("short-2", vm.uiState.value.currentItemId)
+        assertTrue(vm.uiState.value.appendLoading)
+        vm.onPlaybackEnded("short-2")
+        gate.complete(ShortsPage(samples.drop(2)))
+        advanceUntilIdle()
+        vm.onPlaybackEnded("short-2")
+        assertEquals("short-3", vm.uiState.value.currentItemId)
+        assertEquals(1, requests)
+        vm.onAction(ShortsAction.SelectItem("short-1"))
+        vm.onPlaybackEnded("short-2")
+        assertEquals("short-1", vm.uiState.value.currentItemId)
+    }
+
     @Test fun likeAndDislikeStayTypedRateRequestsWithoutStateChange() = runTest {
         val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null)
         advanceUntilIdle()
@@ -39,7 +79,6 @@ class ShortsViewModelTest {
         vm.onAction(ShortsAction.Dislike("short-3"))
         advanceUntilIdle()
         assertEquals(listOf(ShortsNavigationRequest.Rate("short-3", true), ShortsNavigationRequest.Rate("short-3", false)), requests)
-        // No local like state was invented: counts stay as the fixture displays them.
         val page = (vm.uiState.value.content as ShortsContent.Ready).page
         assertEquals("19K", page.items.first { it.id == "short-3" }.likes)
     }
@@ -188,7 +227,6 @@ class ShortsViewModelTest {
         advanceUntilIdle()
         vm.onAction(ShortsAction.SelectItem("short-2"))
         advanceUntilIdle()
-        // Both server states land in the map; no click happened this session.
         assertEquals(true, vm.uiState.value.subscriptions["ch-1"])
         assertEquals(false, vm.uiState.value.subscriptions["ch-2"])
     }
@@ -210,7 +248,6 @@ class ShortsViewModelTest {
         vm.onAction(ShortsAction.Subscribe("ch-1"))
         runCurrent()
         assertTrue("channel is pending while the write is in flight", "ch-1" in vm.uiState.value.subscriptionsPending)
-        // A second tap on the pending channel must not submit again.
         vm.onAction(ShortsAction.Subscribe("ch-1"))
         runCurrent()
         assertEquals(1, actions.calls.size)
@@ -218,6 +255,86 @@ class ShortsViewModelTest {
         advanceUntilIdle()
         assertEquals(mapOf("ch-1" to true), vm.uiState.value.subscriptions)
         assertTrue(vm.uiState.value.subscriptionsPending.isEmpty())
+    }
+
+    @Test fun pendingRatingsAreVisiblePerVideoAndDoNotBlockSubscriptions() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val ratings = mutableListOf<String>()
+        var subscriptions = 0
+        val actions = object : com.hhst.youtubelite.watch.domain.VideoActions {
+            override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating,
+                previous: com.hhst.youtubelite.watch.domain.VideoRating) { ratings += videoId; gate.await() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) { subscriptions++ }
+        }
+        val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null, videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.Like("short-1"))
+        assertEquals(setOf("short-1"), vm.uiState.value.ratingsPending)
+        vm.onAction(ShortsAction.Like("short-1"))
+        vm.onAction(ShortsAction.Like("short-2"))
+        vm.onAction(ShortsAction.Subscribe("channel"))
+        runCurrent()
+        assertEquals(listOf("short-1", "short-2"), ratings)
+        assertEquals(1, subscriptions)
+        assertTrue(vm.uiState.value.ratings.isEmpty())
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.ratingsPending.isEmpty())
+        assertEquals(com.hhst.youtubelite.watch.domain.VideoRating.Like, vm.uiState.value.ratings["short-1"])
+        assertEquals(com.hhst.youtubelite.watch.domain.VideoRating.Like, vm.uiState.value.ratings["short-2"])
+    }
+
+    @Test fun accountSwitchClearsPendingRatingsWithoutPublishingOldResults() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val actions = object : com.hhst.youtubelite.watch.domain.VideoActions {
+            override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating,
+                previous: com.hhst.youtubelite.watch.domain.VideoRating) { gate.await() }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) {}
+        }
+        val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null, videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.Dislike("short-1"))
+        runCurrent()
+        vm.updateSession(com.hhst.youtubelite.data.media.MediaSession.snapshot().generation + 1)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.ratingsPending.isEmpty())
+        assertTrue(vm.uiState.value.ratings.isEmpty())
+    }
+
+    @Test fun accountSwitchDiscardsLateRatingFailuresFromThePreviousSession() = runTest {
+        for (failure in listOf(
+            com.hhst.youtubelite.watch.domain.SignInRequiredException(),
+            com.hhst.youtubelite.watch.domain.UnconfirmedActionException(),
+            java.io.IOException("late transport failure"),
+        )) {
+            val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val notices = mutableListOf<com.hhst.youtubelite.core.AppNotice>()
+            val actions = object : com.hhst.youtubelite.watch.domain.VideoActions {
+                override suspend fun rate(videoId: String, rating: com.hhst.youtubelite.watch.domain.VideoRating,
+                    previous: com.hhst.youtubelite.watch.domain.VideoRating) {
+                    // A transport's cleanup/readback can fail after cancellation was requested.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        gate.await()
+                        throw failure
+                    }
+                }
+                override suspend fun subscribe(channelId: String, subscribed: Boolean) {}
+            }
+            val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null, videoActions = actions)
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.actionNotices.collect { notices += it } }
+            advanceUntilIdle()
+            vm.onAction(ShortsAction.Like("short-1"))
+            runCurrent()
+
+            vm.updateSession(com.hhst.youtubelite.data.media.MediaSession.snapshot().generation + 1)
+            gate.complete(Unit)
+            advanceUntilIdle()
+
+            assertTrue("An old ${failure.javaClass.simpleName} must not prompt the new account", notices.isEmpty())
+            assertTrue(vm.uiState.value.ratingsPending.isEmpty())
+            assertTrue(vm.uiState.value.ratings.isEmpty())
+        }
     }
 
     private class NoopActions : com.hhst.youtubelite.watch.domain.VideoActions {

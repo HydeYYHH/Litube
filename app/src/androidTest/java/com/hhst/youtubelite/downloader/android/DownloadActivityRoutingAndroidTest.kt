@@ -21,10 +21,8 @@ import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 /**
- * DownloadActivity intent routing: a request sent before the screen's collector attaches
- * still opens the latest batch, runtime onNewIntent reaches the live composition without
- * recreation, and the list keeps its filter across a new batch. Batch names and task
- * titles differ so the detail header and its row are distinct texts.
+ * DownloadActivity intent routing. Batch names and task titles differ so the detail
+ * header and its row are distinct texts.
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadActivityRoutingAndroidTest {
@@ -42,7 +40,6 @@ class DownloadActivityRoutingAndroidTest {
             ).batchId
     }
 
-    /** Texts of the focused window; the screen shows the opened batch by name. */
     private fun visibleTexts(): Set<String> {
         val texts = HashSet<String>()
         fun visit(node: AccessibilityNodeInfo?) {

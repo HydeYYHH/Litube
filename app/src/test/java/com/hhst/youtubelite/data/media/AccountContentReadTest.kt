@@ -66,6 +66,7 @@ class AccountContentReadTest {
     private val watchBody = """{"contents":{"singleColumnWatchNextResults":{
       "results":{"results":{"contents":[{"itemSectionRenderer":{"contents":[{"videoMetadataRenderer":{
         "title":{"simpleText":"A film"},"shortViewCountText":{"simpleText":"12K views"},
+        "publishedTimeText":{"simpleText":"2 years ago"},
         "owner":{"videoOwnerRenderer":{"title":{"simpleText":"Ada"},
           "navigationEndpoint":{"browseEndpoint":{"browseId":"UCada"}}}}
       }}]}}]}},

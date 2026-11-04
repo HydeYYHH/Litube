@@ -1,29 +1,55 @@
 package com.hhst.youtubelite.library.presentation
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.SavedStateHandle
+import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.core.WriteFeedback
+import com.hhst.youtubelite.core.ContinuationHistory
+import com.hhst.youtubelite.core.trafficChallenge
 import com.hhst.youtubelite.library.data.LibraryRepository
 import com.hhst.youtubelite.library.data.LibraryScenario
 import com.hhst.youtubelite.library.data.SignedOutPrompts
-import com.hhst.youtubelite.library.domain.*
+import com.hhst.youtubelite.library.domain.CollectionContent
+import com.hhst.youtubelite.library.domain.CollectionUiState
+import com.hhst.youtubelite.library.domain.HistoryContent
+import com.hhst.youtubelite.library.domain.HistoryEntry
+import com.hhst.youtubelite.library.domain.HistoryMenuAction
+import com.hhst.youtubelite.library.domain.HistoryPage
+import com.hhst.youtubelite.library.domain.HistoryUiState
+import com.hhst.youtubelite.library.domain.LibraryAction
+import com.hhst.youtubelite.library.domain.LibraryContent
+import com.hhst.youtubelite.library.domain.LibraryNavigationRequest
+import com.hhst.youtubelite.library.domain.LibraryOverlay
+import com.hhst.youtubelite.library.domain.LibraryUiState
+import com.hhst.youtubelite.library.domain.RemovedHistoryEntry
+import com.hhst.youtubelite.library.domain.YouPage
 import com.hhst.youtubelite.watch.domain.toProvisional
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
 
-import com.hhst.youtubelite.core.AppNotice
-import com.hhst.youtubelite.core.trafficChallenge
+private fun List<HistoryEntry>.restoring(removed: RemovedHistoryEntry): List<HistoryEntry> {
+    if (any { it.videoId == removed.entry.videoId }) return this
+    val previous = indexOfFirst { it.videoId == removed.prevVideoId }
+    val next = indexOfFirst { it.videoId == removed.nextVideoId }
+    val index = when {
+        previous >= 0 -> previous + 1
+        next >= 0 -> next
+        else -> removed.index.coerceIn(0, size)
+    }
+    return toMutableList().apply { add(index, removed.entry) }
+}
 
-/** Hosts the You page. Library screens keep one VM per page, mirroring the search host. */
+/** Library screens keep one VM per page, mirroring the search host. */
 class YouViewModel(
     private val repository: LibraryRepository,
     private val savedState: SavedStateHandle,
@@ -41,9 +67,14 @@ class YouViewModel(
     val saveSheet = saveRepository?.let {
         com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
     }
+    val writes = WriteFeedback()
     private var actionJob: Job? = null
+    // History writes survive refreshes of this account.
+    private var sessionEpoch = 0L
 
     private var loadJob: Job? = null
+    private var historyShelfJob: Job? = null
+    private var playlistsShelfJob: Job? = null
     private var generation = 0
 
     init {
@@ -64,18 +95,29 @@ class YouViewModel(
         sessionKey = key
         if (signedIn == value && !changed) return
         signedIn = value
+        sessionEpoch++
+        writes.reset()
         ++generation
         loadJob?.cancel()
+        loadJob = null
+        historyShelfJob?.cancel()
+        historyShelfJob = null
+        playlistsShelfJob?.cancel()
+        playlistsShelfJob = null
         actionJob?.cancel()
-        saveSheet?.close()
+        actionJob = null
+        saveSheet?.resetSession()
         showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(signedIn = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
+        _uiState.update { it.copy(signedIn = value, verification = null, undo = null, historyRetrying = false, playlistsRetrying = false,
+            content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
         if (value || repository.supportsLocal) refresh()
     }
 
     fun onAction(action: LibraryAction) {
         when (action) {
             LibraryAction.Retry -> refresh()
+            LibraryAction.RetryHistoryShelf -> retryShelf(history = true)
+            LibraryAction.RetryPlaylistsShelf -> retryShelf(history = false)
             LibraryAction.OpenSearch -> showOverlay(LibraryOverlay.Search)
             LibraryAction.CloseOverlay -> showOverlay(LibraryOverlay.None)
             is LibraryAction.QueryChanged -> {
@@ -106,7 +148,6 @@ class YouViewModel(
                         navigation.trySend(LibraryNavigationRequest.About)
                 }
             }
-            LibraryAction.OpenNotifications -> navigation.trySend(LibraryNavigationRequest.OpenNotifications)
             LibraryAction.OpenHistory -> navigation.trySend(LibraryNavigationRequest.OpenHistory)
             LibraryAction.OpenPlaylists -> navigation.trySend(LibraryNavigationRequest.OpenPlaylists)
             LibraryAction.OpenWatchLater -> navigation.trySend(LibraryNavigationRequest.Playlist(
@@ -163,41 +204,66 @@ class YouViewModel(
             return
         }
         if (actionJob?.isActive == true) return
-        val request = generation
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = historyShelfJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 val removed = repository.removeFromHistory(token)
-                if (request != generation) return@launch
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 _uiState.update { state ->
-                    val ready = state.content as? LibraryContent.Ready ?: return@update state
-                    state.copy(content = ready.copy(page = ready.page.copy(
-                        history = ready.page.history.filterNot { it.videoId == videoId })),
+                    val ready = state.content as? LibraryContent.Ready
+                    state.copy(content = ready?.copy(page = ready.page.copy(
+                        history = ready.page.history.filterNot { it.videoId == videoId })) ?: state.content,
                         undo = removed)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
-                notices.trySend(AppNotice.SignIn)
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.SignIn)
+                }
             } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                }
             } catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+                }
             }
         }
     }
 
-    /** Undoes the recorded local removal in the store, then reloads the page from it. */
+    /** Restore only the removed row, keeping the current shelves and list position. */
     private fun undoHistoryRemove() {
         val removed = _uiState.value.undo ?: return
         if (actionJob?.isActive == true) return
-        val request = generation
-        _uiState.update { it.copy(undo = null) }
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = historyShelfJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 repository.restoreHistoryEntry(removed)
-                if (request == generation) refresh()
+                currentCoroutineContext().ensureActive()
+                if (request == sessionEpoch) _uiState.update { state ->
+                    val ready = state.content as? LibraryContent.Ready
+                    state.copy(content = ready?.copy(page = ready.page.copy(history = ready.page.history.restoring(removed))) ?: state.content,
+                        undo = null)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't restore this entry."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't restore this entry."))
+                }
             }
         }
     }
@@ -214,13 +280,61 @@ class YouViewModel(
         _uiState.update { it.copy(overlay = next) }
     }
 
+    private fun retryShelf(history: Boolean) {
+        val ready = _uiState.value.content as? LibraryContent.Ready ?: return
+        if (loadJob?.isActive == true) return
+        if (history) {
+            if (!ready.page.historyFailed || historyShelfJob?.isActive == true) return
+        } else if (!ready.page.playlistsFailed || playlistsShelfJob?.isActive == true) return
+        val request = generation
+        val previousWrite = if (history) actionJob else null
+        _uiState.update { if (history) it.copy(historyRetrying = true) else it.copy(playlistsRetrying = true) }
+        val job = viewModelScope.launch {
+            try {
+                previousWrite?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != generation) return@launch
+                val merge: (YouPage) -> YouPage = if (history) {
+                    repository.history().let { loaded ->
+                        { page: YouPage -> page.copy(history = loaded.entries, historyFailed = false) }
+                    }
+                } else {
+                    repository.playlists().let { loaded ->
+                        { page: YouPage -> page.copy(playlists = loaded.playlists, playlistsFailed = false) }
+                    }
+                }
+                currentCoroutineContext().ensureActive()
+                if (request != generation) return@launch
+                _uiState.update { state ->
+                    val current = state.content as? LibraryContent.Ready ?: return@update state
+                    state.copy(content = current.copy(page = merge(current.page)))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                // Keep the failed shelf's retry available without replacing the usable page.
+            } finally {
+                if (request == generation) _uiState.update {
+                    if (history) it.copy(historyRetrying = false) else it.copy(playlistsRetrying = false)
+                }
+            }
+        }
+        if (history) historyShelfJob = job else playlistsShelfJob = job
+    }
+
     private fun refresh() {
         if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
+        historyShelfJob?.cancel()
+        playlistsShelfJob?.cancel()
         val request = ++generation
+        val previousWrite = actionJob
         loadJob = viewModelScope.launch {
-            _uiState.update { it.copy(content = LibraryContent.Loading) }
-            runCatching { repository.you() }.fold(
+            _uiState.update { it.copy(content = LibraryContent.Loading, historyRetrying = false, playlistsRetrying = false) }
+            runCatching {
+                previousWrite?.join()
+                currentCoroutineContext().ensureActive()
+                repository.you().also { currentCoroutineContext().ensureActive() }
+            }.fold(
                 onSuccess = { page -> if (request == generation) _uiState.update { it.copy(content = LibraryContent.Ready(page)) } },
                 onFailure = { failure -> if (failure is CancellationException) throw failure
                     if (request != generation) return@fold
@@ -254,11 +368,16 @@ class HistoryViewModel(
     val saveSheet = saveRepository?.let {
         com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
     }
+    val writes = WriteFeedback()
     private var actionJob: Job? = null
+    // History writes survive refreshes of this account.
+    private var sessionEpoch = 0L
 
     private var loadJob: Job? = null
     private var appendJob: Job? = null
     private var generation = 0
+    private var emptyAppends = 0
+    private val continuations = ContinuationHistory()
 
     init {
         if (!signedIn && !repository.supportsLocal) _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history"))) }
@@ -275,14 +394,19 @@ class HistoryViewModel(
         sessionKey = key
         if (signedIn == value && !changed) return
         signedIn = value
+        sessionEpoch++
+        writes.reset()
         ++generation
         loadJob?.cancel()
+        loadJob = null
         appendJob?.cancel()
+        appendJob = null
         actionJob?.cancel()
-        saveSheet?.close()
+        actionJob = null
+        saveSheet?.resetSession()
         savedState["confirmClear"] = false
         showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(confirmClear = false, undo = null) }
+        _uiState.update { it.copy(confirmClear = false, undo = null, verification = null) }
         _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
             append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
         if (value || repository.supportsLocal) refresh()
@@ -348,10 +472,11 @@ class HistoryViewModel(
             // Unreachable from the history screen: it has no account menu, tab row or playlist
             // rows. No `else`: a new action must fail to compile here.
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
-            LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
+            LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
             LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads, LibraryAction.OpenQueue,
             is LibraryAction.OpenPlaylist, is LibraryAction.Destination,
             LibraryAction.LoadCollectionNext -> Unit
+            LibraryAction.RetryHistoryShelf, LibraryAction.RetryPlaylistsShelf -> Unit
         }
     }
 
@@ -362,17 +487,27 @@ class HistoryViewModel(
         if (_uiState.value.append == com.hhst.youtubelite.home.domain.AppendState.Loading) return
         appendJob?.cancel()
         val requestGeneration = generation
+        val previousWrite = actionJob
         _uiState.update { it.copy(append = com.hhst.youtubelite.home.domain.AppendState.Loading) }
         appendJob = viewModelScope.launch {
             try {
-                val page = repository.historyNext(cursor)
+                previousWrite?.join()
+                currentCoroutineContext().ensureActive()
                 if (requestGeneration != generation) return@launch
+                val page = repository.historyNext(cursor)
+                currentCoroutineContext().ensureActive()
+                if (requestGeneration != generation) return@launch
+                val existingIds = ready.page.entries.mapTo(hashSetOf()) { it.id }
+                emptyAppends = if (page.entries.any { it.id !in existingIds }) 0 else emptyAppends + 1
+                val nextKey = continuations.nextAfter(cursor, page.nextKey)
+                val nextAppend = if (nextKey != null && emptyAppends >= MAX_EMPTY_APPENDS)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed else com.hhst.youtubelite.home.domain.AppendState.Idle
                 _uiState.update { current ->
                     val existing = (current.content as? HistoryContent.Ready)?.page ?: return@update current
                     current.copy(content = HistoryContent.Ready(existing.copy(
                         entries = (existing.entries + page.entries).distinctBy { it.id },
-                        nextKey = page.nextKey.takeUnless { it == cursor })),
-                        append = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                        nextKey = nextKey)),
+                        append = nextAppend)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -386,39 +521,75 @@ class HistoryViewModel(
     private fun setHistoryPaused(paused: Boolean) {
         showOverlay(LibraryOverlay.None)
         if (actionJob?.isActive == true) return
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = appendJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 repository.setHistoryPaused(paused)
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 notices.trySend(AppNotice.Message(
                     if (paused) "Watch history paused." else "Watch history resumed."))
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
-                notices.trySend(AppNotice.SignIn)
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.SignIn)
+                }
             } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again."))
+                }
             } catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't update watch history. Try again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't update watch history. Try again."))
+                }
             }
         }
     }
 
     private fun clearHistory() {
+        if (actionJob?.isActive == true) return
         savedState["confirmClear"] = false
         _uiState.update { it.copy(confirmClear = false) }
         showOverlay(LibraryOverlay.None)
-        if (actionJob?.isActive == true) return
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = appendJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 repository.clearHistory()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
+                ++generation
+                loadJob?.cancel()
+                appendJob?.cancel()
+                emptyAppends = 0
+                continuations.clear()
+                _uiState.update { it.copy(content = HistoryContent.Empty(), undo = null,
+                    append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
                 notices.trySend(AppNotice.Message("Watch history cleared."))
-                refresh()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
-                notices.trySend(AppNotice.SignIn)
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.SignIn)
+                }
             } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                }
             } catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't clear watch history. Try again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't clear watch history. Try again."))
+                }
             }
         }
     }
@@ -432,41 +603,67 @@ class HistoryViewModel(
             return
         }
         if (actionJob?.isActive == true) return
-        val request = generation
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = appendJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 val removed = repository.removeFromHistory(token)
-                if (request != generation) return@launch
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 _uiState.update { state ->
-                    val ready = state.content as? HistoryContent.Ready ?: return@update state
-                    state.copy(content = ready.copy(page = ready.page.copy(
-                        entries = ready.page.entries.filterNot { it.videoId == videoId })),
+                    val ready = state.content as? HistoryContent.Ready
+                    state.copy(content = ready?.copy(page = ready.page.copy(
+                        entries = ready.page.entries.filterNot { it.videoId == videoId })) ?: state.content,
                         undo = removed)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
-                notices.trySend(AppNotice.SignIn)
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.SignIn)
+                }
             } catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("The server did not confirm this removal. Please refresh before trying again."))
+                }
             } catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't remove this entry. Try again."))
+                }
             }
         }
     }
 
-    /** Undoes the recorded local removal in the store, then reloads the page from it. */
+    /** Restore only the removed row; do not discard already loaded history pages. */
     private fun undoHistoryRemove() {
         val removed = _uiState.value.undo ?: return
         if (actionJob?.isActive == true) return
-        val request = generation
-        _uiState.update { it.copy(undo = null) }
-        actionJob = viewModelScope.launch {
+        val request = sessionEpoch
+        val previousRead = loadJob
+        val previousPage = appendJob
+        actionJob = writes.launch(viewModelScope) {
             try {
+                previousRead?.join()
+                previousPage?.join()
+                currentCoroutineContext().ensureActive()
+                if (request != sessionEpoch) return@launch
                 repository.restoreHistoryEntry(removed)
-                if (request == generation) refresh()
+                currentCoroutineContext().ensureActive()
+                if (request == sessionEpoch) _uiState.update { state ->
+                    val ready = state.content as? HistoryContent.Ready
+                    val page = ready?.page ?: if (state.content is HistoryContent.Empty) HistoryPage(emptyList()) else null
+                    state.copy(content = page?.let { HistoryContent.Ready(it.copy(entries = it.entries.restoring(removed))) }
+                        ?: state.content, undo = null)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
-                notices.trySend(AppNotice.Message("Couldn't restore this entry."))
+                if (request == sessionEpoch) {
+                    notices.trySend(AppNotice.Message("Couldn't restore this entry."))
+                }
             }
         }
     }
@@ -487,15 +684,21 @@ class HistoryViewModel(
         if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
         appendJob?.cancel()
+        emptyAppends = 0
         val request = ++generation
+        val previousWrite = actionJob
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(content = HistoryContent.Loading, append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
-            runCatching { repository.history() }.fold(
+            runCatching {
+                previousWrite?.join()
+                currentCoroutineContext().ensureActive()
+                repository.history().also { currentCoroutineContext().ensureActive() }
+            }.fold(
                 onSuccess = { page ->
                     if (request != generation) return@fold
+                    continuations.clear()
                     val content = when {
-                        page.entries.isEmpty() && scenario == LibraryScenario.HistoryEmpty -> HistoryContent.Empty()
-                        page.entries.isEmpty() -> HistoryContent.Empty()
+                        page.entries.isEmpty() && page.nextKey == null -> HistoryContent.Empty()
                         else -> HistoryContent.Ready(page)
                     }
                     _uiState.update { it.copy(content = content) }
@@ -511,6 +714,7 @@ class HistoryViewModel(
 
     companion object {
         private const val QUERY_KEY = "history_query"
+        private const val MAX_EMPTY_APPENDS = 3
     }
 }
 
@@ -528,6 +732,8 @@ class CollectionViewModel(
     private var loadJob: Job? = null
     private var appendJob: Job? = null
     private var generation = 0
+    private var emptyAppends = 0
+    private val continuations = ContinuationHistory()
 
     init {
         if (!signedIn && !repository.supportsLocal) _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists"))) }
@@ -547,7 +753,7 @@ class CollectionViewModel(
         ++generation
         loadJob?.cancel()
         appendJob?.cancel()
-        _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
+        _uiState.update { it.copy(verification = null, content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
             append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
         if (value || repository.supportsLocal) refresh()
     }
@@ -576,12 +782,13 @@ class CollectionViewModel(
             // Unreachable from the collection screen: it has no account menu, tab row, video
             // rows or history management. No `else`: a new action must fail to compile here.
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
-            LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
+            LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
             LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads, LibraryAction.OpenQueue,
             is LibraryAction.OpenVideo, is LibraryAction.OpenChannel, is LibraryAction.OpenMenu,
             is LibraryAction.MenuSelected, LibraryAction.OpenManageHistory, LibraryAction.PauseHistory,
             LibraryAction.ResumeHistory, LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,
             LibraryAction.UndoHistoryRemove, LibraryAction.DismissUndo,
+            LibraryAction.RetryHistoryShelf, LibraryAction.RetryPlaylistsShelf,
             is LibraryAction.Destination, LibraryAction.LoadHistoryNext -> Unit
         }
     }
@@ -598,12 +805,17 @@ class CollectionViewModel(
             try {
                 val page = repository.playlistsNext(cursor)
                 if (requestGeneration != generation) return@launch
+                val existingIds = ready.playlists.mapTo(hashSetOf()) { it.id }
+                emptyAppends = if (page.playlists.any { it.id !in existingIds }) 0 else emptyAppends + 1
+                val nextKey = continuations.nextAfter(cursor, page.nextKey)
+                val nextAppend = if (nextKey != null && emptyAppends >= MAX_EMPTY_APPENDS)
+                    com.hhst.youtubelite.home.domain.AppendState.Failed else com.hhst.youtubelite.home.domain.AppendState.Idle
                 _uiState.update { current ->
                     val existing = (current.content as? CollectionContent.Ready) ?: return@update current
                     current.copy(content = existing.copy(
                         playlists = (existing.playlists + page.playlists).distinctBy { it.id },
-                        nextKey = page.nextKey.takeUnless { it == cursor }),
-                        append = com.hhst.youtubelite.home.domain.AppendState.Idle)
+                        nextKey = nextKey),
+                        append = nextAppend)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -630,13 +842,16 @@ class CollectionViewModel(
         if (!signedIn && !repository.supportsLocal) return
         loadJob?.cancel()
         appendJob?.cancel()
+        emptyAppends = 0
         val request = ++generation
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(content = CollectionContent.Loading, append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
             runCatching { repository.playlists() }.fold(
                 onSuccess = { page ->
                     if (request != generation) return@fold
-                    val content = if (page.playlists.isEmpty()) CollectionContent.Empty() else CollectionContent.Ready(page.playlists, page.nextKey)
+                    continuations.clear()
+                    val content = if (page.playlists.isEmpty() && page.nextKey == null) CollectionContent.Empty()
+                        else CollectionContent.Ready(page.playlists, page.nextKey)
                     _uiState.update { it.copy(content = content) }
                 },
                 onFailure = { failure -> if (failure is CancellationException) throw failure
@@ -650,6 +865,7 @@ class CollectionViewModel(
 
     companion object {
         private const val QUERY_KEY = "collection_query"
+        private const val MAX_EMPTY_APPENDS = 3
     }
 }
 

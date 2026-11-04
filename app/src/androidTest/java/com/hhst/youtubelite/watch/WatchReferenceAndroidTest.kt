@@ -32,7 +32,6 @@ class WatchReferenceAndroidTest {
         val dump = DeviceEvidence.shell("uiautomator dump /data/local/tmp/watch-ui.xml >/dev/null 2>&1; cat /data/local/tmp/watch-ui.xml 2>/dev/null")
         when {
             dump.contains("Don't allow") || dump.contains("Don’t allow") -> {
-                // Tap the "Don't allow" button via its bounds if present; otherwise skip.
                 val match = Regex("text=\"Don.t allow\"[^>]*bounds=\"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]\"").find(dump)
                 if (match != null) {
                     val (l, t, r, b) = match.destructured.toList().map { it.toInt() }

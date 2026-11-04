@@ -23,12 +23,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Read-only real-server shorts marathon: 30 forward swipes, reverse swipes back through
- * the visited pages, then a rapid un-settled burst. Records per-step feed state and
- * asserts only the host contract — the settled id follows the gesture, appended pages
- * never duplicate items, reverse travel lands exactly on the previously seen pages, and
- * stale generations after the burst leave a consistent page. Network shortfalls are
- * recorded observations, not pass criteria.
+ * Read-only real-server shorts marathon: 30 forward swipes, reverse swipes through visited pages,
+ * then a rapid un-settled burst. Asserts only the host contract (settled id follows the gesture,
+ * no duplicate items, reverse travel lands on previously seen pages, burst leaves a consistent
+ * page); network shortfalls are recorded observations, not pass criteria.
  */
 @RunWith(AndroidJUnit4::class)
 class ShortsMarathonAndroidTest {
@@ -107,7 +105,6 @@ class ShortsMarathonAndroidTest {
         var forwardSettled = 0
         var feedExhausted = false
 
-        // 30 forward swipes; each must settle on a new item unless the feed truly ends.
         for (step in 1..30) {
             swipe(forward = true)
             val next = awaitCurrentItem(current)
@@ -128,7 +125,6 @@ class ShortsMarathonAndroidTest {
             forwardSettled += 1
         }
 
-        // Reverse travel: every swipe lands exactly on the previously visited page.
         var reverseSettled = 0
         while (path.size > 1 && reverseSettled < 6) {
             val expected = path[path.size - 2]
@@ -146,8 +142,7 @@ class ShortsMarathonAndroidTest {
             reverseSettled += 1
         }
 
-        // Rapid un-settled burst: three swipes without waiting; stale generations must
-        // discard their results and the page must stay consistent.
+        // Rapid un-settled burst: stale generations must leave a consistent page.
         val burstFrom = current
         repeat(3) { swipe(forward = true); Thread.sleep(120) }
         awaitAppendSettled()

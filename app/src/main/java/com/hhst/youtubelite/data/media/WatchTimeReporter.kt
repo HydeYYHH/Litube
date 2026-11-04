@@ -6,7 +6,9 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.HttpClient
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpReply
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpRequest
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
+import com.liskovsoft.youtubeapi.videoinfo.V2.RequestContext
 import com.liskovsoft.youtubeapi.videoinfo.V2.WatchHistory
+import com.liskovsoft.youtubeapi.videoinfo.V2.loadAccountWatchTracking
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -19,7 +21,10 @@ import kotlinx.coroutines.sync.withPermit
 
 /** Bounded, identity-scoped reporting of observed playback intervals. */
 class WatchTimeReporter(private val client: MediaClient, private val scope: CoroutineScope,
-    private val newHistory: () -> WatchHistory = { WatchHistory() }, private val now: () -> Long = System::currentTimeMillis) {
+    private val newHistory: () -> WatchHistory = { WatchHistory() }, private val now: () -> Long = System::currentTimeMillis,
+    private val loadAccountTracking: (String, RequestContext, HttpClient) -> PlayerTracking = { id, context, http ->
+        loadAccountWatchTracking(id, context, http).requireValue()
+    }) {
     private sealed interface Update {
         val durationMs: Long
         data class Anchor(val positionMs: Long, override val durationMs: Long) : Update
@@ -29,6 +34,7 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
     private class Session(val videoId: String, val tracking: PlayerTracking?, val generation: Long,
         val lease: Long, val history: WatchHistory) {
         @Volatile var valid = true
+        var accountTracking: PlayerTracking? = null
         val updates = ArrayDeque<Update>()
         var job: Job? = null
         var inFlight: Update? = null
@@ -53,11 +59,12 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
         if (generation != MediaSession.snapshot().generation) return
         val usable = tracking?.takeIf { !it.watchTimeUrl.isNullOrBlank() }
         val previous = current
-        if (previous?.videoId == videoId && previous.tracking == usable && previous.generation == generation && previous.valid) return
+        if (previous?.videoId == videoId && (previous.tracking == usable || MediaSession.signedIn()) &&
+            previous.generation == generation && previous.valid) return
         previous?.let(::finishSession)
         current = Session(videoId, usable, generation, lease, newHistory()).also(sessions::add)
         while (sessions.size > MAX_SESSIONS) invalidate(sessions.first { it !== current })
-        if (usable == null) AppLog.event(AppLog.Category.PLAYER, "watch_report.unavailable",
+        if (usable == null && !MediaSession.signedIn()) AppLog.event(AppLog.Category.PLAYER, "watch_report.unavailable",
             mapOf("video" to DiagnosticRedaction.identity(videoId),
                 "reason" to if (tracking == null) "details_missing" else "watchtime_url_missing"))
     }
@@ -90,7 +97,8 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
         sessions.toList().forEach(::dispatch)
         val session = current ?: return
         if (!isCurrent(session)) { invalidate(session); return }
-        if (session.tracking == null || playingVideoId != session.videoId || durationMs <= 0 || positionMs !in 0..durationMs) return
+        if (session.tracking == null && !MediaSession.signedIn() || playingVideoId != session.videoId ||
+            durationMs <= 0 || positionMs !in 0..durationMs) return
         val discontinuity = session.discontinuity?.let { it != discontinuityEpoch } == true ||
             session.positionMs >= 0 && positionMs < session.positionMs
         if (discontinuity && session.positionMs >= 0) {
@@ -177,7 +185,11 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
                                     return http.execute(request)
                                 }
                             }
-                            val tracking = requireNotNull(session.tracking)
+                            // Media may come from an anonymous client. Its tracking cannot
+                            // be promoted to an account view by adding an OAuth header.
+                            val tracking = if (context.signedIn) session.accountTracking
+                                ?: loadAccountTracking(session.videoId, context, guarded).also { session.accountTracking = it }
+                                else requireNotNull(session.tracking)
                             when (update) {
                                 is Update.Anchor -> session.history.update(session.videoId, update.positionMs,
                                     update.durationMs, tracking, context, guarded, discontinuity = true).requireValue()

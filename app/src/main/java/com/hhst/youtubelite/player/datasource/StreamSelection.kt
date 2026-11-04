@@ -2,36 +2,32 @@ package com.hhst.youtubelite.player.datasource
 
 import com.hhst.youtubelite.extractor.Format
 
-/** Pure stream-selection logic. */
 object StreamSelection {
 
     /**
      * Picks a video format matching [preferredQuality] (e.g. "1080p", "720p60");
-     * falls back to the highest available height when no match or null.
-     *
-     * Input is deduped per (height, fps) keeping the best candidate
-     * (poToken first, then codec avc > vp9 > h265 > av01, then bitrate), then
-     * sorted by height desc, fps desc.
+     * Falls back to the nearest lower height, then the smallest step up.
+     * A null/invalid preference selects the highest available quality.
      */
     fun selectVideo(formats: List<Format>, preferredQuality: String?): Format? {
         val best = filterBest(formats)
-        if (best.isEmpty()) return null
-        if (preferredQuality != null) {
-            val targetHeight = parseHeight(preferredQuality)
-            val targetFps = parseFps(preferredQuality)
-            if (targetHeight > 0) {
-                // Exact resolution+fps match first.
-                best.firstOrNull { it.height == targetHeight && (targetFps == 0 || it.fps == targetFps) }
-                    ?.let { return it }
-                best.firstOrNull { it.height == targetHeight }?.let { return it }
-                // Then highest not exceeding target.
-                best.firstOrNull { it.height <= targetHeight }?.let { return it }
-                // All above the target: take the smallest step up, not the
-                // pool's top — a 360p pick never jumps to 1080p.
-                best.lastOrNull { it.height > targetHeight }?.let { return it }
-            }
-        }
-        return best.first()
+        return selectVideoQuality(best, preferredQuality, { it.height }, { it.fps })
+            ?: best.firstOrNull() // Missing dimensions alone do not make a stream unplayable.
+    }
+
+    /** Shared by extracted formats and supported player tracks, including Shorts. */
+    internal fun <T> selectVideoQuality(
+        candidates: List<T>, preferredQuality: String?, height: (T) -> Int, fps: (T) -> Int,
+    ): T? {
+        val sorted = candidates.filter { height(it) > 0 }
+            .sortedWith(compareByDescending<T>(height).thenByDescending(fps))
+        val target = preferredQuality?.let(::parseHeight) ?: 0
+        if (target <= 0) return sorted.firstOrNull()
+        val chosenHeight = sorted.firstOrNull { height(it) <= target }?.let(height)
+            ?: sorted.lastOrNull()?.let(height) ?: return null
+        val atHeight = sorted.filter { height(it) == chosenHeight }
+        val targetFps = preferredQuality?.let(::parseFps) ?: 0
+        return atHeight.firstOrNull { targetFps > 0 && fps(it) == targetFps } ?: atHeight.firstOrNull()
     }
 
     fun audioCandidates(formats: List<Format>, preferredKey: String? = null): List<Format> {
@@ -115,7 +111,6 @@ object StreamSelection {
     fun isWindowExempt(format: Format): Boolean =
         streamingClient(format.url) == "VISIONOS" || hasPoToken(format)
 
-    /** `c` query param from a googlevideo URL, or null. */
     fun streamingClient(url: String): String? {
         val amp = url.indexOf("&c=")
         val q = url.indexOf("?c=")
@@ -128,7 +123,6 @@ object StreamSelection {
         return url.substring(start, end).ifEmpty { null }
     }
 
-    /** avc/h264=4 > vp9/vp8=3 > h265=2 > av01=1. */
     fun codecPriority(codec: String?): Int {
         val lower = codec?.lowercase() ?: return 0
         return when {
@@ -144,7 +138,6 @@ object StreamSelection {
         }
     }
 
-    /** "1080p" → 1080, "720p60" → 720, "4K" → 2160, else 0. */
     fun parseHeight(quality: String): Int {
         if (quality.equals("4K", ignoreCase = true)) return 2160
         val pIndex = quality.indexOf('p')
@@ -154,7 +147,6 @@ object StreamSelection {
         return quality.filter { it.isDigit() }.toIntOrNull() ?: 0
     }
 
-    /** "720p60" → 60, "1080p" → 0. */
     fun parseFps(quality: String): Int {
         val pIndex = quality.indexOf('p')
         if (pIndex < 0 || pIndex + 1 >= quality.length) return 0

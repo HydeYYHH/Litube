@@ -17,7 +17,6 @@ import org.junit.Before
 import org.junit.Test
 import okhttp3.ResponseBody.Companion.toResponseBody
 
-/** Session-owned playback reporting: watch-time attribution and anonymous local history. */
 class PlaybackWatchReportingTest {
 
     private var activeReporter: WatchTimeReporter? = null
@@ -50,7 +49,8 @@ class PlaybackWatchReportingTest {
                 .code(200).message("OK").body("".toResponseBody()).build()
         }.build(), { MediaSession.snapshot() })
         return PlaybackWatchReporting(client, { library }, CoroutineScope(Dispatchers.Default),
-            WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), { WatchHistory(http) }).also { activeReporter = it },
+            WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), { WatchHistory(http) },
+                loadAccountTracking = { _, _, _ -> tracking }).also { activeReporter = it },
             reloadVideo, clock)
     }
 
@@ -204,7 +204,6 @@ class PlaybackWatchReportingTest {
         val deadline = System.currentTimeMillis() + 5_000
         while (reporting.anonymousReportSignal.value == 0L && System.currentTimeMillis() < deadline) Thread.sleep(20)
         assertEquals(1L, reporting.anonymousReportSignal.value)
-        // The same entry tracks the latest position.
         val progressDeadline = System.currentTimeMillis() + 5_000
         while (library.history().entries.single().progress!! < 0.15f && System.currentTimeMillis() < progressDeadline) Thread.sleep(20)
         assertEquals(0.2f, library.history().entries.single().progress!!, 0.001f)
@@ -229,8 +228,6 @@ class PlaybackWatchReportingTest {
     @Test fun playbackResponseEndpointsArmReportingWhenThePageCarriesNone() {
         anonymousVisitor()
         val reporting = reporting()
-        // The watch page publishes metadata without endpoints; the playback
-        // response arms them afterwards and reporting activates.
         reporting.publish(video("v1").copy(tracking = null))
         reporting.armTracking("v1", tracking)
         reporting.tick(PlaybackSample("v1", 10_000, 100_000, playing = true))
@@ -245,7 +242,6 @@ class PlaybackWatchReportingTest {
         reporting.publish(video("v1").copy(tracking = null))
         reporting.tick(PlaybackSample("v1", 10_000, 100_000, playing = true))
         awaitRequests(1)
-        // A republish (page reload) must keep the armed session reporting.
         reporting.publish(video("v1").copy(tracking = null))
         reporting.tick(PlaybackSample("v1", 30_000, 100_000, playing = true))
         awaitRequests(2)

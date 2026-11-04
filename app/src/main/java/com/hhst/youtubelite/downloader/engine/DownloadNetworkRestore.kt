@@ -10,7 +10,7 @@ import com.hhst.youtubelite.extractor.Promise
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
 
-/** Relays connectivity to [DownloadCoordinator.onNetworkRestored] without unpausing users. */
+/** Network restore must not unpause user-paused tasks. */
 object DownloadNetworkRestore {
     fun start(context: Context) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return

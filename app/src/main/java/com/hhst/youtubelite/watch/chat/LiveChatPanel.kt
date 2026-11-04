@@ -47,6 +47,8 @@ import com.hhst.youtubelite.ui.design.AppIconButton
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.Artwork
 import com.hhst.youtubelite.ui.design.DesignTokens
+import com.hhst.youtubelite.ui.design.PanelTransition
+import com.hhst.youtubelite.ui.design.rememberBottomSheetDrag
 import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import kotlin.math.roundToInt
@@ -66,12 +68,13 @@ fun LiveChatPanel(
     BoxWithConstraints(modifier.fillMaxSize()) {
         val width = maxWidth.value
         val height = maxHeight.value
+        PanelTransition(fromBottom = !WatchLayout.sidebar(width, height), onDismiss = onClose) { panelMotion, close ->
         if (WatchLayout.sidebar(width, height)) {
             Row(Modifier.fillMaxSize().testTag("live-chat-rail")) {
                 Spacer(Modifier.weight(1f).fillMaxHeight())
-                LiveChatSurface(state, onAction, onClose, compact = false, listState = listState,
+                LiveChatSurface(state, onAction, close, compact = false, listState = listState,
                     modifier = Modifier.width(WatchLayout.sidebarWidth(width).dp).fillMaxHeight()
-                        .padding(top = WatchLayout.TopBarHeight.dp))
+                        .padding(top = WatchLayout.TopBarHeight.dp).then(panelMotion))
             }
         } else {
             val top = CommentsLayout.sheetTop(
@@ -82,14 +85,15 @@ fun LiveChatPanel(
             Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxSize()
-                        .clickable(remember { MutableInteractionSource() }, indication = null) { onClose() }
+                        .clickable(remember { MutableInteractionSource() }, indication = null) { close() }
                         .appDescription(R.string.a11y_close_live_chat)
                         .testTag("live-chat-scrim"),
                 )
-                LiveChatSurface(state, onAction, onClose, compact = true, listState = listState,
+                LiveChatSurface(state, onAction, close, compact = true, listState = listState,
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .height((height - top).coerceAtLeast(0f).dp))
+                        .height((height - top).coerceAtLeast(0f).dp).then(panelMotion))
             }
+        }
         }
     }
 }
@@ -106,11 +110,13 @@ private fun LiveChatSurface(
     val shape = if (compact) RoundedCornerShape(topStart = CommentsLayout.SheetRadius.dp,
         topEnd = CommentsLayout.SheetRadius.dp) else RectangleShape
     val title = stringResource(if (state.replay) R.string.chat_replay else R.string.chat_live)
+    val drag = rememberBottomSheetDrag(enabled = compact, onDismiss = onClose)
     Column(
-        modifier.fillMaxSize().background(DesignTokens.Background, shape)
+        modifier.fillMaxSize().then(drag.panelModifier).background(DesignTokens.Panel, shape)
             .semantics { paneTitle = title }
             .testTag("live-chat"),
     ) {
+        Column(Modifier.fillMaxWidth().then(drag.handleModifier).testTag("live-chat-drag-header")) {
         if (compact) {
             Box(Modifier.fillMaxWidth().height(CommentsLayout.HandleStripHeight.dp), contentAlignment = Alignment.BottomCenter) {
                 Box(Modifier.width(CommentsLayout.HandleWidth.dp).height(CommentsLayout.HandleHeight.dp)
@@ -119,8 +125,9 @@ private fun LiveChatSurface(
         }
         Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            AppText(title, Modifier.weight(1f), size = 16, line = 22, weight = FontWeight.Medium)
+            Spacer(Modifier.weight(1f))
             AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_live_chat), Modifier.testTag("live-chat-close"), onClick = onClose)
+        }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
@@ -175,6 +182,7 @@ private fun LiveChatSurface(
             state.ended || state.replay -> AppText(stringResource(R.string.chat_ended),
                 Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-ended"),
                 size = 14, line = 20, color = DesignTokens.Secondary)
+            state.content !is LiveChatContent.Ready -> Unit
             state.signedIn && !state.canSend -> AppText("Posting is unavailable for this chat",
                 Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-readonly"),
                 size = 14, line = 20, color = DesignTokens.Secondary)
@@ -193,10 +201,16 @@ private fun LiveChatSurface(
                     }
                     Spacer(Modifier.width(8.dp))
                     val canSend = state.draft.isNotBlank() && !state.sending
-                    AppIconButton(AppIcon.Send, stringResource(R.string.a11y_send_message), Modifier.testTag("live-chat-send"),
-                        color = if (canSend) AppStyle.Action else DesignTokens.Secondary.copy(alpha = .5f)) {
-                        if (canSend) onAction(LiveChatAction.Send)
+                    Box(Modifier.size(48.dp).testTag("live-chat-send")
+                        .clickable(enabled = canSend, role = androidx.compose.ui.semantics.Role.Button) { onAction(LiveChatAction.Send) }
+                        .appDescription(R.string.a11y_send_message), contentAlignment = Alignment.Center) {
+                        if (state.sending) com.hhst.youtubelite.ui.design.ActionProgress(color = AppStyle.Action)
+                        else AppIcon(AppIcon.Send, color = if (canSend) AppStyle.Action else DesignTokens.Secondary.copy(alpha = .5f))
                     }
+                }
+                state.postingRestriction?.let { reason ->
+                    AppText(reason, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("live-chat-posting-restriction"), size = 14, line = 20, color = DesignTokens.Secondary)
                 }
             }
             else -> AppText("Sign in to join the chat",

@@ -68,6 +68,22 @@ class PlaybackPrefetchTest {
         playback.stream.await()
     }
 
+    @Test fun invalidatingTheSelectedPreparationStartsANewPlaybackRequest() = runTest {
+        val cache = cache()
+        val extractor = Extractor(cache, this)
+        extractor.preparePlayback(id, demand)
+        val preparation = extractor.prefetch(id, demand)
+
+        // Invalidation must fence the separately retained selection; run it before the preparation settles, as a download refresh would.
+        extractor.invalidateStream(id)
+        cache.putStream(id, Stream())
+        val playback = extractor.extract(id, demand = demand)
+
+        assertNotSame(preparation.extraction.stream, playback.stream)
+        preparation.cancel()
+        playback.stream.await()
+    }
+
     @Test fun selectingAnotherCardDoesNotCancelAnOwnedPrefetch() = runTest {
         val secondId = "bcdefghijkl"
         val cache = cache().apply {

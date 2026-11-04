@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.account.SignInFlow
 import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.ui.theme.appDialogContext
 
 fun Activity.renderNotice(notice: AppNotice) {
     when (notice) {
@@ -18,8 +19,7 @@ fun Activity.renderNotice(notice: AppNotice) {
 
 private fun Activity.showFailureReport(notice: AppNotice.Failure) {
     showMessage(notice.text)
-    AlertDialog.Builder(this)
-        .setTitle(notice.report.operation)
+    AlertDialog.Builder(appDialogContext())
         .setMessage(notice.report.text)
         .setPositiveButton(R.string.copy_all) { target, _ ->
             getSystemService(ClipboardManager::class.java)?.setPrimaryClip(

@@ -8,6 +8,15 @@ data class SearchPage(val query: String, val results: List<SearchResult>,
 
 data class SearchChannel(val id: String, val name: String, val handle: String, val subscribers: String, val artwork: String)
 
+/** Complete partial renderers without rolling back resolved fields or menu capabilities. */
+fun SearchResult.withMissingDisplayFrom(other: SearchResult): SearchResult = copy(
+    title = title.ifBlank { other.title }, channel = channel.ifBlank { other.channel },
+    channelId = channelId.ifBlank { other.channelId }, views = views.ifBlank { other.views },
+    age = age.ifBlank { other.age }, duration = duration.ifBlank { other.duration },
+    artwork = artwork.ifBlank { other.artwork },
+    avatar = avatar?.takeIf(String::isNotBlank) ?: other.avatar?.takeIf(String::isNotBlank),
+)
+
 data class SearchResult(
     val id: String,
     val title: String,
@@ -31,7 +40,6 @@ data class SearchResult(
     val feedbackGeneration: Long? = null,
 )
 
-/** The two groups the mobile results page exposes behind its filter button. */
 enum class SearchResultType(val label: String) { All("All"), Shorts("Shorts"), Channels("Channels"), Playlists("Playlists") }
 
 enum class SearchUploadDate(val label: String, val maxAgeDays: Int?) {
@@ -65,6 +73,8 @@ sealed interface SearchOverlay {
 }
 
 interface SearchRepository {
+    /** Optional display metadata for cards whose search renderer omitted fields. */
+    suspend fun metadata(result: SearchResult): SearchResult = result
     suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage = SearchPage(query, emptyList())
     suspend fun search(query: String, filters: SearchFilters = SearchFilters()): SearchPage
 
@@ -80,7 +90,10 @@ interface SearchRepository {
 
 sealed interface SearchContent {
     data object Loading : SearchContent
-    data class Results(val page: SearchPage, val loadingMore: Boolean = false, val loadMoreFailed: Boolean = false) : SearchContent
+    data class Results(val page: SearchPage, val loadingMore: Boolean = false, val loadMoreFailed: Boolean = false,
+        val emptyAutoLoads: Int = 0) : SearchContent {
+        val automaticPagingPaused: Boolean get() = emptyAutoLoads >= 3
+    }
     data class Empty(val query: String) : SearchContent
     data object Failed : SearchContent
 }
@@ -101,6 +114,7 @@ data class SearchUiState(
     val menuFailed: Boolean = false,
     /** Confirmed subscription state per channel, applied only after the server confirms. */
     val subscriptions: Map<String, Boolean> = emptyMap(),
+    val subscriptionsPending: Set<String> = emptySet(),
     /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
@@ -129,6 +143,8 @@ sealed interface SearchNavigationRequest {
 }
 
 sealed interface SearchAction {
+    /** The visible rows and a small look-ahead window, scoped to their search. */
+    data class VisibleResults(val query: String, val filters: SearchFilters, val videoIds: List<String>) : SearchAction
     data object OpenSearch : SearchAction
     data object CloseSearch : SearchAction
     data class QueryChanged(val query: String) : SearchAction
@@ -152,6 +168,7 @@ sealed interface SearchAction {
     data object DismissVerification : SearchAction
     data class OpenVerification(val challengeUrl: String) : SearchAction
     data object LoadMore : SearchAction
+    data object AutomaticLoadMore : SearchAction
     data object Retry : SearchAction
 }
 

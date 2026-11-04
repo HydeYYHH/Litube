@@ -30,6 +30,8 @@ import com.hhst.youtubelite.downloader.io.DownloadFileNames
 import java.io.File
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 
 enum class EngineStage {
@@ -50,6 +52,7 @@ class DownloadEngine(
     private val finalizer: DownloadFinalizer,
     private val publisher: DownloadPublisher,
     private val directories: DownloadDirectories,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     suspend fun run(taskId: String) = run(taskId, EngineStage.ALL)
 
@@ -58,22 +61,24 @@ class DownloadEngine(
     suspend fun runFinalize(taskId: String) = run(taskId, EngineStage.FINALIZE)
 
     suspend fun run(taskId: String, stage: EngineStage) {
-        val initial = repository.transact { snapshot(taskId) }
-        val context = DiagnosticContext(taskId = taskId, videoId = initial?.task?.videoId, generation = initial?.task?.executionGeneration)
+        val initial = repository.transact { snapshot(taskId) } ?: return
+        val generation = initial.task.executionGeneration
+        val context = DiagnosticContext(taskId = taskId, videoId = initial.task.videoId, generation = generation)
         val operation = AppLog.operation(AppLog.Category.DOWNLOADER, "execution", context, mapOf("stage" to stage))
         var failure: Throwable? = null
         var cancelledByCoroutine = false
         try {
-            withContext(DiagnosticCoroutineContext(context)) { execute(taskId, stage) }
+            // CoroutineWorker uses Default; socket bodies, checksums, mux and publish
+            // all contain blocking file I/O. Keep their entire pipeline on IO.
+            withContext(ioDispatcher + DiagnosticCoroutineContext(context)) { execute(taskId, stage, generation) }
         } catch (cancelled: CancellationException) {
             cancelledByCoroutine = true
             throw cancelled
         } catch (t: Throwable) {
             failure = t
-            val snap = repository.transact { snapshot(taskId) } ?: return
             coordinator.reportExecution(
                 taskId,
-                snap.task.executionGeneration,
+                generation,
                 DownloadStatus.FAILED,
                 errorMessage = t.message,
             )
@@ -95,12 +100,12 @@ class DownloadEngine(
         }
     }
 
-    private suspend fun execute(taskId: String, stage: EngineStage) {
+    private suspend fun execute(taskId: String, stage: EngineStage, gen: Long) {
         val initial = repository.transact { snapshot(taskId) } ?: return
-        if (!runnable(initial)) return
+        if (!runnable(initial, gen)) return
         if (stage != EngineStage.FINALIZE) {
-            when (resolver.resolve(taskId)) {
-                is DownloadResolveOutcome.Ready -> Unit
+            when (val resolved = resolver.resolve(taskId, gen)) {
+                is DownloadResolveOutcome.Ready -> if (resolved.generation != gen) return
                 is DownloadResolveOutcome.Failed,
                 DownloadResolveOutcome.Stale,
                 DownloadResolveOutcome.Cancelled,
@@ -108,15 +113,14 @@ class DownloadEngine(
                 -> return
             }
             val afterResolve = repository.transact { snapshot(taskId) } ?: return
-            if (!runnable(afterResolve)) return
-            val gen = afterResolve.task.executionGeneration
+            if (!runnable(afterResolve, gen)) return
             if (!coordinator.reportExecution(taskId, gen, DownloadStatus.RUNNING, DownloadPhase.TRANSFER)) return
-            val sources = resolver.sourcesOf(taskId)
+            val sources = resolver.sourcesOf(taskId, gen)
             val snap = repository.transact { snapshot(taskId) } ?: return
             for (assetSnap in snap.assets) {
                 coroutineContext.ensureActive()
                 val latest = repository.transact { snapshot(taskId) } ?: return
-                if (!runnable(latest)) return
+                if (!runnable(latest, gen)) return
                 val asset = latest.assets.firstOrNull { it.asset.id == assetSnap.asset.id } ?: continue
                 if (asset.asset.published || asset.asset.failed) continue
                 val transferred = transferAsset(taskId, gen, asset.asset.kind, asset, sources)
@@ -139,12 +143,12 @@ class DownloadEngine(
             }
             if (stage == EngineStage.TRANSFER) {
                 val after = repository.transact { snapshot(taskId) } ?: return
-                if (!runnable(after)) return
+                if (!runnable(after, gen)) return
                 val needsLocal = after.assets.any { !it.asset.published && !it.asset.failed }
                 if (needsLocal) {
                     coordinator.reportExecution(
                         taskId,
-                        after.task.executionGeneration,
+                        gen,
                         DownloadStatus.QUEUED,
                         DownloadPhase.WAITING_PROCESS,
                     )
@@ -152,18 +156,17 @@ class DownloadEngine(
                 return
             }
         }
-        finalizeAssets(taskId)
+        finalizeAssets(taskId, gen)
     }
 
-    private suspend fun finalizeAssets(taskId: String) {
+    private suspend fun finalizeAssets(taskId: String, gen: Long) {
         val snap = repository.transact { snapshot(taskId) } ?: return
-        if (!runnable(snap)) return
-        val gen = snap.task.executionGeneration
-        val sources = resolver.sourcesOf(taskId)
+        if (!runnable(snap, gen)) return
+        val sources = resolver.sourcesOf(taskId, gen)
         for (assetSnap in snap.assets) {
             coroutineContext.ensureActive()
             val latest = repository.transact { snapshot(taskId) } ?: return
-            if (!runnable(latest)) return
+            if (!runnable(latest, gen)) return
             val asset = latest.assets.firstOrNull { it.asset.id == assetSnap.asset.id } ?: continue
             if (asset.asset.published || asset.asset.failed) continue
             val kind = asset.asset.kind
@@ -174,7 +177,7 @@ class DownloadEngine(
                 muxAsset(taskId, gen, kind, files, audioOnly = kind == AssetKind.AUDIO)
             }
             val current = repository.transact { snapshot(taskId) } ?: return
-            if (!runnable(current)) return
+            if (!runnable(current, gen)) return
             val latestAsset = current.assets.firstOrNull { it.asset.kind == kind }
             if (publishSource == null) {
                 if (latestAsset?.asset?.failed != true) return
@@ -268,6 +271,7 @@ class DownloadEngine(
             }
             val result = transport.downloadComponent(
                 taskId = taskId,
+                generation = generation,
                 component = component,
                 source = source,
                 dest = dest,
@@ -332,9 +336,11 @@ class DownloadEngine(
             .filter { it.isFile && it.length() > 0L }
     }
 
-    private fun runnable(snap: TaskSnapshot): Boolean {
+    private fun runnable(snap: TaskSnapshot, generation: Long): Boolean {
         val task = snap.task
-        return !task.removed && !task.userPaused && !task.userCancelled &&
+        // Every stage belongs to the generation admitted by run(); a pause/resume
+        // cannot let an old callback adopt the newly runnable task's identity.
+        return task.executionGeneration == generation && !task.removed && !task.userPaused && !task.userCancelled &&
             task.status != DownloadStatus.CANCELLED &&
             task.status != DownloadStatus.PAUSED &&
             task.status != DownloadStatus.FAILED && task.phase != DownloadPhase.COMPLETE

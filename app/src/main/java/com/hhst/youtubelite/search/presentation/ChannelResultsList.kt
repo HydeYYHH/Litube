@@ -26,7 +26,8 @@ import com.hhst.youtubelite.search.domain.*
 import com.hhst.youtubelite.ui.design.*
 
 @Composable
-fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAction: (SearchAction) -> Unit, footer: (@Composable () -> Unit)? = null) {
+fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAction: (SearchAction) -> Unit, footer: (@Composable () -> Unit)? = null,
+    subscriptions: Map<String, Boolean> = emptyMap(), subscriptionsPending: Set<String> = emptySet()) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize().testTag("search-channels-list"), state = state,
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp)) {
@@ -51,11 +52,13 @@ fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAc
                                     }
                                     if (!compact) {
                                         Spacer(Modifier.height(8.dp))
-                                        ChannelSubscribe(channel.id, onAction)
+                                        ChannelSubscribe(channel.id, onAction, subscribed = subscriptions[channel.id] == true,
+                                            pending = channel.id in subscriptionsPending, enabled = subscriptionsPending.isEmpty())
                                     }
                                 }
                             }
-                            if (compact) ChannelSubscribe(channel.id, onAction, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
+                            if (compact) ChannelSubscribe(channel.id, onAction, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                subscribed = subscriptions[channel.id] == true, pending = channel.id in subscriptionsPending, enabled = subscriptionsPending.isEmpty())
                         }
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
@@ -68,12 +71,8 @@ fun ChannelResultsList(channels: List<SearchChannel>, state: LazyListState, onAc
 }
 
 @Composable
-private fun ChannelSubscribe(channelId: String, onAction: (SearchAction) -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier.heightIn(min = 40.dp).clip(CircleShape).background(DesignTokens.Ink)
-        .clickable(role = Role.Button) { onAction(SearchAction.Subscribe(channelId)) }
-        .testTag("search-channel-subscribe-$channelId").padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center) {
-        AppText("Subscribe", size = 14, line = 20, weight = FontWeight.Medium,
-            color = if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Background, maxLines = 1)
-    }
+private fun ChannelSubscribe(channelId: String, onAction: (SearchAction) -> Unit, modifier: Modifier = Modifier,
+    subscribed: Boolean = false, pending: Boolean = false, enabled: Boolean = true) {
+    SubscribeButton(subscribed, { onAction(SearchAction.Subscribe(channelId)) }, modifier,
+        pending = pending, enabled = enabled, testTag = "search-channel-subscribe-$channelId", channelId = channelId)
 }

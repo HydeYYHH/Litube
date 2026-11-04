@@ -297,10 +297,7 @@ class DownloadCoordinator(
         true
     }
 
-    /**
-     * Writes resolved mime, expected bytes, and stream identity onto the
-     * current generation's component/asset rows. Stale generations are ignored.
-     */
+    /** Stale generations are ignored. */
     suspend fun reportResolved(
         taskId: String,
         generation: Long,
@@ -410,7 +407,6 @@ class DownloadCoordinator(
         }
     }
 
-    /** Persist WorkManager unique name / UIDT job id after the system accepts work. */
     suspend fun bindSystemWork(
         taskId: String,
         uniqueWorkName: String? = null,
@@ -654,8 +650,6 @@ class DownloadCoordinator(
         taskIds(target, ownedOnly = true).forEach { taskId ->
             val task = getTask(taskId) ?: return@forEach
             if (task.removed || task.userCancelled || task.status == DownloadStatus.CANCELLED) return@forEach
-            // An explicit user resume covers system waits (WAITING_SYSTEM)
-            // and network waits, in addition to user pauses.
             val resumable = task.userPaused ||
                 task.status == DownloadStatus.PAUSED ||
                 task.status == DownloadStatus.PAUSING ||

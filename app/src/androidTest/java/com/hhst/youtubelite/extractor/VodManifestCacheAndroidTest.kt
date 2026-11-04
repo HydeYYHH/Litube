@@ -41,7 +41,7 @@ class VodManifestCacheAndroidTest {
 
     @Test fun partialOrOversizeReadsNeverBecomeCompleteManifests() {
         var opens = 0
-        val upstream = DataSource.Factory { opens++; ByteArrayDataSource(ByteArray(300 * 1024) { 7 }) }
+        val upstream = DataSource.Factory { opens++; ByteArrayDataSource(ByteArray(VodManifestCache.MAX_DOCUMENT_BYTES + 1) { 7 }) }
         val factory = VodManifestCache().factory("session", Long.MAX_VALUE, { true }, upstream)
         val spec = DataSpec.Builder().setUri("https://manifest.googlevideo.com/large.m3u8").build()
         repeat(2) { index ->
@@ -55,5 +55,35 @@ class VodManifestCacheAndroidTest {
         }
         val third = factory.createDataSource()
         try { third.open(spec); assertEquals(3, opens) } finally { third.close() }
+    }
+    @Test fun aComplete400KiBPlaylistCanBeReused() {
+        verifyLargeDocuments(listOf("one", "one"), 400 * 1024, 1)
+    }
+
+    @Test fun largerDocumentsStillRespectTheTotalCacheBudget() {
+        // The second 600 KiB document evicts the first from the 1 MiB cache.
+        verifyLargeDocuments(listOf("one", "two", "two", "one"), 600 * 1024, 3)
+    }
+
+    private fun verifyLargeDocuments(paths: List<String>, size: Int, expectedOpens: Int) {
+        val bytes=ByteArray(size) { (it % 251).toByte() }
+        var opens=0
+        val factory=VodManifestCache().factory("session",Long.MAX_VALUE,{true},
+            DataSource.Factory { opens++;ByteArrayDataSource(bytes) })
+        paths.forEach { path ->
+            val source=factory.createDataSource()
+            try {
+                source.open(DataSpec.Builder().setUri("https://manifest.googlevideo.com/$path.m3u8").build())
+                val actual=java.io.ByteArrayOutputStream()
+                val buffer=ByteArray(8192)
+                while(true) {
+                    val count=source.read(buffer,0,buffer.size)
+                    if(count<0)break
+                    actual.write(buffer,0,count)
+                }
+                assertArrayEquals(bytes,actual.toByteArray())
+            } finally { source.close() }
+        }
+        assertEquals(expectedOpens,opens)
     }
 }

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.library
 
+import com.hhst.youtubelite.ui.observeAccountChanges
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -47,7 +49,6 @@ import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.ui.renderNotice
 
-/** Hosts the watch history page. */
 class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var historyViewModel: HistoryViewModel
         private set
@@ -78,6 +79,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     if (fixtures) null else sources.saves) as T
             }
         })[HistoryViewModel::class.java]
+        if (!fixtures) observeAccountChanges(::syncSession)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 historyViewModel.navigationRequests.collect { request ->
@@ -99,7 +101,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         // settings, downloads, playlists) the history screen never emits. No
                         // `else`: a new request type must fail to compile here.
                         is LibraryNavigationRequest.Playlist, LibraryNavigationRequest.OpenHistory,
-                        LibraryNavigationRequest.OpenPlaylists, LibraryNavigationRequest.OpenNotifications,
+                        LibraryNavigationRequest.OpenPlaylists,
                         LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads, is LibraryNavigationRequest.Destination,
                         LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
                         LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit
@@ -116,8 +118,10 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
         setAppContent {
             val state by historyViewModel.uiState.collectAsStateWithLifecycle()
+            com.hhst.youtubelite.ui.design.WriteProgressOverlay(historyViewModel.writes)
+            historyViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             val back: () -> Unit = {
-                if (historyViewModel.saveSheet?.state?.value != null) historyViewModel.saveSheet?.close()
+                if (historyViewModel.saveSheet?.state?.value != null) historyViewModel.saveSheet?.dismiss()
                 else if (state.overlay != LibraryOverlay.None) historyViewModel.onAction(LibraryAction.CloseOverlay)
                 else finish()
             }
@@ -130,12 +134,13 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 sheetState?.let { current ->
                     if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
                         draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onDraftChange = { sheet.draftChanged(it.title, it.description) },
                         onSubmit = sheet::submitNewPlaylist,
+                        pending = current.pending,
                     ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
                         playlists = emptyList(),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onSelect = {},
                         onNewPlaylist = sheet::openNewPlaylist,
                         live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
@@ -220,6 +225,10 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onResume() {
         super.onResume()
+        syncSession()
+    }
+
+    private fun syncSession() {
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             com.hhst.youtubelite.data.media.MediaSession.snapshot().let { historyViewModel.updateSession(it.signedIn, it.generation) }
         }

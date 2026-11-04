@@ -4,6 +4,9 @@ import android.view.Gravity
 import android.view.SurfaceView
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
+import com.hhst.youtubelite.ui.design.AppMotion
+import com.hhst.youtubelite.ui.design.LocalMotionScale
+import com.hhst.youtubelite.ui.design.motionDuration
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -45,6 +49,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -99,11 +105,15 @@ fun PlayerSurface(
     modifier: Modifier = Modifier,
     onRefreshCastState: () -> Unit = {},
     managedByHost: Boolean = false,
+    transitionFrame: android.graphics.Bitmap? = null,
+    chromeAlpha: () -> Float = { 1f },
+    showPipLoadingIndicator: Boolean = true,
 ) {
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var dialog by remember { mutableStateOf<PlayerDialog?>(null) }
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
     val miniTransition = LocalMiniTransitionActive.current
+    val miniChromeAlpha = LocalMiniChromeAlpha.current
     state.castFailure?.let { report -> CastFailureDialog(report, callbacks::onCastFailureDismiss) }
     LaunchedEffect(state.castFailure?.id) {
         if (state.castFailure != null) { sheet = null; dialog = null; menu = null }
@@ -123,6 +133,13 @@ fun PlayerSurface(
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
     val fullscreenSwipe = LocalFullscreenSwipeHandle.current
+    SideEffect {
+        fullscreenSwipe?.let {
+            it.pictureAspectRatio = if (state.videoWidth > 0 && state.videoHeight > 0)
+                state.videoWidth.toFloat() / state.videoHeight else 16f / 9f
+            it.pictureResizeMode = state.resizeMode
+        }
+    }
     val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
     // A host-managed surface (embedded/fullscreen interpolation, mini dock)
     // resizes the same view; only system PiP swaps to a separate geometry.
@@ -150,7 +167,9 @@ fun PlayerSurface(
     val chromeLeft = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(leftInsetDp) else 0
     val chromeRight = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(rightInsetDp) else 0
     val hudTop = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(topInsetDp) else 0
-    val hudEnd = PlayerUi.hudSidePadDp(screenWidthDp, chromeRight, rightInsetDp)
+    // Already inside the fullscreen chrome inset; only add enough to keep
+    // the countdown 12 dp from the safe edge, instead of the gesture rail's 12%.
+    val sponsorEnd = (maxOf(12, rightInsetDp) - chromeRight).coerceAtLeast(0)
     val sidePad = if (chromeLeft > 0 || chromeRight > 0) {
         Modifier.padding(start = chromeLeft.dp, end = chromeRight.dp)
     } else {
@@ -259,7 +278,7 @@ fun PlayerSurface(
         val chromeSizing = PlayerUi.chromeSizing(maxWidth.value - chromeLeft - chromeRight, maxHeight.value)
         val centerHeightDp = maxHeight.value - with(density) { (topBarHeightPx + bottomBarHeightPx).toDp().value }
         val showChromeAuthor = maxHeight >= 280.dp || density.fontScale < 1.3f
-        val subtitleScale = if (state.mini || pip) (maxWidth.value / 390f).coerceIn(0.35f, 1f) else 1f
+        val subtitleScale = if (state.mini || miniTransition || pip) (maxWidth.value / 390f).coerceIn(0.35f, 1f) else 1f
         Box(
             Modifier
                 .fillMaxSize()
@@ -275,8 +294,8 @@ fun PlayerSurface(
                     .graphicsLayer {
                         scaleX = zoom.scale * (fullscreenSwipe?.pictureScale ?: 1f)
                         scaleY = zoom.scale * (fullscreenSwipe?.pictureScale ?: 1f)
-                        translationX = zoom.offsetX
-                        translationY = zoom.offsetY
+                        translationX = zoom.offsetX + (fullscreenSwipe?.pictureTranslationX ?: 0f)
+                        translationY = zoom.offsetY + (fullscreenSwipe?.pictureTranslationY ?: 0f)
                     },
             ) {
                 key(surfaceId) {
@@ -316,16 +335,29 @@ fun PlayerSurface(
                             val w = state.videoWidth
                             val h = state.videoHeight
                             if (w > 0 && h > 0) {
+                                // Animate view geometry without reallocating the
+                                // decoder output buffer on every layout change.
+                                surface.holder.setFixedSize(w, h)
                                 frame.setAspectRatio(w.toFloat() / h.toFloat())
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+                // Covers travel with the picture too, rather than pinning an old
+                // entry frame over a translated/zoomed live Surface.
+                if (!state.hasRenderedVideoFrame && !state.casting) {
+                    Box(Modifier.fillMaxSize().background(Color.Black).testTag("player-frame-shutter"))
+                }
+                transitionFrame?.let { frame -> PlayerTransitionFrame(frame, state.resizeMode) }
             }
         }
         if (state.casting && !pip) {
             Box(Modifier.fillMaxSize().background(Color.Black))
+        }
+
+        if (pip && showPipLoadingIndicator && PlayerUi.playPauseAction(state) == PlayerUi.PlayPauseAction.Loading) {
+            PlaybackLoadingIndicator(Modifier.align(Alignment.Center).size(24.dp))
         }
 
         if (state.mini && !pip) {
@@ -340,12 +372,13 @@ fun PlayerSurface(
                 onClose = { miniHandle?.dismiss?.invoke() ?: callbacks.onMiniClose() },
                 onRestore = callbacks::onMiniRestore,
                 onQueue = { sheet = PlayerSheet.Queue },
+                modifier = Modifier.graphicsLayer { alpha = miniChromeAlpha() },
             )
         } else {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = if (miniTransition) 0f else 1f }
+                    .graphicsLayer { alpha = if (miniTransition) 0f else chromeAlpha() }
                     .then(if (miniTransition) Modifier.clearAndSetSemantics {} else Modifier)
                     .playerGestures(
                         callbacks = rememberGestureCallbacks(
@@ -366,6 +399,7 @@ fun PlayerSurface(
                         zoomEnabled = state.fullscreen && !state.locked &&
                             !state.mini && !state.casting && !pip,
                         restartKey = state.casting,
+                        fullscreenEntry = !state.fullscreen && !state.mini,
                     ),
             ) {
                 val showChrome = (state.controlsVisible || seekGestureActive) && !state.locked && !pip
@@ -375,7 +409,7 @@ fun PlayerSurface(
                 val trackClearanceDp = with(density) { trackClearancePx.toDp() }
                 val skipCardDp = with(density) { skipCardPx.toDp() }
                 val skipCardsVisible = !pip && !state.locked &&
-                    (state.sponsorCountdownSec != null || state.sponsorChip)
+                    state.sponsorCountdownSec != null
                 val chipBandBottom by animateDpAsState(
                     if (showChrome) trackClearanceDp + PlayerUi.TRACK_CHIP_GAP_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
                     tween(250),
@@ -391,8 +425,8 @@ fun PlayerSurface(
                 )
                 AnimatedVisibility(
                     visible = showChrome,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+                    exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
                 ) {
                     Box(Modifier.fillMaxSize()) {
                         ControlScrims()
@@ -445,8 +479,8 @@ fun PlayerSurface(
                     if (!gestureActive) AnimatedVisibility(
                         visible = (showChrome || state.loading) && !state.locked &&
                             state.error == null && !pip,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+                        exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
                         modifier = Modifier.align(Alignment.Center),
                     ) {
                         CenterControls(
@@ -479,22 +513,11 @@ fun PlayerSurface(
                     if (!pip && !state.locked && countdown != null) {
                         SponsorCountdownCard(
                             seconds = countdown,
-                            onSkipNow = callbacks::onSponsorSkipNow,
                             onCancel = callbacks::onSponsorSkipCancel,
                             onVisualHeight = { skipCardPx = it },
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = chipBandBottom),
-                        )
-                    }
-                    if (!pip && !state.locked && state.sponsorChip) {
-                        SponsorSkipChip(
-                            highlight = state.sponsorChipHighlight,
-                            onSkip = callbacks::onSponsorChipSkip,
-                            onVisualHeight = { skipCardPx = it },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = chipBandBottom),
+                                .padding(end = sponsorEnd.dp, bottom = chipBandBottom),
                         )
                     }
 
@@ -509,6 +532,16 @@ fun PlayerSurface(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .padding(top = (hudTop + 8).dp),
+                        )
+                    }
+
+                    if (state.notice != null && !state.locked && !pip) {
+                        Text(
+                            text = stringResource(R.string.player_payment_required),
+                            color = Color.White,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center).fillMaxWidth().padding(24.dp)
+                                .testTag("player-access-notice"),
                         )
                     }
 
@@ -569,8 +602,8 @@ fun PlayerSurface(
         if (miniTransition && !pip) {
             SubtitleCuesLayer(subtitleCuesState, showChrome = false,
                 style = state.subtitleStyle.copy(textScale = state.subtitleStyle.textScale * subtitleScale), bottomClearDp = 4f)
-            MiniPlayerChrome(state = state.copy(mini = true), onPlayPause = {}, onPrevious = {}, onNext = {},
-                onClose = {}, onRestore = {}, onQueue = {})
+            MiniPlayerChrome(state = state.copy(mini = true, controlsVisible = true), onPlayPause = {}, onPrevious = {}, onNext = {},
+                onClose = {}, onRestore = {}, onQueue = {}, modifier = Modifier.graphicsLayer { alpha = miniChromeAlpha() })
         }
 
         PlayerSheetHost(
@@ -592,6 +625,23 @@ fun PlayerSurface(
             onRefreshCastState = onRefreshCastState,
         )
     }
+}
+
+@Composable
+internal fun PlayerTransitionFrame(frame: android.graphics.Bitmap, resizeMode: ResizeMode = ResizeMode.Fit) {
+    val scale = when (resizeMode) {
+        ResizeMode.Fit -> ContentScale.Fit
+        ResizeMode.Fill -> ContentScale.FillBounds
+        ResizeMode.Zoom -> ContentScale.Crop
+        ResizeMode.FixedWidth -> ContentScale.FillWidth
+        ResizeMode.FixedHeight -> ContentScale.FillHeight
+    }
+    // PixelCopy supplies the full video buffer, without the parent viewport's
+    // clipping. Apply the same resize policy as the live Surface, including
+    // letterbox coverage while the replacement output is not ready.
+    androidx.compose.foundation.Image(frame.asImageBitmap(), contentDescription = null,
+        contentScale = scale,
+        modifier = Modifier.fillMaxSize().clipToBounds().background(Color.Black).testTag("player-handoff-frame"))
 }
 
 /**
@@ -638,14 +688,17 @@ private fun rememberGestureCallbacks(
     fullscreen: Boolean,
     zoom: VideoZoom,
     fullscreenSwipe: FullscreenSwipeHandle?,
-): GestureCallbacks = remember(callbacks, locked, fullscreen, zoom, fullscreenSwipe) {
+): GestureCallbacks {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.GESTURE_THRESHOLD)
+    return remember(callbacks, locked, fullscreen, zoom, fullscreenSwipe, haptic) {
     if (locked) {
         object : GestureCallbacks {
             override fun onTap() = Unit
         }
     } else {
-        ForwardingGestures(callbacks, fullscreen, zoom, fullscreenSwipe)
+        ForwardingGestures(callbacks, fullscreen, zoom, fullscreenSwipe, haptic)
     }
+}
 }
 
 /** Unlocked: map gesture events onto playback/window callbacks. */
@@ -654,6 +707,7 @@ private class ForwardingGestures(
     private val fullscreen: Boolean,
     private val zoom: VideoZoom,
     private val fullscreenSwipe: FullscreenSwipeHandle?,
+    private val fullscreenHaptic: () -> Unit,
 ) : GestureCallbacks {
     override fun onTap() = c.onToggleControls()
     override fun onDoubleTapSeek(offsetMs: Long) = c.onDoubleTapSeek(offsetMs)
@@ -674,9 +728,11 @@ private class ForwardingGestures(
     override fun onFullscreenSwipeRelease(distancePx: Float, velocityPxPerSec: Float): Boolean =
         fullscreenSwipe?.release?.invoke(distancePx, velocityPxPerSec) ?: false
     override fun onFullscreenSwipe(up: Boolean) {
-        if (up != fullscreen) {
-            fullscreenSwipe?.end?.invoke(true)
-            c.onFullscreenToggle()
+        if (fullscreen || up) {
+            fullscreenHaptic()
+            if (fullscreen) {
+                if (up) c.onFullscreenSwipeExit() else c.onFullscreenSwipeRestore()
+            } else c.onFullscreenToggle()
         }
     }
     override fun onZoomScale(factor: Float) = zoom.applyScale(factor)

@@ -24,7 +24,7 @@ import com.hhst.youtubelite.data.media.MemoryAuthStore
 import com.hhst.youtubelite.subscriptions.data.FixtureSubscriptionsRepository
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -60,11 +60,19 @@ class ExploreViewModelTest {
                 vm.onAction(ExploreAction.SelectCategory(ExploreCategory.Gaming))
                 runCurrent()
                 release.countDown()
-                runBlocking { withTimeout(5_000) { directory.avatar("UCabc") } }
+                withContext(Dispatchers.Default) { withTimeout(5_000) { directory.avatar("UCabc") } }
                 runCurrent()
                 vm.onAction(ExploreAction.SelectCategory(ExploreCategory.Music))
                 runCurrent()
-                val page = (vm.uiState.value.content as ExploreContent.Ready).page
+                // The directory cache can complete before the UI subscriber is resumed.
+                val completed = withContext(Dispatchers.Default) {
+                    withTimeout(5_000) {
+                        vm.uiState.first { state ->
+                            (state.content as? ExploreContent.Ready)?.page?.videos?.firstOrNull()?.avatar != null
+                        }
+                    }
+                }
+                val page = (completed.content as ExploreContent.Ready).page
                 assertEquals("https://yt3/avatar.png", page.videos.first().avatar)
             }
         } finally {
@@ -249,7 +257,6 @@ class ExploreViewModelTest {
         assertEquals(listOf(ExploreCategory.Music, ExploreCategory.Sports), repository.exploreCalls)
         vm.onAction(ExploreAction.SelectCategory(ExploreCategory.Music))
         advanceUntilIdle()
-        // The retained page came back without a read.
         assertEquals(2, repository.exploreCalls.size)
         val ready = vm.uiState.value.content as ExploreContent.Ready
         assertEquals(listOf("music-a"), ready.page.videos.map { it.id })
@@ -286,7 +293,6 @@ class ExploreViewModelTest {
         assertEquals(listOf(ExploreCategory.Music, ExploreCategory.Sports), repository.exploreCalls)
         vm.onAction(ExploreAction.SelectCategory(ExploreCategory.Music))
         advanceUntilIdle()
-        // The cancelled append neither merged nor stuck the tail: the cursor is intact.
         val ready = vm.uiState.value.content as ExploreContent.Ready
         assertEquals(listOf("music-a"), ready.page.videos.map { it.id })
         assertEquals("k1", ready.page.nextKey)

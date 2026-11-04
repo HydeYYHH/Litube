@@ -40,8 +40,8 @@ class OEmbedTitleFetcher(
             if (System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) return null
             failures.remove(id, failedAt)
         }
-        // Losers of a concurrent first lookup skip this round and re-check the
-        // caches on their next call instead of issuing a duplicate request.
+        // Losers of a concurrent first lookup skip this round and re-check the caches on their
+        // next call instead of issuing a duplicate request.
         if (!inFlight.add(id)) return null
         try {
             val title = runCatching {
@@ -79,10 +79,8 @@ class OEmbedTitleFetcher(
     }
 
     private companion object {
-        /** How long a failed lookup suppresses retries. */
         val FAILURE_TTL_MS = TimeUnit.MINUTES.toMillis(5)
 
-        /** Upper bound on remembered failures; expired entries are pruned past it. */
         const val MAX_FAILURES = 64
     }
 }

@@ -19,9 +19,8 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Read-only collector for the mobile-web channel page: header (banner, avatar,
- * name, stats, tabs) and the videos tab grid. Nothing on the page is clicked;
- * samples load `https://m.youtube.com/<channel>(/videos) directly per viewport.
+ * Read-only collector for the mobile-web channel page: header and videos tab grid.
+ * Nothing on the page is clicked; samples load per viewport.
  */
 class ChannelReferenceAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -161,10 +160,9 @@ class ChannelReferenceAndroidTest {
             "[...document.querySelectorAll('a[href*=\"/watch\"]')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).length > 3"
 
         /**
-         * Focused header collection: the generic census misses the name, handle and
-         * description because they are not `ytm-*` elements. This pass stays inside
-         * the page header and records every visible text leaf plus the images
-         * forming the banner/avatar so the typography can be pinned.
+         * Focused header collection: the generic census misses name, handle and description
+         * because they are not `ytm-*` elements; this records visible header text leaves and
+         * banner/avatar images so typography can be pinned.
          */
         val IDENTITY_COLLECT = """
             const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };

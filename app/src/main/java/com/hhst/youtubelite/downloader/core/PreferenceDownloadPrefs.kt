@@ -4,7 +4,6 @@ import com.hhst.youtubelite.core.PreferenceStore
 import com.hhst.youtubelite.diagnostics.*
 import kotlinx.serialization.json.Json
 
-/** Download preferences over [PreferenceStore] under `download.*` keys. */
 class PreferenceDownloadPrefs(
     private val kv: PreferenceStore,
 ) : DownloadPrefs {
@@ -43,6 +42,7 @@ class PreferenceDownloadPrefs(
     override fun setDefaultQuality(value: String) {
         val previous = defaultQuality()
         kv.putString(QUALITY, value)
+        setLastConfig(lastConfig().copy(videoQuality = value, videoItagHint = null))
         if (previous != value) changed(QUALITY, previous, value)
     }
 

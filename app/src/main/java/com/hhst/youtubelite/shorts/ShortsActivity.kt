@@ -4,6 +4,7 @@ import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -53,6 +54,9 @@ import com.hhst.youtubelite.home.domain.FeedMenuKind
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.PlayerViewModel
+import com.hhst.youtubelite.player.engine.LoopMode
+import com.hhst.youtubelite.player.surface.OptionDialog
+import com.hhst.youtubelite.player.surface.OptionRow
 import com.hhst.youtubelite.player.surface.PlayerDialog
 import com.hhst.youtubelite.player.surface.PlayerDialogHost
 import com.hhst.youtubelite.player.surface.PlayerPlaybackActions
@@ -87,6 +91,55 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 class ShortsActivity : ComponentActivity() {
+    private var tabNavigation = false
+    private var tabBackwards = false
+
+    override fun startActivity(intent: android.content.Intent, options: android.os.Bundle?) {
+        val animatedTab = options == null && intent.component?.packageName == packageName &&
+            intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_NAVIGATION, false)
+        val animation = if (animatedTab) {
+            val pair = if (com.hhst.youtubelite.ui.design.readMotionScale(contentResolver) > 0f)
+                com.hhst.youtubelite.ui.NativeActivity.tabAnimations(intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_BACKWARD, false))
+            else 0 to 0
+            android.app.ActivityOptions.makeCustomAnimation(this, pair.first, pair.second).toBundle()
+        } else options
+        super.startActivity(intent, animation)
+    }
+
+    private fun tabCloseAnimation(): Pair<Int, Int>? {
+        if (!tabNavigation || isTaskRoot) return null
+        if (com.hhst.youtubelite.ui.design.readMotionScale(contentResolver) <= 0f) return 0 to 0
+        return com.hhst.youtubelite.ui.NativeActivity.tabAnimations(!tabBackwards)
+    }
+
+    private fun applyTabCloseTransition() {
+        if (Build.VERSION.SDK_INT < 34) return
+        val animation = tabCloseAnimation()
+        if (animation == null) clearOverrideActivityTransition(OVERRIDE_TRANSITION_CLOSE)
+        else overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, animation.first, animation.second)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        tabNavigation = intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_NAVIGATION, false)
+        tabBackwards = intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_BACKWARD, false)
+        applyTabCloseTransition()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("navigation_tab_entry", tabNavigation)
+        outState.putBoolean("navigation_tab_backward", tabBackwards)
+        super.onSaveInstanceState(outState)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun finish() {
+        val animation = if (Build.VERSION.SDK_INT < 34) tabCloseAnimation() else null
+        applyTabCloseTransition()
+        super.finish()
+        if (animation != null) overridePendingTransition(animation.first, animation.second)
+    }
+
     lateinit var shortsViewModel: ShortsViewModel
         private set
     lateinit var commentsViewModel: CommentsViewModel
@@ -104,7 +157,6 @@ class ShortsActivity : ComponentActivity() {
 
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
-    /** Navigates to another in-app screen, carrying this screen's debug fixture scene with it. */
     private fun launchNavigation(intent: android.content.Intent) {
         if (com.hhst.youtubelite.data.media.ContentRepositories.fixtures(this.intent))
             intent.putExtra(com.hhst.youtubelite.data.media.ContentRepositories.EXTRA_FIXTURE_SCENE, true)
@@ -113,6 +165,7 @@ class ShortsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        applyTabCloseTransition()
         // The shorts feed and subscription states are identity-scoped server-side.
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             val generation = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
@@ -123,6 +176,11 @@ class ShortsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        tabNavigation = savedInstanceState?.getBoolean("navigation_tab_entry")
+            ?: intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_NAVIGATION, false)
+        tabBackwards = savedInstanceState?.getBoolean("navigation_tab_backward")
+            ?: intent.getBooleanExtra(com.hhst.youtubelite.ui.NativeActivity.EXTRA_TAB_BACKWARD, false)
+        applyTabCloseTransition()
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
         val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
         if (!fixtures) (application as com.hhst.youtubelite.App).startMediaRuntime()
@@ -199,12 +257,14 @@ class ShortsActivity : ComponentActivity() {
                 }
             }
             val state by shortsViewModel.uiState.collectAsStateWithLifecycle()
+            shortsViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             // Authoritative engine identity: gates the per-page video slot below.
             val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
             // Shorts menu rows open the shared player dialogs; the window half of
             // the bridge stays inert because Shorts own their chrome.
             var shortsPlayerDialog by remember { mutableStateOf<PlayerDialog?>(null) }
             var descriptionItem by remember { mutableStateOf<String?>(null) }
+            var playbackOrderOpen by remember { mutableStateOf(false) }
             val shortsCallbacks = remember(playerViewModel) {
                 object : PlayerSurfaceCallbacks, PlayerPlaybackActions by playerViewModel {
                     override fun onGestureEnd() = playerViewModel.onGestureEnd()
@@ -224,6 +284,7 @@ class ShortsActivity : ComponentActivity() {
                     ShortsMenuAction.Captions -> shortsPlayerDialog = PlayerDialog.Captions
                     ShortsMenuAction.AudioTrack -> shortsPlayerDialog = PlayerDialog.Audio
                     ShortsMenuAction.PlaybackSpeed -> shortsPlayerDialog = PlayerDialog.Speed
+                    ShortsMenuAction.PlaybackOrder -> playbackOrderOpen = true
                     ShortsMenuAction.Quality -> shortsPlayerDialog = PlayerDialog.Quality
                     ShortsMenuAction.Download -> downloadShort(itemId)
                     ShortsMenuAction.Share -> shareGateway.share(itemId)
@@ -281,7 +342,6 @@ class ShortsActivity : ComponentActivity() {
                         kotlinx.coroutines.awaitCancellation()
                     }
                 }
-                // The settled item's hydrated metadata feeds the session's watch reporting.
                 val reporting = remember {
                     org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>()
                 }
@@ -359,13 +419,29 @@ class ShortsActivity : ComponentActivity() {
                     }
                 }
             }
+            val feedPage = (state.content as? com.hhst.youtubelite.shorts.domain.ShortsContent.Ready)?.page
+            val saveSheetOpen = shortsViewModel.saveSheet?.state?.collectAsStateWithLifecycle()?.value != null
+            val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle(
+                lifecycle = lifecycle, minActiveState = Lifecycle.State.CREATED,
+            )
+            val resumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+            LaunchedEffect(playerState.ended, playerState.prepared, playerState.videoId, state.currentItemId,
+                playerState.loopMode, feedPage?.items?.size, feedPage?.nextKey, state.overlay, resumed,
+                playbackOrderOpen, shortsPlayerDialog, descriptionItem, saveSheetOpen) {
+                if (!fixtures && resumed && playerState.prepared && playerState.ended && playerState.loopMode == LoopMode.QUEUE_NEXT &&
+                    !playbackOrderOpen && shortsPlayerDialog == null && descriptionItem == null && !saveSheetOpen) {
+                    playerState.videoId?.let(shortsViewModel::onPlaybackEnded)
+                }
+            }
             ShortsScreen(state, shortsViewModel::onAction, Modifier.fillMaxSize(),
                 videoContent = if (fixtures) null else { itemId ->
                     // Only the short the engine actually loaded may render; every
                     // other page keeps its cover, so a stale frame can never leak
                     // into a new page while the next one resolves.
                     if (playerState.videoId == itemId) {
-                        com.hhst.youtubelite.watch.presentation.WatchPlayer(Modifier.fillMaxSize(), { finish() }, pip = true)
+                        // Shorts owns loading/error feedback, including the swipe gate.
+                        com.hhst.youtubelite.watch.presentation.WatchPlayer(Modifier.fillMaxSize(), { finish() },
+                            pip = true, showPipLoadingIndicator = false)
                     }
                 },
                 playbackControls = if (fixtures) null else { itemId, active ->
@@ -373,10 +449,11 @@ class ShortsActivity : ComponentActivity() {
                         com.hhst.youtubelite.shorts.presentation.ShortPlaybackControls(
                             playing = playerState.isPlaying,
                             active = active,
-                            paused = playerState.shortPausedByUser,
+                            paused = playerState.shortPausedByUser || playerState.ended,
                             loading = !playerState.prepared || playerState.loading,
                             ready = playerState.firstFrameRendered,
                             error = playerState.error,
+                            notice = playerState.notice?.let { getString(R.string.player_payment_required) },
                             onRetry = playerViewModel::onRetry,
                             onDetails = if (playerState.failureReport == null) null else playerViewModel::onErrorDetails,
                             onToggle = playerViewModel::onPlayPause,
@@ -385,7 +462,8 @@ class ShortsActivity : ComponentActivity() {
                         ) {}
                     }
                 },
-                isVideoReady = { playerState.videoId == it && playerState.firstFrameRendered },
+                // Surface resets and same-video recovery must not cover a real retained frame.
+                isVideoReady = { playerState.videoId == it && playerState.hasRenderedVideoFrame },
                 onSwipeStart = if (fixtures) null else playerViewModel::holdShortsForSwipe,
                 onSwipeCancel = if (fixtures) null else playerViewModel::resumeShortsAfterSwipe)
             if (state.overlay is ShortsOverlay.Comments && activeComments != null) {
@@ -414,7 +492,7 @@ class ShortsActivity : ComponentActivity() {
                     MenuBottomSheet(
                         items = rows.map { action ->
                             MenuSheetItem(action.iconOrNull(), shortsMenuLabel(action, playerState),
-                                iconResource = action.iconResource())
+                                iconResource = action.iconResource(playerState))
                         },
                         onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
                         onSelect = { index -> onShortsMenuSelected(rows[index], menuItemId) },
@@ -425,6 +503,16 @@ class ShortsActivity : ComponentActivity() {
             shortsPlayerDialog?.let { dialog ->
                 PlayerDialogHost(dialog, playerState, shortsCallbacks, onDismiss = { shortsPlayerDialog = null })
             }
+            if (playbackOrderOpen) OptionDialog(
+                title = stringResource(R.string.settings_playback),
+                rows = listOf(LoopMode.PAUSE_AT_END, LoopMode.LOOP_ONE, LoopMode.QUEUE_NEXT).map {
+                    OptionRow(it, stringResource(PlayerUi.loopLabelRes(it)))
+                },
+                selected = playerState.loopMode,
+                onPick = { mode -> mode?.let(playerViewModel::onLoopMode); playbackOrderOpen = false },
+                onDismiss = { playbackOrderOpen = false },
+                tag = "shorts-playback-order",
+            )
             descriptionItem?.let { itemId ->
                 state.details[itemId]?.let { detail ->
                     ShortsDescriptionSheet(
@@ -440,12 +528,13 @@ class ShortsActivity : ComponentActivity() {
                 sheetState?.let { current ->
                     if (current.newPlaylist) NewPlaylistSheet(
                         draft = NewPlaylistDraft(current.title, current.description),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onDraftChange = { sheet.draftChanged(it.title, it.description) },
                         onSubmit = sheet::submitNewPlaylist,
+                        pending = current.pending,
                     ) else SaveToPlaylistSheet(
                         playlists = emptyList(),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onSelect = {},
                         onNewPlaylist = sheet::openNewPlaylist,
                         live = SaveSheetLive(
@@ -488,7 +577,6 @@ class ShortsActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /** Production download row: same executor the page menus use. */
     private fun downloadShort(itemId: String) {
         val item = (shortsViewModel.uiState.value.content as? com.hhst.youtubelite.shorts.domain.ShortsContent.Ready)
             ?.page?.items?.firstOrNull { it.id == itemId }
@@ -503,6 +591,7 @@ class ShortsActivity : ComponentActivity() {
         if (shortsViewModel.saveSheet != null) add(ShortsMenuAction.SaveToPlaylist)
         add(ShortsMenuAction.Captions)
         add(ShortsMenuAction.AudioTrack)
+        add(ShortsMenuAction.PlaybackOrder)
         add(ShortsMenuAction.PlaybackSpeed)
         add(ShortsMenuAction.Quality)
         add(ShortsMenuAction.Download)
@@ -517,10 +606,11 @@ class ShortsActivity : ComponentActivity() {
         else -> null
     }
 
-    private fun ShortsMenuAction.iconResource(): Int? = when (this) {
+    private fun ShortsMenuAction.iconResource(state: PlayerUiState): Int? = when (this) {
         ShortsMenuAction.Captions -> R.drawable.ic_subtitles_on
         ShortsMenuAction.AudioTrack -> R.drawable.ic_track
         ShortsMenuAction.PlaybackSpeed -> R.drawable.ic_playback_speed
+        ShortsMenuAction.PlaybackOrder -> PlayerUi.loopIcon(state.loopMode)
         ShortsMenuAction.Quality -> R.drawable.ic_quality
         else -> null
     }
@@ -538,6 +628,7 @@ class ShortsActivity : ComponentActivity() {
         ShortsMenuAction.AudioTrack -> stringResource(R.string.audio_track) + state.audioTracks
             .firstOrNull { it.key == state.audioTrackKey }?.let { " · " + audioTrackLabel(it) }.orEmpty()
         ShortsMenuAction.PlaybackSpeed -> stringResource(R.string.info_playback_speed) + " · " + PlayerUi.speedLabel(state.speed)
+        ShortsMenuAction.PlaybackOrder -> stringResource(PlayerUi.loopLabelRes(state.loopMode))
         ShortsMenuAction.Quality -> {
             // Same real-value chain as the info dialog: pinned label, else what is on
             // screen, else the auto mode itself.

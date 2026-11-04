@@ -13,7 +13,6 @@ import com.hhst.youtubelite.ui.theme.AppTheme
 import com.hhst.youtubelite.ui.theme.NeutralControls
 import org.koin.androidx.compose.koinViewModel
 
-/** Independent download manager: filters, batch details, settings, history. */
 class DownloadActivity : ComponentActivity() {
 
     private var pipHandle: PipAutoEnter.Handle? = null
@@ -44,8 +43,6 @@ class DownloadActivity : ComponentActivity() {
     public override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Keep filters, scroll and the ViewModel: route the batch id into the
-        // live composition instead of rebuilding the activity.
         intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID)?.takeIf(String::isNotBlank)?.let { id ->
             batchRequests.trySend(id)
         }

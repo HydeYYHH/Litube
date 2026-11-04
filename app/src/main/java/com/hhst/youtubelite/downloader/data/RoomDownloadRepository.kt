@@ -4,6 +4,8 @@ import androidx.room.InvalidationTracker
 import androidx.room.withTransaction
 import com.hhst.youtubelite.downloader.core.BatchStatsCalculator
 import com.hhst.youtubelite.downloader.core.BatchView
+import com.hhst.youtubelite.downloader.core.AssetSnapshot
+import com.hhst.youtubelite.downloader.core.ComponentSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadAsset
 import com.hhst.youtubelite.downloader.core.DownloadBatch
 import com.hhst.youtubelite.downloader.core.DownloadChunk
@@ -17,9 +19,11 @@ import com.hhst.youtubelite.downloader.core.PublishRecord
 import com.hhst.youtubelite.downloader.core.ScheduleRecord
 import com.hhst.youtubelite.downloader.core.TaskSnapshot
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.map
 import com.hhst.youtubelite.diagnostics.*
 import kotlin.coroutines.coroutineContext
 
@@ -37,22 +41,20 @@ class RoomDownloadRepository(
     }
 
     override fun observeDownloads(filter: DownloadFilter): Flow<List<TaskSnapshot>> =
-        callbackFlow {
-            suspend fun push() { send(transact { downloads(filter) }) }
-            val observer = graphObserver { launch { push() } }
-            db.invalidationTracker.addObserver(observer)
-            push()
-            awaitClose { db.invalidationTracker.removeObserver(observer) }
-        }
+        observeGraph { downloads(filter) }
 
     override fun observeBatch(batchId: String): Flow<BatchView?> =
+        observeGraph { batchView(batchId) }
+
+    // One query at a time, with at most one pending refresh. Conflate before
+    // reading Room, so a slow snapshot cannot accumulate obsolete transactions.
+    private fun <T> observeGraph(read: suspend DownloadSession.() -> T): Flow<T> =
         callbackFlow {
-            suspend fun push() { send(transact { batchView(batchId) }) }
-            val observer = graphObserver { launch { push() } }
+            val observer = graphObserver { trySend(Unit) }
             db.invalidationTracker.addObserver(observer)
-            push()
+            trySend(Unit)
             awaitClose { db.invalidationTracker.removeObserver(observer) }
-        }
+        }.buffer(Channel.CONFLATED).map { transact(read) }
 
     override fun observeVideo(videoId: String): Flow<List<TaskSnapshot>> =
         observeDownloads(DownloadFilter(videoId = videoId))
@@ -181,52 +183,58 @@ private class RoomSession(
     override suspend fun allSchedules(): List<ScheduleRecord> =
         dao.allSchedules().map { it.toDomain() }
 
-    override suspend fun snapshot(taskId: String): TaskSnapshot? =
-        taskStore(taskId).taskSnapshot(taskId)
+    override suspend fun snapshot(taskId: String): TaskSnapshot? {
+        val task = dao.getTask(taskId) ?: return null
+        return taskSnapshots(listOf(task))[taskId]
+    }
 
     override suspend fun batchView(batchId: String): BatchView? {
         val batch = dao.getBatch(batchId)?.toDomain() ?: return null
         val items = dao.itemsForBatch(batchId).map { it.toDomain() }
+        val tasks = items.map { it.taskId }.distinct().chunked(QUERY_BATCH_SIZE)
+            .flatMap { dao.tasksByIds(it) }
+        val snapshots = taskSnapshots(tasks)
         val snaps = items.mapNotNull { item ->
-            snapshot(item.taskId)?.takeUnless { it.task.removed }?.let { ItemSnapshot(item, it) }
+            snapshots[item.taskId]?.takeUnless { it.task.removed }?.let { ItemSnapshot(item, it) }
         }
         return BatchView(batch, snaps, BatchStatsCalculator.compute(snaps))
     }
 
-    /** Per-task entity slice assembled through the shared [DownloadStore] mappings. */
-    private suspend fun taskStore(taskId: String): DownloadStore {
-        val task = dao.getTask(taskId) ?: return DownloadStore()
-        val items = dao.itemsForTask(taskId)
-        val assets = dao.assetsForTask(taskId)
-        val components = assets.flatMap { dao.componentsForAsset(it.id) }
-        val chunks = components.flatMap { dao.chunksForComponent(it.id) }
-        val publishes = assets.mapNotNull { dao.publishForAsset(it.id) }
-        val batches = items.mapNotNull { dao.getBatch(it.batchId) }
-        return storeFromEntities(
-            batches = batches,
-            submissions = emptyList(),
-            tasks = listOf(task),
-            items = items,
-            assets = assets,
-            components = components,
-            chunks = chunks,
-            publishes = publishes,
-            schedules = listOfNotNull(dao.scheduleForTask(taskId)),
+    override suspend fun downloads(filter: DownloadFilter): List<TaskSnapshot> {
+        val tasks = dao.tasksForDownloads(
+            videoId = filter.videoId, includeRemoved = filter.includeRemoved,
+            allPhases = filter.phases == null, phases = filter.phases.orEmpty().map { it.name },
+            allStatuses = filter.statuses == null, statuses = filter.statuses.orEmpty().map { it.name },
         )
+        return taskSnapshots(tasks).values.sortedByDescending { it.task.createdAt }
     }
 
-    override suspend fun downloads(filter: DownloadFilter): List<TaskSnapshot> {
-        val store = storeFromEntities(
-            batches = dao.allBatches(),
-            submissions = emptyList(),
-            tasks = dao.allTasks(),
-            items = dao.allItems(),
-            assets = dao.allAssets(),
-            components = dao.allComponents(),
-            chunks = dao.allChunks(),
-            publishes = dao.allPublish(),
-            schedules = dao.allSchedules(),
-        )
-        return store.downloads(filter)
+    private suspend fun taskSnapshots(tasks: List<TaskEntity>): Map<String, TaskSnapshot> = buildMap {
+        // Stay below SQLite's bind limit, even for large download histories.
+        for (group in tasks.chunked(QUERY_BATCH_SIZE)) {
+            val ids = group.map { it.id }
+            val items = dao.itemsForTasks(ids).groupBy { it.taskId }
+            val assets = dao.assetsForTasks(ids).map { it.toDomain() }.groupBy { it.taskId }
+            val components = dao.componentsForTasks(ids).map { it.toDomain() }.groupBy { it.assetId }
+            val chunks = dao.chunksForTasks(ids).map { it.toDomain() }.groupBy { it.componentId }
+            val publishes = dao.publishesForTasks(ids).map { it.toDomain() }.associateBy { it.assetId }
+            val schedules = dao.schedulesForTasks(ids).map { it.toDomain() }.associateBy { it.taskId }
+            for (task in group) {
+                put(task.id, TaskSnapshot(
+                    task = task.toDomain(),
+                    assets = assets[task.id].orEmpty().map { asset ->
+                        AssetSnapshot(asset, components[asset.id].orEmpty().map { component ->
+                            ComponentSnapshot(component, chunks[component.id].orEmpty())
+                        }, publishes[asset.id])
+                    },
+                    schedule = schedules[task.id],
+                    batchId = items[task.id]?.firstOrNull()?.batchId,
+                ))
+            }
+        }
+    }
+
+    private companion object {
+        const val QUERY_BATCH_SIZE = 900
     }
 }

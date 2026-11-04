@@ -2,6 +2,7 @@ package com.hhst.youtubelite.downloader.io
 
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 
@@ -40,6 +41,23 @@ object FileIntegrity {
         val actual = sha256(file, startByte, receivedBytes)
         val recorded = expected ?: readChecksum(file, startByte) ?: return false
         return actual.equals(recorded, ignoreCase = true)
+    }
+
+    /** Verify a published stream without allocating another full-size file in app storage. */
+    fun verify(input: InputStream, expectedBytes: Long, checksum: String?): Boolean {
+        if (expectedBytes < 0) return false
+        val digest = checksum?.takeIf { it.isNotBlank() }?.let { MessageDigest.getInstance("SHA-256") }
+        val buffer = ByteArray(8192)
+        var received = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            if (count.toLong() > expectedBytes - received) return false
+            received += count
+            digest?.update(buffer, 0, count)
+        }
+        if (received != expectedBytes) return false
+        return digest == null || digest.digest().joinToString("") { "%02x".format(it) }.equals(checksum, ignoreCase = true)
     }
 
     fun fsync(file: File) {

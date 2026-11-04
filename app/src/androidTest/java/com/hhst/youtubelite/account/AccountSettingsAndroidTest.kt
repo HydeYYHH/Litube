@@ -25,7 +25,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Account menu and settings entry points; sign-in uses the native device-code flow. */
 class AccountSettingsAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var scenario: ActivityScenario<*>? = null
@@ -104,7 +103,9 @@ class AccountSettingsAndroidTest {
         host.onActivity {
             assertEquals(LibraryNavigationRequest.SignOut, it.lastNavigationRequest)
         }
-        compose.onNodeWithText("Sign out?").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText("Sign out?").assertIsDisplayed() }.isSuccess
+        }
         compose.onNodeWithTag("account-signout-confirm").performClick()
         compose.waitForIdle()
         // Fixture mode performs no session write; the page stays signed in.
@@ -209,13 +210,12 @@ class SettingsActivityAndroidTest {
         try {
             launch(SettingsPage.Playback)
             val before = prefs.isEnabled(key)
-            compose.onNodeWithTag("settings-toggle-state-$key", useUnmergedTree = true)
-                .assertTextEquals(if (before) "On" else "Off")
+            val toggle = compose.onNodeWithTag("settings-toggle-$key")
+            if (before) toggle.assertIsOn() else toggle.assertIsOff()
             compose.onNodeWithTag("settings-toggle-$key").performClick()
             compose.waitForIdle()
             assertEquals(!before, prefs.isEnabled(key))
-            compose.onNodeWithTag("settings-toggle-state-$key", useUnmergedTree = true)
-                .assertTextEquals(if (before) "Off" else "On")
+            if (before) toggle.assertIsOff() else toggle.assertIsOn()
         } finally {
             prefs.setEnabled(key, original)
         }
@@ -255,8 +255,8 @@ class SettingsListenerAndroidTest {
     private fun assertToggleState(key: String, enabled: Boolean) {
         compose.waitUntil(5_000) {
             runCatching {
-                compose.onNodeWithTag("settings-toggle-state-$key", useUnmergedTree = true)
-                    .assertTextEquals(if (enabled) "On" else "Off")
+                val toggle = compose.onNodeWithTag("settings-toggle-$key")
+                if (enabled) toggle.assertIsOn() else toggle.assertIsOff()
             }.isSuccess
         }
     }

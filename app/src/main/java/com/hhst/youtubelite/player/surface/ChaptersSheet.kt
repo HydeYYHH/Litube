@@ -149,15 +149,7 @@ fun ChaptersSheet(
             .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.chapters),
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp),
-            fontSize = SettingsTokens.TitleSize.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
         PlayerIconButton(
             icon = R.drawable.ic_close,
             contentDescription = stringResource(R.string.close),

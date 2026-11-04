@@ -1,4 +1,7 @@
 package com.hhst.youtubelite.search.presentation
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -24,6 +27,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,12 +69,13 @@ fun SearchResultsScreen(
     modifier: Modifier = Modifier,
     searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null,
 ) {
+    val appBar = rememberAppBarCollapseState(state.query, enabled = !state.searchOpen && state.overlay == SearchOverlay.None && state.content is SearchContent.Results)
     AppTheme {
         val hideShorts = LocalHideShorts.current
         LaunchedEffect(hideShorts, state.filters.type) {
             if (hideShorts && state.filters.type == SearchResultType.Shorts) onAction(SearchAction.SelectResultType(SearchResultType.All))
         }
-        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("search-results")) {
+        BoxWithConstraints(modifier.fillMaxSize().nestedScroll(appBar.connection).background(DesignTokens.Background).testTag("search-results")) {
             val width = maxWidth.value
             val height = maxHeight.value
             val listState = rememberLazyListState()
@@ -81,15 +94,54 @@ fun SearchResultsScreen(
                 }
             }
             val ready = state.content as? SearchContent.Results
+            val rows by rememberUpdatedState(if (state.filters.type == SearchResultType.Shorts)
+                ready?.page?.shorts.orEmpty() else ready?.page?.results.orEmpty())
+            val dispatch by rememberUpdatedState(onAction)
+            LaunchedEffect(listState, shortsState, state.query, state.filters) {
+                if (state.filters.type != SearchResultType.All && state.filters.type != SearchResultType.Shorts) return@LaunchedEffect
+                snapshotFlow {
+                    val range = if (state.filters.type == SearchResultType.Shorts) {
+                        val visible = shortsState.layoutInfo.visibleItemsInfo
+                        visible.firstOrNull()?.index?.let { it to (visible.lastOrNull()?.index ?: it) }
+                    } else {
+                        val visible = listState.layoutInfo.visibleItemsInfo
+                        visible.firstOrNull()?.index?.let { it to (visible.lastOrNull()?.index ?: it) }
+                    } ?: return@snapshotFlow emptyList<String>()
+                    val (first, lastVisible) = range
+                    val last = lastVisible + 3
+                    rows.subList(first.coerceAtMost(rows.size), (last + 1).coerceAtMost(rows.size)).map { it.id }
+                }.distinctUntilChanged().collect { ids ->
+                    if (ids.isNotEmpty()) dispatch(SearchAction.VisibleResults(state.query, state.filters, ids))
+                }
+            }
             val footer: (@Composable () -> Unit)? = if (ready != null &&
                 (ready.page.nextCursor != null || ready.loadingMore || ready.loadMoreFailed)) {
-                { com.hhst.youtubelite.ui.components.PagingFooter(ready.loadingMore, ready.loadMoreFailed) { onAction(SearchAction.LoadMore) } }
+                {
+                    if (ready.automaticPagingPaused && !ready.loadingMore && !ready.loadMoreFailed) {
+                        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("search-load-more"), contentAlignment = Alignment.Center) {
+                            com.hhst.youtubelite.home.presentation.PillButton(stringResource(R.string.load_more)) { onAction(SearchAction.LoadMore) }
+                        }
+                    } else com.hhst.youtubelite.ui.components.PagingFooter(ready.loadingMore, ready.loadMoreFailed) {
+                        onAction(if (ready.loadMoreFailed) SearchAction.LoadMore else SearchAction.AutomaticLoadMore)
+                    }
+                }
             } else null
             val backgroundHidden = state.searchOpen || state.overlay is SearchOverlay.ItemMenu || state.overlay is SearchOverlay.PlaylistMenu
             Column(Modifier.fillMaxSize().then(if (backgroundHidden) Modifier.clearAndSetSemantics {} else Modifier)) {
-                SearchTopBar(state.query, onAction, onBack)
-                if (state.filtersOpen) SearchFilterBar(state.filters, onAction)
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                CollapsingAppBar(appBar) {
+                    SearchTopBar(state.query, onAction, onBack)
+                }
+
+                val motion = LocalMotionScale.current > 0f
+                androidx.compose.animation.AnimatedVisibility(visible = state.filtersOpen,
+                    enter = if (motion) fadeIn(tween(160)) + expandVertically(tween(180)) else EnterTransition.None,
+                    exit = if (motion) fadeOut(tween(100)) + shrinkVertically(tween(140)) else ExitTransition.None) {
+                    SearchFilterBar(state.filters, onAction)
+                }
+                RefreshableContent(value = state, refreshing = state.content == SearchContent.Loading,
+                    onRefresh = { onAction(SearchAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = !backgroundHidden && state.overlay == SearchOverlay.None, contentKey = Triple(state.query, state.filters, state.signedInPreview), tag = "search-refresh",
+                    canPull = { if (state.filters.type == SearchResultType.Shorts) !shortsState.canScrollBackward else !listState.canScrollBackward }) { state ->
                     when (val content = state.content) {
                         SearchContent.Loading -> SearchSkeleton(width, height)
                         SearchContent.Failed -> if (state.verification != null) VerificationCard(
@@ -104,7 +156,7 @@ fun SearchResultsScreen(
                                 { onAction(SearchAction.OpenPlaylist(it)) }, { onAction(SearchAction.OpenChannel(it)) },
                                 { onAction(SearchAction.OpenPlaylistMenu(it)) }, footer)
                             else if (state.filters.type == SearchResultType.Channels)
-                                ChannelResultsList(content.page.channels, listState, onAction, footer)
+                                ChannelResultsList(content.page.channels, listState, onAction, footer, state.subscriptions, state.subscriptionsPending)
                             else if (state.filters.type == SearchResultType.Shorts)
                                 ShortsResultsList(content.page.shorts, shortsState, onAction, footer)
                             else SearchList(content.page.results, width, height, listState, onAction, footer)
@@ -312,11 +364,13 @@ private fun SearchList(
             ),
             verticalArrangement = Arrangement.spacedBy(SearchResultsLayout.itemSpacing(width, height).dp),
         ) {
-            items(results, key = { it.id }) { result ->
+            items(results, key = { it.id }, contentType = { "video" }) { result ->
                 val (itemWidth, itemHeight) = viewport.value
-                if (SearchResultsLayout.listLockup(itemWidth, itemHeight)) {
-                    ListResultRow(result, itemWidth, itemHeight, onAction)
-                } else StackedResultRow(result, itemWidth, itemHeight, onAction)
+                Box(if (LocalMotionScale.current > 0f) Modifier.animateItem() else Modifier) {
+                    if (SearchResultsLayout.listLockup(itemWidth, itemHeight)) {
+                        ListResultRow(result, itemWidth, itemHeight, onAction)
+                    } else StackedResultRow(result, itemWidth, itemHeight, onAction)
+                }
             }
             if (footer != null) item(key = "pagination") { footer() }
         }
@@ -381,7 +435,7 @@ private fun ResultThumbnail(
                 Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f)).background(DesignTokens.Red))
             }
         }
-        Box(Modifier.align(Alignment.BottomEnd).padding(badgeInset).testTag("search-badge-${result.id}")
+        if (result.duration.isNotBlank()) Box(Modifier.align(Alignment.BottomEnd).padding(badgeInset).testTag("search-badge-${result.id}")
             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
             .padding(horizontal = 4.dp, vertical = 1.dp), contentAlignment = Alignment.Center) {
             AppText(result.duration, size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
@@ -433,7 +487,7 @@ private fun ChannelAvatar(result: SearchResult, modifier: Modifier, onAction: (S
     Box(modifier.size(40.dp).clip(CircleShape).testTag("search-channel-${result.id}")
         .clickable(role = Role.Button) { onAction(SearchAction.OpenChannel(result.channelId)) }
         .appDescription(R.string.a11y_go_to_channel, result.channel)) {
-        Artwork(result.avatar ?: result.artwork, Modifier.fillMaxSize())
+        Artwork(result.avatar.orEmpty(), Modifier.fillMaxSize())
     }
 }
 

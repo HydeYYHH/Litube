@@ -89,7 +89,7 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         when (action) {
             ExploreAction.Retry -> load(_uiState.value.category)
             is ExploreAction.SelectCategory -> {
-                if (action.category == _uiState.value.category) return // reselecting never reloads
+                if (action.category == _uiState.value.category) return
                 savedState["category"] = action.category.name
                 val current = _uiState.value
                 // Retain the outgoing page with appends reset: their reads die with the switch.
@@ -106,7 +106,9 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
                 else load(action.category)
             }
             ExploreAction.LoadMore -> loadMore()
+            ExploreAction.AutomaticLoadMore -> loadMore(automatic = true)
             is ExploreAction.LoadShelf -> loadShelf(action.index)
+            is ExploreAction.AutomaticLoadShelf -> loadShelf(action.index, automatic = true)
             is ExploreAction.OpenVideo -> navigation.trySend(ExploreNavigationRequest.Watch(action.videoId))
             is ExploreAction.OpenChannel -> navigation.trySend(ExploreNavigationRequest.Channel(action.channelId))
             is ExploreAction.OpenPlaylist -> navigation.trySend(ExploreNavigationRequest.Playlist(action.playlistId))
@@ -148,10 +150,11 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
     }
 
     /** One in-flight page append per category; a cursor that repeats itself ends the list. */
-    private fun loadMore() {
+    private fun loadMore(automatic: Boolean = false) {
         val ready = _uiState.value.content as? ExploreContent.Ready ?: return
         val key = ready.page.nextKey ?: return
         if (ready.append == AppendState.Loading || appendJob?.isActive == true) return
+        if (automatic && ready.automaticPagingPaused) return
         val category = _uiState.value.category
         val request = generation
         _uiState.update { it.copy(content = ready.copy(append = AppendState.Loading)) }
@@ -202,17 +205,31 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
             }
         }
         val videos = (current.page.videos + page.videos).distinctBy { it.id }
-        return current.copy(page = current.page.copy(videos = videos, sections = sections,
+        val combined = current.page.copy(videos = videos, sections = sections,
             playlists = (current.page.playlists + page.playlists).distinctBy { it.id },
-            nextKey = if (looped) null else page.nextKey), append = AppendState.Idle)
+            nextKey = if (looped) null else page.nextKey)
+        val previousCards = current.page.cardKeys()
+        val addedCards = combined.cardKeys().any { it !in previousCards }
+        return current.copy(page = combined, append = AppendState.Idle,
+            emptyAutoLoads = if (addedCards) 0 else current.emptyAutoLoads + 1)
+    }
+
+    private fun com.hhst.youtubelite.explore.domain.ExplorePage.cardKeys(): Set<String> = buildSet {
+        videos.forEach { add("video:${it.id}") }
+        playlists.forEach { add("playlist:${it.id}") }
+        sections.forEach { section ->
+            section.videos.forEach { add("video:${it.id}") }
+            section.playlists.forEach { add("playlist:${it.id}") }
+        }
     }
 
     /** Shelf appends are scoped to the shelf's position plus the cursor that launched them. */
-    private fun loadShelf(index: Int) {
+    private fun loadShelf(index: Int, automatic: Boolean = false) {
         val ready = _uiState.value.content as? ExploreContent.Ready ?: return
         val section = ready.page.sections.getOrNull(index) ?: return
         val key = section.nextKey ?: return
         if (section.append == AppendState.Loading || shelfJobs[index]?.isActive == true) return
+        if (automatic && section.automaticPagingPaused) return
         val category = _uiState.value.category
         val request = generation
         updateShelf(index, key) { it.copy(append = AppendState.Loading) }
@@ -225,10 +242,12 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
                     updateShelf(index, key) {
                         val looped = result.nextKey == key || result.nextKey in visited
                         val videos = (it.videos + result.videos).distinctBy { video -> video.id }
+                        val playlists = (it.playlists + result.playlists).distinctBy { playlist -> playlist.id }
+                        val addedCards = videos.size > it.videos.size || playlists.size > it.playlists.size
                         it.copy(videos = videos,
-                            playlists = (it.playlists + result.playlists).distinctBy { playlist -> playlist.id },
+                            playlists = playlists,
                             nextKey = if (looped) null else result.nextKey,
-                            append = AppendState.Idle)
+                            append = AppendState.Idle, emptyAutoLoads = if (addedCards) 0 else it.emptyAutoLoads + 1)
                     }
                     fillMissingAvatars(result.videos)
                 },
@@ -246,7 +265,7 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
     private fun updateShelf(index: Int, key: String, edit: (com.hhst.youtubelite.explore.domain.ExploreSection) -> com.hhst.youtubelite.explore.domain.ExploreSection) {
         val ready = _uiState.value.content as? ExploreContent.Ready ?: return
         val section = ready.page.sections.getOrNull(index) ?: return
-        if (section.nextKey != key) return // the shelf moved on; the result is late
+        if (section.nextKey != key) return
         val sections = ready.page.sections.toMutableList()
         sections[index] = edit(section)
         _uiState.update { it.copy(content = ready.copy(page = ready.page.copy(sections = sections))) }
@@ -283,7 +302,6 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
 
 }
 
-/** The explore entry: four fixed category containers sharing one template. */
 class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var exploreViewModel: ExploreViewModel
         private set

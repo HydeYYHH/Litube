@@ -8,6 +8,7 @@ import com.hhst.youtubelite.shorts.data.ShortsRepository
 import com.hhst.youtubelite.shorts.data.ShortsScenario
 import com.hhst.youtubelite.shorts.domain.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -17,9 +18,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import com.hhst.youtubelite.core.AppNotice
 
-/** Hosts the shorts pager. Fixture builds keep like/subscribe as typed requests; production writes through here. */
+/** Fixture builds keep like/subscribe as typed requests; production writes through here. */
 class ShortsViewModel(
     private val repository: ShortsRepository,
     private val savedState: SavedStateHandle,
@@ -42,16 +46,16 @@ class ShortsViewModel(
     private var loadJob: Job? = null
     private var appendJob: Job? = null
     private val consumedCursors = mutableSetOf<String>()
-    private var actionJob: Job? = null
+    private val ratingJobs = mutableMapOf<String, Job>()
+    private val subscriptionJobs = mutableMapOf<String, Job>()
     private var hydrateJob: Job? = null
+    private val upcomingHydration = mutableMapOf<String, Job>()
     private var readyItemId: String? = null
 
-    /** Per-item hydration bookkeeping; only terminal states stop further reads. */
+    /** Per-item hydration bookkeeping; retries are bounded within one feed generation. */
     private sealed interface Hydration {
-        data object Running : Hydration
+        class Running : Hydration
         data object Done : Hydration
-        /** The read succeeded but the server has no detail for the item. */
-        data object Missing : Hydration
         data class Failed(val attempts: Int) : Hydration
     }
     private val hydration = object : LinkedHashMap<String, Hydration>(16, 0.75f, false) {
@@ -67,7 +71,7 @@ class ShortsViewModel(
         overlay(ShortsOverlay.None)
         // The open sheet shows the previous account's playlist membership; a
         // toggle after the switch would write stale choices under the new one.
-        saveSheet?.close()
+        saveSheet?.resetSession()
         preloader?.cancel()
         savedState["currentItem"] = startItemId
         _uiState.update { it.copy(currentItemId = startItemId) }
@@ -100,32 +104,44 @@ class ShortsViewModel(
                 preloader?.select(action.itemId)
                 savedState["currentItem"] = action.itemId
                 _uiState.update { it.copy(currentItemId = action.itemId) }
-                hydrateAround(action.itemId)
+                trimUpcomingHydration(action.itemId)
+                hydrateSelected(action.itemId)
             }
             is ShortsAction.Subscribe -> {
                 val actions = videoActions
                 if (actions == null) navigation.trySend(ShortsNavigationRequest.Subscribe(action.channelId))
-                else if (actionJob?.isActive != true) {
+                else if (subscriptionJobs[action.channelId]?.isActive != true) {
                     val target = _uiState.value.subscriptions[action.channelId] != true
-                    actionJob = viewModelScope.launch {
-                        _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending + action.channelId) }
+                    val request = generation
+                    _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending + action.channelId) }
+                    subscriptionJobs[action.channelId] = viewModelScope.launch {
                         try {
                             actions.subscribe(action.channelId, target)
+                            if (request != generation) return@launch
                             _uiState.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target),
                                 subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                            if (request != generation) return@launch
                             notices.trySend(AppNotice.SignIn)
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
                         catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                            if (request != generation) return@launch
                             notices.trySend(failure("shorts_subscribe", error, action.channelId, UNCONFIRMED))
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
                         catch (error: Exception) {
+                            if (request != generation) return@launch
                             notices.trySend(failure("shorts_subscribe", error, action.channelId, "Couldn't update this subscription. Try again."))
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
+                        finally {
+                            if (request == generation) _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
+                        }
+                    }
+                    subscriptionJobs[action.channelId]?.let { job ->
+                        job.invokeOnCompletion { if (subscriptionJobs[action.channelId] === job) subscriptionJobs.remove(action.channelId) }
                     }
                 }
             }
@@ -152,17 +168,30 @@ class ShortsViewModel(
             navigation.trySend(ShortsNavigationRequest.Rate(itemId, like = selection == com.hhst.youtubelite.watch.domain.VideoRating.Like))
             return
         }
-        if (actionJob?.isActive == true) return
+        if (ratingJobs[itemId]?.isActive == true) return
         val previous = _uiState.value.ratings[itemId] ?: com.hhst.youtubelite.watch.domain.VideoRating.None
         val next = if (previous == selection) com.hhst.youtubelite.watch.domain.VideoRating.None else selection
-        actionJob = viewModelScope.launch {
+        _uiState.update { it.copy(ratingsPending = it.ratingsPending + itemId) }
+        val request = generation
+        ratingJobs[itemId] = viewModelScope.launch {
             try {
                 actions.rate(itemId, next, previous)
+                if (request != generation) return@launch
                 _uiState.update { it.copy(ratings = it.ratings + (itemId to next)) }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-            catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(failure("shorts_rate", error, itemId, UNCONFIRMED)) }
-            catch (error: Exception) { notices.trySend(failure("shorts_rate", error, itemId, "Couldn't update this video. Try again.")) }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
+                if (request == generation) notices.trySend(AppNotice.SignIn)
+            }
+            catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                if (request == generation) notices.trySend(failure("shorts_rate", error, itemId, UNCONFIRMED))
+            }
+            catch (error: Exception) {
+                if (request == generation) notices.trySend(failure("shorts_rate", error, itemId, "Couldn't update this video. Try again."))
+            }
+            finally { if (request == generation) _uiState.update { it.copy(ratingsPending = it.ratingsPending - itemId) } }
+        }
+        ratingJobs[itemId]?.let { job ->
+            job.invokeOnCompletion { if (ratingJobs[itemId] === job) ratingJobs.remove(itemId) }
         }
     }
 
@@ -170,28 +199,50 @@ class ShortsViewModel(
     private fun failure(operation: String, error: Exception, itemId: String, message: String): AppNotice =
         com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error, mapOf("video_id" to itemId), message)
 
-    /**
-     * Hydrates the settled item and, at most, the next one. A swipe cancels the
-     * previous round mid-flight; playback never waits on these reads.
-     */
-    private fun hydrateAround(itemId: String) {
+    /** Selected details yield to startup, or take over an already-running neighbor read. */
+    private fun hydrateSelected(itemId: String, immediate: Boolean = false) {
+        if (upcomingHydration[itemId]?.isActive == true) {
+            hydrateJob?.cancel()
+            hydrateJob = null
+            return
+        }
+        if (immediate && hydration[itemId] is Hydration.Running) return
         hydrateJob?.cancel()
         val request = generation
-        val items = (_uiState.value.content as? ShortsContent.Ready)?.page?.items.orEmpty()
-        val index = items.indexOfFirst { it.id == itemId }
-        val next = items.getOrNull(index + 1)?.id.takeIf { index >= 0 }
         hydrateJob = viewModelScope.launch {
+            if (!immediate && readyItemId != itemId) delay(DETAILS_STARTUP_GRACE_MS)
+            hydrateWithSelectedRetry(itemId, request)
+        }
+    }
+
+    private suspend fun hydrateWithSelectedRetry(itemId: String, request: Int) {
+        hydrateOne(itemId, request)
+        val failed = hydration[itemId] as? Hydration.Failed
+        if (failed != null && failed.attempts < MAX_HYDRATION_ATTEMPTS &&
+            request == generation && itemId == _uiState.value.currentItemId) {
+            delay(DETAILS_RETRY_DELAY_MS)
             hydrateOne(itemId, request)
-            if (request != generation) return@launch
-            next ?: return@launch
-            hydrateOne(next, request)
         }
     }
 
     fun onPlaybackReady(itemId: String) {
         if (itemId != _uiState.value.currentItemId) return
+        if (readyItemId == itemId) return
         readyItemId = itemId
+        hydrateSelected(itemId, immediate = true)
         preloadNext()
+    }
+
+    /** Only the settled item may advance; an append can call this again when ready. */
+    fun onPlaybackEnded(itemId: String) {
+        val state = _uiState.value
+        if (state.currentItemId != itemId || state.overlay != ShortsOverlay.None) return
+        val page = (state.content as? ShortsContent.Ready)?.page ?: return
+        val index = page.items.indexOfFirst { it.id == itemId }
+        if (index < 0) return
+        val next = page.items.getOrNull(index + 1)
+        if (next == null) loadMore()
+        else onAction(ShortsAction.SelectItem(next.id))
     }
 
     private fun preloadNext() {
@@ -200,6 +251,30 @@ class ShortsViewModel(
         val items = (state.content as? ShortsContent.Ready)?.page?.items ?: return
         val index = items.indexOfFirst { it.id == id }
         if (index >= 0) items.getOrNull(index + 1)?.id?.let { preloader?.preload(it) }
+        if (index < 0) return
+        val request = generation
+        // Only after a real frame: two bounded metadata reads overlap the current
+        // short and survive a swipe onto their item. Media bytes still warm one ahead.
+        items.drop(index + 1).take(METADATA_LOOKAHEAD).forEach { item ->
+            if (item.id in upcomingHydration || hydration[item.id] is Hydration.Running ||
+                hydration[item.id] == Hydration.Done && item.id in state.details ||
+                hydration[item.id] is Hydration.Failed) return@forEach
+            val job = viewModelScope.launch(start = CoroutineStart.LAZY) { hydrateWithSelectedRetry(item.id, request) }
+            upcomingHydration[item.id] = job
+            job.invokeOnCompletion { if (upcomingHydration[item.id] === job) upcomingHydration.remove(item.id) }
+            job.start()
+        }
+    }
+
+    private fun trimUpcomingHydration(selected: String) {
+        val items = (_uiState.value.content as? ShortsContent.Ready)?.page?.items.orEmpty()
+        val index = items.indexOfFirst { it.id == selected }
+        val keep = if (index < 0) setOf(selected) else items.drop(index).take(METADATA_LOOKAHEAD + 1).map { it.id }.toSet()
+        upcomingHydration.keys.filter { it !in keep }.forEach { id ->
+            val job = upcomingHydration.remove(id)
+            if (hydration[id] is Hydration.Running) hydration.remove(id)
+            job?.cancel()
+        }
     }
 
     private suspend fun hydrateOne(itemId: String, request: Int) {
@@ -207,27 +282,28 @@ class ShortsViewModel(
         if (items.none { it.id == itemId }) return
         val previousAttempts = (hydration[itemId] as? Hydration.Failed)?.attempts ?: 0
         when (val existing = hydration[itemId]) {
-            is Hydration.Running, Hydration.Missing -> return
+            is Hydration.Running -> return
             Hydration.Done -> if (itemId in _uiState.value.details) return
             is Hydration.Failed -> if (existing.attempts >= MAX_HYDRATION_ATTEMPTS) return
             null -> Unit
         }
-        hydration[itemId] = Hydration.Running
+        val running = Hydration.Running()
+        hydration[itemId] = running
         val detail = try {
-            repository.hydrate(itemId)
+            repository.hydrate(itemId).also { currentCoroutineContext().ensureActive() }
         } catch (cancelled: CancellationException) {
             // A cancelled read must stay retryable, never a terminal state.
-            hydration.remove(itemId)
+            if (request == generation && hydration[itemId] === running) hydration.remove(itemId)
             throw cancelled
         } catch (_: Exception) {
-            hydration[itemId] = Hydration.Failed(previousAttempts + 1)
-            return
-        }
-        if (detail == null) {
-            hydration[itemId] = Hydration.Missing
+            if (request == generation) hydration[itemId] = Hydration.Failed(previousAttempts + 1)
             return
         }
         if (request != generation) return
+        if (detail == null || detail.item.id != itemId) {
+            hydration[itemId] = Hydration.Failed(previousAttempts + 1)
+            return
+        }
         hydration[itemId] = Hydration.Done
         _uiState.update { state ->
             val ready = state.content as? ShortsContent.Ready ?: return@update state
@@ -239,9 +315,13 @@ class ShortsViewModel(
                     .associateTo(LinkedHashMap()) { it.key to it.value },
                 // The server's subscription state feeds the map; the local click
                 // write only lands after the same server confirms the change.
-                subscriptions = if (detail.subscribed != null && detail.item.channelId.isNotBlank())
+                subscriptions = if (detail.subscribed != null && detail.item.channelId.isNotBlank() &&
+                    detail.item.channelId !in state.subscriptionsPending && detail.item.channelId !in state.subscriptions)
                     state.subscriptions + (detail.item.channelId to detail.subscribed)
                 else state.subscriptions,
+                ratings = if (detail.rating != null && itemId !in state.ratingsPending && itemId !in state.ratings)
+                    state.ratings + (itemId to detail.rating)
+                else state.ratings,
             )
         }
     }
@@ -249,11 +329,19 @@ class ShortsViewModel(
     private companion object {
         const val UNCONFIRMED = "The server did not confirm this change. Please refresh before trying again."
         const val MAX_DETAILS = 24
+        const val METADATA_LOOKAHEAD = 2
         const val MAX_HYDRATION_STATES = 96
         const val MAX_HYDRATION_ATTEMPTS = 2
+        const val DETAILS_STARTUP_GRACE_MS = 3_000L
+        const val DETAILS_RETRY_DELAY_MS = 750L
     }
 
     private fun overlay(next: ShortsOverlay) {
+        when (next) {
+            is ShortsOverlay.Menu -> hydrateSelected(next.itemId, immediate = true)
+            is ShortsOverlay.Comments -> hydrateSelected(next.itemId, immediate = true)
+            ShortsOverlay.None -> Unit
+        }
         savedState["overlay"] = if (next is ShortsOverlay.Comments) "comments" else "menu"
         savedState["overlayItem"] = when (next) {
             is ShortsOverlay.Comments -> next.itemId
@@ -277,10 +365,11 @@ class ShortsViewModel(
                 consumedCursors += cursor
                 _uiState.update { state ->
                     val readyPage = (state.content as? ShortsContent.Ready)?.page ?: return@update state
-                    val seen = readyPage.items.map { it.id }.toSet()
+                    val merged = readyPage.items.associateByTo(linkedMapOf()) { it.id }
+                    page.items.forEach { item -> merged[item.id] = merged[item.id]?.fillFrom(item) ?: item }
                     state.copy(appendLoading = false, appendFailed = false,
                         content = ShortsContent.Ready(readyPage.copy(
-                            items = (readyPage.items + page.items.filter { it.id !in seen }).distinctBy { it.id },
+                            items = merged.values.toList(),
                             nextKey = page.nextKey?.takeUnless { it in consumedCursors || page.items.isEmpty() })))
                 }
                 preloadNext()
@@ -295,15 +384,22 @@ class ShortsViewModel(
     private fun refresh() {
         loadJob?.cancel()
         appendJob?.cancel()
-        actionJob?.cancel()
+        ratingJobs.values.toList().forEach(Job::cancel)
+        subscriptionJobs.values.toList().forEach(Job::cancel)
+        ratingJobs.clear()
+        subscriptionJobs.clear()
         hydrateJob?.cancel()
+        upcomingHydration.values.toList().forEach(Job::cancel)
+        upcomingHydration.clear()
         hydration.clear()
         consumedCursors.clear()
-        preloader?.cancel()
+        // Initial entry can claim preparation started while browsing. Explicit
+        // retries still discard obsolete work; identity changes cancel above.
+        if (generation > 0) preloader?.cancel()
         readyItemId = null
         val request = ++generation
         _uiState.update { it.copy(content = ShortsContent.Loading, appendLoading = false, appendFailed = false,
-            ratings = emptyMap(), subscriptions = emptyMap(), subscriptionsPending = emptySet(), details = emptyMap()) }
+            ratings = emptyMap(), subscriptions = emptyMap(), subscriptionsPending = emptySet(), ratingsPending = emptySet(), details = emptyMap()) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.shorts()

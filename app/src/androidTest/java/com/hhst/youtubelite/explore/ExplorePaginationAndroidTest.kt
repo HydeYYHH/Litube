@@ -10,7 +10,6 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 
-/** Drives the fixture continuation scenarios end to end: page tails, shelf tails, and the end of a list. */
 class ExplorePaginationAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var scenario: ActivityScenario<ExploreActivity>? = null
@@ -35,7 +34,6 @@ class ExplorePaginationAndroidTest {
         // Reaching the last loaded item puts the tail on screen, which asks for page two.
         compose.onNodeWithTag("explore-list").performScrollToNode(hasTestTag("explore-item-music-live"))
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("explore-item-music-bunny-p2").fetchSemanticsNodes().isNotEmpty() }
-        // All four fixture items of the canned second page arrive.
         compose.onNodeWithTag("explore-list").performScrollToNode(hasTestTag("explore-item-music-live-p2"))
         compose.onNodeWithTag("explore-item-music-live-p2").assertIsDisplayed()
         compose.waitForIdle()
@@ -57,7 +55,6 @@ class ExplorePaginationAndroidTest {
             compose.onNodeWithTag("explore-carousel-0").performScrollToNode(hasTestTag("explore-item-$id"))
             compose.onNodeWithTag("explore-item-$id").assertIsDisplayed()
         }
-        // The second shelf keeps its original items.
         compose.onAllNodesWithTag("explore-item-music-s1-bunny").assertCountEquals(1)
         compose.onAllNodesWithTag("explore-item-music-bunny-s0-1").assertCountEquals(1)
     }
@@ -69,7 +66,6 @@ class ExplorePaginationAndroidTest {
         compose.onNodeWithTag("explore-sections").performScrollToIndex(4)
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("explore-section-2-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("explore-section-2-title").assertIsDisplayed()
-        // The appended page renders as a third carousel with its own items.
         compose.onNodeWithTag("explore-carousel-2").performScrollToNode(hasTestTag("explore-item-music-bunny-p2"))
         compose.onNodeWithTag("explore-item-music-bunny-p2").assertIsDisplayed()
     }

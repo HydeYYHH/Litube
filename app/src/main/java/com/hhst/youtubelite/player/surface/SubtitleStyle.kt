@@ -18,7 +18,6 @@ data class SubtitleStyle(
     val horizontal: Float = 0f,
     val background: Background = Background.SEMI,
     val bold: Boolean = false,
-    /** Packed ARGB text color. */
     val colorArgb: Int = COLOR_WHITE,
 ) {
     enum class Background { NONE, SEMI, OPAQUE }

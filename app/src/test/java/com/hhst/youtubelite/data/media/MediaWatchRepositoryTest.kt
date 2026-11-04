@@ -18,10 +18,7 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * The watch read runs the page and the player-details requests beside each other on the
- * one captured session, so first paint pays the slower call rather than their sum.
- */
+/** The watch read runs the page and player-details requests in parallel on one captured session, so first paint pays the slower call, not their sum. */
 class MediaWatchRepositoryTest {
     @Test fun aCancelledWatchInterruptsBothReads() = interruptedPair(false)
     @Test fun aFailedPageInterruptsItsPendingDetailsRead() = interruptedPair(true)
@@ -108,12 +105,10 @@ class MediaWatchRepositoryTest {
         // The page read owns the identity fields; details only fill the gaps.
         assertEquals("Big Buck Bunny", page.video.title)
         assertEquals("Blender", page.video.channel)
-        // Details carry the artwork, the live flag and the reporting endpoints.
         assertEquals("https://i.ytimg.com/thumb.jpg", page.video.artwork)
         assertTrue(page.video.live)
         assertEquals("https://www.youtube.com/api/stats/playback", page.video.tracking?.playbackUrl)
         assertEquals("https://s.youtube.com/api/stats/watchtime", page.video.tracking?.watchTimeUrl)
-        // Both requests rode the same visitor identity: one session, no second context.
         assertEquals(listOf("next", "player").sorted(), calls.map { it.substringAfterLast('/') }.sorted())
         assertEquals(listOf("visitor-token", "visitor-token"), visitors)
     }
@@ -124,8 +119,6 @@ class MediaWatchRepositoryTest {
         val page = repository.watch("bunny")
         assertEquals("Big Buck Bunny", page.video.title)
         assertEquals("https://i.ytimg.com/thumb.jpg", page.video.artwork)
-        // The gate releases only once both reads were in flight together; a serialized
-        // read times out each request and never reaches two.
         assertEquals(setOf("next", "player"), calls.map { it.substringAfterLast('/') }.toSet())
         assertEquals(2, interceptor.maxInFlight)
     }

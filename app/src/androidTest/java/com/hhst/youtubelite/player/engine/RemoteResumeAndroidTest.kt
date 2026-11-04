@@ -5,6 +5,7 @@ import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.data.media.MediaSession
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.QueueOwner
+import com.hhst.youtubelite.player.PlayerViewModel
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
@@ -12,6 +13,43 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RemoteResumeAndroidTest {
+    @Test fun aNewShortStartsAtZeroWithoutReadingAccountProgress() {
+        OfflineWatchFixture("resume00004").use { fixture ->
+            val field = fixture.engine.javaClass.getDeclaredField("remoteResumePosition").apply { isAccessible = true }
+            val previous = field.get(fixture.engine)
+            val calls = AtomicInteger()
+            val load: suspend (String) -> Long? = { calls.incrementAndGet(); 30_000L }
+            try {
+                fixture.instrumentation.runOnMainSync {
+                    fixture.prefs.setEnabled(PreferenceKeys.REMEMBER_LAST_POSITION, true)
+                    field.set(fixture.engine, load)
+                }
+                fixture.launch()
+                fixture.await { fixture.engine.snapshot.value.positionMs in 30_000..35_000 }
+                assertEquals(1, calls.get())
+                fixture.instrumentation.runOnMainSync {
+                    fixture.engine.stop()
+                    org.koin.core.context.GlobalContext.get().get<PlayerViewModel>().apply {
+                        onShortsOpened()
+                        openShort(fixture.id)
+                    }
+                }
+                fixture.await {
+                    val state = fixture.engine.snapshot.value
+                    state.firstFrameRendered && state.isPlaying && state.positionMs in 0..5_000
+                }
+                assertEquals("Shorts must skip the account request, not only its wait", 1, calls.get())
+            } finally {
+                fixture.instrumentation.runOnMainSync {
+                    field.set(fixture.engine, previous)
+                    // This fixture hosts a watch surface. End the simulated Shorts host before it closes, so a later watch fixture does not inherit hidden video.
+                    fixture.model.onShortsClosed()
+                    fixture.engine.setVideoVisible(true)
+                }
+            }
+        }
+    }
+
     @Test fun privatePlaybackDoesNotReadOrOverwriteStoredProgress() {
         OfflineWatchFixture("resume00003").use { fixture ->
             val cacheField = fixture.engine.javaClass.getDeclaredField("cache").apply { isAccessible = true }

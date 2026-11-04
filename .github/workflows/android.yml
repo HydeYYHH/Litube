@@ -143,6 +143,7 @@ jobs:
               com.hhst.youtubelite.browser.TransientUiAndroidTest
               com.hhst.youtubelite.browser.ExternalRouteAndroidTest
               com.hhst.youtubelite.player.engine.PipDismissAndroidTest
+              com.hhst.youtubelite.player.engine.PipReturnAndroidTest
               com.hhst.youtubelite.diagnostics.DiagnosticSaveAndroidTest
               com.hhst.youtubelite.player.surface.FullscreenSheetAndroidTest
               com.hhst.youtubelite.player.surface.PlayerControlSizingAndroidTest
@@ -150,6 +151,7 @@ jobs:
               com.hhst.youtubelite.player.engine.TransportRecoveryAndroidTest
               com.hhst.youtubelite.player.engine.PinnedVideoRecoveryAndroidTest
               com.hhst.youtubelite.player.engine.MediaResponseRecoveryAndroidTest
+              com.hhst.youtubelite.player.engine.PlaybackAttemptLifecycleAndroidTest
               com.hhst.youtubelite.player.engine.RemoteResumeAndroidTest
               com.hhst.youtubelite.player.engine.WatchStartSecondsAndroidTest
               com.hhst.youtubelite.player.engine.CastStateIsolationAndroidTest
@@ -158,6 +160,10 @@ jobs:
               com.hhst.youtubelite.player.engine.OriginalAudioAndroidTest
               com.hhst.youtubelite.downloader.android.DownloadOptionsAndroidTest
               com.hhst.youtubelite.downloader.android.DownloadIntentAndroidTest
+              com.hhst.youtubelite.downloader.io.LocalPublishAndroidTest
+              com.hhst.youtubelite.data.media.SearchIdentityAndroidTest
+              com.hhst.youtubelite.cast.CastChannelAndroidTest#authenticatedBlockedWriteIsAbortedByLocalClose
+              com.hhst.youtubelite.cast.CastChannelAndroidTest#closeDuringAuthenticationCannotRestartTheTransport
             )
             printf -v class_list '%s,' "${classes[@]}"
             status=0

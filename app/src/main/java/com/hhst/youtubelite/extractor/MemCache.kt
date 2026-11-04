@@ -63,7 +63,6 @@ class MemCache(
         synchronized(chapterLists) { chapterLists.evictAll() }
     }
 
-    /** Expiry-stamped wrapper so TTL checks need no extra map. */
     private class Boxed<T>(val value: T, val expiresAt: Long)
 
     private fun <T> lru(max: Int) = object : LruCache<String, Boxed<T>>(max) {

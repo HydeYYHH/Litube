@@ -47,4 +47,11 @@ class LiveChatRoutingTest {
             route(video("chat"), live = true, pip = true),
         )) assertNull(target)
     }
+
+    @Test fun postingAddressesTheBroadcasterFromTheCurrentVideo() {
+        val current = video("continuation").copy(id = "a".repeat(11), channelId = "UC" + "b".repeat(22))
+        assertEquals(com.liskovsoft.youtubeapi.videoinfo.V2.chatMessageParameters(current.id, current.channelId),
+            route(current, live = true)!!.messageParams)
+        assertNull(route(current.copy(channelId = "@handle"), live = true)!!.messageParams)
+    }
 }

@@ -28,8 +28,8 @@ import org.koin.core.context.GlobalContext
 
 /** Runs the production player against a local HLS fixture. */
 internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: Boolean = false,
+    videoAsset: String = "player/quality-recovery/360.ts",
     onStreamRead: () -> Unit = {}) : Closeable {
-    /** Flip to fail every media request (tests a load that never reaches first frame). */
     var mediaRefused = refuseMedia
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val app = instrumentation.targetContext
@@ -44,7 +44,7 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
     private val extractorField = engine.javaClass.getDeclaredField("extractor").apply { isAccessible = true }
     private val originalExtractor = extractorField.get(engine)
     private val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
-    private val video = instrumentation.context.assets.open("player/quality-recovery/360.ts").use { it.readBytes() }
+    private val video = instrumentation.context.assets.open(videoAsset).use { it.readBytes() }
     private val server = object : NanoHTTPD("127.0.0.1", 0) {
         override fun serve(session: IHTTPSession): Response = if (mediaRefused) {
             newFixedLengthResponse(Response.Status.FORBIDDEN, "text/plain", "Unavailable")
@@ -63,7 +63,7 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
                 #EXTM3U
                 #EXT-X-TARGETDURATION:21
                 #EXT-X-MEDIA-SEQUENCE:0
-                ${List(6) { "#EXTINF:20.0,\n${if (session.uri == "/audio.m3u8") "audio.ts" else "video.ts"}" }.joinToString("\n#EXT-X-DISCONTINUITY\n")}
+                ${List(30) { "#EXTINF:20.0,\n${if (session.uri == "/audio.m3u8") "audio.ts" else "video.ts"}" }.joinToString("\n#EXT-X-DISCONTINUITY\n")}
                 #EXT-X-ENDLIST
             """.trimIndent())
         }
@@ -81,14 +81,20 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
             oldPreferences.keys.filter { it.startsWith("skip_") }.forEach { prefs.setEnabled(it, false) }
             prefs.setEnabled(PreferenceKeys.ENABLE_PIP, true)
             prefs.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
-            // The swipe/rotate flow runs against live playback; a short stream
-            // ends mid-test on slow renderers and collapses fullscreen first.
+            // This fixture only advertises 360p; an unrelated remembered pin
+            // must not turn a surface/navigation regression into a quality failure.
+            prefs.setEnabled(PreferenceKeys.REMEMBER_QUALITY, false)
+            // UI fixtures reuse video IDs. Resume tests explicitly opt back in;
+            // unrelated navigation tests must not inherit another run's position.
+            prefs.setEnabled(PreferenceKeys.REMEMBER_LAST_POSITION, false)
+            // A short stream ends mid-test on slow renderers and collapses fullscreen first; the finite
+            // HLS playlist above carries the same 600 seconds for the swipe/rotate flow.
             extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 600, onStreamRead = onStreamRead), scope))
         }
     }
 
     fun launch(expectFailure: Boolean = false, source: android.app.Activity? = null,
-        startSeconds: Long? = null, settleUi: () -> Unit = {}) {
+        startSeconds: Long? = null, awaitReady: Boolean = true, settleUi: () -> Unit = {}) {
         if (source == null) {
             val intent = WatchActivity.intent(app, id)
                 .apply { startSeconds?.let { putExtra(WatchActivity.EXTRA_START_SECONDS, it) } }
@@ -101,12 +107,11 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
                 activity = requireNotNull(monitor.waitForActivityWithTimeout(10_000)) as WatchActivity
             } finally { instrumentation.removeMonitor(monitor) }
         }
-        // Fixture mode gates off the activity's own openVideo block (no media
-        // runtime), so the fixture drives the same production openVideo entry
-        // point itself; the explicit start (0 included) rides along.
+        // Fixture mode gates off the activity's own openVideo block (no media runtime), so the fixture
+        // drives the same production openVideo entry point itself; the explicit start (0 included) rides along.
         instrumentation.runOnMainSync { model.openVideo(id, startSeconds) }
         settleUi()
-        await { model.uiState.value.visible &&
+        if (awaitReady) await { model.uiState.value.visible &&
             if (expectFailure) engine.snapshot.value.error != null else engine.snapshot.value.isPlaying && surface() != null }
     }
 
@@ -135,14 +140,14 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
         instrumentation.runOnMainSync { remoteResumeField.set(engine, originalRemoteResume) }
     }
 
-    fun await(condition: () -> Boolean) {
+    fun await(message: String = "Offline condition failed", condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + 25_000
         var ready = false
         while (!ready && SystemClock.elapsedRealtime() < deadline) {
             instrumentation.runOnMainSync { ready = condition() }
             if (!ready) Thread.sleep(50)
         }
-        assertTrue("Offline condition failed: ${engine.snapshot.value}", ready)
+        assertTrue("$message: ${engine.snapshot.value}", ready)
     }
 
     fun surface(): android.view.SurfaceView? {
@@ -168,6 +173,8 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: 
                 prefs.setHapticStrength(oldHapticStrength)
                 queue.clear(); oldQueue.items.forEach(queue::add); queue.setEnabled(oldQueue.enabled)
             }
+            // Instrumentation can end the process after the last fixture; commit() drains async preference writes so settings cannot leak to the next run.
+            check(app.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE).edit().commit())
             scope.cancel(); server.stop()
         }
     }

@@ -17,9 +17,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -32,9 +34,13 @@ import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import org.koin.compose.koinInject
 
 @Composable
-internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = false) {
+internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = false,
+    presentationState: com.hhst.youtubelite.player.PlayerUiState? = null,
+    chromeAlpha: () -> Float = { 1f },
+    showPipLoadingIndicator: Boolean = true) {
     val playerViewModel: PlayerViewModel = koinInject()
-    val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val livePlayerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val playerState = livePlayerState.withWatchPresentation(presentationState)
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val audioManager = remember(context) {
@@ -43,10 +49,21 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
     val back = rememberUpdatedState(onBack)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val surface = remember { mutableStateOf<SurfaceView?>(null) }
+    val frameReady = playerState.firstFrameRendered &&
+        surface.value?.let(playerViewModel::hasRenderedFrame) == true
+    val handoff = com.hhst.youtubelite.navigation.WatchTransition.videoFrame
+        ?.takeIf { it.videoId == playerState.videoId && it.source.get() !== surface.value }
     DisposableEffect(lifecycle, playerViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> surface.value?.let(playerViewModel::attachSurface)
+                Lifecycle.Event.ON_START -> {
+                    surface.value?.let(playerViewModel::attachSurface)
+                }
+                // Reordering a watch host before its previous stop completes
+                // can resume it without a new ON_START. Reclaim output here too.
+                Lifecycle.Event.ON_RESUME -> surface.value?.let {
+                    playerViewModel.attachSurface(it)
+                }
                 Lifecycle.Event.ON_STOP -> surface.value?.let(playerViewModel::detachSurface)
                 else -> Unit
             }
@@ -82,6 +99,8 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
     val immersive = playerState.fullscreen && playerState.visible && !playerState.mini && !pip
     PlayerWindowEffects(
         activity, windowHost, immersive, playerState.videoWidth, playerState.videoHeight,
+        keepOrientation = playerState.fullscreenKeepsOrientation && playerState.visible && !playerState.mini && !pip,
+        restoreEntryOrientation = playerState.fullscreenRestoresEntryOrientation,
     )
     LaunchedEffect(playerViewModel) { playerViewModel.initializeCast() }
     com.hhst.youtubelite.ui.theme.AppTheme {
@@ -106,6 +125,7 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
                 },
                 zoneEnabled = playerViewModel::gestureEnabled,
                 pip = pip,
+                showPipLoadingIndicator = showPipLoadingIndicator,
                 onRefreshCastState = playerViewModel::refreshCastState,
                 positionState = playerViewModel.positionState,
                 bufferedPositionState = playerViewModel.bufferedPositionState,
@@ -114,9 +134,26 @@ internal fun WatchPlayer(modifier: Modifier, onBack: () -> Unit, pip: Boolean = 
                 subtitleCuesState = playerViewModel.subtitleCuesState,
                 modifier = Modifier.fillMaxSize(),
                 managedByHost = true,
+                chromeAlpha = chromeAlpha,
+                // Only a captured frame of this video can cover its replacement surface.
+                transitionFrame = rememberWatchTransitionFrame(playerState.videoId, handoff?.image, frameReady),
             )
         }
     }
+}
+
+@Composable
+internal fun rememberWatchTransitionFrame(
+    videoId: String?,
+    handoffFrame: android.graphics.Bitmap?,
+    frameReady: Boolean,
+): android.graphics.Bitmap? {
+    var handoffRevealed by remember(videoId, handoffFrame) { mutableStateOf(false) }
+    SideEffect {
+        if (frameReady && handoffFrame != null) handoffRevealed = true
+    }
+    // Do not resurrect a consumed frame on buffering or holder recreation.
+    return handoffFrame?.takeUnless { handoffRevealed || frameReady }
 }
 
 private fun Context.findActivity(): Activity? {

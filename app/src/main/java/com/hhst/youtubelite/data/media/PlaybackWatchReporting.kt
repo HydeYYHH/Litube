@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Playback state sample the reporting loop consumes. */
 data class PlaybackSample(val videoId: String?, val positionMs: Long, val durationMs: Long, val playing: Boolean,
     /** Engine seek counter; a change re-anchors the reported interval. */
     val discontinuityEpoch: Long = 0)

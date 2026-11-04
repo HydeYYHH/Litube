@@ -3,8 +3,6 @@ package com.hhst.youtubelite.extractor
 import android.content.Context
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Executors
-import java.net.SocketException
-import java.net.SocketTimeoutException
 import java.net.URI
 import android.net.ConnectivityManager
 import android.net.Network
@@ -36,6 +34,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                              private val diagnostics: ExtractionDiagnostics? = null) {
     private val app = context.applicationContext
     private val networkGeneration = AtomicLong()
+    private val nativeRecovery = AtomicLong()
     private val lock = Any()
     private val capturePermit = Semaphore(1, true)
     private val cancellation = Executors.newSingleThreadScheduledExecutor {
@@ -88,6 +87,37 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
 
     fun capture(videoId: String): YoutubeWebSession = captureBounded(videoId, false, Long.MAX_VALUE, { true })
 
+    /** A known anonymous native identity can issue direct requests without a browser document. */
+    internal fun captureNative(deadline: Long, current: () -> Boolean): YoutubeWebSession? {
+        if (System.nanoTime() >= deadline || !current() || Thread.currentThread().isInterrupted)
+            throw IOException("SESSION_CHANGED_OR_CANCELLED")
+        val native = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+        if (native.signedIn || native.visitor.isNullOrBlank()) return null
+        val domains = listOf(ORIGIN, "https://youtube.com", "https://m.youtube.com", "https://music.youtube.com")
+            .associateWith { CookieManager.getInstance().getCookie(it).orEmpty() }
+        if (domains.values.any { authCookies(it).isNotEmpty() }) return null
+        val ua = Constants.userAgent()
+        val capturedRoute = networkGeneration.get()
+        val hint = scopeHint()
+        synchronized(lock) {
+            // Reuse an already prepared web revision so catalog and startup share MSC results.
+            val now = System.currentTimeMillis()
+            if (pageIdentity == hint && configAt != 0L && now - configAt < CONFIG_TTL_MS ||
+                browserConfig?.let { it.scope == hint && it.generation == it.document() &&
+                    now - it.capturedAt < 120_000 } == true) return null
+            if (browserConfig?.takeIf { it.scope == hint }?.value?.flag("LOGGED_IN", false) == true ||
+                pageIdentity == hint && config.flag("LOGGED_IN", false)) return null
+        }
+        val snapshot = YoutubeWebSession(digest("native:$hint:${nativeRecovery.get()}:${native.visitor}"), WebAccount.ANONYMOUS, 0, null, null, null,
+            native.visitor, ua, capturedRoute, null, "native-session", JsonObject(emptyMap()),
+            SessionCredentials { domains[it].orEmpty() })
+        if (native != com.hhst.youtubelite.data.media.MediaSession.snapshot() || !current() ||
+            ua != Constants.userAgent() || domains.any { (origin, cookie) ->
+                CookieManager.getInstance().getCookie(origin).orEmpty() != cookie
+            } || !isCurrent(snapshot)) throw IOException("SESSION_CHANGED_OR_CANCELLED")
+        return snapshot
+    }
+
     /** Invoked off the lock whenever a browser document supplies session configuration. */
     @Volatile var onBrowserConfiguration: (() -> Unit)? = null
 
@@ -116,15 +146,14 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                 config = browser.value; configAt = browser.capturedAt
                 pageIdentity = identity; configSource = "browser-document"
             }
-            if (fresh) { generation++; configAt = 0 }
-            // A cold process starts with no configuration at all; the persisted
-            // snapshot of this identity spares the watch-page bootstrap inside
-            // the same TTL window the in-memory config already lives in.
+            if (fresh) { generation++; nativeRecovery.incrementAndGet(); configAt = 0 }
+            // A cold process starts with no configuration; the persisted snapshot spares the
+            // watch-page bootstrap within the same TTL window as the in-memory config.
             if (!fresh && configAt == 0L) restorePersisted(identity)
             capturedGeneration = generation
-            // Innertube account/visitor/player configuration belongs to the session.
-            // A different video needs a different /player request, not another page
-            // or minter. Browser identity changes and explicit recovery still refresh it.
+            // Innertube account/visitor/player configuration belongs to the session: a different
+            // video needs a different /player request, not another page or minter. Browser identity
+            // changes and explicit recovery still refresh it.
             fetchPage = fresh || configAt == 0L || System.currentTimeMillis() - configAt >= CONFIG_TTL_MS
         }
         if (fetchPage && !allowPage) throw IOException("SESSION_PAGE_REQUIRED")
@@ -177,12 +206,6 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         }
     }
 
-    /**
-     * Adopts the persisted configuration snapshot for this identity so a cold
-     * process skips the watch-page fetch and parse. The snapshot never crosses
-     * identities: it is stored under the identity digest and dropped when the
-     * identity moves on, and it expires on the same TTL as the in-memory config.
-     */
     private fun restorePersisted(identity: String) {
         val entry = runCatching {
             appPreferenceStore().readString(PERSIST_KEY_PREFIX + identity)?.let { text ->
@@ -200,7 +223,6 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         configSource = "disk-cache"
     }
 
-    /** Writes the just-parsed configuration; older identities are dropped, keeping one snapshot. */
     private fun persistConfig(identity: String, parsed: JsonObject) {
         runCatching {
             val store = appPreferenceStore()
@@ -220,13 +242,19 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     private fun readPage(initialUrl: String, ua: String, cookies: Map<String, String>, deadline: Long, current: () -> Boolean): String {
         var url = initialUrl
         var transientRetried = false
-        val client = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
+        var retryDeadline = Long.MAX_VALUE
+        // Bound a stalled TLS/header/body read without shortening healthy body
+        // transfers or weakening a caller's stricter read timeout.
+        val readTimeout = http.readTimeoutMillis.toLong().takeIf { it > 0 }?.coerceAtMost(PAGE_STALL_MS) ?: PAGE_STALL_MS
+        val client = http.newBuilder().followRedirects(false).followSslRedirects(false)
+            .readTimeout(readTimeout, TimeUnit.MILLISECONDS).build()
         repeat(4) {
-            val remaining = (deadline - System.nanoTime()) / 1_000_000
+            val requestDeadline = minOf(deadline, retryDeadline)
+            val remaining = (requestDeadline - System.nanoTime()) / 1_000_000
             if (remaining <= 0 || !current()) throw IOException("EXTRACTION_DEADLINE")
             val call = client.newCall(pageRequest(url, ua, cookies))
             call.timeout().timeout(minOf(10_000, remaining), TimeUnit.MILLISECONDS)
-            val abort = cancellation.scheduleAtFixedRate({ if (System.nanoTime() >= deadline || !current()) call.cancel() }, 100, 100, TimeUnit.MILLISECONDS)
+            val abort = cancellation.scheduleAtFixedRate({ if (System.nanoTime() >= requestDeadline || !current()) call.cancel() }, 100, 100, TimeUnit.MILLISECONDS)
             val started = System.nanoTime()
             val html = try { call.execute().use { response ->
                 if (response.code in setOf(301, 302, 303, 307, 308)) {
@@ -241,11 +269,13 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                     source.readUtf8().also { diagnostics?.event("request", "session-page", "GET", (System.nanoTime() - started) / 1_000_000, response.code) }
                 }
             } } catch (failure: IOException) {
-                // One reset or connect/read timeout is not a session failure. The next iteration still
-                // checks cancellation and the deadline, so this cannot outlive the extraction budget.
-                val transient = failure is SocketTimeoutException || failure is SocketException
-                if (!transient || transientRetried || !current() || System.nanoTime() >= deadline) throw failure
+                // OkHttp call timeouts surface as InterruptedIOException and handshake
+                // EOFs as SSLException; both need the transient path.
+                val now = System.nanoTime()
+                if (!ExtractionReadRetry.isTransient(failure) || transientRetried || !current() ||
+                    deadline - now < TimeUnit.MILLISECONDS.toNanos(500)) throw failure
                 transientRetried = true
+                retryDeadline = minOf(deadline, now + TimeUnit.MILLISECONDS.toNanos(PAGE_RETRY_MS))
                 diagnostics?.event("request", "session-page", "TRANSIENT_RETRY", (System.nanoTime() - started) / 1_000_000, 0)
                 null
             } finally { abort.cancel(false) }
@@ -264,7 +294,13 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
 
     fun isCurrent(session: YoutubeWebSession): Boolean = synchronized(lock) {
-        session.networkGeneration == networkGeneration.get() && session.key == currentKey() && identity == scopeHint()
+        session.networkGeneration == networkGeneration.get() && if (session.nativeBootstrap) {
+            val native = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+            !native.signedIn && !native.visitor.isNullOrBlank() &&
+                session.key == digest("native:${scopeHint()}:${nativeRecovery.get()}:${native.visitor}") &&
+                listOf(ORIGIN, "https://youtube.com", "https://m.youtube.com", "https://music.youtube.com")
+                    .all { authCookies(CookieManager.getInstance().getCookie(it).orEmpty()).isEmpty() }
+        } else session.key == currentKey() && identity == scopeHint()
     }
 
     /**
@@ -383,9 +419,10 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
          */
         private const val CONFIG_TTL_MS = 15 * 60_000L
 
-        /** Persisted-configuration key namespace and single-snapshot size cap. */
         private const val PERSIST_KEY_PREFIX = "youtube-session:config:"
         private const val PERSIST_MAX_BYTES = 1_500_000
+        private const val PAGE_STALL_MS = 6_000L
+        private const val PAGE_RETRY_MS = 2_000L
 
         /** Account-bearing cookies only; visitor and consent cookies churn without changing the audience. */
         private val AUTH_COOKIE_NAMES = setOf("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO")

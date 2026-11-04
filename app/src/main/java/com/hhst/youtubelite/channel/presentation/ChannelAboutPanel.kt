@@ -47,19 +47,27 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
     val square = width > height && (width >= 931 || width * 9 >= height * 13)
     val headingSize = if (width < 600) 18 else 20
     val headingLine = if (width < 600) 24 else 28
-    Box(Modifier.fillMaxSize().background(DesignTokens.Scrim)
-        .clickable(role = Role.Button) { onAction(ChannelAction.CloseOverlay) }.testTag("channel-about-scrim"))
+    PanelTransition(fromBottom = !docked, onDismiss = { onAction(ChannelAction.CloseOverlay) },
+        scrim = { scrimMotion, close ->
+            Box(Modifier.fillMaxSize().then(scrimMotion).background(DesignTokens.Scrim)
+                .clickable(role = Role.Button) { close() }.testTag("channel-about-scrim"))
+        }) { panelMotion, close ->
+    val drag = rememberBottomSheetDrag(enabled = !docked, onDismiss = close)
     Column(Modifier.offset(x = if (docked) (width - ChannelAboutLayout.panelWidth(width, height)).dp else 0.dp, y = top.dp)
         .height((height - top).dp).width(ChannelAboutLayout.panelWidth(width, height).dp)
+        .then(panelMotion)
+        .then(drag.panelModifier)
         .clip(RoundedCornerShape(topStart = if (square) 0.dp else 12.dp, topEnd = if (square) 0.dp else 12.dp))
         .background(DesignTokens.Background).pointerInput(Unit) { detectTapGestures {} }
         .semantics { paneTitle = "About ${profile.name}" }.testTag("channel-about-panel")) {
+        Column(Modifier.fillMaxWidth().then(drag.handleModifier).testTag("channel-about-drag-header")) {
         Box(Modifier.fillMaxWidth().height(12.dp).padding(top = 8.dp), contentAlignment = Alignment.TopCenter) {
             if (!square) Box(Modifier.size(40.dp, 4.dp).background(DesignTokens.Ink.copy(alpha = .15f), RoundedCornerShape(4.dp)))
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AboutHeading(profile.name, headingSize, headingLine, Modifier.weight(1f).testTag("channel-about-title"))
-            AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_channel_details), diameter = 48.dp) { onAction(ChannelAction.CloseOverlay) }
+            Spacer(Modifier.weight(1f))
+            AppIconButton(AppIcon.Close, stringResource(R.string.a11y_close_channel_details), diameter = 48.dp) { close() }
+        }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 12.dp).testTag("channel-about-content")) {
@@ -95,6 +103,7 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
             }
             Spacer(Modifier.height(32.dp))
         }
+    }
     }
 }
 

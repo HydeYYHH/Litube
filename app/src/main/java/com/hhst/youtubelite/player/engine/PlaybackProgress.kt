@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.player.engine
 
-/** Resume-progress write rules and share-link start clamping. */
 internal object PlaybackProgress {
     const val SAFE_ZONE_MS = 5_000L
 

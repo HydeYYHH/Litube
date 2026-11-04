@@ -97,7 +97,6 @@ class SponsorSkipController(
         return null
     }
 
-    /** Segment whose countdown/skip logic owns [posMs]. */
     private fun segmentAt(posMs: Long, segments: List<Segment>): Segment? =
         segments.firstOrNull { posMs >= it.startMs && posMs < it.endMs }
 

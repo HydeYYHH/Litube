@@ -60,7 +60,6 @@ class LibraryViewModelTest {
         val anonymous = YouViewModel(recordingRepository(loads), SavedStateHandle(), LibraryScenario.Content, signedIn = false)
         anonymous.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
         assertEquals(LibraryNavigationRequest.SignIn, anonymous.navigationRequests.first())
-        // The signed-in avatar routes the same row to the real account switcher.
         val signedIn = YouViewModel(FixtureLibraryRepository(LibraryScenario.Content), SavedStateHandle(), LibraryScenario.Content, signedIn = true)
         advanceUntilIdle()
         signedIn.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
@@ -115,7 +114,6 @@ class LibraryViewModelTest {
         vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
         assertEquals(LibraryNavigationRequest.MenuAction("bunny", HistoryMenuAction.RemoveFromHistory), vm.navigationRequests.first())
         assertEquals(LibraryOverlay.None, vm.uiState.value.overlay)
-        // The menu emits a request only; nothing is removed from the local history sample.
         assertTrue((vm.uiState.value.content as HistoryContent.Ready).page.entries.isNotEmpty())
     }
 
@@ -148,7 +146,6 @@ class LibraryViewModelTest {
         vm.onAction(LibraryAction.QueryChanged("open movies"))
         vm.onAction(LibraryAction.CloseOverlay)
         assertEquals(LibraryOverlay.None, vm.uiState.value.overlay)
-        // The draft survives the close and is still there when the panel reopens.
         assertEquals("open movies", vm.uiState.value.query)
         vm.onAction(LibraryAction.OpenSearch)
         assertEquals("open movies", vm.uiState.value.query)
@@ -167,8 +164,7 @@ class LibraryViewModelTest {
         val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, true)
         advanceUntilIdle()
         assertTrue(vm.uiState.value.content is LibraryContent.Failed)
-        // The repository assembles the sections: an account failure still fails the page,
-        // while MediaLibraryRepository isolates shelf failures into the YouPage flags.
+        // An account-level failure fails the whole page; MediaLibraryRepository instead isolates shelf failures into YouPage flags.
         repository.failHistory = false
         vm.onAction(LibraryAction.Retry)
         advanceUntilIdle()
@@ -219,7 +215,6 @@ class LibraryViewModelTest {
         vm.onAction(LibraryAction.LoadCollectionNext)
         advanceUntilIdle()
         assertEquals(2, (vm.uiState.value.content as CollectionContent.Ready).playlists.size)
-        // A moved generation invalidates the account-scoped collection and reloads it.
         vm.updateSession(true, 1) // First snapshot only establishes the key.
         advanceUntilIdle()
         vm.updateSession(true, 2)
@@ -273,7 +268,6 @@ class LibraryViewModelTest {
         val removed = ArrayList<String>()
         var paused: Boolean? = null
         var cleared = 0
-        /** When set, removals report a device-lane undo record. */
         var removalRecord: com.hhst.youtubelite.library.domain.RemovedHistoryEntry? = null
         var restored: com.hhst.youtubelite.library.domain.RemovedHistoryEntry? = null
         override suspend fun you() = YouPage(FixtureLibraryRepository.profile(), entries, FixtureLibraryRepository.collections())
@@ -353,23 +347,19 @@ class LibraryViewModelTest {
         vm.onAction(LibraryAction.OpenMenu("a"))
         vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
         advanceUntilIdle()
-        // The record from the device lane becomes the pending undo prompt.
         assertEquals("tokA", vm.uiState.value.undo?.entry?.removeToken)
         vm.onAction(LibraryAction.UndoHistoryRemove)
         advanceUntilIdle()
         assertEquals("tokA", repository.restored?.entry?.removeToken)
         assertNull(vm.uiState.value.undo)
-        // The page reloads from the store, which has the entry back at the head.
         val reloaded = (vm.uiState.value.content as HistoryContent.Ready).page.entries
         assertEquals(listOf("a", "b"), reloaded.map { it.videoId })
-        // Dismiss clears a later prompt without touching the store.
         vm.onAction(LibraryAction.OpenMenu("b"))
         vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
         advanceUntilIdle()
         vm.onAction(LibraryAction.DismissUndo)
         advanceUntilIdle()
         assertNull(vm.uiState.value.undo)
-        // Dismiss never triggered a restore: only the earlier tokA restore ran.
         assertEquals("tokA", repository.restored?.entry?.removeToken)
     }
 
@@ -485,8 +475,6 @@ class LibraryViewModelTest {
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
-    // --- Identity-driven library source: device storage backs anonymous, account backs signed in ---
-
     private fun identityRepository(signedIn: () -> Boolean) = object : LibraryRepository {
         override val supportsLocal get() = true
         val youReads = ArrayList<Boolean>()
@@ -525,8 +513,6 @@ class LibraryViewModelTest {
         vm.onAction(LibraryAction.OpenLiked)
         advanceUntilIdle()
         assertEquals(listOf(LibraryNavigationRequest.Playlist("WL"), LibraryNavigationRequest.Playlist("LL")), requests)
-
-        // The identity drops to anonymous: the page reloaded against the device storage.
         signedIn = false
         vm.updateSession(false, 7)
         advanceUntilIdle()
@@ -551,7 +537,6 @@ class LibraryViewModelTest {
 
         vm.updateSession(false, 99)
         advanceUntilIdle()
-        // The appended page and its spent cursor left with the account scope; page one re-read.
         page = (vm.uiState.value.content as HistoryContent.Ready).page
         assertEquals(listOf("h1"), page.entries.map { it.id })
         assertEquals("k1", page.nextKey)
@@ -568,7 +553,6 @@ class LibraryViewModelTest {
         signedIn = false
         vm.updateSession(false, 7)
         advanceUntilIdle()
-        // Device data backs the signed-out page too.
         assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
     }
 

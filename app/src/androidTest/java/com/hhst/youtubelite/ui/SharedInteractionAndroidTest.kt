@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.ui
 
+import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.SemanticsActions
@@ -18,6 +22,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.hhst.youtubelite.ui.design.*
+import com.hhst.youtubelite.ui.components.WatchSheetHost
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -63,8 +68,7 @@ class SharedInteractionAndroidTest {
     }
 
     @Test fun dismissalMovesTheSheetAndFadesBeforeRemovingIt() {
-        // With "remove animations" (animator scale 0) the sheet closes instantly;
-        // the mid-flight assertions only apply to the animated path.
+        // With "remove animations" (animator scale 0) the sheet closes instantly; the mid-flight assertions only apply to the animated path.
         val motion = readMotionScale(compose.activity.contentResolver)
         var dismissed = 0
         compose.setContent {
@@ -91,6 +95,54 @@ class SharedInteractionAndroidTest {
         compose.mainClock.advanceTimeBy(240)
         compose.runOnIdle { assertEquals(1, dismissed) }
         compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun watchMenuWrapsContentAndScrollsWithinThePlayerBoundary() {
+        var rowCount by mutableIntStateOf(7)
+        var fillWatchHeight by mutableStateOf(true)
+        var availableHeight by mutableIntStateOf(420)
+        var containerBottom by mutableIntStateOf(0)
+        val host = object : ContextWrapper(compose.activity), WatchSheetHost {
+            override val sheetPlayerBottomPx: Int get() = containerBottom - availableHeight
+            override val sheetWindowHeightPx: Int get() = 560
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f), LocalContext provides host) {
+                AppTheme {
+                    Box(Modifier.requiredSize(320.dp, 560.dp).testTag("menu-viewport")
+                        .onGloballyPositioned { containerBottom = it.boundsInWindow().bottom.toInt() }) {
+                        val items = List(rowCount) { MenuSheetItem(null, "Action $it", "action-$it") }
+                        if (fillWatchHeight) MenuBottomSheet(items, {}, {})
+                        else MenuBottomSheet(items, {}, {}, fillWatchHeight = false)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val initialViewport = compose.onNodeWithTag("menu-viewport").fetchSemanticsNode().boundsInRoot
+        val initialSheet = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals("Menus retain the full watch height by default", initialViewport.bottom - 420f, initialSheet.top, 1f)
+        compose.runOnIdle { fillWatchHeight = false }
+        fun assertCompact(lastRow: Int) {
+            val sheet = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
+            val last = compose.onNodeWithTag("action-$lastRow").fetchSemanticsNode().boundsInRoot
+            assertEquals("No empty panel below the final action", last.bottom, sheet.bottom, 1f)
+            val viewport = compose.onNodeWithTag("menu-viewport").fetchSemanticsNode().boundsInRoot
+            assertEquals("The compact menu remains bottom aligned", viewport.bottom - 24f, sheet.bottom, 1f)
+        }
+        assertCompact(6)
+
+        // A shorter viewport must keep the player clear and the remaining actions reachable.
+        compose.runOnIdle { availableHeight = 160; rowCount = 20 }
+        val viewport = compose.onNodeWithTag("menu-viewport").fetchSemanticsNode().boundsInRoot
+        val sheet = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
+        assertEquals("Long menus stop at the player boundary", viewport.bottom - 160f, sheet.top, 1f)
+        compose.onNodeWithTag("action-19").performScrollTo().assertIsDisplayed()
+
+        // Replacing a long menu must not retain its expanded height or scroll position.
+        compose.runOnIdle { availableHeight = 420; rowCount = 1 }
+        compose.onNodeWithTag("action-0").assertIsDisplayed()
+        assertCompact(0)
     }
 
     @Test fun filledButtonShowsPressFeedbackAndDisabledButtonCannotRun() {

@@ -1,7 +1,8 @@
 package com.hhst.youtubelite.player.datasource
 
-import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -11,15 +12,17 @@ import androidx.media3.common.Format as MediaFormat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSchemeDataSource
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.dash.DefaultDashChunkSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MediaSourceEventListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
-import androidx.media3.extractor.text.SubtitleExtractor
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticJson
 import com.hhst.youtubelite.extractor.Format
@@ -28,6 +31,10 @@ import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Subtitle
 import androidx.core.net.toUri
+import java.io.IOException
+import android.os.SystemClock
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Converts the engine's candidates into a Media3 source using their frozen request plans.
@@ -45,9 +52,36 @@ class MediaSourceResolver(
     private val diagnosticContext: DiagnosticContext? = null,
 ) {
     @Volatile private var startupParameters: (() -> TrackSelectionParameters)? = null
+    @Volatile private var subtitleLoadError: ((DiagnosticContext?, IOException) -> Unit)? = null
+
+    fun configureSubtitleLoadError(listener: (DiagnosticContext?, IOException) -> Unit) {
+        subtitleLoadError = listener
+    }
 
     fun configureStartupTrackSelection(parameters: () -> TrackSelectionParameters) {
         startupParameters = parameters
+    }
+
+    /** The exact issued master only: no variant choice, credentials or quality changes. */
+    internal suspend fun prepareHlsFallback(stream: Stream, checkCurrent: () -> Unit): Long = runInterruptible(Dispatchers.IO) {
+        val url = stream.hlsUrl ?: return@runInterruptible 0L
+        val plan = stream.hlsRequestPlan ?: return@runInterruptible 0L
+        val source = dataSources.vodHls(plan).createDataSource(C.DATA_TYPE_MANIFEST)
+        try {
+            checkCurrent()
+            source.open(DataSpec.Builder().setUri(url)
+                .setCustomData(PrefetchDeadline(SystemClock.elapsedRealtime() + 2_000)).build())
+            val buffer = ByteArray(8192)
+            var total = 0L
+            while (true) {
+                checkCurrent()
+                val count = source.read(buffer, 0, buffer.size)
+                if (count == C.RESULT_END_OF_INPUT) break
+                total += count
+                if (total > VodManifestCache.MAX_DOCUMENT_BYTES) throw IOException("HLS_MANIFEST_TOO_LARGE")
+            }
+            total
+        } finally { source.close() }
     }
 
     data class Resolved(
@@ -62,7 +96,6 @@ class MediaSourceResolver(
         val videoFormats: List<Format> = emptyList(),
     )
 
-    /** MediaItem metadata so the session player exposes title/author/artwork to the system media card. */
     private fun sessionMetadata(m: Metadata): MediaMetadata =
         MediaMetadata.Builder()
             .setTitle(m.title)
@@ -84,10 +117,14 @@ class MediaSourceResolver(
         subtitleKey: String? = null,
         excludeClient: String? = null,
         diagnosticContext: DiagnosticContext? = null,
+        onSlowInitialRead: (() -> Unit)? = null,
     ): Resolved {
-        if (diagnosticContext != null) {
-            val scoped = MediaSourceResolver(dataSources.withDiagnostics(diagnosticContext), startupBandwidth, startupVideoSupport, diagnosticContext)
+        if (diagnosticContext != null || onSlowInitialRead != null) {
+            var sources = diagnosticContext?.let(dataSources::withDiagnostics) ?: dataSources
+            onSlowInitialRead?.let { sources = sources.withSlowInitialRead(it) }
+            val scoped = MediaSourceResolver(sources, startupBandwidth, startupVideoSupport, diagnosticContext)
             startupParameters?.let(scoped::configureStartupTrackSelection)
+            subtitleLoadError?.let(scoped::configureSubtitleLoadError)
             return scoped.resolve(stream, metadata, preferredQuality, audioTrackKey, forceMuxed, subtitleKey, excludeClient)
         }
         val meta = sessionMetadata(metadata)
@@ -259,8 +296,6 @@ class MediaSourceResolver(
         )
     }
 
-    // -- live --
-
     private fun resolveLive(stream: Stream, subtitleKey: String?, meta: MediaMetadata): Resolved {
         val liveItem = { url: String ->
             MediaItem.Builder()
@@ -309,8 +344,6 @@ class MediaSourceResolver(
         )
     }
 
-    // -- construction --
-
     private fun mergedAdaptive(
         videos: List<Format>,
         audio: Format,
@@ -355,15 +388,13 @@ class MediaSourceResolver(
         return MergingMediaSource(true, *(listOf(base) + subs).toTypedArray())
     }
 
-    /** Whether [trackKey] resolves to a text track the player can actually parse. */
     fun hasSubtitleTrack(subtitles: List<Subtitle>, trackKey: String?): Boolean =
         subtitleSources(SubtitleSelection.select(subtitles, trackKey)).isNotEmpty()
 
     /** Synthetic DASH manifest served from a data: URI; chunks via cached YT factory. */
     private fun syntheticDash(mpd: String, meta: MediaMetadata, formats: List<Format>): MediaSource {
-        val item = MediaItem.fromUri(
-            ("data:application/dash+xml," + Uri.encode(mpd)).toUri(),
-        ).buildUpon().setMediaMetadata(meta).build()
+        val item = MediaItem.fromUri(DashManifestFactory.dataUri(mpd))
+            .buildUpon().setMediaMetadata(meta).build()
         return DashMediaSource.Factory(
             DefaultDashChunkSource.Factory(dataSources.formats(formats)),
             DataSource.Factory { DataSchemeDataSource() },
@@ -418,11 +449,18 @@ class MediaSourceResolver(
                 .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
                 .build()
             if (!parserFactory.supportsFormat(format)) return@mapNotNull null
-            val extractorsFactory = ExtractorsFactory {
-                arrayOf(SubtitleExtractor(parserFactory.create(format), format))
+            androidx.media3.exoplayer.source.LazySubtitleSourceFactory.create(
+                dataSources.manifest(sub.requestPlan), format, sub.url.toUri()).also { source ->
+                subtitleLoadError?.let { listener ->
+                    source.addEventListener(Handler(Looper.getMainLooper()), object : MediaSourceEventListener {
+                        override fun onLoadError(windowIndex: Int, mediaPeriodId: MediaSource.MediaPeriodId?, info: LoadEventInfo, data: MediaLoadData, error: IOException, wasCanceled: Boolean) {
+                            // Media3 sets wasCanceled when an error ends a load without retry.
+                            // That terminal failure is exactly what the caption owner needs.
+                            listener(diagnosticContext, error)
+                        }
+                    })
+                }
             }
-            ProgressiveMediaSource.Factory(dataSources.manifest(sub.requestPlan), extractorsFactory)
-                .createMediaSource(MediaItem.fromUri(sub.url))
         }
     }
 

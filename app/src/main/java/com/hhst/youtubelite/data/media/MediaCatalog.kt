@@ -7,10 +7,12 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.MediaItem
 import com.liskovsoft.youtubeapi.videoinfo.V2.HomeSection
 import com.liskovsoft.youtubeapi.videoinfo.V2.MenuActionKind
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadHome
+import com.liskovsoft.youtubeapi.videoinfo.V2.loadPlayerDetails
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadSearch
 import com.liskovsoft.youtubeapi.videoinfo.V2.sendFeedback
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadMenu
 import com.liskovsoft.youtubeapi.videoinfo.V2.MenuEndpoint
+import com.liskovsoft.youtubeapi.videoinfo.V2.ledgerScope
 
 // Metadata joins drop blank parts so a missing half cannot leave an orphaned separator;
 // the avatar is null (not "") when the response did not carry one, which is the signal
@@ -109,7 +111,7 @@ class MediaHomeRepository(private val client: MediaClient,
     }
 
     override suspend fun menu(video: FeedItem.Video): FeedItem.Video {
-        val endpoint = video.menuEndpoint ?: return video
+        val endpoint = video.menuEndpoint ?: video.feedbackGeneration?.let { recommendationMenuEndpoint(video.id) } ?: return video
         return client.readIdempotent { context, http ->
             if (!context.signedIn || video.feedbackGeneration != context.generation)
                 throw kotlinx.coroutines.CancellationException("Session changed")
@@ -126,7 +128,7 @@ class MediaHomeRepository(private val client: MediaClient,
     }
 
     override suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) {
-        client.read { context, http ->
+        client.write { context, http ->
             if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
             val token = when (action) {
                 FeedMenuAction.NotInterested -> video.notInterestedToken
@@ -170,35 +172,106 @@ internal fun homeFeed(items: List<MediaItem>): List<FeedItem> {
 class MediaSearchRepository(private val client: MediaClient,
     private val now: () -> Long = System::currentTimeMillis) : SearchRepository {
     private val menus = DeferredMenuCache(now)
+    private data class FilterIdentity(val ledger: String, val oauth: Boolean, val visitor: String?,
+        val language: String, val region: String, val cookies: String?)
+    private data class FilterPanel(val identity: FilterIdentity, val query: String, val applied: SearchFilters,
+        val filters: List<com.liskovsoft.youtubeapi.videoinfo.V2.SearchFilter>, val at: Long)
+    // Only navigation capabilities from the latest completed page; results are always fetched.
+    @Volatile private var filterPanel: FilterPanel? = null
+
+    override suspend fun metadata(result: SearchResult): SearchResult = client.readBackgroundIdempotent { context, http ->
+        val details = loadPlayerDetails(result.id, context.anonymous(), http).requireValue()
+        val seconds = details.durationSeconds?.takeIf { it > 0 && !details.live }
+        val duration = seconds?.let {
+            if (it >= 3600) "%d:%02d:%02d".format(java.util.Locale.US, it / 3600, it / 60 % 60, it % 60)
+            else "%d:%02d".format(java.util.Locale.US, it / 60, it % 60)
+        }.orEmpty()
+        result.copy(channel = result.channel.ifBlank { details.author.orEmpty() },
+            channelId = result.channelId.ifBlank { details.channelId.orEmpty() },
+            views = result.views.ifBlank { details.viewCount?.takeIf { it >= 0 }?.let {
+                java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
+            }.orEmpty() },
+            duration = result.duration.ifBlank { duration },
+            age = result.age.ifBlank { details.published?.substringBefore('T').orEmpty() })
+    }
     override suspend fun search(query: String, filters: SearchFilters): SearchPage = client.read { context, http ->
-        var params: String? = null
-        var page = loadSearch(query, context, http = http).requireValue()
-        val labels = listOfNotNull(
-            filters.uploaded.takeUnless { it == SearchUploadDate.Anytime }?.let { when (it) {
-                SearchUploadDate.Today -> "Today"
-                SearchUploadDate.ThisWeek -> "This week"
-                SearchUploadDate.ThisMonth -> "This month"
-                SearchUploadDate.ThisYear -> "This year"
-                else -> null
-            } },
-            filters.type.takeUnless { it == SearchResultType.All }?.let { when (it) {
-                SearchResultType.Channels -> "Channel"
-                SearchResultType.Playlists -> "Playlist"
-                SearchResultType.Shorts -> "Shorts"
-                else -> null
-            } },
-        )
-        // Each response carries the filter panel for its own state: the next label's
-        // cumulative params come from the page we already have, not from a refetch.
-        for (label in labels) {
-            val filter = page.filters.firstOrNull {
-                it.title.equals(label, true) || it.title.equals(label + "s", true)
-            } ?: throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
-                com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.UNSUPPORTED, "filter_unavailable"))
-            params = filter.params
-            page = loadSearch(query, context, params, http = http).requireValue()
+        val identity = filterIdentity(context)
+        val direct = filterPanel?.takeIf { it.identity == identity && it.query == query && now() - it.at in 0..60_000 }
+            ?.transition(filters)
+        var page = loadSearch(query, context, direct, http = http).requireValue()
+        var anonymousFallback = page.anonymousFallback
+        if (direct == null) {
+            // A cold search, reset or unproven transition follows the existing recipe.
+            // Each response carries cumulative params for the next selected option.
+            for (label in listOfNotNull(filters.uploaded.label(), filters.type.label())) {
+                val filter = page.filters.firstOrNull { it.matches(label) }
+                    ?: throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
+                        com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.UNSUPPORTED, "filter_unavailable"))
+                page = loadSearch(query, context, filter.params, http = http).requireValue()
+                anonymousFallback = anonymousFallback || page.anonymousFallback
+            }
         }
+        filterPanel = if (anonymousFallback) null else FilterPanel(identity, query, filters, page.filters, now())
         page.toSearchPage(query, context)
+    }
+
+    private fun filterIdentity(context: com.liskovsoft.youtubeapi.videoinfo.V2.RequestContext): FilterIdentity {
+        val web = context.webSession
+        val cookies = when {
+            context.accessToken != null -> null
+            web?.signedIn == true -> web.cookies + "\u0000" + web.accountIndex
+            else -> context.visitorCookie
+        }
+        val digest = cookies?.let { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray())
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 255) } }
+        return FilterIdentity(context.ledgerScope(),
+            context.accessToken != null, context.visitor, context.language, context.region, digest)
+    }
+
+    private fun FilterPanel.transition(target: SearchFilters): String? {
+        val typeChanged = applied.type != target.type
+        val dateChanged = applied.uploaded != target.uploaded
+        if (typeChanged == dateChanged) return null
+        val group: String
+        val label: String
+        val retainedGroup: String
+        val retainedLabel: String?
+        if (typeChanged) {
+            group = "Type"
+            label = target.type.label() ?: return null // Reset endpoints need their own proof.
+            retainedGroup = "Upload date"
+            retainedLabel = applied.uploaded.label()
+        } else {
+            group = "Upload date"
+            label = target.uploaded.label() ?: return null
+            retainedGroup = "Type"
+            retainedLabel = applied.type.label()
+        }
+        val retained = filters.filter { it.group.equals(retainedGroup, true) }
+        if (retained.isEmpty()) return null
+        val selected = retained.filter { it.selected }
+        // A returned endpoint belongs to its current filter state. Prove the other
+        // group is still selected before using its cumulative navigation params.
+        if (retainedLabel != null && (selected.size != 1 || !selected.single().matches(retainedLabel))) return null
+        if (retainedLabel == null && selected.any { !it.title.equals("All", true) && !it.title.equals("Anytime", true) }) return null
+        return filters.firstOrNull { it.group.equals(group, true) && !it.selected && it.matches(label) }
+            ?.params?.takeIf(String::isNotBlank)
+    }
+
+    private fun com.liskovsoft.youtubeapi.videoinfo.V2.SearchFilter.matches(label: String) =
+        title.equals(label, true) || title.equals(label + "s", true)
+    private fun SearchUploadDate.label(): String? = when (this) {
+        SearchUploadDate.Today -> "Today"
+        SearchUploadDate.ThisWeek -> "This week"
+        SearchUploadDate.ThisMonth -> "This month"
+        SearchUploadDate.ThisYear -> "This year"
+        SearchUploadDate.Anytime -> null
+    }
+    private fun SearchResultType.label(): String? = when (this) {
+        SearchResultType.Channels -> "Channel"
+        SearchResultType.Playlists -> "Playlist"
+        SearchResultType.Shorts -> "Shorts"
+        SearchResultType.All -> null
     }
 
     override suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage = client.read { context, http ->
@@ -222,7 +295,7 @@ class MediaSearchRepository(private val client: MediaClient,
     }
 
     override suspend fun feedback(result: SearchResult, action: SearchVideoMenuAction) {
-        client.read { context, http ->
+        client.write { context, http ->
             if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
             val token = when (action) {
                 SearchVideoMenuAction.NotInterested -> result.notInterestedToken

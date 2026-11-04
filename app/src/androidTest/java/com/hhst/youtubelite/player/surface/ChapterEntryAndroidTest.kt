@@ -31,6 +31,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
+import com.hhst.youtubelite.player.sponsor.SponsorSkipController
 import com.hhst.youtubelite.ui.theme.AppTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,7 +39,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The chapter pill, skip chip and subtitles anchor to the measured track
+ * The chapter pill, countdown and subtitles anchor to the measured track
  * line, not to a hardcoded bar height; these checks read real coordinates.
  */
 class ChapterEntryAndroidTest {
@@ -95,7 +96,7 @@ class ChapterEntryAndroidTest {
         surface(
             PlayerUiState(
                 visible = true, durationMs = 8_544_000L, chapters = chapters,
-                sponsorChip = true, controlsVisible = true,
+                sponsorCountdownSec = 3, controlsVisible = true,
             ),
             cues = listOf("Readable subtitle"),
         )
@@ -106,13 +107,14 @@ class ChapterEntryAndroidTest {
             .fetchSemanticsNode().boundsInRoot
         // Current chapter at 4_272 s is "Welcome" (starts 3_600 s).
         compose.onNodeWithText("Welcome").assertIsDisplayed()
-        // The chapter entry lives in the info band below the track, next to time.
         assertTrue("Chapter chip sits below the track", chip.top >= track - 1)
-        val skipTouch = compose.onNodeWithTag("player-sponsor-chip")
+        val skipTouch = compose.onNodeWithTag("player-sponsor-countdown")
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertEquals("Skip chip bottom sits 8 dp above the track", track - 8 * density, skipTouch.bottom, 1.5f)
+        assertEquals("Countdown bottom sits 8 dp above the track", track - 8 * density, skipTouch.bottom, 1.5f)
+        val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
+        assertEquals("Countdown stays near the right edge", frame.right - 12 * density, skipTouch.right, 1.5f)
         assertTrue("Skip card must not cover the info band", skipTouch.bottom <= chip.top + 1)
-        val skipVisual = compose.onNodeWithTag("player-sponsor-visual")
+        val skipVisual = compose.onNodeWithTag("player-sponsor-visual", useUnmergedTree = true)
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val subtitle = compose.onNodeWithText("Readable subtitle").assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
@@ -176,7 +178,7 @@ class ChapterEntryAndroidTest {
 
     @Test fun entryHiddenWithoutDataWhenLockedOrControlsHidden() {
         var state by mutableStateOf(
-            PlayerUiState(visible = true, durationMs = 8_544_000L, chapters = chapters, sponsorChip = true)
+            PlayerUiState(visible = true, durationMs = 8_544_000L, chapters = chapters, sponsorCountdownSec = 3)
         )
         compose.setContent {
             AppTheme(darkTheme = true, dynamicColor = false) {
@@ -194,26 +196,80 @@ class ChapterEntryAndroidTest {
         }
         compose.waitForIdle()
         compose.onNodeWithTag("player-chapter-entry").assertIsDisplayed()
-        // Locked: no operable player controls remain.
         compose.runOnIdle { state = state.copy(locked = true) }
         compose.waitForIdle()
         compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
-        compose.onNodeWithTag("player-sponsor-chip").assertDoesNotExist()
-        // Unlocked but controls hidden: the skip chip drops to the player edge.
+        compose.onNodeWithTag("player-sponsor-countdown").assertDoesNotExist()
         compose.runOnIdle { state = state.copy(locked = false, controlsVisible = false) }
         compose.waitForIdle()
         val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
-        val chip = compose.onNodeWithTag("player-sponsor-chip")
+        val chip = compose.onNodeWithTag("player-sponsor-countdown")
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density
         assertEquals("Hidden chrome: chip keeps a 12 dp edge margin", frame.bottom - 12 * density, chip.bottom, 1.5f)
         compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
         // No chapters and no segments: the entry disappears instead of dead-ending.
         compose.runOnIdle {
-            state = state.copy(controlsVisible = true, chapters = emptyList(), sponsorChip = false)
+            state = state.copy(controlsVisible = true, chapters = emptyList(), sponsorCountdownSec = null)
         }
         compose.waitForIdle()
         compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
+    }
+
+    @Test fun countdownTapCancelsAndManualJumpChipStaysHidden() {
+        var cancelled = false
+        var skipped = false
+        val segments = listOf(SponsorBlockManager.Segment(10_000L, 20_000L, "sponsor"))
+        val controller = SponsorSkipController()
+        controller.tick(7_000L, segments, countdownEnabled = true)
+        var state by mutableStateOf(PlayerUiState(
+            visible = true, durationMs = 30_000L, sponsorCountdownSec = controller.countdownSec,
+            sponsorChip = true, sponsorChipHighlight = true,
+        ))
+        compose.setContent {
+            AppTheme(darkTheme = true, dynamicColor = false) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    PlayerSurface(
+                        state, remember { mutableStateOf(7_000L) },
+                        remember { mutableStateOf(7_000L) },
+                        remember { mutableStateOf(null) }, remember { mutableStateOf(null) },
+                        remember { mutableStateOf(emptyList()) },
+                        proxyActions("SponsorCountdownActions") { name, _ ->
+                            when (name) {
+                                "onSponsorSkipCancel" -> {
+                                    cancelled = true
+                                    controller.cancelPending()
+                                    state = state.copy(sponsorCountdownSec = controller.countdownSec)
+                                }
+                                "onSponsorSkipNow", "onSponsorChipSkip" -> skipped = true
+                            }
+                        }, {}, {}, managedByHost = true,
+                        modifier = Modifier.size(411.dp, 231.dp),
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("player-sponsor-chip").assertDoesNotExist()
+        for (seconds in 3 downTo 1) {
+            compose.runOnIdle {
+                assertEquals(null, controller.tick((10 - seconds) * 1_000L, segments, countdownEnabled = true))
+                state = state.copy(sponsorCountdownSec = controller.countdownSec)
+            }
+            compose.onNodeWithText(compose.activity.getString(R.string.sponsor_skip_in, seconds)).assertIsDisplayed()
+        }
+        compose.onNodeWithText(compose.activity.getString(R.string.cancel), useUnmergedTree = true)
+            .assertIsDisplayed().performTouchInput { click() }
+        compose.runOnIdle {
+            assertTrue("Tapping the countdown cancels the jump", cancelled)
+            assertTrue("Tapping the countdown must not seek", !skipped)
+            assertEquals(null, controller.tick(10_000L, segments, countdownEnabled = true))
+            assertEquals(null, controller.tick(19_000L, segments, countdownEnabled = true))
+            assertEquals(null, controller.countdownSec)
+        }
+        compose.onNodeWithTag("player-sponsor-countdown").assertDoesNotExist()
+        compose.onNodeWithTag("player-sponsor-chip").assertDoesNotExist()
+        compose.runOnIdle { state = state.copy(sponsorChipHighlight = false) }
+        compose.onNodeWithTag("player-sponsor-chip").assertDoesNotExist()
     }
 
     @Test fun chapterRowsStayCompactAndExpandForLargerText() {

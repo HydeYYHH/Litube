@@ -3,7 +3,6 @@ package com.hhst.youtubelite.player.datasource
 import com.hhst.youtubelite.extractor.Format
 import java.util.Locale
 
-/** Menu row for one audio track: stable key + human label. */
 data class AudioTrackChoice(
     val key: String,
     val label: String,
@@ -134,7 +133,9 @@ object AudioTrackIdentity {
         val unique = LinkedHashMap<String, AudioTrackChoice>()
         for ((language, label) in entries) {
             val key = renditionKey(language, label)
-            if (key.isBlank() || unique.containsKey(key)) continue
+            if (key.isBlank() || unique.containsKey(key)) {
+                continue
+            }
             val text = label?.trim()?.takeIf { it.isNotEmpty() }
                 ?: language?.trim()?.takeIf { it.isNotEmpty() }?.let(::displayLanguage)
                 ?: continue

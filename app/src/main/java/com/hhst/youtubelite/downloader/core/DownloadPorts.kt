@@ -4,11 +4,11 @@ import com.hhst.youtubelite.extractor.MediaRequestPlan
 import java.io.File
 import java.util.UUID
 
-/** Metadata, selection, and PoToken-aware resolve. */
 interface DownloadResolver {
-    suspend fun resolve(taskId: String): DownloadResolveOutcome
-    fun sourcesOf(taskId: String): List<DownloadComponentSource> = emptyList()
-    suspend fun recoverForbidden(taskId: String): Boolean = false
+    /** The caller owns this execution identity; implementations must never adopt a newer one. */
+    suspend fun resolve(taskId: String, generation: Long): DownloadResolveOutcome
+    fun sourcesOf(taskId: String, generation: Long): List<DownloadComponentSource> = emptyList()
+    suspend fun recoverForbidden(taskId: String, generation: Long): Boolean = false
 }
 
 sealed class DownloadResolveOutcome {
@@ -46,6 +46,7 @@ interface DownloadTransport {
     fun cancelInFlight(taskId: String)
     suspend fun downloadComponent(
         taskId: String,
+        generation: Long,
         component: InputComponent,
         source: DownloadComponentSource,
         dest: File,
@@ -150,7 +151,7 @@ object NoOpPublisher : DownloadPublisher {
 }
 
 object NoOpResolver : DownloadResolver {
-    override suspend fun resolve(taskId: String): DownloadResolveOutcome = DownloadResolveOutcome.Ignored
+    override suspend fun resolve(taskId: String, generation: Long): DownloadResolveOutcome = DownloadResolveOutcome.Ignored
 }
 
 object NoOpFinalizer : DownloadFinalizer {

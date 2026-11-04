@@ -4,7 +4,6 @@ import com.hhst.youtubelite.shorts.domain.ShortItem
 import com.hhst.youtubelite.shorts.domain.ShortsPage
 import kotlinx.coroutines.delay
 
-/** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureShortsRepository(private val scenario: ShortsScenario = ShortsScenario.Content,
     private val channelId: String? = null,
 ) : ShortsRepository {

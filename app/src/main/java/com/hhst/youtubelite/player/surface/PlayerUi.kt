@@ -19,6 +19,30 @@ import kotlin.math.roundToInt
  */
 object PlayerUi {
 
+    enum class PlayPauseAction(val icon: Int, val label: Int) {
+        Play(R.drawable.ic_play, R.string.action_play),
+        Pause(R.drawable.ic_pause, R.string.action_pause),
+        Replay(R.drawable.ic_replay, R.string.action_replay),
+        Loading(R.drawable.ic_loading, R.string.a11y_loading);
+
+        /** Filled transport glyphs for the player controls; menus keep the outline resources. */
+        val playerIcon: Int get() = when (this) {
+            Play -> R.drawable.ic_player_play
+            Pause -> R.drawable.ic_player_pause
+            Replay, Loading -> icon
+        }
+    }
+
+    /** Shared by the full player, mini-player and system PiP actions. */
+    fun playPauseAction(state: PlayerUiState): PlayPauseAction = when {
+        state.ended -> PlayPauseAction.Replay
+        state.error == null && state.notice == null && (!state.prepared || state.loading ||
+            (state.userWantsPlay && !state.firstFrameRendered && !state.hasRenderedVideoFrame && !state.casting &&
+                (state.videoWidth > 0 || state.videoItag != null || state.qualities.isNotEmpty()))) -> PlayPauseAction.Loading
+        state.isPlaying -> PlayPauseAction.Pause
+        else -> PlayPauseAction.Play
+    }
+
     val YtRed = Color(0xFFFF0000)
     val Icon = Color.White.copy(alpha = 0.92f)
     val Unplayed = Color(0x99FFFFFF)
@@ -307,9 +331,6 @@ object PlayerUi {
     fun lockVisible(fullscreen: Boolean, mini: Boolean, locked: Boolean, controlsVisible: Boolean): Boolean =
         fullscreen && !mini && (locked || controlsVisible)
 
-    /**
-     * Lock *state* icon: locked shows a closed lock, unlocked an open lock.
-     */
     fun lockIconRes(locked: Boolean): Int =
         if (locked) R.drawable.ic_lock else R.drawable.ic_unlock
 

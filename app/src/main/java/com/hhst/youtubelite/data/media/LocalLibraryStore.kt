@@ -132,14 +132,20 @@ class LocalLibraryStore(private val store: AuthStore,
         return SaveChoice(list.id, list.title, true)
     }
     @Synchronized fun setContaining(id: String, video: HistoryEntry, contains: Boolean) {
+        updatePlaylist(id, video.videoId, video.takeIf { contains })
+    }
+    @Synchronized fun removeFromPlaylist(id: String, videoId: String) {
+        updatePlaylist(id, videoId, null)
+    }
+    private fun updatePlaylist(id: String, videoId: String, added: HistoryEntry?) {
         val old = data.collections.firstOrNull { it.id == id }
             ?: if (id == WATCH_LATER) {
                 check(data.collections.size < 100) { "Too many playlists on this device" }
                 Collection(id, "Watch later", "", emptyList())
             } else error("Playlist is unavailable")
-        val videos = old.videos.filter { it.videoId != video.videoId }
-        check(!contains || videos.size < PlaylistLimits.MAX_ENTRIES) { "Playlist is full" }
-        val updated = old.copy(videos = if (contains) videos + video else videos)
+        val videos = old.videos.filter { it.videoId != videoId }
+        check(added == null || videos.size < PlaylistLimits.MAX_ENTRIES) { "Playlist is full" }
+        val updated = old.copy(videos = if (added != null) videos + added else videos)
         save(data.copy(collections = data.collections.filter { it.id != id } + updated))
     }
     @Synchronized fun playlist(id: String): PlaylistPage? {

@@ -34,27 +34,25 @@ import kotlin.coroutines.resumeWithException
 /**
  * DeArrow display decoration: community-submitted titles and thumbnails.
  *
- * Branding queries use `https://sponsor.ajay.app/api/branding/<prefix>` where
- * `<prefix>` is the first 4 hex characters of the video ID's SHA-256 — the
- * plain video ID is never sent to that endpoint; the response is a bucket of
- * candidates and the caller must strict-match the requested ID. Thumbnail
- * bitmaps come from `https://dearrow-thumb.ajay.app`, whose URL does carry
- * the full video ID — the settings copy must not claim the hash prefix makes
- * these requests anonymous. No Google cookies, OAuth tokens or visitor
- * headers are attached to third-party requests.
+ * Branding queries use `https://sponsor.ajay.app/api/branding/<prefix>` where `<prefix>` is the
+ * first 4 hex characters of the video ID's SHA-256 — the plain video ID is never sent to that
+ * endpoint; the response is a bucket of candidates and the caller must strict-match the requested
+ * ID. Thumbnail bitmaps come from `https://dearrow-thumb.ajay.app`, whose URL does carry the
+ * full video ID — the settings copy must not claim the hash prefix makes these requests
+ * anonymous. No Google cookies, OAuth tokens or visitor headers are attached to third-party
+ * requests.
  *
- * Attribution: community data under the SponsorBlock database/API license
- * (CC BY-NC-SA 4.0); see `assets/licenses/dearrow-attribution.txt`.
+ * Attribution: community data under the SponsorBlock database/API license (CC BY-NC-SA 4.0);
+ * see `assets/licenses/dearrow-attribution.txt`.
  *
- * Canonical titles and thumbnails are never mutated: replacement values only
- * decorate display, and both toggles are read before and after every
- * suspension so a mid-flight switch-off cannot re-apply stale content.
+ * Canonical titles and thumbnails are never mutated: replacement values only decorate display,
+ * and both toggles are read before and after every suspension so a mid-flight switch-off cannot
+ * re-apply stale content.
  */
 class DeArrowService(
     private val http: OkHttpClient,
     private val prefs: ExtensionManager,
-    // Process-scoped singleton owner (Koin `single`): bounded worker pool so
-    // a fast scroll cannot queue an unbounded number of bucket fetches.
+    // Process-scoped singleton (Koin `single`): bounded pool so a fast scroll cannot queue unbounded bucket fetches.
     private val scope: CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2)),
     private val brandingUrl: String = BRANDING_URL,
@@ -230,8 +228,7 @@ class DeArrowService(
                 ?.takeIf { trusted(it) && !original(it) }
                 ?.strMember("title")
         }
-            // '>' characters are auto-formatter casing directives; without a
-            // formatter the official guidance is to strip them.
+            // '>' characters are auto-formatter casing directives; without one the official guidance is to strip them.
             ?.replace(">", "")?.trim()?.takeIf { it.isNotEmpty() && it.length <= 512 }
 
         val thumbnails = entry["thumbnails"] as? kotlinx.serialization.json.JsonArray

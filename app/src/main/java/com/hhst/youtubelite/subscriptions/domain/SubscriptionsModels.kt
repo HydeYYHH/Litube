@@ -14,9 +14,10 @@ data class SubscribedChannel(
     val avatar: String,
     val metadata: String,
     val hasNewContent: Boolean = false,
+    /** The server's FEsubscriptions channel filter, independent of channel-home navigation. */
+    val subscriptionParams: String? = null,
 )
 
-/** One directory page; [nextKey] is null when the server has no further page. */
 data class ChannelDirectoryPage(val channels: List<SubscribedChannel>, val nextKey: String? = null)
 
 sealed interface SubscriptionsContent {
@@ -62,6 +63,7 @@ data class SubscriptionsUiState(
     val overlay: SubscriptionsOverlay = SubscriptionsOverlay.None,
     val query: String = "",
     val selectedChip: SubscriptionsChip = SubscriptionsChip.All,
+    val selectedChannel: SubscribedChannel? = null,
     /** Chips the backend can serve; production hides the lanes the server rejects. */
     val chips: List<SubscriptionsChip> = SubscriptionsChip.entries,
     /** Production mode: the item menu writes through the save sheet and feedback rows hide. */
@@ -105,6 +107,8 @@ sealed interface SubscriptionsAction {
     data object LoadMoreChannels : SubscriptionsAction
     data class OpenVideo(val videoId: String) : SubscriptionsAction
     data class OpenChannel(val channelId: String) : SubscriptionsAction
+    /** null returns to the combined subscriptions feed. */
+    data class SelectChannel(val channelId: String?) : SubscriptionsAction
     data class OpenMenu(val videoId: String) : SubscriptionsAction
     data class MenuSelected(val action: com.hhst.youtubelite.home.domain.FeedMenuAction) : SubscriptionsAction
     data class Destination(val tab: com.hhst.youtubelite.ui.components.MainTab) : SubscriptionsAction

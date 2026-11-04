@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.QueueItem
@@ -113,34 +114,6 @@ internal fun QueueSheet(
     }
 
     Column(Modifier.padding(bottom = 24.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 4.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.queue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.Center)
-                    .padding(start = 8.dp, end = 48.dp),
-                textAlign = TextAlign.Start,
-                fontSize = SettingsTokens.TitleSize.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Icon(
-                painter = painterResource(R.drawable.ic_close),
-                contentDescription = stringResource(R.string.close),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onClose)
-                    .padding(12.dp),
-            )
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,11 +143,14 @@ internal fun QueueSheet(
                 modifier = Modifier.size(40.dp),
                 enabled = items.isNotEmpty(),
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            PlayerIconButton(R.drawable.ic_close, stringResource(R.string.close), onClose,
+                tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(48.dp))
         }
         if (confirmClear) {
             AlertDialog(
                 onDismissRequest = { confirmClear = false },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                containerColor = AppStyle.Panel,
                 title = {
                     Text(
                         stringResource(R.string.clear_queue),
@@ -221,12 +197,11 @@ internal fun QueueSheet(
             LazyColumn(
                 state = listState,
                 userScrollEnabled = drag.draggingKey == null,
-                modifier = Modifier.weight(1f, fill = false).testTag("queue-list")
+                modifier = Modifier.weight(1f).testTag("queue-list")
                     .pointerInput(drag) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
-                                haptic()
-                                drag.start(it.y, ownerState.value)
+                                if (drag.start(it.y, ownerState.value)) haptic()
                             },
                             onDragEnd = { drag.finish(source.value, ownerState.value, false, move.value) },
                             onDragCancel = { drag.finish(source.value, ownerState.value, true, move.value) },
@@ -280,7 +255,7 @@ private fun QueueRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(when {
-                    dragging -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    dragging -> MaterialTheme.colorScheme.surfaceContainer
                     current -> MaterialTheme.colorScheme.surfaceVariant
                     else -> Color.Transparent
                 })
@@ -340,7 +315,6 @@ private fun QueueRow(
     }
 }
 
-/** Small async thumbnail; falls back to a play icon. */
 @Composable
 private fun QueueThumbnail(url: String?, width: Dp) {
     YoutubeThumb(

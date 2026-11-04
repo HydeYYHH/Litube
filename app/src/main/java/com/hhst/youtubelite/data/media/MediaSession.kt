@@ -47,6 +47,9 @@ class MemoryAuthStore : AuthStore {
     }
 }
 
+/** Credential-free session state observed by UI and owner-scoped local stores. */
+data class MediaSessionIdentity(val generation: Long, val signedIn: Boolean)
+
 /**
  * A persisted refresh token yields access tokens
  * through [AccountToken]; [AccountSession] carries the account list and bumps the generation
@@ -72,6 +75,8 @@ object MediaSession {
     private var store: AuthStore? = null
     private var session = AccountSession()
     private var token: AccountToken? = null
+    /** Access fields confirmed written to this store; guarded by [lock]. */
+    private var persistedAccess: AccessToken? = null
     private var client: SignInClient? = null
     private var visitor: String? = null
     private var visitorCookie: String? = null
@@ -80,10 +85,13 @@ object MediaSession {
     /** Extra generation offset from anonymous-mode flips; the derived generation never collides. */
     private var identityEpoch = 0L
     private var privateMode: () -> Boolean = { false }
-    private val _changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
-    val changes: kotlinx.coroutines.flow.StateFlow<Long> = _changes
+    private val _changes = kotlinx.coroutines.flow.MutableStateFlow(MediaSessionIdentity(0L, false))
+    val changes: kotlinx.coroutines.flow.StateFlow<MediaSessionIdentity> = _changes
 
-    private fun changed() { _changes.value = snapshot().generation }
+    private fun changed() {
+        val current = snapshot()
+        _changes.value = MediaSessionIdentity(current.generation, current.signedIn)
+    }
 
     /** Test hook: the default [AccountToken] refreshes over the network. */
     internal var tokenFactory: (AccessToken, SignInClient) -> AccountToken = { initial, signInClient ->
@@ -94,6 +102,7 @@ object MediaSession {
     fun initialize(store: AuthStore, privateMode: () -> Boolean = { false }) {
         synchronized(lock) {
             this.store = store
+            persistedAccess = null
             this.privateMode = privateMode
             visitor = store.read(KEY_VISITOR)?.takeIf { it.isNotBlank() }
             visitorCookie = store.read(KEY_VISITOR_COOKIE)?.takeIf { it.isNotBlank() }
@@ -108,12 +117,16 @@ object MediaSession {
             session = AccountSession()
             token = null
             client = null
-            val refresh = store.read(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() } ?: return
+            val refresh = store.read(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() } ?: run {
+                changed()
+                return
+            }
             val id = store.read(KEY_CLIENT_ID)
             val secret = store.read(KEY_CLIENT_SECRET)
             val device = store.read(KEY_DEVICE_ID)
             if (id.isNullOrBlank() || secret.isNullOrBlank() || device.isNullOrBlank()) {
                 wipeLocked()
+                changed()
                 return
             }
             val signInClient = SignInClient(id, secret, device)
@@ -139,7 +152,6 @@ object MediaSession {
     } }
     fun privateBrowsing(): Boolean = privateMode()
 
-    /** Whether the "On this device" whole-app switch is currently engaged. */
     fun anonymousMode(): Boolean = synchronized(lock) { anonymousMode }
 
     /**
@@ -217,14 +229,26 @@ object MediaSession {
                 throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
                     com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.AUTH, "session_changed"))
             }
-            store?.write(KEY_ACCESS_TOKEN, fresh.accessToken)
-            store?.write(KEY_ACCESS_EXPIRES, fresh.expiresAtMs.toString())
+            store?.let { target ->
+                // Even an unchanged write decrypts the stored value to compare it.
+                // Publish the pair only after both writes succeed so failures retry.
+                if (persistedAccess?.accessToken != fresh.accessToken || persistedAccess?.expiresAtMs != fresh.expiresAtMs) {
+                    target.write(KEY_ACCESS_TOKEN, fresh.accessToken)
+                    target.write(KEY_ACCESS_EXPIRES, fresh.expiresAtMs.toString())
+                    persistedAccess = fresh
+                }
+            }
+            session.updateAccessToken(fresh.accessToken)
+            // Recovering a missing token changes signed-in presentation and local
+            // ownership, while ordinary token rotation leaves this value equal.
+            changed()
             current.copy(accessToken = fresh.accessToken)
         }
     }
 
     fun completeSignIn(client: SignInClient, token: AccessToken, accounts: List<Account>) {
         synchronized(lock) {
+            persistedAccess = null
             this.client = client
             this.token = tokenFactory(token, client)
             // Signing in always ends the "On this device" switch: the account is the identity.
@@ -246,6 +270,7 @@ object MediaSession {
                 s.write(KEY_ACCESS_EXPIRES, token.expiresAtMs.toString())
                 s.write(KEY_ACCOUNT_ID, selected)
                 s.write(KEY_ACCOUNTS, encodeAccounts(accounts.map { it.copy(selected = it.id == selected) }))
+                persistedAccess = token
             }
         }
     }
@@ -275,6 +300,7 @@ object MediaSession {
         synchronized(lock) {
             session.clear()
             token = null
+            persistedAccess = null
             client = null
             wipeLocked()
             changed()
@@ -284,7 +310,8 @@ object MediaSession {
     /** Drops account state; the client credentials and device id identify the install, not the account. */
     private fun wipeLocked() {
         val s = store ?: return
-        listOf(KEY_REFRESH_TOKEN, KEY_ACCESS_TOKEN, KEY_ACCESS_EXPIRES, KEY_ACCOUNT_ID, KEY_ACCOUNTS)
+        listOf(KEY_REFRESH_TOKEN, KEY_ACCESS_TOKEN, KEY_ACCESS_EXPIRES, KEY_ACCOUNT_ID, KEY_ACCOUNTS,
+            com.hhst.youtubelite.watch.chat.ChatWebSessionStore.KEY)
             .forEach { s.write(it, null) }
     }
 

@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 
-/** Caption track from the player response. */
 @Serializable
 data class Subtitle(
     val url: String = "",
@@ -15,7 +14,6 @@ data class Subtitle(
     @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
-/** Progressive or adaptive media URL. */
 @Serializable
 data class Format(
     val url: String = "",
@@ -25,19 +23,18 @@ data class Format(
     val fps: Int = 0,
     val qualityLabel: String? = null,
     val codec: String? = null,
-    /** Container identifier, such as WEBM or MPEG_4. */
+    /** e.g. WEBM or MPEG_4. */
     @SerialName("format")
     val container: String? = null,
     val itag: Int? = null,
     val videoOnly: Boolean = false,
     val audioOnly: Boolean = false,
-    /** MIME type for DASH manifest (e.g. "video/mp4", "audio/webm"). */
+    /** e.g. "video/mp4", "audio/webm". */
     val mimeType: String = "",
     val initStart: Int = -1,
     val initEnd: Int = -1,
     val indexStart: Int = -1,
     val indexEnd: Int = -1,
-    /** Approximate stream duration in ms; -1 when unknown. */
     val approxDurationMs: Long = -1L,
     val sampleRate: Int = -1,
     val audioChannels: Int = -1,
@@ -46,7 +43,6 @@ data class Format(
     val audioTrackName: String? = null,
     /** `original`, `dubbed`, `descriptive`, or `secondary`. */
     val audioTrackType: String? = null,
-    /** True for the original audio track (vs. dubbed). */
     val audioTrackOriginal: Boolean = false,
     /** Stable identity of the format, audio track and codec. */
     @SerialName("formatKey2")
@@ -56,17 +52,15 @@ data class Format(
     @Transient val requestPlan: MediaRequestPlan? = null,
 ) {
     /**
-     * True when this format has a usable sidx/index range for synthetic DASH.
-     *
-     * Java `int` fields default to 0, so `>= 0` alone treats missing ranges as valid
-     * and would wrap a muxed itag in a broken `indexRange="0-0"` DASH manifest.
-     * `indexEnd > indexStart` also rejects a 1-byte index; the host does not emit one.
+     * Usable sidx/index range for synthetic DASH. `>= 0` alone treats a missing
+     * (0-defaulted) range as valid and would wrap a muxed itag in a broken
+     * `indexRange="0-0"`; `indexEnd > indexStart` also rejects a 1-byte index,
+     * which the host does not emit.
      */
     val hasDashRanges: Boolean
         get() = initStart >= 0 && initEnd >= initStart && indexEnd > indexStart
 }
 
-/** Chapter marker from Innertube `/next`. */
 @Serializable
 data class Chapter(
     val title: String = "",
@@ -74,11 +68,6 @@ data class Chapter(
     val previewUrl: String? = null,
 )
 
-/**
- * Stable video fields from [Extraction.metadata].
- *
- * Count fields use `-1` when omitted.
- */
 @Serializable
 class Metadata(
     var id: String = "",
@@ -88,7 +77,6 @@ class Metadata(
     /** Length in seconds. */
     var duration: Long = 0L,
     var thumbnailUrl: String? = null,
-    /** True for live / premiere streams. */
     var isLive: Boolean = false,
 ) {
     fun copyFrom(other: Metadata) {
@@ -102,7 +90,6 @@ class Metadata(
     }
 }
 
-/** Manifest URL with its transport protocol and expiry. */
 @Serializable
 data class Manifest(
     val url: String,
@@ -146,7 +133,6 @@ class Stream(
     }
 }
 
-/** Chapter list from [Extraction.chapters]. */
 @Serializable
 class ChapterList(
     var chapters: List<Chapter> = emptyList(),
@@ -156,11 +142,6 @@ class ChapterList(
     }
 }
 
-/**
- * Result of [Extractor.extract]: three independent promises for one video.
- *
- * Call [Promise.get] only on the branches you need.
- */
 class Extraction(
     val metadata: Promise<Metadata>,
     val stream: Promise<Stream>,

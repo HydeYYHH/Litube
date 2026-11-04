@@ -43,8 +43,8 @@ import kotlinx.coroutines.launch
 import com.hhst.youtubelite.ui.renderNotice
 import com.hhst.youtubelite.ui.observeAccountChanges
 
-/** Hosts the local channel page and observes its navigation requests. */
 class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
+    private val postCards = com.hhst.youtubelite.post.PostCardActionHost(this)
     lateinit var channelViewModel: ChannelViewModel
         private set
     var lastNavigationRequest: ChannelNavigationRequest? = null
@@ -59,7 +59,6 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
     }
     val shareGateway: ShareGateway by lazy { ShareGateway(this) }
 
-    /** Identity of the video whose overflow menu opened the shared actions dialog, if any. */
     private val itemMenuState = androidx.compose.runtime.mutableStateOf<com.hhst.youtubelite.ui.MediaActionItem?>(null)
     private var itemMenu: com.hhst.youtubelite.ui.MediaActionItem?
         get() = itemMenuState.value
@@ -85,7 +84,14 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 return ChannelViewModel(if (fixtures) FixtureChannelRepository(scenario) else sources.channel, extras.createSavedStateHandle(), resolvedChannelId, scenario, if (fixtures) null else sources.videoActions) as T
             }
         })[ChannelViewModel::class.java]
-        if (!fixtures) observeAccountChanges { channelViewModel.refreshSession() }
+        if (!fixtures) {
+            postCards.bind()
+            channelViewModel.updateSignedIn(com.hhst.youtubelite.data.media.MediaSession.snapshot().signedIn)
+            observeAccountChanges {
+                channelViewModel.updateSignedIn(com.hhst.youtubelite.data.media.MediaSession.snapshot().signedIn)
+                channelViewModel.refreshSession()
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 channelViewModel.actionNotices.collect { notice ->
@@ -110,7 +116,7 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             PostDetailActivity.intent(this@ChannelActivity, request.identity.channelId, request.identity.postId)
                         )
                         is ChannelNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
+                            this@ChannelActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), channelViewModel.uiState.value.signedIn)?.let { launchNavigation(it); finish() }
                         is ChannelNavigationRequest.LiveStream -> launchNavigation(WatchActivity.intent(this@ChannelActivity, request.videoId))
                         is ChannelNavigationRequest.Share -> shareGateway.shareChannel(resolvedChannelId)
                         is ChannelNavigationRequest.OpenLink -> openContentLink(request.url)
@@ -118,7 +124,7 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             android.content.Intent(this@ChannelActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
                                 .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                         is ChannelNavigationRequest.PostFeedback -> if (!fixtures) {
-                            com.hhst.youtubelite.post.openPostVoteRoute(this@ChannelActivity)
+                            postCards.rate(request.identity, request.liked)
                         }
                         is ChannelNavigationRequest.ItemMenu -> if (!fixtures) {
                             val ready = channelViewModel.uiState.value.content as? com.hhst.youtubelite.channel.domain.ChannelContent.Ready
@@ -147,12 +153,11 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
             val state by channelViewModel.uiState.collectAsStateWithLifecycle()
             val back = { if (state.overlay != ChannelOverlay.None) channelViewModel.onAction(ChannelAction.CloseOverlay) else finish() }
             BackHandler(onBack = back)
-            ChannelScreen(state, channelViewModel::onAction, onBack = back,
+            ChannelScreen(state, channelViewModel::onAction, onBack = { onBackPressedDispatcher.onBackPressed() },
+                postInteractions = if (fixtures) null else postCards.interactions(),
                 modifier = Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                     .windowInsetsPadding(WindowInsets.safeDrawing).imePadding())
             itemMenu?.let { item ->
-                // The unified More sheet routes taps to the activity-owned executor;
-                // the card long-press dialog is gone.
                 val executor = androidx.compose.runtime.remember { com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@ChannelActivity) }
                 val items = com.hhst.youtubelite.ui.MediaActionKind.entries.map { kind ->
                     com.hhst.youtubelite.ui.design.MenuSheetItem(icon = when (kind) {
@@ -162,7 +167,8 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         com.hhst.youtubelite.ui.MediaActionKind.OpenWith -> com.hhst.youtubelite.ui.design.AppIcon.OpenWith
                         com.hhst.youtubelite.ui.MediaActionKind.Share -> com.hhst.youtubelite.ui.design.AppIcon.Share
                         com.hhst.youtubelite.ui.MediaActionKind.CopyLink -> null
-                    }, label = kind.label, tag = "media-action-${kind.name}")
+                    }, label = kind.label, tag = "media-action-${kind.name}",
+                        iconResource = if (kind == com.hhst.youtubelite.ui.MediaActionKind.CopyLink) com.hhst.youtubelite.R.drawable.ic_copy else null)
                 }
                 com.hhst.youtubelite.ui.design.MenuBottomSheet(items,
                     onDismiss = { itemMenu = null },

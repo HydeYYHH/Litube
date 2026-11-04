@@ -17,14 +17,13 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 
 /**
- * Startup-performance driver. The test adds only intent markers to the
- * production diagnostics stream; every phase number comes from the existing
- * playback telemetry, extraction operations and network traces. Orchestration
- * (force-stop per cold rep, process reuse) lives in the shell. `startupScenario`
- * labels the cache condition: cold / warm / replay / next. `startupSecond` pins
- * a different video for the second in-process launch (warm); without it the
- * second launch replays the same video after an explicit engine stop, because
- * engine.play short-circuits an already prepared item.
+ * Startup-performance driver: adds only intent markers to the production diagnostics
+ * stream; all phase numbers come from existing playback telemetry, extraction operations
+ * and network traces. Orchestration (force-stop per cold rep, process reuse) lives in the
+ * shell. `startupScenario` labels the cache condition: cold/warm/replay/next.
+ * `startupSecond` pins a different video for the second in-process launch; without it the
+ * second launch replays the same video after an explicit engine stop, because engine.play
+ * short-circuits an already prepared item.
  */
 class StartupPerfAndroidTest {
     @Test fun startupPhasesUnderExplicitCacheConditions() = runBlocking(Dispatchers.IO) {
@@ -45,8 +44,6 @@ class StartupPerfAndroidTest {
             val launch = index + 1
             val target = if (launch == 2 && second != null) second else videoId
             if (launch == 2) {
-                // Drop the prepared player so the next launch performs a full
-                // load instead of engine.play's prepared short-circuit.
                 instrumentation.runOnMainSync { engine.stop() }
                 delay(500)
             }
@@ -73,9 +70,8 @@ class StartupPerfAndroidTest {
                     delay(50)
                 }
                 if (scenario == "next" && finished) {
-                    // Record the setup run, then measure the skip while the
-                    // watch surface is still attached — the production Next
-                    // condition. After close() the surface is gone and the
+                    // Measure the skip while the watch surface is still attached, the
+                    // production Next condition; after close() the surface is gone and the
                     // first-frame gate never opens.
                     delay(300)
                     val state = engine.snapshot.value
@@ -88,17 +84,26 @@ class StartupPerfAndroidTest {
                     nextVideoStartup(instrumentation, engine, run, rep)
                     return@repeat
                 }
+                // Keep the playback surface and foreground alive through the end marker and
+                // log flush; closing first can trip the device runner's foreground
+                // protection during cleanup.
+                delay(300)
+                val state = engine.snapshot.value
+                val elapsed = SystemClock.elapsedRealtime() - started
+                AppLog.event(AppLog.Category.APP, "startup_perf.end", mapOf(
+                    "run" to run, "scenario" to scenario, "rep" to rep, "launch" to launch,
+                    "video_id" to target, "elapsed_ms" to elapsed, "first_frame" to finished,
+                    "playing" to state.isPlaying, "failed" to (state.error != null),
+                    "position_ms" to state.positionMs))
+                try {
+                    AppLog.flush(3_000)
+                    assertTrue("Startup did not reach first frame in ${elapsed}ms (run $run)", finished)
+                } finally {
+                    // This task belongs to the test. Avoid the interactive mini-player
+                    // handoff in finish(), including when the startup assertion fails.
+                    it.onActivity { host -> host.finishAndRemoveTask() }
+                }
             }
-            delay(300) // let the isPlaying/first-audio events land before the end marker
-            val state = engine.snapshot.value
-            val elapsed = SystemClock.elapsedRealtime() - started
-            AppLog.event(AppLog.Category.APP, "startup_perf.end", mapOf(
-                "run" to run, "scenario" to scenario, "rep" to rep, "launch" to launch,
-                "video_id" to target, "elapsed_ms" to elapsed, "first_frame" to finished,
-                "playing" to state.isPlaying, "failed" to (state.error != null),
-                "position_ms" to state.positionMs))
-            assertTrue("Startup did not reach first frame in ${elapsed}ms (run $run)", finished)
-            AppLog.flush(3_000)
             if (scenario == "next") {
                 nextVideoStartup(instrumentation, engine, run, rep)
                 return@repeat
@@ -106,11 +111,6 @@ class StartupPerfAndroidTest {
         }
     }
 
-    /**
-     * Measures the production Next path against the resolved related id: waits
-     * for the prefetch to settle, then records skipToNext → first frame while
-     * the watch surface stays attached.
-     */
     private suspend fun nextVideoStartup(
         instrumentation: android.app.Instrumentation,
         engine: PlaybackApi, run: String, rep: String) {

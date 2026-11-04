@@ -51,9 +51,6 @@ import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.ui.theme.AppStyle
 
-/**
- * Displays a device code while the account is confirmed in a browser.
- */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
 

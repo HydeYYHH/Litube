@@ -46,7 +46,6 @@ class SearchResultsScreenshotAndroidTest {
         else -> SearchContent.Failed
     }
 
-    /** Phone lockup: 390 × 218.875 bleed cover, 40px channel column, 48px menu trigger. */
     @Test fun stackedLockupMatchesMeasuredAnchors() {
         var width by mutableIntStateOf(390)
         compose.setContent {
@@ -79,8 +78,8 @@ class SearchResultsScreenshotAndroidTest {
         assertEquals(thumb.bottom - 8f, badge.bottom, 0.5f)
         assertEquals(20f, badge.height, 0.5f)
         // Sampled row pitch: cover + 4px + a 51px details row, then 24px between rows. Compose
-        // rounds the sampled sub-pixel boxes up (cover 218.875→219, and every 17.5px title line
-        // box to 18px), which is why the two-line row sits 1.125px above the browser value.
+        // rounds the sampled sub-pixel boxes up (cover 218.875→219, every 17.5px title line box
+        // to 18px), so the two-line row sits 1.125px above the browser value.
         val twoLine = compose.onNodeWithTag("search-result-harbour").fetchSemanticsNode().boundsInRoot
         assertEquals(282.875f, twoLine.height, 1.5f)
         val titleStyle = mutableListOf<TextLayoutResult>()
@@ -94,7 +93,6 @@ class SearchResultsScreenshotAndroidTest {
         compose.onNodeWithTag("search-results-list").performScrollToIndex(2)
         assertEquals(287.375f, compose.onNodeWithTag("search-result-meadow").fetchSemanticsNode().boundsInRoot.height, 1f)
         compose.onNodeWithTag("search-results-list").performScrollToIndex(0)
-        // Tablet stacked lockup: the cover is inset by 12px and keeps an exact 16:9 box.
         compose.runOnIdle { width = 600 }
         val tabletThumb = compose.onNodeWithTag("search-thumb-harbour", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(12f, tabletThumb.left, 0.5f)
@@ -105,7 +103,6 @@ class SearchResultsScreenshotAndroidTest {
         assertEquals(484f, tabletTitle.width, 0.5f)
     }
 
-    /** Wide lockup: a centred 840px column of 200 × 112 rows with a 40px menu trigger. */
     @Test fun listLockupMatchesMeasuredAnchors() {
         var width by mutableIntStateOf(1280)
         compose.setContent {
@@ -133,7 +130,6 @@ class SearchResultsScreenshotAndroidTest {
         val badge = compose.onNodeWithTag("search-badge-harbour", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(thumb.right - 5f, badge.right, 0.5f)
         assertEquals(thumb.bottom - 5f, badge.bottom, 0.5f)
-        // The sampled list keeps a 12px gap between 112px rows.
         val second = compose.onNodeWithTag("search-thumb-studio").fetchSemanticsNode().boundsInRoot
         assertEquals(thumb.bottom + 12f, second.top, 1f)
         compose.runOnIdle { width = 1600 }
@@ -202,7 +198,6 @@ class SearchResultsScreenshotAndroidTest {
             .fetchSemanticsNodes().single().boundsInRoot.width, 0.5f)
     }
 
-    /** Split-screen windows keep the stacked lockup inside the window down to a 240px height. */
     @Test fun splitWindowBoundsKeepTheResultsUsable() {
         var width by mutableIntStateOf(390)
         var height by mutableIntStateOf(400)
@@ -403,7 +398,6 @@ class SearchResultsScreenshotAndroidTest {
         }
     }
 
-    /** The inline filter strip and the ordinary-video sheet at both sampled widths. */
     @Test fun filterAndCardMenuSurfacesFollowTheMeasuredGeometry() {
         val record = InstrumentationRegistry.getArguments().getString("recordMenuGoldens") == "true"
         val goldens = setOf("filters-390", "filters-1280", "video-menu-390", "video-menu-1280")

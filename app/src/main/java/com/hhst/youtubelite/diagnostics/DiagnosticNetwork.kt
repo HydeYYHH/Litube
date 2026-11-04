@@ -146,6 +146,7 @@ object DiagnosticNetwork {
             override fun callStart(call: Call) {
                 if (active.size > 256) active.entries.firstOrNull { it.key != call }?.let { active.remove(it.key) }
                 phase("start", mapOf("method" to call.request().method,
+                    "call_timeout_ms" to java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(call.timeout().timeoutNanos()),
                     "range" to call.request().header("Range")?.takeIf { it.matches(Regex("bytes=\\d+-\\d*")) }))
             }
             override fun dnsStart(call: Call, domainName: String) { dnsAt = SystemClock.elapsedRealtime(); phase("dns_start") }

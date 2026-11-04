@@ -100,14 +100,6 @@ class LibraryHostAndroidTest {
         compose.onNodeWithTag("home-screen").assertIsDisplayed()
     }
 
-    @Test fun bellOpensNotificationsThroughOneTypedRequest() {
-        val host = launchYou(signedIn = true)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("you-library").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Notifications").performClick()
-        compose.waitForIdle()
-        host.onActivity { assertEquals(LibraryNavigationRequest.OpenNotifications, it.lastNavigationRequest) }
-    }
-
     @Test fun searchOverlayEmitsTheQueryAndKeepsThePageUnderneath() {
         val host = launchYou(signedIn = true)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("you-library").fetchSemanticsNodes().isNotEmpty() }

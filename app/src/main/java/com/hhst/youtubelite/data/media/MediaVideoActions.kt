@@ -1,61 +1,53 @@
 package com.hhst.youtubelite.data.media
 
-import com.hhst.youtubelite.watch.domain.*
-import com.liskovsoft.youtubeapi.videoinfo.V2.*
+import com.hhst.youtubelite.watch.domain.SignInRequiredException
+import com.hhst.youtubelite.watch.domain.VideoActions
+import com.hhst.youtubelite.watch.domain.VideoRating
+import com.liskovsoft.youtubeapi.videoinfo.V2.ReadResult
+import com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure
+import com.liskovsoft.youtubeapi.videoinfo.V2.VideoVote
+import com.liskovsoft.youtubeapi.videoinfo.V2.loadChannel
+import com.liskovsoft.youtubeapi.videoinfo.V2.loadWatch
+import com.liskovsoft.youtubeapi.videoinfo.V2.subscribeChannel
+import com.liskovsoft.youtubeapi.videoinfo.V2.voteVideo
 
 class MediaVideoActions(private val client: MediaClient, private val onConfirmed: () -> Unit = {}) : VideoActions {
-    override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) {
-        action { context, http ->
-            val vote = when (rating) {
-                VideoRating.Like -> VideoVote.LIKE
-                VideoRating.Dislike -> VideoVote.DISLIKE
-                VideoRating.None -> if (previous == VideoRating.Dislike) VideoVote.UNDISLIKE else VideoVote.UNLIKE
-            }
-            val reply = voteVideo(videoId, vote, context, http).requireValue()
-            if (!reply.confirmed) {
-                val observed = loadWatch(videoId, context, http = http)
-                val expected = when (rating) {
-                    VideoRating.Like -> "LIKE"
-                    VideoRating.Dislike -> "DISLIKE"
-                    VideoRating.None -> "INDIFFERENT"
-                }
-                if (observed.ok && observed.value?.rating == expected) return@action reply.copy(state = ActionState.CONFIRMED)
-                throw unconfirmed(reply, mapOf("expected_rating" to expected,
-                    "observed_rating" to (observed.value?.rating?.takeIf { it in setOf("LIKE", "DISLIKE", "INDIFFERENT") } ?: "unknown"),
-                    "readback" to if (observed.ok) "completed" else "failed"))
-            }
-            reply
+    override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) = authorized {
+        val vote = when (rating) {
+            VideoRating.Like -> VideoVote.LIKE
+            VideoRating.Dislike -> VideoVote.DISLIKE
+            VideoRating.None -> if (previous == VideoRating.Dislike) VideoVote.UNDISLIKE else VideoVote.UNLIKE
         }
+        val expected = when (rating) {
+            VideoRating.Like -> "LIKE"
+            VideoRating.Dislike -> "DISLIKE"
+            VideoRating.None -> "INDIFFERENT"
+        }
+        client.desiredStateWrites.setState("video:$videoId", "rating", expected,
+            write = { context, http -> DesiredStateAttempt(voteVideo(videoId, vote, context, http).requireValue(), Unit) },
+            observe = { context, http ->
+                val result = loadWatch(videoId, context, http = http)
+                if (result.ok) ReadResult(DesiredStateRead(result.value?.rating?.takeIf { it in RATINGS }, Unit))
+                else ReadResult(error = result.error)
+            }, onConfirmed = { onConfirmed() })
     }
 
-    override suspend fun subscribe(channelId: String, subscribed: Boolean) {
-        action { context, http ->
-            val reply = subscribeChannel(channelId, subscribed, context, http = http).requireValue()
-            if (!reply.confirmed) {
-                val observed = loadChannel(channelId, context, http = http)
-                if (observed.ok && observed.value?.subscribed == subscribed) return@action reply.copy(state = ActionState.CONFIRMED)
-                throw unconfirmed(reply, mapOf("expected_subscribed" to subscribed.toString(),
-                    "observed_subscribed" to (observed.value?.subscribed?.toString() ?: "unknown"),
-                    "readback" to if (observed.ok) "completed" else "failed"))
-            }
-            reply
-        }
+    override suspend fun subscribe(channelId: String, subscribed: Boolean) = authorized {
+        client.desiredStateWrites.setState("channel:$channelId", "subscribed", subscribed.toString(),
+            write = { context, http -> DesiredStateAttempt(subscribeChannel(channelId, subscribed, context, http = http).requireValue(), Unit) },
+            observe = { context, http ->
+                val result = loadChannel(channelId, context, http = http)
+                if (result.ok) ReadResult(DesiredStateRead(result.value?.subscribed?.toString(), Unit))
+                else ReadResult(error = result.error)
+            }, onConfirmed = { onConfirmed() })
     }
 
-    private suspend fun action(block: (RequestContext, HttpClient) -> ActionReply) {
-        try {
-            client.read { context, http ->
-                if (!context.signedIn) throw SignInRequiredException()
-                val reply = block(context, http)
-                if (!reply.confirmed) throw unconfirmed(reply)
-            }
-            onConfirmed()
-        } catch (error: MediaException) {
-            if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()
-            throw error
-        }
+    private suspend fun <T> authorized(block: suspend () -> T): T = try {
+        block()
+    } catch (error: MediaException) {
+        if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()
+        throw error
     }
 
-    private fun unconfirmed(reply: ActionReply, detail: Map<String, String> = emptyMap()) =
-        UnconfirmedActionException(reply.httpStatus, detail + mapOf("response_shape" to reply.responseShape.orEmpty()))
+    private companion object { val RATINGS = setOf("LIKE", "DISLIKE", "INDIFFERENT") }
 }

@@ -75,10 +75,6 @@ import com.hhst.youtubelite.ui.YoutubeThumb
 /** Coalescing window for style pushes while the user drags a control. */
 private const val STYLE_PUSH_INTERVAL_MS = 500L
 
-/**
- * Subtitle appearance editor: draggable preview for position, size slider,
- * background chips, bold, HSV palette + hex, Reset / Close.
- */
 @Composable
 internal fun ColumnScope.SubtitleStyleEditor(
     style: SubtitleStyle,
@@ -113,8 +109,7 @@ internal fun ColumnScope.SubtitleStyleEditor(
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             PlayerIconButton(R.drawable.ic_arrow_back, stringResource(R.string.a11y_back), onBack,
                 tint = MaterialTheme.colorScheme.onSurface)
-            Text(stringResource(R.string.subtitle_style), Modifier.weight(1f), fontSize = 18.sp,
-                lineHeight = 24.sp, fontWeight = FontWeight.Medium)
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
             PlayerIconButton(R.drawable.ic_close, stringResource(R.string.close), onDismiss,
                 modifier = Modifier.testTag("subtitle-style-close"), tint = MaterialTheme.colorScheme.onSurface)
         }
@@ -457,7 +452,6 @@ private fun HueBar(
     }
 }
 
-/** Label and filled selection chips. */
 @Composable
 private fun <T> StyleOptionRow(
     label: String,

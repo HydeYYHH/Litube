@@ -24,8 +24,7 @@ class StreamSelectionTest {
         assertEquals(4, StreamSelection.codecPriority("avc1"))
         assertEquals(4, StreamSelection.codecPriority("H264"))
         assertEquals(3, StreamSelection.codecPriority("vp9"))
-        // RFC 6381 form from the /player mimeType ("vp09.00.10.08") carries
-        // no "vp9" substring — it must still rank as VP9.
+        // RFC 6381 form ("vp09.00.10.08") carries no "vp9" substring but must still rank as VP9.
         assertEquals(3, StreamSelection.codecPriority("vp09.00.10.08"))
         assertEquals(3, StreamSelection.codecPriority("vp8"))
         assertEquals(2, StreamSelection.codecPriority("h265"))
@@ -75,7 +74,6 @@ class StreamSelectionTest {
         val lowBitrate = format(720, bitrate = 1_000_000, codec = "avc1")
         val deduped = StreamSelection.filterBest(listOf(highBitrate, lowBitrate))
         assertEquals(1, deduped.size)
-        // avc1 (priority 4) beats av01 (priority 1) despite lower bitrate
         assertEquals("avc1", deduped[0].codec)
     }
 
@@ -217,10 +215,28 @@ class StreamSelectionTest {
 
     @Test
     fun selectVideo_allAboveTarget_nearestUp() {
-        // "360p" with only 720p/1080p in the pool: take the smallest step up,
-        // not the pool's top (bandwidth overshoot).
         val formats = listOf(format(1080), format(720))
         assertEquals(720, StreamSelection.selectVideo(formats, "360p")?.height)
+    }
+
+    @Test fun missingFpsKeepsTheResolutionAndUsesAvailableFps() {
+        assertEquals(30, StreamSelection.selectVideo(listOf(format(720), format(480, fps = 60)), "720p60")?.fps)
+        assertEquals(720, StreamSelection.selectVideo(listOf(format(720), format(480, fps = 60)), "720p60")?.height)
+    }
+
+    @Test fun fallbackUsesTheHighestFpsAtTheSmallestAvailableHeight() {
+        val formats = listOf(format(1080), format(720, fps = 30), format(720, fps = 60))
+        assertEquals(format(720, fps = 60), StreamSelection.selectVideo(formats, "360p"))
+    }
+
+    @Test fun fallbackPrefersTheNearestLowerHeightOverAHigherOne() {
+        assertEquals(480, StreamSelection.selectVideo(listOf(format(1080), format(480), format(360)), "720p")?.height)
+    }
+
+    @Test fun missingDimensionsDoNotDiscardTheOnlyVideoStream() {
+        val unknown = format(0)
+        assertEquals(unknown, StreamSelection.selectVideo(listOf(unknown), "720p"))
+        assertEquals(unknown, StreamSelection.selectVideo(listOf(unknown), null))
     }
 
     @Test
@@ -231,9 +247,8 @@ class StreamSelectionTest {
 
     @Test
     fun qualityLabels_fromPlayablePool_only() {
-        // Mirrors PlaybackEngine.trackQualityLabels: raw pool has VR 4K, but the
-        // menu must only offer what preferPlayable would actually select from.
-        // When a poToken format exists, only poToken formats are playable.
+        // Mirrors PlaybackEngine.trackQualityLabels: the menu offers only what preferPlayable would select;
+        // when a poToken format exists, only poToken formats are playable.
         val vr = format(2160).copy(url = "https://gv/v?c=ANDROID_VR")
         val web = format(1080).copy(url = "https://gv/v?c=WEB&pot=xyz")
         val tv = format(720).copy(url = "https://gv/v?c=TVHTML5")
@@ -241,14 +256,11 @@ class StreamSelectionTest {
             .map { "${it.height}p" + if (it.fps > 30) "${it.fps}" else "" }
         assertEquals(listOf("1080p"), potPool)
 
-        // Without any poToken, all non-VR decodable formats stay selectable.
         val plain = StreamSelection.preferPlayable(listOf(vr, tv))
             .map { "${it.height}p" + if (it.fps > 30) "${it.fps}" else "" }
             .sortedByDescending { StreamSelection.parseHeight(it) }
         assertEquals(listOf("720p"), plain)
     }
-
-    // -- isWindowExempt (VISIONOS full-quality path) --
 
     @Test
     fun isWindowExempt_visionosDirectUrl() {

@@ -44,6 +44,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -85,8 +88,11 @@ fun AppTextButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = AppStyle.Action),
     content: @Composable RowScope.() -> Unit,
-) = TextButton(onClick = onClick, modifier = modifier, enabled = enabled,
-    colors = colors, shape = CircleShape, contentPadding = contentPadding, content = content)
+) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
+    TextButton(onClick = { haptic(); onClick() }, modifier = modifier, enabled = enabled,
+        colors = colors, shape = CircleShape, contentPadding = contentPadding, content = content)
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -99,7 +105,7 @@ fun AppAlertDialog(
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
     shape: Shape = AppStyle.MenuShape,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    containerColor: Color = AppStyle.Panel,
     tonalElevation: Dp = 0.dp,
     titleContentColor: Color = MaterialTheme.colorScheme.onSurface,
     textContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -112,10 +118,14 @@ fun AppAlertDialog(
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
                     CompositionLocalProvider(LocalContentColor provides titleContentColor) {
                         icon?.let { Box(Modifier.padding(bottom = 8.dp).align(Alignment.CenterHorizontally)) { it() } }
-                        title?.let { ProvideTextStyle(MaterialTheme.typography.titleLarge, it) }
+                        title?.let {
+                            Box(Modifier.padding(bottom = if (text != null) 8.dp else 0.dp)) {
+                                ProvideTextStyle(MaterialTheme.typography.bodyMedium, it)
+                            }
+                        }
                     }
                     text?.let {
-                        Box(Modifier.weight(1f, fill = false).padding(top = if (title == null) 0.dp else 8.dp)) {
+                        Box(Modifier.weight(1f, fill = false)) {
                             CompositionLocalProvider(LocalContentColor provides textContentColor) {
                                 ProvideTextStyle(MaterialTheme.typography.bodyMedium, it)
                             }
@@ -133,17 +143,21 @@ fun AppAlertDialog(
 }
 
 @Composable
-fun AppRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) =
-    RadioButton(selected, onClick, modifier,
+fun AppRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
+    RadioButton(selected, onClick?.let { { if (!selected) haptic(); it() } }, modifier,
         colors = RadioButtonDefaults.colors(selectedColor = AppStyle.Action,
             unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant))
+}
 
 @Composable
 fun AppCheckbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
-    modifier: Modifier = Modifier, enabled: Boolean = true) =
-    Checkbox(checked, onCheckedChange, modifier, enabled,
+    modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
+    Checkbox(checked, onCheckedChange?.let { callback -> { next -> haptic(); callback(next) } }, modifier, enabled,
         colors = CheckboxDefaults.colors(checkedColor = AppStyle.Action,
             uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant, checkmarkColor = AppStyle.OnAction))
+}
 
 @Composable
 fun AppLinearProgressIndicator(modifier: Modifier = Modifier, color: Color = AppStyle.Action,
@@ -161,6 +175,7 @@ fun AppLinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modif
 @Composable
 fun AppSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     // With system animations off the thumb snaps instead of gliding.
     val fraction by animateFloatAsState(if (checked) 1f else 0f,
         animationSpec = if (com.hhst.youtubelite.ui.design.LocalMotionScale.current > 0f) spring() else snap(), label = "switch")
@@ -170,7 +185,7 @@ fun AppSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     val thumb = if (checked) AppStyle.OnAction else Color.White
     Box(modifier.size(48.dp).then(if (onCheckedChange == null) Modifier else
         Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch,
-            onValueChange = onCheckedChange)), contentAlignment = Alignment.Center) {
+            onValueChange = { haptic(); onCheckedChange(it) })), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(36.dp, 20.dp)) {
             drawRoundRect(track, cornerRadius = CornerRadius(size.height / 2))
             val radius = 8.dp.toPx()
@@ -190,8 +205,14 @@ fun AppSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier =
         activeTrackColor = AppStyle.Action, inactiveTrackColor = MaterialTheme.colorScheme.outline)) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val opacity = if (enabled) 1f else .38f
-    Slider(value, onValueChange, modifier, enabled, valueRange = valueRange, steps = steps,
-        onValueChangeFinished = onValueChangeFinished, colors = colors,
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
+    var changed by remember { mutableStateOf(false) }
+    Slider(value, { changed = true; onValueChange(it) }, modifier, enabled, valueRange = valueRange, steps = steps,
+        onValueChangeFinished = {
+            if (changed) haptic()
+            changed = false
+            onValueChangeFinished?.invoke()
+        }, colors = colors,
         thumb = { Box(Modifier.size(12.dp).background(colors.thumbColor.copy(alpha = opacity), CircleShape)) },
         track = { state ->
             Canvas(Modifier.fillMaxWidth().height(2.dp)) {
@@ -208,6 +229,6 @@ fun AppSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier =
 @Composable
 fun AppSheetHandle(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(32.dp, 4.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .5f), RoundedCornerShape(2.dp)))
+        Box(Modifier.size(32.dp, 4.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .15f), RoundedCornerShape(2.dp)))
     }
 }

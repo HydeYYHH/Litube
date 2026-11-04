@@ -1,5 +1,10 @@
 package com.hhst.youtubelite.playlist.presentation
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,6 +21,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -40,20 +48,25 @@ import com.hhst.youtubelite.R
 
 @Composable
 fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val appBar = rememberAppBarCollapseState(state.playlistId, enabled = state.overlay == PlaylistOverlay.None && state.content is PlaylistContent.Ready)
     AppTheme {
-        BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlist-page")) {
+        BoxWithConstraints(modifier.fillMaxSize().nestedScroll(appBar.connection).background(DesignTokens.Background).testTag("playlist-page")) {
             val width = maxWidth.value
             val viewport = rememberUpdatedState(width)
             val listState = rememberLazyListState()
             val headerScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
-            val page = (state.content as? PlaylistContent.Ready)?.page
+            val loadedPage = (state.content as? PlaylistContent.Ready)?.page
+            var lastPage by remember(state.playlistId) { mutableStateOf(loadedPage) }
+            SideEffect { if (state.content != PlaylistContent.Loading) lastPage = loadedPage }
+            val page = loadedPage ?: lastPage.takeIf { state.content == PlaylistContent.Loading }
             val emptyList = page?.entries?.isEmpty() == true
             val local = page?.summary?.local == true
             // A device-stored list has no server artwork to paint behind the toolbar;
             // an empty one shows the neutral compact header instead of the accent hero.
             val neutralToolbar = page == null || (local && emptyList)
             Column(Modifier.fillMaxSize().then(if (state.overlay != PlaylistOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-                Row(Modifier.fillMaxWidth().height(48.dp).background(if (neutralToolbar) DesignTokens.Background else page?.summary?.accent?.let(::Color) ?: DesignTokens.Background)
+                CollapsingAppBar(appBar) {
+Row(Modifier.fillMaxWidth().height(48.dp).background(if (neutralToolbar) DesignTokens.Background else page?.summary?.accent?.let(::Color) ?: DesignTokens.Background)
                     .testTag("playlist-toolbar"), verticalAlignment = Alignment.CenterVertically) {
                     val color = if (neutralToolbar) DesignTokens.Ink else Color.White
                     AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), color = color, onClick = onBack)
@@ -64,7 +77,12 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                     AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search), color = color) { onAction(PlaylistAction.OpenSearch) }
                     AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_options), color = color) { onAction(PlaylistAction.OpenMenu) }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+
+                }
+                RefreshableContent(value = state, refreshing = state.content == PlaylistContent.Loading,
+                    onRefresh = { onAction(PlaylistAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = state.overlay == PlaylistOverlay.None, contentKey = state.playlistId, tag = "playlist-refresh",
+                    canPull = { !listState.canScrollBackward }) { state ->
                     when (val content = state.content) {
                         PlaylistContent.Loading -> PlaylistSkeleton(width)
                         PlaylistContent.Unavailable -> PlaylistMessage("playlist-unavailable", "This playlist isn't available")
@@ -93,7 +111,7 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                                     if (local && emptyList) PlaylistCompactHeader(content.page)
                                     else PlaylistHero(content.page, w, PlaylistLayout.sideBySide(w), state.descriptionExpanded, onAction)
                                 }
-                                if (content.page.entries.isEmpty()) item {
+                                if (content.page.entries.isEmpty() && content.page.nextKey == null) item {
                                     // Formal empty state: an honest message, no fake cover or author.
                                     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp).testTag("playlist-empty"),
                                         horizontalAlignment = Alignment.CenterHorizontally) {
@@ -103,7 +121,7 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                                             size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
                                     }
                                 }
-                                items(content.page.entries, key = { it.id }) { entry -> PlaylistVideoRow(entry, onAction) }
+                                items(content.page.entries, key = { it.id }, contentType = { "video" }) { entry -> PlaylistVideoRow(entry, onAction) }
                                 item(key = "append") {
                                     PlaylistAppendRow(state, onAction)
                                 }
@@ -118,7 +136,7 @@ fun PlaylistScreen(state: PlaylistUiState, onAction: (PlaylistAction) -> Unit, o
                         }
                     }
                 }
-                PlaylistNavigation(onAction)
+                PlaylistNavigation(state.signedIn, onAction)
             }
             when (state.overlay) {
                 PlaylistOverlay.None -> Unit
@@ -240,7 +258,7 @@ private fun PlaylistIdentity(
             }
         }
     }
-    AppText(page.description, Modifier.padding(top = 12.dp).widthIn(max = 600.dp)
+    AppText(page.description, Modifier.padding(top = 12.dp).widthIn(max = 600.dp).animateContentSize(tween(180))
         .clickable(role = Role.Button) { onAction(PlaylistAction.ToggleDescription) }
         .semantics { contentDescription = if (descriptionExpanded) "Show less description" else "Show full description" }
         .testTag("playlist-description"),
@@ -343,17 +361,9 @@ private fun PlaylistAppendRow(state: PlaylistUiState, onAction: (PlaylistAction)
 }
 
 @Composable
-private fun PlaylistNavigation(onAction: (PlaylistAction) -> Unit) {    Column(Modifier.fillMaxWidth().background(DesignTokens.Background)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
-        Row(Modifier.fillMaxWidth().height(56.dp)) {
-            listOf(PlaylistDestination.Home to AppIcon.HomeOutline, PlaylistDestination.Shorts to AppIcon.Shorts, PlaylistDestination.You to AppIcon.You).forEach { (destination, icon) ->
-                Column(Modifier.weight(1f).fillMaxHeight().clickable(role = Role.Tab) { onAction(PlaylistAction.Destination(destination)) },
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    AppIcon(icon)
-                    AppText(destination.name, size = 11, line = 14)
-                }
-            }
-        }
+private fun PlaylistNavigation(signedIn: Boolean, onAction: (PlaylistAction) -> Unit) {
+    BrowseNavigationBar("playlist", signedIn) { destination ->
+        onAction(PlaylistAction.Destination(PlaylistDestination.valueOf(destination.name)))
     }
 }
 

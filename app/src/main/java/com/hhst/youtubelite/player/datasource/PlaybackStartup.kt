@@ -5,7 +5,6 @@ package com.hhst.youtubelite.player.datasource
 import android.net.Uri
 import android.content.Context
 import android.os.Handler
-import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -27,11 +26,9 @@ import androidx.media3.exoplayer.trackselection.TrackSelector
 import androidx.media3.exoplayer.source.chunk.MediaChunkIterator
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
-import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 import androidx.media3.exoplayer.upstream.BandwidthMeter
 import androidx.media3.exoplayer.upstream.ParsingLoadable
 import java.io.InputStream
-import kotlin.math.ceil
 
 /**
  * First-chunk policy shared by the HLS variant order and the track selection. Both must name the
@@ -39,8 +36,6 @@ import kotlin.math.ceil
  * different initial pick costs one more serial playlist read.
  */
 internal object PlaybackStartup {
-    const val MAX_START_HEIGHT = 480
-    const val START_WINDOW_MS = 5_000L
     private const val FRACTION = AdaptiveTrackSelection.DEFAULT_BANDWIDTH_FRACTION
 
     fun videoSupport(context: Context): (Format) -> Int {
@@ -77,7 +72,7 @@ internal object PlaybackStartup {
         // inside the selector is never dereferenced unless parameters fall
         // back to context-derived defaults.
         @Suppress("DEPRECATION")
-        val selector = DefaultTrackSelector(parameters, StartCappedSelectionFactory())
+        val selector = DefaultTrackSelector(parameters, AdaptiveTrackSelection.Factory())
         selector.init(TrackSelector.InvalidationListener { }, meter)
         try {
             val result = selector.selectTracks(arrayOf(capabilities), TrackGroupArray(group),
@@ -91,18 +86,8 @@ internal object PlaybackStartup {
         } finally { selector.release() }
     }
 
-    /** Estimate that lets AdaptiveTrackSelection afford [format] and nothing above it. */
-    private fun estimateFor(format: Format): Long = ceil(format.bitrate / FRACTION.toDouble()).toLong() + 16
-
-    /** Start-window estimate ceiling, or null when no track exceeds the start height. */
-    fun capEstimate(formats: List<Format>): Long? {
-        val video = formats.filter { it.height > 0 && it.bitrate > 0 }
-        if (video.none { it.height > MAX_START_HEIGHT }) return null
-        return video.filter { it.height <= MAX_START_HEIGHT }.maxByOrNull { it.bitrate }?.let(::estimateFor)
-    }
-
     /**
-     * Fallback for callers without a decoder-capability selector: the highest bitrate the capped
+     * Fallback for callers without a decoder-capability selector: the highest bitrate the
      * estimate affords, else the cheapest, within the most common video MIME type. Production HLS
      * uses [selectFormat] to also respect renderer support and track selection parameters.
      */
@@ -110,8 +95,7 @@ internal object PlaybackStartup {
         val video = formats.filter { it.bitrate > 0 && it.height > 0 }
             .groupBy { MimeTypes.getMediaMimeType(Util.getCodecsOfType(it.codecs, C.TRACK_TYPE_VIDEO)) }
             .values.maxByOrNull { it.size } ?: return null
-        val ceiling = minOf(estimate, capEstimate(video) ?: Long.MAX_VALUE)
-        val allocated = (ceiling * FRACTION).toLong()
+        val allocated = (estimate * FRACTION).toLong()
         return video.filter { it.bitrate <= allocated }.maxByOrNull { it.bitrate }
             ?: video.minByOrNull { it.bitrate }
     }
@@ -150,7 +134,6 @@ internal fun startVariantFirst(
     )
 }
 
-/** Orders VOD variants so the playlist Media3 reads for the timeline is the start pick's. */
 internal class StartupHlsPlaylistParserFactory(
     private val delegate: HlsPlaylistParserFactory,
     private val bandwidth: () -> Long,
@@ -166,53 +149,4 @@ internal class StartupHlsPlaylistParserFactory(
         multivariantPlaylist: HlsMultivariantPlaylist,
         previousMediaPlaylist: HlsMediaPlaylist?,
     ): ParsingLoadable.Parser<HlsPlaylist> = delegate.createPlaylistParser(multivariantPlaylist, previousMediaPlaylist)
-}
-
-/**
- * Caps only the first selection of each media period, for [PlaybackStartup.START_WINDOW_MS]. Later
- * selections of the same period (quality pin, audio switch) keep the real estimate, so a mid-play
- * reselection never drops to the start height.
- */
-internal class StartCappedSelectionFactory(
-    private val delegate: ExoTrackSelection.Factory = AdaptiveTrackSelection.Factory(),
-    private val clock: () -> Long = SystemClock::elapsedRealtime,
-) : ExoTrackSelection.Factory {
-    private val started = LinkedHashSet<Pair<Any, Long>>()
-
-    override fun createTrackSelections(
-        definitions: Array<out ExoTrackSelection.Definition?>,
-        bandwidthMeter: BandwidthMeter,
-        mediaPeriodId: MediaSource.MediaPeriodId,
-        timeline: Timeline,
-    ): Array<ExoTrackSelection?> {
-        val first = synchronized(started) {
-            started.add(mediaPeriodId.periodUid to mediaPeriodId.windowSequenceNumber).also {
-                while (started.size > 8) started.remove(started.first())
-            }
-        }
-        val cap = if (!first) null else definitions.firstNotNullOfOrNull { definition ->
-            definition?.takeIf { it.tracks.size > 1 && it.group.type == C.TRACK_TYPE_VIDEO }
-                ?.let { video -> PlaybackStartup.capEstimate(video.tracks.map(video.group::getFormat)) }
-        }
-        val meter = if (cap == null) bandwidthMeter
-            else StartCappedBandwidthMeter(bandwidthMeter, cap, clock() + PlaybackStartup.START_WINDOW_MS, clock)
-        @Suppress("UNCHECKED_CAST")
-        return delegate.createTrackSelections(definitions as Array<ExoTrackSelection.Definition?>, meter, mediaPeriodId, timeline)
-    }
-}
-
-private class StartCappedBandwidthMeter(
-    private val real: BandwidthMeter,
-    private val cap: Long,
-    private val until: Long,
-    private val clock: () -> Long,
-) : BandwidthMeter {
-    override fun getBitrateEstimate(): Long =
-        if (clock() < until) minOf(real.bitrateEstimate, cap) else real.bitrateEstimate
-    override fun getTimeToFirstByteEstimateUs(): Long = real.timeToFirstByteEstimateUs
-    override fun getTransferListener(): TransferListener? = real.transferListener
-    override fun addEventListener(eventHandler: Handler, eventListener: BandwidthMeter.EventListener) =
-        real.addEventListener(eventHandler, eventListener)
-    override fun removeEventListener(eventListener: BandwidthMeter.EventListener) =
-        real.removeEventListener(eventListener)
 }

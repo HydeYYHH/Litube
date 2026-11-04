@@ -10,6 +10,9 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -26,6 +29,45 @@ class DlnaTransportTest {
 
     private fun response(values: String = "") = MockResponse().setBody(
         "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>$values</s:Body></s:Envelope>")
+
+    @Test fun pauseIsRetriedWhenALateMediaOpenResumesTheRenderer() = runBlocking {
+        MockWebServer().use { server ->
+            val pauses = AtomicInteger()
+            val polls = AtomicInteger()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse = when {
+                    request.getHeader("SOAPAction").orEmpty().contains("#Pause") -> response().also { pauses.incrementAndGet() }
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetTransportInfo") -> {
+                        val firstPausedEcho = polls.incrementAndGet() == 1
+                        response("<CurrentTransportState>${if (firstPausedEcho || pauses.get() >= 2) "PAUSED_PLAYBACK" else "PLAYING"}</CurrentTransportState>")
+                    }
+                    else -> response()
+                }
+            }
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/video", "Title", "video/mp4")
+            assertTrue(transport.pauseAndConfirm())
+            assertEquals(2, pauses.get())
+            assertTrue(polls.get() >= 5)
+        }
+    }
+
+    @Test fun everySoapCommandOpensANewConnectionForRenderersWithBrokenKeepAlive() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(description()))
+            repeat(3) { server.enqueue(response()) }
+            val transport = DlnaTransport(client)
+            val renderer = requireNotNull(transport.describe(server.url("/desc.xml")))
+            assertTrue(transport.cast(renderer, "http://phone/stream/v", "Video", "video/mp4"))
+            assertTrue(transport.pause())
+            repeat(4) {
+                val request = server.takeRequest(3, TimeUnit.SECONDS)!!
+                assertEquals("close", request.getHeader("Connection"))
+                assertEquals("A renderer must not receive Play on a reused SetURI socket", 0, request.sequenceNumber)
+            }
+        }
+    }
 
     @Test fun namesNamespacesAndRelativeControlPathsAreParsed() {
         MockWebServer().use { server ->
@@ -71,7 +113,6 @@ class DlnaTransportTest {
         MockWebServer().use { server ->
             val target = DlnaDescription.parse(description().toByteArray(), server.url("/renderer/desc.xml"))!!
             val transport = DlnaTransport(client)
-            // cast() selects the renderer: SetAVTransportURI then Play, both valid.
             server.enqueue(response()); server.enqueue(response())
             assertTrue(transport.cast(target, "http://upstream/v.mp4", "t", "video/mp4"))
             server.enqueue(MockResponse().setBody("<not-xml"))
@@ -135,6 +176,89 @@ class DlnaTransportTest {
         }
     }
 
+    @Test fun waitsForTheNewTrackBeforeAllowingResumeSeekAndPause() = runBlocking {
+        MockWebServer().use { server ->
+            val positions = AtomicInteger()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse = when {
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetTransportInfo") ->
+                        response("<CurrentTransportState>PLAYING</CurrentTransportState>")
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetPositionInfo") -> {
+                        val track = if (positions.incrementAndGet() <= 2) "old" else "new"
+                        response("<TrackURI>http://phone/$track</TrackURI><TrackDuration>00:00:00</TrackDuration>")
+                    }
+                    else -> response()
+                }
+            }
+            val transport = DlnaTransport(client)
+            val target = DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!
+            transport.cast(target, "http://phone/new", "Title", "video/mp4")
+            transport.awaitMediaReady("http://phone/new")
+            transport.pause()
+            assertTrue(positions.get() >= 3)
+            val actions = List(server.requestCount) { server.takeRequest().getHeader("SOAPAction")!!.substringAfter('#').trimEnd('"') }
+            assertEquals(listOf("SetAVTransportURI", "Play"), actions.take(2))
+            assertEquals("Pause", actions.last())
+        }
+    }
+
+    @Test fun playingDoesNotRequireDurationOrAnUnmodifiedTrackUri() = runBlocking {
+        val metadata = listOf(
+            "<TrackURI>http://phone/new</TrackURI><TrackDuration>00:00:00</TrackDuration>",
+            "<TrackURI>NOT_IMPLEMENTED</TrackURI><TrackDuration>NOT_IMPLEMENTED</TrackDuration>",
+            "",
+            "<TrackURI>http://renderer/internal/42</TrackURI>",
+        )
+        for (values in metadata) MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) = when {
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetTransportInfo") ->
+                        response("<CurrentTransportState>PLAYING</CurrentTransportState>")
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetPositionInfo") -> response(values)
+                    else -> response()
+                }
+            }
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/new", "Title", "video/mp4")
+            transport.awaitMediaReady("http://phone/new", timeoutMs = 4_000)
+        }
+    }
+
+    @Test fun unsupportedPositionInfoDoesNotBlockAPlayingRenderer() = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) = when {
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetTransportInfo") ->
+                        response("<CurrentTransportState>PLAYING</CurrentTransportState>")
+                    request.getHeader("SOAPAction").orEmpty().contains("#GetPositionInfo") ->
+                        response("<Fault><errorCode>401</errorCode></Fault>").setResponseCode(500)
+                    else -> response()
+                }
+            }
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/new", "Title", "video/mp4")
+            transport.awaitMediaReady("http://phone/new", timeoutMs = 3_000)
+        }
+    }
+
+    @Test fun bufferingAloneDoesNotCountAsReadyAndReportsTheLastState() = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) =
+                    response("<CurrentTransportState>TRANSITIONING</CurrentTransportState>")
+            }
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/new", "Title", "video/mp4")
+            val error = runCatching { transport.awaitMediaReady("http://phone/new", timeoutMs = 350) }.exceptionOrNull()
+            assertTrue(error is DlnaRequestException)
+            assertEquals("media_ready", (error as DlnaRequestException).stage)
+            assertTrue(error.message!!.contains("BUFFERING"))
+        }
+    }
+
     @Test fun soapFaultKeepsTheFailingActionAndDeviceError() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(response("<Fault><detail><UPnPError><errorCode>714</errorCode><errorDescription>Illegal MIME-Type</errorDescription></UPnPError></detail></Fault>").setResponseCode(500))
@@ -171,6 +295,58 @@ class DlnaTransportTest {
             delay(100)
             pending.cancelAndJoin()
             assertTrue(pending.isCancelled)
+        }
+    }
+
+    @Test fun aRendererThatRejectsPausedSeekIsResumedAndPausedAgain() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(2) { server.enqueue(response()) }
+            server.enqueue(response("<Fault><errorCode>501</errorCode></Fault>").setResponseCode(500))
+            server.enqueue(response("<CurrentTransportState>PAUSED_PLAYBACK</CurrentTransportState>"))
+            server.enqueue(response())
+            server.enqueue(response("<CurrentTransportState>PLAYING</CurrentTransportState>"))
+            repeat(2) { server.enqueue(response()) }
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/video", "Title", "video/mp4")
+            assertTrue(transport.seek(20_000))
+            val actions = List(8) { server.takeRequest().getHeader("SOAPAction")!!.substringAfter('#').trimEnd('"') }
+            assertEquals(listOf("SetAVTransportURI", "Play", "Seek", "GetTransportInfo", "Play", "GetTransportInfo", "Seek", "Pause"), actions)
+        }
+    }
+
+    @Test fun aPlayingRendererIsNotResumedOrPausedAfterASeekFailure() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(2) { server.enqueue(response()) }
+            server.enqueue(response("<Fault><errorCode>501</errorCode></Fault>").setResponseCode(500))
+            server.enqueue(response("<CurrentTransportState>PLAYING</CurrentTransportState>"))
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/video", "Title", "video/mp4")
+            val error = runCatching { transport.seek(20_000) }.exceptionOrNull() as DlnaRequestException
+            assertEquals("Seek", error.stage)
+            assertEquals("501", error.code)
+            assertEquals(4, server.requestCount)
+        }
+    }
+
+    @Test fun aFailedPausedSeekRestoresPauseAndKeepsTheSeekError() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(2) { server.enqueue(response()) }
+            server.enqueue(response("<Fault><errorCode>501</errorCode></Fault>").setResponseCode(500))
+            server.enqueue(response("<CurrentTransportState>PAUSED_PLAYBACK</CurrentTransportState>"))
+            server.enqueue(response())
+            server.enqueue(response("<CurrentTransportState>PLAYING</CurrentTransportState>"))
+            server.enqueue(response("<Fault><errorCode>710</errorCode></Fault>").setResponseCode(500))
+            server.enqueue(response())
+            val transport = DlnaTransport(client)
+            transport.cast(DlnaDescription.parse(description().toByteArray(), server.url("/desc"))!!,
+                "http://phone/video", "Title", "video/mp4")
+            val error = runCatching { transport.seek(20_000) }.exceptionOrNull() as DlnaRequestException
+            assertEquals("Seek", error.stage)
+            assertEquals("710", error.code)
+            val actions = List(8) { server.takeRequest().getHeader("SOAPAction")!! }
+            assertTrue(actions.last().endsWith("#Pause\""))
         }
     }
 }

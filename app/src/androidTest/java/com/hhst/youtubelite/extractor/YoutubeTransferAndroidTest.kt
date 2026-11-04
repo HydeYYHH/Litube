@@ -58,7 +58,7 @@ class YoutubeTransferAndroidTest {
         val record = linkedMapOf<String, Any>("videoId" to id, "profile" to plan.client.name, "expectedBytes" to length)
         val proxy = LocalStreamProxy(app, client, advertisedHost = "127.0.0.1", mediaRequests = policy)
         try {
-            val paused = transport.downloadComponent("device-transfer", component, source, dest, emptyList()) {
+            val paused = transport.downloadComponent("device-transfer", 0, component, source, dest, emptyList()) {
                 chunks += it
                 false
             }
@@ -66,7 +66,7 @@ class YoutubeTransferAndroidTest {
             assertEquals(1, chunks.size)
             assertTrue(FileIntegrity.verify(dest, chunks[0].startByte, chunks[0].receivedBytes, chunks[0].checksum))
             val firstChecksum = chunks[0].checksum
-            val completed = transport.downloadComponent("device-transfer", component, source, dest, chunks.toList()) {
+            val completed = transport.downloadComponent("device-transfer", 0, component, source, dest, chunks.toList()) {
                 chunks += it
                 true
             }

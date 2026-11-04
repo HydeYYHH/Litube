@@ -12,10 +12,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * In-app navigation holds auto-PiP only for the handoff itself: the hold
- * ends when the destination activity owns the foreground, not when the
- * source behind it resumes or dies. Overlay holds (downloads, share) keep
- * their own lifetime and are covered by the downloader tests.
+ * In-app navigation holds auto-PiP only for the handoff itself: the hold ends when the
+ * destination owns the foreground, not when the source behind it resumes or dies. Overlay
+ * holds keep their own lifetime and are covered by the downloader tests.
  */
 class PipHandoffAndroidTest {
     private fun fixtureIntent(context: android.content.Context, target: Class<*>): Intent =

@@ -1,10 +1,12 @@
 package com.hhst.youtubelite.downloader.ui
 
+import com.hhst.youtubelite.ui.components.watchSheetHeight
 import android.content.res.Configuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.ui.components.AppSheetHandle
 import com.hhst.youtubelite.downloader.core.BatchSelection
@@ -252,9 +255,12 @@ fun SingleVideoConfirmSheet(
     }
     if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
         sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { AppSheetHandle() },
-        tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
+        containerColor = AppStyle.Panel, contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) {
+        Column(Modifier.fillMaxWidth().watchSheetHeight()) { AppSheetHandle(); body() }
+    }
     picker?.let { kind ->
         val options = when (kind) { "quality" -> qualityOptions; "audio" -> audioOptions; else -> subOptions }
         val selected = when (kind) { "quality" -> qualityKey; "audio" -> selectedAudioKey; else -> selectedSubKey }
@@ -294,7 +300,7 @@ private fun SelectionRow(name: String, selected: String, enabled: Boolean, onCli
 private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, selected: String,
     onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium) },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp,
+        containerColor = AppStyle.Panel, tonalElevation = 0.dp,
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 options.forEach { (key, label) ->
@@ -312,7 +318,6 @@ private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, sel
         }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
-/** Section heading shared by the download sheets. */
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -384,7 +389,6 @@ private fun SizeRow(kind: SizeKind, bytes: Long?) {
     )
 }
 
-/** Full-width expander for the advanced block, with a rotating chevron. */
 @Composable
 private fun MoreOptionsHandle(open: Boolean, onToggle: () -> Unit) {
     val moreLabel = stringResource(R.string.download_more_options)
@@ -509,7 +513,6 @@ fun BatchConfirmSheet(
         attachmentsOnly = attachmentsOnly,
     )
     val downloadLabel = stringResource(R.string.download)
-    // Same embedded/host distinction as SingleVideoConfirmSheet above.
     val bodyScroll = if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState())
     val sheetBody: @Composable () -> Unit = {
         Column(
@@ -519,13 +522,6 @@ fun BatchConfirmSheet(
                 .navigationBarsPadding()
                 .padding(horizontal = DownloadTokens.PageInset),
         ) {
-            Text(
-                snapshot.name,
-                fontWeight = FontWeight.Medium,
-                fontSize = SettingsTokens.TitleSize.sp,
-                lineHeight = SettingsTokens.TitleLine.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
             Text(
                 stringResource(R.string.download_batch_meta, snapshot.items.size, snapshot.source.name),
                 fontSize = SettingsTokens.DetailSize.sp,
@@ -640,12 +636,13 @@ fun BatchConfirmSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            dragHandle = { AppSheetHandle() },
+            containerColor = AppStyle.Panel,
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner),
         ) {
-            sheetBody()
+            Column(Modifier.fillMaxWidth().watchSheetHeight()) { AppSheetHandle(); sheetBody() }
         }
     }
 }

@@ -72,11 +72,24 @@ object YoutubeDownloadRequestAdapter {
  */
 object DownloadHttpClients {
     private const val MAX_REQUESTS = DownloadSettings.DEFAULT_CONNECTIONS
-    private const val MAX_REQUESTS_PER_HOST = 2
+    private val budgets = java.util.WeakHashMap<Dispatcher, DownloadConnectionLimiter>()
+
+    internal fun connectionLimiter(client: OkHttpClient): DownloadConnectionLimiter = synchronized(budgets) {
+        budgets.getOrPut(client.dispatcher) {
+            DownloadConnectionLimiter(client.dispatcher.maxRequests, client.dispatcher.maxRequestsPerHost)
+        }
+    }
+
+    fun setMaxConnections(client: OkHttpClient, value: Int) {
+        val n = value.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
+        client.dispatcher.maxRequests = n
+        client.dispatcher.maxRequestsPerHost = n
+        connectionLimiter(client).update(n, n)
+    }
 
     fun create(
         maxRequests: Int = MAX_REQUESTS,
-        maxRequestsPerHost: Int = MAX_REQUESTS_PER_HOST,
+        maxRequestsPerHost: Int = maxRequests,
     ): OkHttpClient {
         val connections = maxRequests.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
         val dispatcher = Dispatcher().apply {

@@ -34,7 +34,6 @@ sealed interface FeedItem {
         val age: String? = null,
         val isNew: Boolean = false,
         val avatar: String? = null,
-        /** The item's own not-interested feedback token, when the feed rendered one. */
         @kotlinx.serialization.Transient val notInterestedToken: String? = null,
         @kotlinx.serialization.Transient val dontRecommendToken: String? = null,
         @kotlinx.serialization.Transient val feedbackGeneration: Long? = null,
@@ -55,6 +54,15 @@ sealed interface FeedItem {
 
 data class ThumbnailPalette(val stackColor: Int, val badgeColor: Int)
 
+/** Later renderers may omit display fields already recovered for the same video. */
+fun FeedItem.Video.withMissingDisplayFrom(other: FeedItem.Video): FeedItem.Video = copy(
+    title = title.ifBlank { other.title }, author = author.ifBlank { other.author },
+    metadata = metadata.ifBlank { other.metadata }, artwork = artwork.ifBlank { other.artwork },
+    duration = duration.ifBlank { other.duration }, channelId = channelId.ifBlank { other.channelId },
+    age = age?.takeIf(String::isNotBlank) ?: other.age?.takeIf(String::isNotBlank),
+    avatar = avatar?.takeIf(String::isNotBlank) ?: other.avatar?.takeIf(String::isNotBlank),
+)
+
 data class FeedMenuEndpoint(val panelId: String, val params: String) {
     override fun toString() = "FeedMenuEndpoint"
 }
@@ -74,12 +82,12 @@ sealed interface HomeContent {
     data class Feed(val page: HomePage, val refreshing: Boolean = false, val append: AppendState = AppendState.Idle,
         val refreshFailed: Boolean = false,
         /** A user-visible refresh (pull, chip or identity change) may show the anchored indicator. */
-        val userRefresh: Boolean = false) : HomeContent
-    /**
-     * A real watch landed and recommendations may exist now: the empty card
-     * stays painted while the quiet re-check runs (no Loading flash).
-     */
-    /** Blank [title]/[message] fall back to localized strings in the UI layer. */
+        val userRefresh: Boolean = false,
+        /** Consecutive pages that added no cards; automatic paging pauses after three. */
+        val emptyAutoLoads: Int = 0) : HomeContent {
+        val automaticPagingPaused: Boolean get() = emptyAutoLoads >= 3
+    }
+    /** The empty card stays painted during the quiet re-check after a real watch (no Loading flash); blank [title]/[message] fall back to localized strings in the UI layer. */
     data class Empty(val title: String = "", val message: String = "", val refreshing: Boolean = false,
         val userRefresh: Boolean = false) : HomeContent
     data object Failed : HomeContent
@@ -104,7 +112,6 @@ sealed interface HomeOverlay {
     data class Feedback(val itemId: String, val kind: HomeFeedbackKind) : HomeOverlay
 }
 
-/** Reason chooser opened by the feedback/report rows; no sample exposes these panels. */
 enum class HomeFeedbackKind(val title: String, val reasons: List<String>) {
     NotInterested("Tell us why", listOf(
         "I'm not interested in this video", "It's repetitive", "I've already seen it",
@@ -128,7 +135,6 @@ data class HomeUiState(
     val signedInPreview: Boolean = false,
     val hideShorts: Boolean = false,
     val chips: List<String> = HomeLayout.chips,
-    /** Production account photo for the You tab; fixtures keep the bundled sample avatar. */
     val avatar: String? = null,
     /** Production mode: feedback menu rows without server tokens hide. Fixtures keep the recorded menus. */
     val live: Boolean = false,
@@ -170,7 +176,6 @@ fun FeedMenuKind.productionActions(signedIn: Boolean = false, video: FeedItem.Vi
 fun FeedMenuKind.visibleActions(live: Boolean, signedIn: Boolean = false, video: FeedItem.Video? = null): List<FeedMenuAction> =
     if (live) productionActions(signedIn, video) else actions
 
-/** Navigation and operation requests handled by the host. */
 sealed interface HomeNavigationRequest {
     data class Search(val query: String) : HomeNavigationRequest
     data class Watch(val videoId: String) : HomeNavigationRequest
@@ -210,6 +215,7 @@ sealed interface HomeAction {
     data class Navigate(val request: HomeNavigationRequest) : HomeAction
     data object Refresh : HomeAction
     data object LoadNext : HomeAction
+    data object AutomaticLoadNext : HomeAction
     data object DismissVerification : HomeAction
 }
 

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
+import com.hhst.youtubelite.player.PlayerUiState
+import com.hhst.youtubelite.player.engine.LoopMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +9,59 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerUiTest {
+
+    @Test fun endedPlaybackOffersReplayRegardlessOfRemainingNavigationOrPlayIntent() {
+        for (hasNext in listOf(false, true)) {
+            val ended = PlayerUiState(
+                ended = true, prepared = true, userWantsPlay = true, hasNext = hasNext,
+                loopMode = LoopMode.PAUSE_AT_END,
+            )
+            assertEquals(PlayerUi.PlayPauseAction.Replay, PlayerUi.playPauseAction(ended))
+            assertEquals(PlayerUi.PlayPauseAction.Pause,
+                PlayerUi.playPauseAction(ended.copy(ended = false, isPlaying = true)))
+            assertEquals(PlayerUi.PlayPauseAction.Play,
+                PlayerUi.playPauseAction(ended.copy(ended = false, userWantsPlay = false)))
+        }
+    }
+
+    @Test fun loadingIncludesResolutionBufferingAndWaitingForTheFirstVideoFrame() {
+        val ready = PlayerUiState(
+            prepared = true, isPlaying = true, userWantsPlay = true,
+            videoWidth = 1280, firstFrameRendered = true,
+        )
+        for (loading in listOf(
+            ready.copy(prepared = false),
+            ready.copy(loading = true),
+            ready.copy(firstFrameRendered = false),
+        )) {
+            assertEquals(PlayerUi.PlayPauseAction.Loading, PlayerUi.playPauseAction(loading))
+            assertEquals(PlayerUi.PlayPauseAction.Replay, PlayerUi.playPauseAction(loading.copy(ended = true)))
+            assertTrue(PlayerUi.playPauseAction(loading.copy(error = "Failed")) != PlayerUi.PlayPauseAction.Loading)
+        }
+        assertEquals(PlayerUi.PlayPauseAction.Pause, PlayerUi.playPauseAction(ready))
+        assertEquals(PlayerUi.PlayPauseAction.Play,
+            PlayerUi.playPauseAction(ready.copy(isPlaying = false, userWantsPlay = false)))
+        assertEquals(PlayerUi.PlayPauseAction.Pause,
+            PlayerUi.playPauseAction(ready.copy(casting = true, firstFrameRendered = false)))
+    }
+
+    @Test fun surfaceHandoffDoesNotRestartLoadingAfterVideoHasRendered() {
+        for (mini in listOf(false, true)) {
+            val handoff = PlayerUiState(
+                mini = mini, prepared = true, isPlaying = true, userWantsPlay = true,
+                videoWidth = 1280, firstFrameRendered = false, hasRenderedVideoFrame = true,
+            )
+            assertEquals(PlayerUi.PlayPauseAction.Pause, PlayerUi.playPauseAction(handoff))
+            assertEquals(PlayerUi.PlayPauseAction.Play,
+                PlayerUi.playPauseAction(handoff.copy(isPlaying = false, userWantsPlay = false)))
+            assertEquals(PlayerUi.PlayPauseAction.Loading,
+                PlayerUi.playPauseAction(handoff.copy(loading = true, isPlaying = false)))
+            assertEquals(PlayerUi.PlayPauseAction.Loading,
+                PlayerUi.playPauseAction(handoff.copy(prepared = false)))
+            assertEquals(PlayerUi.PlayPauseAction.Loading,
+                PlayerUi.playPauseAction(handoff.copy(hasRenderedVideoFrame = false)))
+        }
+    }
 
     @Test
     fun offsetHint_signedSeconds() {
@@ -64,13 +119,10 @@ class PlayerUiTest {
 
     @Test
     fun playerTopOffset_windowSpaceIsInsetPlusReportedPageTop() {
-        // The overlay lives one level above the inset-padded WebView: window
-        // space = system-bar inset + the page player's viewport-relative top.
+        // The overlay sits above the inset-padded WebView: window space = inset + page-relative player top.
         assertEquals(80, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = 48, insetTopDp = 32))
         assertEquals(32, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = 0, insetTopDp = 32))
-        // No report yet: fall back to the masthead height below the inset.
         assertEquals(80, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = null, insetTopDp = 32))
-        // Scrolled past the window top clamps at the edge.
         assertEquals(0, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = -30, insetTopDp = 24))
         assertEquals(0, PlayerUi.playerTopOffsetDp(fullscreen = true, reportedTopDp = 48, insetTopDp = 32))
     }
@@ -104,9 +156,7 @@ class PlayerUiTest {
         assertTrue(PlayerUi.useLandscapeMiniPlayer(880, 360, 495))
         assertTrue(PlayerUi.useLandscapeMiniPlayer(880, 360, null))
         assertFalse(PlayerUi.useLandscapeMiniPlayer(1024, 840, 576))
-        // A wide device still needs mini when the actual page player is tall.
         assertTrue(PlayerUi.useLandscapeMiniPlayer(1280, 800, 720))
-        // A shorter slot fits even in a phone-sized landscape window.
         assertFalse(PlayerUi.useLandscapeMiniPlayer(880, 480, 220))
     }
 
@@ -121,7 +171,6 @@ class PlayerUiTest {
 
     @Test
     fun qualityButtonLabel_autoIncludesActiveTrack() {
-        // Pinned label wins.
         assertEquals(
             "1080p",
             PlayerUi.qualityButtonLabel(pinned = "1080p", active = null, autoPrefix = "Auto", videoHeight = 720),
@@ -131,12 +180,10 @@ class PlayerUiTest {
             "Auto 1080p",
             PlayerUi.qualityButtonLabel(pinned = null, active = "720p", autoPrefix = "Auto", videoHeight = 1080),
         )
-        // They agree: keep the track label, including a frame-rate suffix.
         assertEquals(
             "Auto 1080p60",
             PlayerUi.qualityButtonLabel(pinned = null, active = "1080p60", autoPrefix = "Auto", videoHeight = 1080),
         )
-        // Track unknown yet: fall back to the reported video height.
         assertEquals(
             "Auto 720p",
             PlayerUi.qualityButtonLabel(pinned = null, active = null, autoPrefix = "Auto", videoHeight = 720),

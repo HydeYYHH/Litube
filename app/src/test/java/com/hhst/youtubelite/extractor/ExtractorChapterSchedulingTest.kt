@@ -10,11 +10,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Chapter scheduling: speculative chapter reads stay behind the stream promise so
- * they never share the foreground request window, while an explicit chapter
- * consumer still starts the read on demand.
- */
+/** Speculative chapter reads stay behind the stream promise so they never share the foreground request window; an explicit chapter consumer still starts the read on demand. */
 class ExtractorChapterSchedulingTest {
     private class GatedHost : PlaybackHost {
         val streamGate = CompletableDeferred<Unit>()
@@ -54,7 +50,6 @@ class ExtractorChapterSchedulingTest {
         Thread.sleep(200)
         assertEquals(0, host.chaptersCalls.get())
         assertFalse(extraction.chapters.done)
-        // Releasing the stream lets the chapter read follow.
         host.streamGate.complete(Unit)
         val chapters = extraction.chapters.get(5, TimeUnit.SECONDS)
         assertEquals(1, host.chaptersCalls.get())

@@ -9,6 +9,13 @@ interface SubscriptionsRepository {
     val supportedFilters: Set<SubscriptionsFilter> get() = SubscriptionsFilter.entries.toSet()
     suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String? = null): SubscriptionsPage
 
+    /** Channel-scoped subscription feed. Production uses the channel's server filter and cursor. */
+    suspend fun channelSubscriptions(channel: SubscribedChannel, filter: SubscriptionsFilter,
+                                     continuation: String? = null): SubscriptionsPage {
+        val page = subscriptions(filter, continuation)
+        return page.copy(items = page.items.filter { it.channelId == channel.channelId })
+    }
+
     /** Independent channel read so a guide failure cannot erase the feed. */
     suspend fun subscribedChannels(): List<SubscribedChannel> = emptyList()
 

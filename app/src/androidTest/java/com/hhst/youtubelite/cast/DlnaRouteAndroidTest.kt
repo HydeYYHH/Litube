@@ -13,14 +13,46 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Layer-2 acceptance for the DLNA route: the real UPnPCast stack on the test
- * device. Renderers are not part of CI — these tests pin the graceful
- * no-renderer behavior (real SSDP discovery completes, casting is refused,
- * state stays closed); end-to-end playback to a TV needs a physical DLNA
- * device and stays a manual acceptance item.
+ * Layer-2 acceptance for the DLNA route on the real UPnPCast stack. Renderers are not
+ * part of CI; these tests pin the graceful no-renderer behavior. End-to-end playback
+ * to a TV is a manual acceptance item.
  */
 @RunWith(AndroidJUnit4::class)
 class DlnaRouteAndroidTest {
+    @Test fun openEndedProgressiveRangesReadBeyondTheProxyChunkLimit() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bytes = ByteArray(4 * 1024 * 1024) { (it % 251).toByte() }
+        val upstream = object : fi.iki.elonen.NanoHTTPD("127.0.0.1", 0) {
+            override fun serve(session: IHTTPSession): Response {
+                val range = session.headers["range"]?.removePrefix("bytes=")?.split('-')
+                val start = range?.firstOrNull()?.toIntOrNull() ?: 0
+                val end = (range?.getOrNull(1)?.toIntOrNull() ?: bytes.lastIndex).coerceAtMost(bytes.lastIndex)
+                return newFixedLengthResponse(if (range == null) Response.Status.OK else Response.Status.PARTIAL_CONTENT,
+                    "video/mp4", bytes.copyOfRange(start, end + 1).inputStream(), (end - start + 1).toLong()).apply {
+                    addHeader("Accept-Ranges", "bytes")
+                    if (range != null) addHeader("Content-Range", "bytes $start-$end/${bytes.size}")
+                }
+            }
+        }
+        upstream.start()
+        val http = okhttp3.OkHttpClient.Builder().proxy(java.net.Proxy.NO_PROXY).build()
+        val controller = CastController(context, http)
+        try {
+            val source = CastSource("video", "Title", 240,
+                Format(url = "http://127.0.0.1:${upstream.listeningPort}/video", mimeType = "video/mp4"), null)
+            val url = requireNotNull(controller.dlnaStreamUrl(source))
+            // First response discovers the upstream total; the second uses the cached total.
+            for (start in listOf(1024 * 1024, 0)) {
+                http.newCall(okhttp3.Request.Builder().url(url).header("Range", "bytes=$start-").build())
+                    .execute().use { response ->
+                        assertEquals(206, response.code)
+                        assertEquals("bytes $start-${bytes.lastIndex}/${bytes.size}", response.header("Content-Range"))
+                        assertArrayEquals(bytes.copyOfRange(start, bytes.size), response.body!!.bytes())
+                    }
+            }
+        } finally { controller.stopLink(); upstream.stop() }
+    }
+
     @Test fun progressiveMediaWithoutDashIndicesSupportsRangeReads() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val bytes = CastVmFixture.bytes("cast-video.mp4")
@@ -59,8 +91,7 @@ class DlnaRouteAndroidTest {
         DLNACast.init(context)
         val devices = runBlocking { DLNACast.search(timeout = 3_000) }
         DLNACast.cleanup()
-        // A renderer on the test network would make the no-device assertions
-        // below meaningless; such a run is not no-renderer evidence.
+        // A renderer on the test network would invalidate the no-device assertion below.
         assumeTrue("DLNA renderer present on test network", devices.isEmpty())
     }
 

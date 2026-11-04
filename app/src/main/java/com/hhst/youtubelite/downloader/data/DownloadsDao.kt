@@ -108,6 +108,49 @@ interface DownloadsDao {
     @Query("SELECT * FROM dl_task")
     suspend fun allTasks(): List<TaskEntity>
 
+    @Query("""
+        SELECT * FROM dl_task
+        WHERE (:videoId IS NULL OR videoId = :videoId)
+          AND (:includeRemoved OR removed = 0)
+          AND (:allPhases OR phase IN (:phases))
+          AND (:allStatuses OR status IN (:statuses))
+    """)
+    suspend fun tasksForDownloads(
+        videoId: String?, includeRemoved: Boolean,
+        allPhases: Boolean, phases: List<String>,
+        allStatuses: Boolean, statuses: List<String>,
+    ): List<TaskEntity>
+
+    @Query("SELECT * FROM dl_task WHERE id IN (:taskIds)")
+    suspend fun tasksByIds(taskIds: List<String>): List<TaskEntity>
+
+    @Query("SELECT * FROM dl_item WHERE taskId IN (:taskIds)")
+    suspend fun itemsForTasks(taskIds: List<String>): List<ItemEntity>
+
+    @Query("SELECT * FROM dl_asset WHERE taskId IN (:taskIds)")
+    suspend fun assetsForTasks(taskIds: List<String>): List<AssetEntity>
+
+    @Query("""
+        SELECT c.* FROM dl_component c JOIN dl_asset a ON c.assetId = a.id
+        WHERE a.taskId IN (:taskIds)
+    """)
+    suspend fun componentsForTasks(taskIds: List<String>): List<ComponentEntity>
+
+    @Query("""
+        SELECT c.* FROM dl_chunk c JOIN dl_component i ON c.componentId = i.id
+        JOIN dl_asset a ON i.assetId = a.id WHERE a.taskId IN (:taskIds)
+    """)
+    suspend fun chunksForTasks(taskIds: List<String>): List<ChunkEntity>
+
+    @Query("""
+        SELECT p.* FROM dl_publish p JOIN dl_asset a ON p.assetId = a.id
+        WHERE a.taskId IN (:taskIds)
+    """)
+    suspend fun publishesForTasks(taskIds: List<String>): List<PublishEntity>
+
+    @Query("SELECT * FROM dl_schedule WHERE taskId IN (:taskIds)")
+    suspend fun schedulesForTasks(taskIds: List<String>): List<ScheduleEntity>
+
     @Query("SELECT * FROM dl_batch")
     suspend fun allBatches(): List<BatchEntity>
 

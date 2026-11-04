@@ -103,8 +103,7 @@ class DownloadEngineE2ETest {
         val taskId = env.coordinator.enqueue(request("a"), "s1").created.single().taskId
         val first = async(Dispatchers.IO) { env.engine.run(taskId) }
         assertTrue(firstDone.await(5, TimeUnit.SECONDS))
-        // The request arriving does not mean the chunk is checkpointed yet:
-        // poll until the first verified chunk lands, then pause mid-transfer.
+        // Request arrival does not imply checkpointing; poll until a chunk is verified, then pause mid-transfer.
         val deadline = System.nanoTime() + 5_000_000_000L
         while (System.nanoTime() < deadline) {
             val count = env.repo.transact { snapshot(taskId) }!!.assets.single().components

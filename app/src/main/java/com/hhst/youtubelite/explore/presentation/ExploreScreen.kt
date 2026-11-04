@@ -1,5 +1,11 @@
 package com.hhst.youtubelite.explore.presentation
 
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+
+import com.hhst.youtubelite.ui.design.RefreshableContent
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
@@ -57,7 +63,8 @@ import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("explore-screen")) {
+    val appBar = rememberAppBarCollapseState(state.category, enabled = state.content is ExploreContent.Ready)
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("explore-screen").nestedScroll(appBar.connection)) {
         val width = maxWidth.value
         // Scroll positions are retained per category (and per shelf) across tab switches
         // AND configuration rebuilds (saved via savers, not plain remember).
@@ -65,13 +72,21 @@ fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBa
         val gridStates = rememberSaveable(saver = gridStatesSaver) { mutableStateMapOf<ExploreCategory, LazyGridState>() }
         val shelfStates = rememberSaveable(saver = shelfStatesSaver) { mutableStateMapOf<String, LazyListState>() }
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("explore-topbar"), verticalAlignment = Alignment.CenterVertically) {
+            CollapsingAppBar(appBar) {
+Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("explore-topbar"), verticalAlignment = Alignment.CenterVertically) {
                 AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onBack() }
                 AppText("Explore", Modifier.padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
+
+            }
             CategoryChips(state.category, onAction)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            RefreshableContent(value = state, refreshing = state.content == ExploreContent.Loading,
+                    onRefresh = { onAction(ExploreAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = true, contentKey = state.category, tag = "explore-refresh",
+                    canPull = { if ((state.content as? ExploreContent.Ready)?.page?.sections?.isNotEmpty() == true)
+                        columnStates[state.category]?.canScrollBackward != true
+                        else gridStates[state.category]?.canScrollBackward != true }) { state ->
                 when (val content = state.content) {
                     ExploreContent.Loading -> ExploreSkeleton(width)
                     ExploreContent.Failed -> if (state.verification != null) VerificationCard(
@@ -182,7 +197,7 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
             if (section.videos.isEmpty() && section.playlists.isEmpty()) {
                 if (section.nextKey != null || section.append != AppendState.Idle) {
                     item(key = "pending-$index", contentType = "pending-shelf") {
-                        ShelfTail(index, section.append, section.nextKey,
+                        ShelfTail(index, section.append, section.nextKey, section.automaticPagingPaused,
                             Modifier.fillMaxWidth().height(48.dp), onAction)
                     }
                 }
@@ -210,21 +225,23 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
                     }
                     if (section.nextKey != null || section.append != AppendState.Idle) {
                         item(key = "shelf-more-$index", contentType = "shelf-tail") {
-                            ShelfTail(index, section.append, section.nextKey, Modifier.width(96.dp).height(cardWidth * 9f / 16f), onAction)
+                            ShelfTail(index, section.append, section.nextKey, section.automaticPagingPaused,
+                                Modifier.width(96.dp).height(cardWidth * 9f / 16f), onAction)
                         }
                     }
                 }
             }
         }
         item(key = "page-tail", contentType = "page-tail") {
-            PageTail(content.append, content.page.nextKey, onAction)
+            PageTail(content.append, content.page.nextKey, content.automaticPagingPaused, onAction)
         }
     }
 }
 
 /** The shelf's trailing tile: idle triggers the append once visible, failed offers retry. */
 @Composable
-private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, modifier: Modifier, onAction: (ExploreAction) -> Unit) {
+private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, paused: Boolean,
+    modifier: Modifier, onAction: (ExploreAction) -> Unit) {
     Box(modifier.testTag("explore-shelf-$index-tail"), contentAlignment = Alignment.Center) {
         when (append) {
             AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
@@ -234,8 +251,12 @@ private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, modifie
                 AppText("Retry", size = 12, line = 16, weight = FontWeight.Medium)
             }
             AppendState.Idle -> {
-                LaunchedEffect(index, nextKey) { onAction(ExploreAction.LoadShelf(index)) }
-                CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
+                if (paused) Box(Modifier.testTag("explore-shelf-$index-load-more")) {
+                    PillButton(stringResource(R.string.load_more)) { onAction(ExploreAction.LoadShelf(index)) }
+                } else {
+                    LaunchedEffect(index, nextKey) { onAction(ExploreAction.AutomaticLoadShelf(index)) }
+                    CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
+                }
             }
         }
     }
@@ -243,7 +264,7 @@ private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, modifie
 
 /** The page tail below the content: idle triggers the append once visible, failed offers retry. */
 @Composable
-private fun PageTail(append: AppendState, nextKey: String?, onAction: (ExploreAction) -> Unit) {
+private fun PageTail(append: AppendState, nextKey: String?, paused: Boolean, onAction: (ExploreAction) -> Unit) {
     if (nextKey == null && append == AppendState.Idle) return
     Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
         when (append) {
@@ -252,7 +273,9 @@ private fun PageTail(append: AppendState, nextKey: String?, onAction: (ExploreAc
             AppendState.Failed -> Box(Modifier.testTag("explore-tail-retry")) {
                 PillButton("Retry") { onAction(ExploreAction.LoadMore) }
             }
-            AppendState.Idle -> LaunchedEffect(nextKey) { onAction(ExploreAction.LoadMore) }
+            AppendState.Idle -> if (paused) Box(Modifier.testTag("explore-load-more")) {
+                PillButton(stringResource(R.string.load_more)) { onAction(ExploreAction.LoadMore) }
+            } else LaunchedEffect(nextKey) { onAction(ExploreAction.AutomaticLoadMore) }
         }
     }
 }
@@ -286,7 +309,7 @@ private fun CategoryContainer(content: ExploreContent.Ready, width: Float, gridS
             ExplorePlaylistCard(playlist, Modifier.padding(horizontal = if (compact) 12.dp else 0.dp, vertical = 8.dp), onAction)
         }
         item(key = "page-tail", span = { GridItemSpan(maxLineSpan) }, contentType = "page-tail") {
-            PageTail(content.append, content.page.nextKey, onAction)
+            PageTail(content.append, content.page.nextKey, content.automaticPagingPaused, onAction)
         }
     }
 }

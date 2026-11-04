@@ -14,17 +14,17 @@ import java.util.ArrayDeque
 import java.util.HashSet
 
 /**
- * mDNS discovery of Google Cast receivers (`_googlecast._tcp`) via the platform
- * [NsdManager]. Play Services is not used, so the Cast v2 stack stays self-contained.
- * API mirrors other platform discovery: start/stop, device
- * callbacks on the MAIN thread, results stream in incrementally.
+ * mDNS discovery of Google Cast receivers (`_googlecast._tcp`) via the platform [NsdManager].
+ * Play Services is not used, so the Cast v2 stack stays self-contained. API mirrors other
+ * platform discovery: start/stop, device callbacks on the MAIN thread, results stream in
+ * incrementally.
  *
- * **Resolve serialization:** [NsdManager.resolveService] allows only one in-flight
- * resolve per listener on many Android versions (concurrent calls fail with
- * FAILURE_ALREADY_ACTIVE), so found services queue up and resolve strictly one at a time.
+ * **Resolve serialization:** [NsdManager.resolveService] allows only one in-flight resolve per
+ * listener on many Android versions (concurrent calls fail with FAILURE_ALREADY_ACTIVE), so
+ * found services queue up and resolve strictly one at a time.
  *
- * Devices are deduped by host IP: a Cast receiver advertises one service per device, but
- * rediscovery after a stop/start or a TXT update must not produce duplicate picker rows.
+ * Devices are deduped by host IP: rediscovery after a stop/start or a TXT update must not
+ * produce duplicate picker rows.
  */
 class CastV2Discovery(context: Context) {
 
@@ -135,10 +135,6 @@ class CastV2Discovery(context: Context) {
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // Serialized resolves
-    // ---------------------------------------------------------------------------------
-
     private fun enqueueResolve(serviceInfo: NsdServiceInfo, serviceGeneration: Int) {
         val owned: Boolean
         synchronized(lock) {
@@ -200,14 +196,13 @@ class CastV2Discovery(context: Context) {
         val host: String = address.hostAddress ?: return
         synchronized(lock) {
             if (!reportedHosts.add(host)) {
-                return // same device, dedupe
+                return
             }
         }
         val port = if (serviceInfo.port > 0) serviceInfo.port else DEFAULT_CAST_PORT
         val name = friendlyName(serviceInfo)
-        // Audio-only receivers (soundbars, speakers) are dropped here: they advertise Cast and
-        // even accept a LOAD, but cannot render the video DASH. Dropping in discovery keeps the
-        // Listener contract untouched.
+        // Audio-only receivers are dropped here: they advertise Cast and even accept a LOAD, but
+        // cannot render the video DASH. Dropping in discovery keeps the Listener contract untouched.
         if (!hasVideoOut(attribute(serviceInfo, TXT_CAPABILITIES))) {
             AppLog.detail(AppLog.Category.CAST, "device_filtered", mapOf("reason" to "audio_only"))
             return
@@ -255,10 +250,9 @@ class CastV2Discovery(context: Context) {
             }
 
         /**
-         * Does the `ca` TXT capabilities bitmask claim VIDEO_OUT (bit 0)?
-         *
-         * Fails OPEN: a missing or unparseable `ca` counts as video-capable - hiding a real
-         * TV whose TXT record could not be read is far worse than listing a soundbar.
+         * Does the `ca` TXT capabilities bitmask claim VIDEO_OUT (bit 0)? Fails open: a missing
+         * or unparseable `ca` counts as video-capable - hiding a real TV whose TXT record could
+         * not be read is far worse than listing a soundbar.
          */
         internal fun hasVideoOut(caValue: ByteArray?): Boolean {
             if (caValue == null || caValue.isEmpty()) {

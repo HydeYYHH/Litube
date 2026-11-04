@@ -30,6 +30,51 @@ class WatchViewModelTest {
         override suspend fun watch(videoId: String) = block(videoId)
     }
 
+    @Test fun deferredPageLoadsOnlyTheCurrentVideoAfterPlaybackStarts() = runTest {
+        val reads = mutableListOf<String>()
+        val vm = WatchViewModel(repository { id -> reads += id; FixtureWatchRepository.samplePage(id) },
+            SavedStateHandle(), "first", loadOnStart = false)
+        vm.selectVideo("second")
+        vm.refreshSession()
+        advanceUntilIdle()
+        assertTrue(reads.isEmpty())
+        vm.startLoading()
+        vm.startLoading()
+        advanceUntilIdle()
+        assertEquals(listOf("second"), reads)
+    }
+
+    @Test fun explicitPageActionReleasesTheStartupWait() = runTest {
+        var reads = 0
+        val vm = WatchViewModel(repository { reads++; FixtureWatchRepository.samplePage(it) },
+            SavedStateHandle(), "bunny", loadOnStart = false)
+        vm.onAction(WatchAction.OpenComments("bunny"))
+        advanceUntilIdle()
+        assertEquals(1, reads)
+        assertTrue(vm.uiState.value.commentsOpen)
+    }
+
+    @Test fun signedInRelatedCardsLoadFeedbackEvenWithoutAnInlineMenuEndpoint() = runTest {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        val card = page.related.first().copy(feedbackGeneration = 7, menuEndpoint = null)
+        var reads = 0
+        val repo = object : WatchRepository {
+            override suspend fun watch(videoId: String) = page.copy(related = listOf(card))
+            override suspend fun menu(video: WatchRelated): WatchRelated {
+                reads++
+                return video.copy(notInterestedToken = "ni", dontRecommendToken = "dc")
+            }
+        }
+        val vm = WatchViewModel(repo, SavedStateHandle(), "bunny", saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        assertEquals(0, reads)
+        vm.onAction(WatchAction.OpenItemMenu(card.id))
+        advanceUntilIdle()
+        assertEquals(1, reads)
+        val loaded = (vm.uiState.value.content as WatchContent.Ready).page.related.single()
+        assertTrue(watchVideoMenuActions(true, loaded).containsAll(listOf(WatchVideoMenuAction.NotInterested, WatchVideoMenuAction.DontRecommend)))
+    }
+
     @Test fun deferredFeedbackCapabilitiesAppearForTheOpenMenu() = runTest {
         val page = FixtureWatchRepository.samplePage("bunny")
         val card = page.related.first().copy(menuEndpoint = com.hhst.youtubelite.home.domain.FeedMenuEndpoint("panel", "params"))
@@ -172,11 +217,13 @@ class WatchViewModelTest {
         runCurrent()
         assertEquals(1, calls)
         assertTrue(vm.uiState.value.actionPending)
+        assertEquals(WatchAction.Like, vm.uiState.value.pendingVideoAction)
         assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
         result.complete(Unit)
         advanceUntilIdle()
         assertEquals(VideoRating.Like, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
         assertFalse(vm.uiState.value.actionPending)
+        assertNull(vm.uiState.value.pendingVideoAction)
     }
 
     @Test fun failedRatingKeepsTheServerStateAndRequestsSignIn() = runTest {
@@ -310,7 +357,6 @@ class WatchViewModelTest {
             assertEquals(expected, vm.navigationRequests.first())
             assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
         }
-        // Every emission is a request only: the page itself never changed.
         assertTrue(vm.uiState.value.content is WatchContent.Ready)
         assertEquals("harbour", vm.uiState.value.videoId)
     }
@@ -562,7 +608,6 @@ class WatchViewModelTest {
         assertTrue(related.all { it.views.endsWith("views") && it.duration.isNotBlank() })
         assertEquals(listOf("4K"), related.mapNotNull { it.badge })
         assertTrue(related.any { it.progress != null })
-        // The page never lists itself as a related video.
         assertTrue(FixtureWatchRepository.samplePage("harbour").related.any { it.id == "bunny" })
         assertTrue(FixtureWatchRepository.samplePage("harbour").related.none { it.id == "harbour" })
     }
@@ -772,6 +817,51 @@ class WatchViewModelTest {
         assertTrue(vm.uiState.value.content is WatchContent.Ready)
     }
 
+    @Test fun thinWatchResponsesKeepKnownCardMetadataAndFreshViewerState() = runTest {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        var reads = 0
+        val vm = WatchViewModel(repository {
+            reads++
+            page.copy(video = page.video.copy(title = "", channel = "", channelId = "", artwork = "",
+                views = if (reads == 1) "2M views" else "", age = "", avatar = "",
+                rating = if (reads == 1) VideoRating.Like else VideoRating.None, subscribed = reads == 1))
+        }, SavedStateHandle(), "bunny", provisional = WatchProvisional("bunny", title = "Card title",
+            channel = "Card channel", channelId = "channel-id", artwork = "cover", views = "1M views",
+            age = "2 days ago", avatar = "channel-avatar"))
+        advanceUntilIdle()
+        var video = (vm.uiState.value.content as WatchContent.Ready).page.video
+        assertEquals("Card title", video.title)
+        assertEquals("Card channel", video.channel)
+        assertEquals("2M views", video.views)
+        assertEquals("2 days ago", video.age)
+        assertEquals("channel-avatar", video.avatar)
+        vm.onAction(WatchAction.Retry)
+        advanceUntilIdle()
+        video = (vm.uiState.value.content as WatchContent.Ready).page.video
+        assertEquals("2M views", video.views)
+        assertEquals(VideoRating.None, video.rating)
+        assertFalse(video.subscribed)
+    }
+
+    @Test fun richerRelatedDuplicatesFillMissingFieldsWithoutDuplicatingCards() = runTest {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        val card = page.related.first().copy(views = "", age = "", avatar = null)
+        val repo = object : WatchRepository {
+            override suspend fun watch(videoId: String) = page.copy(related = listOf(card), nextKey = "next")
+            override suspend fun next(videoId: String, cursor: String) = RelatedPage(listOf(
+                card.copy(title = "Different title", views = "1K views", age = "1 day ago", avatar = "channel-avatar")), null)
+        }
+        val vm = WatchViewModel(repo, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.LoadRelated)
+        advanceUntilIdle()
+        val merged = (vm.uiState.value.content as WatchContent.Ready).page.related.single()
+        assertEquals(card.title, merged.title)
+        assertEquals("1K views", merged.views)
+        assertEquals("1 day ago", merged.age)
+        assertEquals("channel-avatar", merged.avatar)
+    }
+
     @Test fun aLiveStreamWithoutAChatKeyDoesNotOpenTheCommentsPanel() = runTest {
         fun liveRepository() = repository { id ->
             val page = FixtureWatchRepository.samplePage(id)
@@ -783,7 +873,6 @@ class WatchViewModelTest {
         advanceUntilIdle()
         assertFalse(vm.uiState.value.commentsOpen)
         assertTrue(withTimeoutOrNull(1) { vm.navigationRequests.first() } == null)
-        // An ordinary page keeps its comments affordance.
         val plain = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny")
         advanceUntilIdle()
         plain.onAction(WatchAction.OpenComments("bunny"))

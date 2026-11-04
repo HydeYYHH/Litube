@@ -32,9 +32,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The shared subscribe pill: one geometry behind Watch and Shorts, mirrored
- * under RTL, click-gated while a write is in flight or the channel is unknown,
- * and stable at 320dp with 2x fonts.
+ * The shared subscribe pill: one geometry behind Watch and Shorts, mirrored under RTL, click-gated
+ * while a write is in flight or the channel is unknown, and stable at 320dp with 2x fonts.
  */
 @RunWith(AndroidJUnit4::class)
 class SubscribeButtonAndroidTest {

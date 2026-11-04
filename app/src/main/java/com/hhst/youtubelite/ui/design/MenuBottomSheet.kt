@@ -39,6 +39,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import com.hhst.youtubelite.ui.components.watchSheetHost
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -53,10 +57,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import com.hhst.youtubelite.R
 
-/** One action in a bottom sheet. */
 data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null, val iconResource: Int? = null)
 
-/** Layout metrics for action sheets. */
 object MenuSheetLayout {
     const val WidthWideShort = 400f
     const val BottomInset = 24f
@@ -75,7 +77,6 @@ object MenuSheetLayout {
         else width.coerceAtLeast(0f)
 }
 
-/** Action sheet with a fading scrim and a draggable handle. */
 @Composable
 fun MenuBottomSheet(
     items: List<MenuSheetItem>,
@@ -89,11 +90,17 @@ fun MenuBottomSheet(
     rowStart: Dp = MenuSheetLayout.RowStart.dp,
     iconGap: Dp = MenuSheetLayout.IconGap.dp,
     header: (@Composable () -> Unit)? = null,
+    dismissEnabled: Boolean = true,
+    actionsEnabled: Boolean = true,
+    /** Player panels fill the space below playback; contextual action menus can opt out. */
+    fillWatchHeight: Boolean = true,
 ) {
     val density = LocalDensity.current.density
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(0f) }
     var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var finger by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val threshold = remember { GestureThreshold() }
     var settleJob by remember { mutableStateOf<Job?>(null) }
     var closing by remember { mutableStateOf(false) }
     val haptics = org.koin.compose.koinInject<com.hhst.youtubelite.core.HapticsController>()
@@ -104,11 +111,11 @@ fun MenuBottomSheet(
         else progress.snapTo(1f)
     }
     fun finish() {
-        if (closing) return
+        if (closing || !dismissEnabled) return
         closing = true
         settleJob?.cancel()
         scope.launch {
-            if (motion > 0f) progress.animateTo(0f, tween(motionDuration(MenuMotion.exitMs, motion), easing = FastOutSlowInEasing))
+            if (motion > 0f) progress.animateTo(0f, tween(motionDuration((MenuMotion.exitMs * progress.value).toInt(), motion), easing = androidx.compose.animation.core.FastOutLinearInEasing))
             else progress.snapTo(0f)
             onDismiss()
         }
@@ -116,45 +123,61 @@ fun MenuBottomSheet(
     fun settle() {
         settleJob?.cancel()
         settleJob = scope.launch {
-            if (motion > 0f) animate(drag, 0f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
+            if (motion > 0f) animate(drag, 0f, animationSpec = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
             else drag = 0f
         }
     }
     BackHandler { finish() }
     Box(
         modifier.fillMaxSize().graphicsLayer { alpha = progress.value }
-            .background(DesignTokens.MenuScrim).clickable { finish() }
+            .background(DesignTokens.MenuScrim).clickable(enabled = dismissEnabled) { finish() }
             .appDescription(R.string.a11y_close_menu),
     )
-    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+    val watchHost = LocalContext.current.watchSheetHost()
+    var containerBottom by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val localDensity = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { containerBottom = it.boundsInWindow().bottom },
+        contentAlignment = Alignment.BottomCenter) {
+        val playerBottom = watchHost?.sheetPlayerBottomPx ?: 0
+        val watchHeight = if (playerBottom > 0 && containerBottom > playerBottom)
+            with(localDensity) { (containerBottom - playerBottom).toDp() } else null
         Column(
-            Modifier.heightIn(max = maxHeight)
+            Modifier.heightIn(max = watchHeight?.coerceAtMost(maxHeight) ?: maxHeight)
+                .then(if (fillWatchHeight && watchHeight != null) Modifier.height(watchHeight) else Modifier)
                 .padding(bottom = bottomPadding)
                 .width(sheetWidth ?: MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .graphicsLayer {
                     translationY = (1f - progress.value) * (size.height + bottomPadding.toPx()) + drag
                 }.clip(RoundedCornerShape(MenuSheetLayout.Corner.dp))
-                .background(DesignTokens.Background)
+                .background(DesignTokens.Panel)
                 .testTag(tag).semantics {
                     this.paneTitle = paneTitle
-                    customActions = listOf(CustomAccessibilityAction("Close menu") { finish(); true })
+                    customActions = listOf(CustomAccessibilityAction("Close menu") { if (dismissEnabled) { finish(); true } else false })
                 },
         ) {
             Box(
                 Modifier.fillMaxWidth().height(MenuSheetLayout.HandleStrip.dp).testTag("menu-handle")
-                    .pointerInput(closing) {
+                    .pointerInput(closing, dismissEnabled) {
                         detectVerticalDragGestures(
-                            onDragStart = { settleJob?.cancel() },
+                            onDragStart = {
+                                settleJob?.cancel()
+                                finger = GestureResistance.fingerDistance(drag, density)
+                                threshold.reset()
+                            },
                             onVerticalDrag = { change, amount ->
                                 change.consume()
-                                if (!closing) drag = (drag + amount).coerceAtLeast(0f)
+                                if (!closing && dismissEnabled) {
+                                    finger = (finger + amount).coerceAtLeast(0f)
+                                    drag = GestureResistance.distance(finger, density)
+                                    if (threshold.crossed(finger, MenuMotion.dismissDragPx * density))
+                                        haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.GESTURE_THRESHOLD)
+                                }
                             },
                             onDragCancel = {
                                 if (!closing) settle()
                             },
                             onDragEnd = {
-                                if (drag > MenuMotion.dismissDragPx * density) {
-                                    haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.SELECTION)
+                                if (finger >= MenuMotion.dismissDragPx * density) {
                                     finish()
                                 } else if (!closing) settle()
                             },
@@ -173,7 +196,7 @@ fun MenuBottomSheet(
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
                             .then(if (item.tag != null) Modifier.testTag(item.tag) else Modifier)
-                            .clickable(enabled = !closing, role = Role.Button) { haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.SELECTION); onSelect(index) }
+                            .clickable(enabled = !closing && actionsEnabled, role = Role.Button) { haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.SELECTION); onSelect(index) }
                             .padding(horizontal = item.contentStart ?: rowStart, vertical = MenuSheetLayout.RowVertical.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -191,9 +214,8 @@ fun MenuBottomSheet(
     }
 }
 
-/** Sheet transition durations and drag threshold. */
 object MenuMotion {
-    const val enterMs = 200
-    const val exitMs = 160
-    const val dismissDragPx = 48f
+    const val enterMs = 180
+    const val exitMs = 120
+    const val dismissDragPx = 80f
 }

@@ -35,14 +35,11 @@ import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
 
-/** Shared rendering for the library feature (You page, history and playlists). */
-
 @Composable
 internal fun LibraryArtwork(asset: String, modifier: Modifier = Modifier) {
     com.hhst.youtubelite.ui.design.Artwork(asset, modifier)
 }
 
-/** The 48px message card reused for signed-out, empty and failed states. */
 @Composable
 internal fun LibraryMessageCard(title: String, message: String, tag: String, action: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag(tag).padding(horizontal = 16.dp),
@@ -160,7 +157,6 @@ internal fun PlaylistShelf(playlists: List<PlaylistSummary>, onOpen: (String) ->
     }
 }
 
-/** Horizontal shelf of recently watched videos. */
 @Composable
 internal fun HistoryShelf(entries: List<HistoryEntry>, onOpen: (String) -> Unit) {
     LazyRow(Modifier.fillMaxWidth().testTag("library-history-shelf"),

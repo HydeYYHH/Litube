@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.comments.domain
 
+import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.watch.domain.VideoRating
+
 data class CommentThread(
     val id: String,
     val author: CommentAuthor,
@@ -11,11 +14,11 @@ data class CommentThread(
     val authorChannelId: String = "",
     val ownedByViewer: Boolean = false,
     val replyKey: String? = null,
-    /** Continuation for the next replies page; null when the thread is fully read. */
     val repliesNextCursor: String? = null,
     val repliesLoading: Boolean = false,
     val repliesFailed: Boolean = false,
     val runs: List<CommentTextRun> = emptyList(),
+    val rating: VideoRating = VideoRating.None,
 )
 
 data class CommentAuthor(val displayName: String, val handle: String, val artwork: String)
@@ -29,6 +32,7 @@ data class CommentReply(
     val authorChannelId: String = "",
     val ownedByViewer: Boolean = false,
     val runs: List<CommentTextRun> = emptyList(),
+    val rating: VideoRating = VideoRating.None,
 )
 
 data class CommentsPage(
@@ -40,20 +44,15 @@ data class CommentsPage(
     val sortFallback: Boolean = false,
 )
 
-/** One replies page under a thread. */
 data class RepliesPage(val replies: List<CommentReply>, val nextCursor: String?)
 
 sealed interface CommentTarget {
     data class Video(val id: String) : CommentTarget
-    data class Post(val identity: com.hhst.youtubelite.post.domain.PostIdentity) : CommentTarget
+    data class Post(val identity: PostIdentity) : CommentTarget
 }
 
 interface CommentsRepository {
-    /**
-     * One replies page for [thread]; [cursor] is null for the first page, the
-     * thread's `repliesNextCursor` afterwards. The default serves the inline
-     * fixture replies once and never paginates.
-     */
+    /** One replies page for [thread]; [cursor] is null for the first page, the thread's `repliesNextCursor` afterwards. */
     suspend fun repliesPage(target: CommentTarget, thread: CommentThread, cursor: String?): RepliesPage =
         RepliesPage(if (cursor == null) thread.replies else emptyList(), null)
     suspend fun comments(target: CommentTarget, sort: CommentSort, cursor: String?): CommentsPage
@@ -63,7 +62,6 @@ interface CommentsRepository {
 
 enum class CommentSort { Top, Newest }
 
-/** The panel's visible content, including its pagination sub-state. */
 sealed interface CommentsContent {
     data object Loading : CommentsContent
     data class Ready(
@@ -86,14 +84,13 @@ data class CommentsUiState(
     val overlay: CommentsOverlay = CommentsOverlay.None,
     val draft: String = "",
     val actionPending: Boolean = false,
+    val refreshing: Boolean = false,
+    val pendingAction: CommentNavigationRequest? = null,
     val target: CommentTarget = CommentTarget.Video(videoId),
     val supportedMenuActions: Set<CommentMenuAction> = CommentMenuAction.entries.toSet(),
 )
 
-/**
- * One panel overlay at a time. Menus keep the panel, its expansion set and its scroll
- * position alive underneath.
- */
+/** One overlay at a time; menus keep the panel, its expansion set and its scroll position alive underneath. */
 sealed interface CommentsOverlay {
     data object None : CommentsOverlay
     data object SortMenu : CommentsOverlay
@@ -110,10 +107,6 @@ sealed interface CommentsOverlay {
     data class DeleteConfirm(val threadId: String, val replyId: String? = null) : CommentsOverlay
 }
 
-/**
- * Public rows plus the owner-only rows. Edit/Delete are never added to a menu for a
- * comment the local viewer does not own; the anonymous sample exposes only Reply/Report.
- */
 enum class CommentMenuAction(val label: String, val ownerOnly: Boolean = false) {
     Reply("Reply"),
     Report("Report"),
@@ -145,11 +138,15 @@ sealed interface CommentNavigationRequest {
     data class DeleteComment(override val target: CommentTarget, val threadId: String, val commentId: String) : CommentNavigationRequest {
         constructor(videoId: String, threadId: String, commentId: String) : this(CommentTarget.Video(videoId), threadId, commentId)
     }
-    data class LikeComment(override val target: CommentTarget, val commentId: String) : CommentNavigationRequest {
-        constructor(videoId: String, commentId: String) : this(CommentTarget.Video(videoId), commentId)
+    data class LikeComment(override val target: CommentTarget, val commentId: String,
+        val rating: VideoRating, val previous: VideoRating) : CommentNavigationRequest {
+        constructor(videoId: String, commentId: String, rating: VideoRating, previous: VideoRating) :
+            this(CommentTarget.Video(videoId), commentId, rating, previous)
     }
-    data class DislikeComment(override val target: CommentTarget, val commentId: String) : CommentNavigationRequest {
-        constructor(videoId: String, commentId: String) : this(CommentTarget.Video(videoId), commentId)
+    data class DislikeComment(override val target: CommentTarget, val commentId: String,
+        val rating: VideoRating, val previous: VideoRating) : CommentNavigationRequest {
+        constructor(videoId: String, commentId: String, rating: VideoRating, previous: VideoRating) :
+            this(CommentTarget.Video(videoId), commentId, rating, previous)
     }
     data class ReportComment(override val target: CommentTarget, val threadId: String, val commentId: String) : CommentNavigationRequest {
         constructor(videoId: String, threadId: String, commentId: String) : this(CommentTarget.Video(videoId), threadId, commentId)
@@ -172,7 +169,6 @@ sealed interface CommentAction {
     data object CloseMenu : CommentAction
     data class MenuAction(val action: CommentMenuAction) : CommentAction
     data class ToggleReplies(val commentId: String) : CommentAction
-    /** Fetch the next replies page for an expanded thread. */
     data class LoadMoreReplies(val commentId: String) : CommentAction
     data object Compose : CommentAction
     data class DraftChanged(val text: String) : CommentAction
@@ -194,14 +190,12 @@ sealed interface CommentAction {
     data class OpenReplyMenu(val commentId: String, val replyId: String) : CommentAction
 }
 
-/** Layout metrics for the comments panel. */
 object CommentsLayout {
     const val SheetRadius = 12f
     const val HandleStripHeight = 12f
     const val HandleWidth = 40f
     const val HandleHeight = 4f
 
-    /** The panel header block (title row) sits 12px below the panel top. */
     const val HeaderTopGap = 12f
     const val HeaderHeight = 65f
     const val HeaderPaddingStart = 12f
@@ -218,7 +212,6 @@ object CommentsLayout {
     const val CloseIcon = 24f
     const val CloseEndInset = 8f
 
-    /** Header and simplebox separators are 1px at 20% black. */
     const val DividerAlpha = 0.2f
 
     const val SimpleboxHeight = 88f

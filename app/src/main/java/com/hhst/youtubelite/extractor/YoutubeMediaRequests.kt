@@ -17,7 +17,6 @@ import okio.ForwardingSource
 import okio.buffer
 import java.io.IOException
 
-/** Shared media request construction and bounded compatibility feedback, injected into consumers. */
 class YoutubeMediaRequests(
     private val current: (YoutubeWebSession) -> Boolean,
     private val diagnostics: ExtractionDiagnostics,
@@ -110,7 +109,10 @@ class YoutubeMediaRequests(
         val started = System.nanoTime()
         var response = exchange(request)
         var compatibilityPost = false
-        if (response.code == 403 && request.method == "GET" && plan.allowPostFallback && request.url.encodedPath.startsWith("/videoplayback")) {
+        // An announced readiness hold is handled by the player on the original URL.
+        // Trying POST before it is ready only produces another predictable refusal.
+        if (response.code == 403 && request.method == "GET" && plan.allowPostFallback &&
+            System.nanoTime() >= plan.availableAtNanos && request.url.encodedPath.startsWith("/videoplayback")) {
             response.close()
             response = exchange(request.newBuilder().post(byteArrayOf(0x78, 0).toRequestBody()).build())
             compatibilityPost = true
@@ -161,7 +163,6 @@ class YoutubeMediaRequests(
 
     data class Window(val expectedBytes: Long, val total: Long?)
 
-    /** Shared range interpretation for player, download and proxy, including query-cropped views. */
     fun window(response: Response, plan: MediaRequestPlan): Window {
         val query = response.request.url.queryParameter("range")
         val raw = query ?: response.request.header("Range")?.removePrefix("bytes=")

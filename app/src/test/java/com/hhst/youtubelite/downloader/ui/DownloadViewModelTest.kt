@@ -21,6 +21,22 @@ import org.junit.Test
 class DownloadViewModelTest {
 
     @Test
+    fun connectionSettingUpdatesBothTheSavedAndLivePerHostBudget() {
+        var saved = 0
+        val prefs = object : com.hhst.youtubelite.downloader.core.DownloadPrefs {
+            override fun setMaxConnections(value: Int) { saved = value }
+        }
+        val client = com.hhst.youtubelite.downloader.net.DownloadHttpClients.create(maxRequests = 12)
+        assertEquals(12, client.dispatcher.maxRequests)
+        assertEquals(12, client.dispatcher.maxRequestsPerHost)
+        val vm = DownloadViewModel(DownloadHarness().coordinator, prefs = prefs, downloadHttp = client)
+        vm.setMaxConnections(7)
+        assertEquals(7, saved)
+        assertEquals(7, client.dispatcher.maxRequests)
+        assertEquals(7, client.dispatcher.maxRequestsPerHost)
+    }
+
+    @Test
     fun observeApis_mapPersistedState() = runTest {
         val h = DownloadHarness()
         val vm = DownloadViewModel(h.coordinator)
@@ -85,8 +101,7 @@ class DownloadViewModelTest {
         assertEquals(1024L, progress.expectedBytes)
         assertEquals(0.5f, DownloadPresentation.progressFraction(progress.progressBytes, progress.expectedBytes)!!, 0f)
 
-        // Starting a full fetch discards the old ranges, then promotes the
-        // server's trusted length without double-counting live bytes.
+        // A full fetch discards old ranges and promotes the server's trusted length without double-counting live bytes.
         h.coordinator.reportChunk(id, 0, chunk.copy(receivedBytes = 0, endByte = 0), 2048)
         h.coordinator.reportChunk(id, 0, chunk.copy(receivedBytes = 256, endByte = 255), 2048)
         val restarted = vm.observeDownloads().first().single()

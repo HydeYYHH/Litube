@@ -110,8 +110,7 @@ class LiveChatPanelScreenshotAndroidTest {
         val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        // Report where the diff lives so an intentional geometry change is
-        // distinguishable from unrelated drift without lowering the bar.
+        // Report the diff region so an intentional geometry change is distinguishable from unrelated drift.
         val changedArea = changed.fold(null as IntArray?) { area, i ->
             val x = i % expected.width; val y = i / expected.width
             if (area == null) intArrayOf(x, y, x, y)

@@ -17,10 +17,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.Before
 
-/**
- * Host-level checks for the watch page's comments panel: entry, overlay ordering,
- * player retention, pinned states, author hand-off and recreation.
- */
 class WatchCommentsHostAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var watch: ActivityScenario<WatchActivity>? = null
@@ -68,7 +64,6 @@ class WatchCommentsHostAndroidTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
-    /** Any SurfaceView currently attached under the activity's content view. */
     private fun surfaces(): List<View> {
         var found = emptyList<View>()
         watch?.onActivity { activity ->

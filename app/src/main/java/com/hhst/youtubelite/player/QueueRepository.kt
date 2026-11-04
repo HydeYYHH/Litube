@@ -30,7 +30,6 @@ data class QueueOwner private constructor(val id: String) {
     }
 }
 
-/** Queue entry for up-next playback. */
 @kotlinx.serialization.Serializable
 data class QueueItem(
     val videoId: String = "",
@@ -66,7 +65,6 @@ class QueueRepository(
     private val _state = MutableStateFlow(loadState(active))
     val state: StateFlow<QueueState> = _state.asStateFlow()
 
-    /** Owner whose queue is currently active and published. */
     fun currentOwner(): QueueOwner = synchronized(lock) { active }
 
     /**
@@ -160,10 +158,7 @@ class QueueRepository(
         }
     }
 
-    /**
-     * Insert or refresh the playing item. New videos append; the list is capped
-     * so a long session cannot grow without bound.
-     */
+    /** New videos append; the list is capped so a long session cannot grow without bound. */
     fun upsertPlaying(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item) ?: return
         guarded(owner) {
@@ -188,7 +183,6 @@ class QueueRepository(
         }
     }
 
-    /** Caps [items] at [MAX_ITEMS], dropping entries other than [keepVideoId] first. */
     private fun evictOverflow(items: List<QueueItem>, keepVideoId: String?, dropFromHead: Boolean = true): List<QueueItem> {
         if (items.size <= MAX_ITEMS) return items
         val kept = items.toMutableList()
@@ -221,7 +215,6 @@ class QueueRepository(
         return if (idx > 0) items[idx - 1] else null
     }
 
-    /** Random item excluding the current one. */
     fun random(currentVideoId: String?): QueueItem? {
         val candidates = _state.value.items.filter { it.videoId != currentVideoId }
         return candidates.randomOrNull()

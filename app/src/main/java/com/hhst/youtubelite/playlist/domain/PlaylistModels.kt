@@ -34,7 +34,6 @@ data class PlaylistPage(val summary: PlaylistSummary, val description: String, v
     /** Server continuation for the next entry page; null when the list ended or is unknown. */
     val nextKey: String? = null)
 
-/** One appended server page of playlist entries. */
 data class PlaylistAppendPage(val entries: List<PlaylistEntry>, val nextKey: String?)
 
 object PlaylistLimits {
@@ -82,11 +81,12 @@ data class PlaylistUiState(
     val descriptionExpanded: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
+    val signedIn: Boolean = false,
 ) {
     val nextKey: String? get() = (content as? PlaylistContent.Ready)?.page?.nextKey
 }
 
-enum class PlaylistDestination { Home, Shorts, You }
+enum class PlaylistDestination { Home, Shorts, Subscriptions, You }
 
 sealed interface PlaylistAction {
     data object Retry : PlaylistAction

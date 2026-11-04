@@ -70,11 +70,14 @@ class SubscriptionsHostAndroidTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("channels-overlay").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("channels-row-blender").assertIsDisplayed()
         compose.onNodeWithTag("channels-row-blender").performClick()
+        compose.onNodeWithTag("subscriptions-visit-channel").assertIsDisplayed()
+        second.onActivity { assertNull(it.lastNavigationRequest); assertEquals("blender", it.subscriptionsViewModel.uiState.value.selectedChannel?.channelId) }
+        compose.onNodeWithTag("subscriptions-visit-channel").performClick()
         compose.waitForIdle()
         second.onActivity { assertEquals(SubscriptionsNavigationRequest.Channel("blender"), it.lastNavigationRequest) }
     }
 
-    @Test fun channelStripAndFiltersStayVisibleAndOpenChannels() {
+    @Test fun channelStripSelectsItsFeedAndOnlyVisitChannelOpensTheChannel() {
         val host = launch(signedIn = true)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("subscriptions-feed").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("subscriptions-channels").assertIsDisplayed()
@@ -84,6 +87,11 @@ class SubscriptionsHostAndroidTest {
         compose.onNodeWithTag("subscriptions-chips").performScrollToNode(hasText("Live"))
         compose.onNodeWithText("Live").assertIsDisplayed()
         compose.onNodeWithTag("subs-strip-blender").performClick()
+        compose.onNodeWithTag("subs-strip-blender").assertIsSelected()
+        compose.onNodeWithTag("subs-new-blender", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("subscriptions-chips").assertDoesNotExist()
+        host.onActivity { assertNull(it.lastNavigationRequest) }
+        compose.onNodeWithTag("subscriptions-visit-channel").performClick()
         compose.waitForIdle()
         host.onActivity { assertEquals(SubscriptionsNavigationRequest.Channel("blender"), it.lastNavigationRequest) }
     }
@@ -115,56 +123,5 @@ class SubscriptionsHostAndroidTest {
         }
         compose.onNodeWithTag("video-menu").assertDoesNotExist()
         compose.onNodeWithTag("subscriptions-feed").assertIsDisplayed()
-    }
-}
-
-class NotificationsHostAndroidTest {
-    @get:Rule val compose = createEmptyComposeRule()
-    private var scenario: ActivityScenario<com.hhst.youtubelite.notifications.NotificationsActivity>? = null
-
-    private fun launch(signedIn: Boolean, scene: com.hhst.youtubelite.notifications.data.NotificationsScenario =
-        com.hhst.youtubelite.notifications.data.NotificationsScenario.Content): ActivityScenario<com.hhst.youtubelite.notifications.NotificationsActivity> {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        return ActivityScenario.launch<com.hhst.youtubelite.notifications.NotificationsActivity>(
-            com.hhst.youtubelite.notifications.NotificationsActivity.intent(context, signedIn)
-                .putExtra(com.hhst.youtubelite.notifications.NotificationsActivity.EXTRA_SCENARIO, scene.argument)).also {
-            scenario = it
-            compose.waitUntil(15_000) { runCatching { compose.onAllNodesWithTag("notifications-screen").fetchSemanticsNodes() }.getOrDefault(emptyList()).isNotEmpty() }
-        }
-    }
-
-    @After fun close() {
-        scenario?.close()
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                .filterIsInstance<SignInActivity>().forEach { it.finish() }
-        }
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-    }
-
-    @Test fun signedOutNotificationsShowThePromptAndKeepItTyped() {
-        val host = launch(signedIn = false)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("notifications-signed-out").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Sign in").performClick()
-        compose.waitForIdle()
-        host.onActivity { assertEquals(com.hhst.youtubelite.notifications.domain.NotificationsNavigationRequest.SignIn, it.lastNavigationRequest) }
-        compose.onNodeWithTag("notifications-list").assertDoesNotExist()
-    }
-
-    @Test fun readyListOpensTheLinkedVideoIdentity() {
-        val host = launch(signedIn = true)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("notifications-list").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("notification-note-1").assertIsDisplayed()
-        compose.onNodeWithTag("notification-note-1").performClick()
-        compose.waitForIdle()
-        host.onActivity {
-            assertEquals(com.hhst.youtubelite.notifications.domain.NotificationsNavigationRequest.Watch("bunny"), it.lastNavigationRequest)
-        }
-    }
-
-    @Test fun emptyNotificationsShowTheirOwnState() {
-        launch(signedIn = true, scene = com.hhst.youtubelite.notifications.data.NotificationsScenario.Empty)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("notifications-empty").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("notifications-list").assertDoesNotExist()
     }
 }

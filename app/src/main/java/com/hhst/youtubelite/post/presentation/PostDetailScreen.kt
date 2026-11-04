@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.post.domain.PostDetailAction
@@ -71,7 +72,7 @@ fun PostDetailScreen(
                         PostDetailContentColumn(state, onAction)
                     }
                 }
-                BrowseNavigationBar("post-detail") { onAction(PostDetailAction.SelectDestination(PostDestination.valueOf(it.name))) }
+                BrowseNavigationBar("post-detail", state.signedIn) { onAction(PostDetailAction.SelectDestination(PostDestination.valueOf(it.name))) }
             }
             when (val overlay = state.overlay) {
                 PostDetailOverlay.None -> Unit
@@ -130,6 +131,9 @@ private fun PostDetailTopBar(
             Modifier.weight(1f).padding(end = 4.dp).testTag("post-detail-title"),
             size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1,
         )
+        if (state.refreshing) Box(Modifier.size(48.dp).testTag("post-detail-refreshing"), contentAlignment = Alignment.Center) {
+            com.hhst.youtubelite.ui.design.ActionProgress()
+        }
         if (!state.live) AppIconButton(
             AppIcon.More, "Post actions",
             modifier = Modifier.testTag("post-detail-more"),
@@ -191,10 +195,21 @@ private fun PostDetailContentColumn(
                 )
             }
         }
+        post.poll?.let { poll ->
+            item("poll") {
+                PostPollChoices(poll, state.actionPending, Modifier.padding(12.dp),
+                    pendingOption = (state.pendingAction as? PostDetailAction.Vote)?.option) {
+                    onAction(PostDetailAction.Vote(it, !poll.options[it].selected))
+                }
+            }
+        }
         item("feedback") {
             PostFeedbackRow(
                 likes = post.likes,
                 comments = post.comments,
+                rating = post.rating,
+                pending = state.actionPending,
+                pendingAction = state.pendingAction,
                 onAction = onAction,
             )
         }
@@ -205,6 +220,9 @@ private fun PostDetailContentColumn(
 private fun PostFeedbackRow(
     likes: String,
     comments: String,
+    rating: com.hhst.youtubelite.watch.domain.VideoRating,
+    pending: Boolean,
+    pendingAction: PostDetailAction?,
     onAction: (PostDetailAction) -> Unit,
 ) {
     Row(
@@ -213,13 +231,21 @@ private fun PostFeedbackRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconButton(
-            AppIcon.Like, "Like post", modifier = Modifier.testTag("post-detail-like"),
-            diameter = 40.dp,
+            AppIcon.Like, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) "Unlike post" else "Like post",
+            modifier = Modifier.testTag("post-detail-like").semantics { selected = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like },
+            diameter = 40.dp, enabled = !pending,
+            pending = pendingAction == PostDetailAction.Like,
+            background = if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+            color = if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) DesignTokens.Red else DesignTokens.Ink,
         ) { onAction(PostDetailAction.Like) }
         AppText(likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
         AppIconButton(
-            AppIcon.Dislike, "Dislike post", modifier = Modifier.testTag("post-detail-dislike"),
-            diameter = 40.dp,
+            AppIcon.Dislike, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike) "Remove dislike" else "Dislike post",
+            modifier = Modifier.testTag("post-detail-dislike").semantics { selected = rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike },
+            diameter = 40.dp, enabled = !pending,
+            pending = pendingAction == PostDetailAction.Dislike,
+            background = if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
+            color = if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike) DesignTokens.Red else DesignTokens.Ink,
         ) { onAction(PostDetailAction.Dislike) }
         Spacer(Modifier.weight(1f))
         Row(

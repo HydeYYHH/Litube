@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** Field storage for extension preferences. */
 class ExtensionManagerTest {
 
     private lateinit var store: MemoryPrefStore

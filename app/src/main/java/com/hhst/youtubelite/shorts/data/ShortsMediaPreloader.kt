@@ -4,7 +4,11 @@ package com.hhst.youtubelite.shorts.data
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.media3.common.C
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Format as MediaFormat
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.cache.CacheDataSource
@@ -23,14 +27,17 @@ import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
+import com.hhst.youtubelite.player.datasource.PrefetchDeadline
 import com.hhst.youtubelite.player.datasource.StreamSelection
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
@@ -59,21 +66,12 @@ class ShortsMediaPreloader(
     private val prefs: ExtensionManager? = null,
     private val demandFor: (String) -> PlaybackDemand? = { null },
 ) : ShortsPreloader {
-    /** Serializes prefetch network work; playback always outranks it. */
-    private val networkPermit = Semaphore(1)
+    /** One audio head and one video head may overlap; retargets share this bound. */
+    private val networkPermit = Semaphore(2)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
     private var job: Job? = null
     @Volatile private var target: String? = null
-    /**
-     * Hand-off flag of the single running prefetch. Set once its target became
-     * the item the user settled on: media warming must stop (its reads would
-     * compete with the player for network and cache locks) while the extraction
-     * result stays claimable by playback. Per-run so a retarget cannot reset a
-     * hand-over the still-finishing job has not observed yet.
-     */
-    @Volatile private var handover: AtomicBoolean? = null
-    /** Videos this session's prefetch warmed, with the bytes written. */
     private val warmed = object : LinkedHashMap<String, Long>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_WARMED
     }
@@ -88,24 +86,20 @@ class ShortsMediaPreloader(
                 mapOf("video_id" to id, "superseded" to true))
             job?.cancel()
             target = id
-            val flag = java.util.concurrent.atomic.AtomicBoolean(false)
-            handover = flag
             val demand = demandFor(id)
-            job = scope.launch { run(id, demand, flag) }
+            job = scope.launch { run(id, demand) }
         }
     }
 
     /** Preserves preparation of the selected item while releasing a superseded target. */
     override fun select(videoId: String) {
         synchronized(lock) {
-            // Keep the settled item's job: its remaining warming is exactly the
-            // head playback is about to read, so finishing it helps the
-            // foreground instead of fighting it. Measured variant, not a guess.
+            // Keep matching work until the engine claims it. PlaybackClaim then makes
+            // byte warming yield while the player reuses the extraction and cached spans.
             if (target == videoId) return
             job?.cancel()
             job = null
             target = null
-            handover = null
         }
     }
 
@@ -117,7 +111,6 @@ class ShortsMediaPreloader(
             job?.cancel()
             job = null
             target = null
-            handover = null
             warmed.clear()
         }
     }
@@ -129,7 +122,7 @@ class ShortsMediaPreloader(
      */
     fun prefetchedBytes(videoId: String): Long = synchronized(lock) { warmed[videoId] ?: 0L }
 
-    private suspend fun run(videoId: String, demand: PlaybackDemand?, handover: AtomicBoolean) {
+    private suspend fun run(videoId: String, demand: PlaybackDemand?) {
         val session = MediaSession.snapshot().generation
         if (MediaSession.privateBrowsing() || prefs?.isEnabled(PreferenceKeys.DATA_SAVER) == true) return
         coroutineContext.ensureActive()
@@ -137,28 +130,32 @@ class ShortsMediaPreloader(
         try {
             val stream = preparation.extraction.stream.await()
             coroutineContext.ensureActive()
-            // The resolved URLs outlive nothing: bail out when identity or
-            // privacy moved while the read was in flight.
+            // Resolved URLs outlive nothing: bail out when identity or privacy moved while the read was in flight.
             if (MediaSession.privateBrowsing() || MediaSession.snapshot().generation != session) return
             val requestContext = coroutineContext
             val checkActive = {
                 requestContext.ensureActive()
-                if (handover.get()) throw CancellationException("Foreground claimed")
+                // Playback owns this video now: its reads are the ones that matter, so the warm
+                // stops instead of sharing the pipe with the first frame. Yield rather than
+                // cancel — the resolved stream stays claimable by the player that just started.
+                if (com.hhst.youtubelite.player.datasource.PlaybackClaim.blocks(videoId)) {
+                    throw WarmingYield()
+                }
                 if (MediaSession.privateBrowsing() || MediaSession.snapshot().generation != session ||
                     prefs?.isEnabled(PreferenceKeys.DATA_SAVER) == true) throw CancellationException("Prefetch stopped")
             }
             val formats = pickFormats(stream, demand)
             val transport = if (formats.isNotEmpty()) "dash" else "hls"
-            val cached = if (formats.isNotEmpty()) cacheFormatHeads(videoId, formats, checkActive)
-                else cacheHlsHead(videoId, stream, session, demand, checkActive).also { warmedHls ->
-                    // The HLS path writes in one pass; record its total here (the
-                    // DASH path records each format slice as it lands).
-                    if (warmedHls > 0) synchronized(lock) { warmed[videoId] = (warmed[videoId] ?: 0L) + warmedHls }
-                }
+            val deadline = SystemClock.elapsedRealtime() + WARM_TIME_MS
+            val cached = if (formats.isNotEmpty()) cacheFormatHeads(videoId, formats, deadline, checkActive)
+                else cacheHlsHead(videoId, stream, session, demand, checkActive)
             if (cached > 0) {
                 AppLog.event(AppLog.Category.PLAYER, "shorts_prefetch",
                     mapOf("video_id" to videoId, "bytes" to cached, "formats" to formats.size, "transport" to transport))
             }
+        } catch (yield: WarmingYield) {
+            // Playback claimed the video: stop reading bytes; the shared stream and cached spans
+            // remain available to the foreground owner.
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -166,32 +163,33 @@ class ShortsMediaPreloader(
             AppLog.event(AppLog.Category.PLAYER, "shorts_prefetch_skip",
                 mapOf("video_id" to videoId, "reason" to "error", "kind" to error.javaClass.simpleName))
         } finally {
-            // A claimed preparation belongs to playback now; releasing it would
-            // cancel the shared extraction the foreground is about to join.
-            if (!handover.get()) preparation.cancel()
+            // Release this speculative owner. Extractor keeps an extraction already claimed
+            // by playback alive independently of its prefetch owners.
+            preparation.cancel()
         }
     }
+
+    /**
+     * Warming stopped because foreground playback claimed the video. Distinct from cancellation:
+     * only the speculative byte reads end, the resolved stream is handed over intact.
+     */
+    private class WarmingYield : CancellationException("Playback owns the pipe")
 
     private fun skip(videoId: String, reason: String, extra: Map<String, Any> = emptyMap()) {
         AppLog.event(AppLog.Category.PLAYER, "shorts_prefetch_skip",
             mapOf("video_id" to videoId, "reason" to reason) + extra)
     }
 
-    private suspend fun cacheFormatHeads(videoId: String, formats: List<Format>, checkActive: () -> Unit): Long {
-        var remaining = TOTAL_BUDGET_BYTES
-        var cached = 0L
-        for (format in formats) {
-            if (remaining <= 0) break
-            val covered = networkPermit.withPermit {
-                runInterruptible { head(format, remaining, checkActive) }
+    private suspend fun cacheFormatHeads(videoId: String, formats: List<Format>, deadline: Long, checkActive: () -> Unit): Long = coroutineScope {
+        // pickFormats selects at most one audio/video rendition. Separate per-format
+        // budgets preserve the 4 MiB total without making video wait for audio's RTT.
+        formats.take(2).map { format ->
+            async {
+                networkPermit.withPermit {
+                    runInterruptible { head(videoId, format, PER_FORMAT_BUDGET_BYTES, deadline, checkActive) }
+                }
             }
-            cached += covered
-            remaining -= covered
-            // Record as slices land: a hand-over or cancel mid-loop must still
-            // credit the bytes playback can actually serve from cache.
-            if (covered > 0) synchronized(lock) { warmed[videoId] = (warmed[videoId] ?: 0L) + covered }
-        }
-        return cached
+        }.awaitAll().sum()
     }
 
     /**
@@ -205,9 +203,12 @@ class ShortsMediaPreloader(
         val plan = stream.hlsRequestPlan ?: run { skip(videoId, "no_hls_plan"); return 0 }
         val masterUrl = stream.hlsUrl ?: run { skip(videoId, "no_hls_url"); return 0 }
         val parser = HlsPlaylistParser()
+        // Playlists are not optional: an unparsed playlist warms nothing. They get a wider bound
+        // than the media bytes, which start their own clock once the playlist is in hand.
+        val playlistDeadline = SystemClock.elapsedRealtime() + PLAYLIST_TIME_MS
         val master = try {
             networkPermit.withPermit {
-                runInterruptible { checkActive(); readPlaylist(dataSources.vodHls(plan).createDataSource(C.DATA_TYPE_MANIFEST), masterUrl) }
+                runInterruptible { readPlaylist(dataSources.vodHls(plan).createDataSource(C.DATA_TYPE_MANIFEST), masterUrl, playlistDeadline, checkActive) }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -217,14 +218,31 @@ class ShortsMediaPreloader(
         coroutineContext.ensureActive()
         val multivariant = parser.parse(Uri.parse(masterUrl), master.inputStream()) as? HlsMultivariantPlaylist
             ?: run { skip(videoId, "master_unparsed"); return 0 }
-        val maxHeight = demand?.height?.takeIf { it > 0 } ?: PlaybackStartup.MAX_START_HEIGHT
-        val variant = pickHlsVariant(multivariant.variants, maxHeight)
+        // Use playback's decoder-aware selector and shared bandwidth estimate. Highest height /
+        // bitrate alone can warm another codec or frame rate, leaving the first frame cold.
+        val maxHeight = demand?.height?.takeIf { it > 0 } ?: Int.MAX_VALUE
+        val parameters = TrackSelectionParameters.Builder(context).apply {
+            if (maxHeight != Int.MAX_VALUE) {
+                setMinVideoSize(0, maxHeight)
+                setMaxVideoSize(Int.MAX_VALUE, maxHeight)
+            }
+        }.build()
+        val variant = pickHlsVariant(multivariant.variants, maxHeight) { formats ->
+            PlaybackStartup.selectFormat(formats,
+                DefaultBandwidthMeter.getSingletonInstance(context).bitrateEstimate,
+                parameters, PlaybackStartup.videoSupport(context))
+        }
             ?: run { skip(videoId, "no_variant", mapOf("variants" to multivariant.variants.size)); return 0 }
+        AppLog.detail(AppLog.Category.PLAYER, "shorts_prefetch_variant",
+            mapOf("video_id" to videoId, "height" to variant.format.height, "bitrate" to variant.format.bitrate))
         val mediaUrl = variant.url.toString()
         val mediaSource = dataSources.vodHlsMedia(plan) ?: run { skip(videoId, "no_cache_source"); return 0 }
         try {
             val media = try {
-                networkPermit.withPermit { runInterruptible { checkActive(); readPlaylist(mediaSource, mediaUrl) } }
+                networkPermit.withPermit { runInterruptible {
+                    checkActive()
+                    readPlaylist(dataSources.vodHls(plan).createDataSource(C.DATA_TYPE_MANIFEST), mediaUrl, playlistDeadline, checkActive)
+                } }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -236,12 +254,13 @@ class ShortsMediaPreloader(
                 ?: run { skip(videoId, "media_unparsed"); return 0 }
             var remaining = TOTAL_BUDGET_BYTES
             var cached = 0L
+            val mediaDeadline = SystemClock.elapsedRealtime() + WARM_TIME_MS
             val segments = playlist.segments.take(HLS_MAX_SEGMENTS)
             val init = segments.firstOrNull()?.initializationSegment
             for (segment in listOfNotNull(init) + segments) {
-                if (remaining <= 0) break
+                if (remaining <= 0 || SystemClock.elapsedRealtime() >= mediaDeadline) break
                 val covered = networkPermit.withPermit {
-                    runInterruptible { segmentHead(mediaSource, playlist.baseUri, segment, remaining, checkActive) }
+                    runInterruptible { segmentHead(videoId, mediaSource, playlist.baseUri, segment, remaining, mediaDeadline, checkActive) }
                 }
                 cached += covered
                 remaining -= covered
@@ -265,14 +284,32 @@ class ShortsMediaPreloader(
         val videos = StreamSelection.preferPlayable(candidates.filter { it.videoOnly && it.hasDashRanges }, false)
         val audios = StreamSelection.preferPlayable(
             StreamSelection.audioCandidates(candidates.filter { it.audioOnly && it.hasDashRanges }), false)
-        val height = demand?.height?.takeIf { it > 0 } ?: PlaybackStartup.MAX_START_HEIGHT
-        val video = StreamSelection.selectVideo(StreamSelection.filterBest(videos), "${height}p")
+        val pool = StreamSelection.filterBest(videos)
+        val parameters = TrackSelectionParameters.Builder(context).apply {
+            demand?.height?.takeIf { it > 0 }?.let {
+                setMinVideoSize(0, it); setMaxVideoSize(Int.MAX_VALUE, it)
+            }
+        }.build()
+        // Auto playback is no longer capped at 480p. Use its bandwidth/decoder-aware choice
+        // here as well, otherwise all the warmed bytes can belong to an unused rendition.
+        val mediaFormats = pool.map { format ->
+            MediaFormat.Builder().setId(format.itag?.toString())
+                .setWidth(format.width).setHeight(format.height).setFrameRate(format.fps.toFloat())
+                .setAverageBitrate(format.bitrate).setCodecs(format.codec)
+                .setContainerMimeType(format.mimeType)
+                .setSampleMimeType(androidx.media3.common.MimeTypes.getVideoMediaMimeType(format.codec.orEmpty()))
+                .build()
+        }
+        val selected = PlaybackStartup.selectFormat(mediaFormats,
+            DefaultBandwidthMeter.getSingletonInstance(context).bitrateEstimate,
+            parameters, PlaybackStartup.videoSupport(context))
+        val video = selected?.let { pool.getOrNull(mediaFormats.indexOf(it)) }
         val audio = audios.maxByOrNull { it.bitrate }
         return listOfNotNull(audio, video).distinctBy { it.url }
     }
 
     /** Reads up to [budget] head bytes of [format] into the shared cache; returns bytes written. */
-    private fun head(format: Format, budget: Long, checkActive: () -> Unit): Long {
+    private fun head(videoId: String, format: Format, budget: Long, deadline: Long, checkActive: () -> Unit): Long {
         val plan = format.requestPlan ?: return 0
         val total = plan.resourceLength.takeIf { it > 0 }
             ?: com.hhst.youtubelite.downloader.net.DownloadBitrate.queryParam(format.url, "clen")?.toLongOrNull()
@@ -284,7 +321,7 @@ class ShortsMediaPreloader(
             runCatching { source.close() }
             return 0
         }
-        return cacheHead(source, format.url, 0, length, checkActive)
+        return cacheHead(videoId, source, format.url, 0, length, deadline, checkActive)
     }
 
     /**
@@ -293,57 +330,65 @@ class ShortsMediaPreloader(
      * is explicit: a span written at the wrong offset would serve playback
      * wrong bytes under the same cache key.
      */
-    private fun segmentHead(source: CacheDataSource, baseUri: String, segment: HlsMediaPlaylist.Segment, budget: Long, checkActive: () -> Unit): Long {
+    private fun segmentHead(videoId: String, source: CacheDataSource, baseUri: String, segment: HlsMediaPlaylist.Segment, budget: Long, deadline: Long, checkActive: () -> Unit): Long {
         val ranged = segment.byteRangeLength >= 0
         if (ranged && segment.byteRangeOffset < 0) return 0
         val start = if (ranged) segment.byteRangeOffset else 0L
         val total = if (ranged) segment.byteRangeLength else -1L
         val length = budget.let { if (total > 0) minOf(it, total) else it }
         if (length <= 0) return 0
-        return cacheHead(source, androidx.media3.common.util.UriUtil.resolve(baseUri, segment.url), start, length, checkActive)
+        return cacheHead(videoId, source, androidx.media3.common.util.UriUtil.resolve(baseUri, segment.url), start, length, deadline, checkActive)
     }
 
-    /** Slices [length] head bytes from [position] into the cache; returns bytes written. */
-    private fun cacheHead(source: CacheDataSource, url: String, position: Long, length: Long, checkActive: () -> Unit): Long {
+    /** One request per head; cancellation checks belong between reads, not new HTTP requests. */
+    private fun cacheHead(videoId: String, source: CacheDataSource, url: String, position: Long, length: Long, deadline: Long, checkActive: () -> Unit): Long {
         var written = 0L
         try {
-            // CacheWriter runs blocking; slice the head so cancellation and
-            // failure land between reads instead of mid-stream.
-            while (written < length) {
+            checkActive()
+            if (SystemClock.elapsedRealtime() >= deadline) return 0
+            val spec = DataSpec.Builder().setUri(url).setPosition(position).setLength(length)
+                .setCustomData(PrefetchDeadline(deadline)).build()
+            CacheWriter(source, spec, ByteArray(PREFETCH_READ_BYTES)) { _, bytesCached, _ ->
+                // Count before checking: a yield/timeout still leaves these bytes in the cache.
+                written = bytesCached
                 checkActive()
-                val slice = minOf(length - written, PREFETCH_SLICE_BYTES)
-                var cachedInSlice = 0L
-                val spec = DataSpec.Builder()
-                    .setUri(url)
-                    .setPosition(position + written)
-                    .setLength(slice)
-                    .build()
-                CacheWriter(source, spec, null) { _, bytesCached, _ ->
-                    checkActive()
-                    cachedInSlice = bytesCached
-                }.cache()
-                written += (if (cachedInSlice > 0) cachedInSlice else slice).coerceAtMost(slice)
-            }
+                if (SystemClock.elapsedRealtime() >= deadline) throw WarmingDeadline()
+            }.cache()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             // Partially written spans stay in the cache and still help.
+        } finally {
+            runCatching { source.close() }
+            if (written > 0) synchronized(lock) {
+                if (target == videoId) warmed[videoId] = (warmed[videoId] ?: 0L) + written
+            }
         }
         return written
     }
 
-    /** Reads a playlist document (bounded); closes the source. */
-    private fun readPlaylist(source: DataSource, url: String): ByteArray {
+    private class WarmingDeadline : java.io.IOException("Prefetch budget exhausted")
+
+    /**
+     * Reads a playlist document, bounded in size and in time. The time bound matters: a media
+     * playlist can be a few hundred kilobytes, which at a slow link's rate is several seconds of
+     * speculative reading — enough to run past the tap it was meant to prepare for.
+     */
+    private fun readPlaylist(source: DataSource, url: String, deadline: Long, checkActive: () -> Unit): ByteArray {
         try {
-            source.open(DataSpec(Uri.parse(url)))
+            checkActive()
+            if (SystemClock.elapsedRealtime() >= deadline) throw WarmingDeadline()
+            source.open(DataSpec.Builder().setUri(url).setCustomData(PrefetchDeadline(deadline)).build())
             val out = ByteArrayOutputStream()
             val buffer = ByteArray(32 * 1024)
             while (out.size() < PLAYLIST_LIMIT_BYTES) {
-                val read = source.read(buffer, 0, buffer.size)
-                if (read == C.RESULT_END_OF_INPUT) break
+                checkActive()
+                if (SystemClock.elapsedRealtime() >= deadline) throw WarmingDeadline()
+                val read = source.read(buffer, 0, minOf(buffer.size, PLAYLIST_LIMIT_BYTES - out.size()))
+                if (read == C.RESULT_END_OF_INPUT) return out.toByteArray()
                 out.write(buffer, 0, read)
             }
-            return out.toByteArray()
+            throw java.io.IOException("Prefetch playlist exceeds size budget")
         } finally {
             runCatching { source.close() }
         }
@@ -357,14 +402,30 @@ class ShortsMediaPreloader(
     }
 
     companion object {
-        /** Initial prefetch budget: about 2 seconds of media, ~4 MiB across formats. */
+        /**
+         * Initial prefetch budget: enough for the first frames, not two seconds of media at any
+         * quality. Measured on a ~1 MB/s proxied link, a 4 MiB budget kept the warm running for
+         * 11 s, so a tap almost always landed while it was still in flight and shared the pipe
+         * with playback. The head only has to cover the first rendered frames.
+         */
         const val HEAD_SECONDS = 2
+        /**
+         * Time-bounded warming. A byte budget cannot be right for every link: 4 MiB is two seconds
+         * at 2 MB/s and half a minute at 150 KB/s, and the second case never finishes before the
+         * user taps. The budget is therefore how long warming may own the pipe, so the same rule
+         * covers a fast link (reads more, helps the next swipe) and a slow one (reads less, still
+         * covers the first frames).
+         */
+        const val WARM_TIME_MS = 2000L
+        /** Playlist documents are not optional, so they get a wider bound than the media bytes. */
+        const val PLAYLIST_TIME_MS = 4000L
         const val TOTAL_BUDGET_BYTES = 4L * 1024 * 1024
         const val PER_FORMAT_BUDGET_BYTES = 2L * 1024 * 1024
-        const val PREFETCH_SLICE_BYTES = 1L * 1024 * 1024
+        /** Check the time budget and foreground handover after each read on the same connection. */
+        const val PREFETCH_READ_BYTES = 32 * 1024
         const val DEFAULT_MEDIA_BYTES = 256L * 1024
-        const val PLAYLIST_LIMIT_BYTES = 512 * 1024
-        const val HLS_MAX_SEGMENTS = 3
+        const val PLAYLIST_LIMIT_BYTES = com.hhst.youtubelite.player.datasource.VodManifestCache.MAX_DOCUMENT_BYTES
+        const val HLS_MAX_SEGMENTS = 2
         const val MAX_WARMED = 8
 
         /**
@@ -374,12 +435,14 @@ class ShortsMediaPreloader(
         internal fun pickHlsVariant(
             variants: List<HlsMultivariantPlaylist.Variant>,
             maxHeight: Int,
+            select: ((List<MediaFormat>) -> MediaFormat?)? = null,
         ): HlsMultivariantPlaylist.Variant? {
-            val withFormat = variants.filter { it.format != null }
-            if (withFormat.isEmpty()) return variants.firstOrNull()
-            val pool = withFormat.filter { it.format!!.height <= 0 || it.format!!.height <= maxHeight }
-                .ifEmpty { withFormat }
-            return pool.maxWithOrNull(compareBy({ it.format!!.height }, { it.format!!.bitrate }))
+            select?.invoke(variants.map { it.format })?.let { chosen ->
+                variants.firstOrNull { it.format === chosen }?.let { return it }
+            }
+            val pool = variants.filter { it.format.height <= 0 || it.format.height <= maxHeight }
+                .ifEmpty { variants }
+            return pool.maxWithOrNull(compareBy({ it.format.height }, { it.format.bitrate }))
         }
     }
 }

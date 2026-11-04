@@ -22,12 +22,7 @@ object PipAutoEnter {
     private val suppressCount = AtomicInteger(0)
     private val host = AtomicReferenceHolder()
 
-    /**
-     * In-app navigation handoffs still waiting for their destination. Each
-     * entry is one [suppress] hold created by the source activity; entries
-     * are released when any other activity resumes (the destination took
-     * over) or when the owning source resumes or dies. Guarded by itself.
-     */
+    /** In-app navigation handoffs still waiting for their destination; released per [suppressForNavigation]. */
     private val handoffs = ArrayList<Activity>()
 
     @Volatile
@@ -141,7 +136,6 @@ object PipAutoEnter {
         lastPushError = result.exceptionOrNull()?.let { it.javaClass.simpleName + ": " + it.message }
     }
 
-    /** Reads the host's live PictureInPictureParams.isAutoEnterEnabled (API 31+). */
     fun isAutoEnterEnabled(activity: Activity): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return runCatching {

@@ -43,11 +43,11 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.ui.YoutubeThumb
 
-/** What a Subtitles dropdown pick means. */
 private sealed interface SubtitlePick {
     data class Language(val key: String) : SubtitlePick
     data object Style : SubtitlePick
@@ -167,10 +167,9 @@ internal fun SegmentPreviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         text = {
             Column {
-                // Reserve timestamp space before measuring the scrollable preview.
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     YoutubeThumb(
                         url = thumbnailUrl,
@@ -252,7 +251,6 @@ private fun popupMenuWidth(labels: List<String>): Dp {
     return with(density) { menuPx.toDp() }
 }
 
-/** Small menu popup for short lists (few rows, already measured). */
 @Composable
 private fun ListPopup(
     onDismiss: () -> Unit,
@@ -271,7 +269,7 @@ private fun ListPopup(
         Surface(
             modifier = Modifier.requiredWidth(width),
             shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = AppStyle.Panel,
             tonalElevation = 0.dp,
             shadowElevation = 4.dp,
         ) {

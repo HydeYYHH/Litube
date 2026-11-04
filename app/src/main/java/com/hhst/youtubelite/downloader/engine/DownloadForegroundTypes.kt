@@ -18,16 +18,12 @@ object DownloadForegroundTypes {
 
     fun forWork(sdk: Int, kind: DownloadWorkKind): Int = when (kind) {
         DownloadWorkKind.TRANSFER -> {
-            // HTTP byte transfer: dataSync is the closest FGS type on API 29–33.
-            // API 34+ transfer is UIDT (see BackgroundDownloadScheduler).
             if (sdk >= 29) DATA_SYNC else NONE
         }
         DownloadWorkKind.MUX, DownloadWorkKind.FINALIZE -> {
-            // Long mux/verify: mediaProcessing is required on API 35+.
             if (sdk >= 35) MEDIA_PROCESSING else if (sdk >= 29) DATA_SYNC else NONE
         }
         DownloadWorkKind.SAVE -> {
-            // MediaStore / local copy is dataSync on API 29+.
             if (sdk >= 29) DATA_SYNC else NONE
         }
     }

@@ -7,6 +7,11 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.HttpClient
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpReply
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpRequest
 import com.liskovsoft.youtubeapi.videoinfo.V2.SignInClient
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -177,7 +182,9 @@ class MediaSessionTest {
         val context = MediaSession.snapshot()
         val fresh = MediaSession.freshContext()
         assertEquals("fresh-access", fresh.accessToken)
+        assertEquals("fresh-access", MediaSession.snapshot().accessToken)
         assertEquals(context.generation, fresh.generation)
+        assertEquals(context.generation, MediaSession.snapshot().generation)
         assertEquals("fresh-access", store.read(MediaSession.KEY_ACCESS_TOKEN))
     }
 
@@ -192,6 +199,125 @@ class MediaSessionTest {
         assertEquals(0, calls)
     }
 
+    @Test fun repeatedFreshContextsDoNotReadOrWriteAnAlreadyPersistedAccessPair() {
+        val counting = CountingAuthStore(store)
+        MediaSession.initialize(counting)
+        MediaSession.completeSignIn(client(), token(), accounts())
+        val generation = MediaSession.snapshot().generation
+        counting.reset()
+
+        repeat(20) {
+            val fresh = MediaSession.freshContext()
+            assertEquals("access", fresh.accessToken)
+            assertEquals(generation, fresh.generation)
+        }
+
+        assertEquals(emptyList<String>(), counting.writes)
+        assertEquals(0, counting.reads)
+    }
+
+    @Test fun restoredAccessPairIsVerifiedOnceEvenWhenContextsAreConcurrent() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        val counting = CountingAuthStore(store)
+        MediaSession.initialize(counting)
+        counting.reset()
+        val executor = java.util.concurrent.Executors.newFixedThreadPool(4)
+        try {
+            val reads = List(20) { executor.submit<String?> { MediaSession.freshContext().accessToken } }
+            reads.forEach { assertEquals("access", it.get(3, java.util.concurrent.TimeUnit.SECONDS)) }
+        } finally {
+            executor.shutdownNow()
+        }
+        assertEquals(listOf(MediaSession.KEY_ACCESS_TOKEN, MediaSession.KEY_ACCESS_EXPIRES), counting.writes)
+        assertEquals(0, counting.reads)
+    }
+
+    @Test fun refreshedAccessAndExpiryArePersistedOnlyOnce() {
+        var calls = 0
+        val refreshHttp = object : HttpClient {
+            override fun execute(request: HttpRequest): HttpReply {
+                calls++
+                return HttpReply(200, """{"access_token":"fresh-access","expires_in":3600}""", emptyMap())
+            }
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, refreshHttp) }
+        val counting = CountingAuthStore(store)
+        MediaSession.initialize(counting)
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
+        val generation = MediaSession.snapshot().generation
+        counting.reset()
+
+        repeat(10) {
+            assertEquals("fresh-access", MediaSession.freshContext().accessToken)
+            assertEquals(generation, MediaSession.snapshot().generation)
+        }
+
+        assertEquals(1, calls)
+        assertEquals(listOf(MediaSession.KEY_ACCESS_TOKEN, MediaSession.KEY_ACCESS_EXPIRES), counting.writes)
+        assertEquals("fresh-access", store.read(MediaSession.KEY_ACCESS_TOKEN))
+        assertTrue(store.read(MediaSession.KEY_ACCESS_EXPIRES)!!.toLong() > System.currentTimeMillis())
+    }
+
+    @Test fun aRefreshWithTheSameAccessTokenStillPersistsItsNewExpiry() {
+        val refreshHttp = object : HttpClient {
+            override fun execute(request: HttpRequest) =
+                HttpReply(200, """{"access_token":"access","expires_in":3600}""", emptyMap())
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, refreshHttp) }
+        val counting = CountingAuthStore(store)
+        MediaSession.initialize(counting)
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
+        counting.reset()
+
+        assertEquals("access", MediaSession.freshContext().accessToken)
+        MediaSession.freshContext()
+
+        assertEquals(listOf(MediaSession.KEY_ACCESS_TOKEN, MediaSession.KEY_ACCESS_EXPIRES), counting.writes)
+        assertTrue(store.read(MediaSession.KEY_ACCESS_EXPIRES)!!.toLong() > System.currentTimeMillis())
+    }
+
+    @Test fun aPartlyFailedAccessPairWriteIsRetriedBeforeItCanBeSkipped() {
+        var refreshes = 0
+        val refreshHttp = object : HttpClient {
+            override fun execute(request: HttpRequest): HttpReply {
+                refreshes++
+                return HttpReply(200, """{"access_token":"fresh-access","expires_in":3600}""", emptyMap())
+            }
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, refreshHttp) }
+        val counting = CountingAuthStore(store)
+        MediaSession.initialize(counting)
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
+        counting.reset()
+        counting.failOnceOn = MediaSession.KEY_ACCESS_EXPIRES
+
+        assertEquals("auth_write_failed", assertThrows(IllegalStateException::class.java) {
+            MediaSession.freshContext()
+        }.message)
+        assertEquals("0", store.read(MediaSession.KEY_ACCESS_EXPIRES))
+        assertEquals("fresh-access", MediaSession.freshContext().accessToken)
+        MediaSession.freshContext()
+
+        assertEquals(1, refreshes)
+        assertEquals(List(2) { listOf(MediaSession.KEY_ACCESS_TOKEN, MediaSession.KEY_ACCESS_EXPIRES) }.flatten(), counting.writes)
+        assertTrue(store.read(MediaSession.KEY_ACCESS_EXPIRES)!!.toLong() > System.currentTimeMillis())
+    }
+
+    @Test fun aNewStoreDoesNotInheritThePreviousStoresPersistenceConfirmation() {
+        val first = CountingAuthStore(store)
+        MediaSession.initialize(first)
+        MediaSession.completeSignIn(client(), token(), accounts())
+        val replacement = MemoryAuthStore().also { it.values.putAll(store.values) }
+        val second = CountingAuthStore(replacement)
+        MediaSession.initialize(second)
+        second.reset()
+
+        MediaSession.freshContext()
+        MediaSession.freshContext()
+
+        assertEquals(listOf(MediaSession.KEY_ACCESS_TOKEN, MediaSession.KEY_ACCESS_EXPIRES), second.writes)
+    }
+
     @Test fun persistedRefreshTokenRecoversAMissingAccessToken() {
         val http = object : HttpClient {
             override fun execute(request: HttpRequest) =
@@ -200,7 +326,102 @@ class MediaSessionTest {
         MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, http) }
         MediaSession.completeSignIn(client(), token(access = "", expires = 0), accounts())
         MediaSession.initialize(store)
+        val generation = MediaSession.snapshot().generation
         assertEquals("recovered", MediaSession.freshContext().accessToken)
+        assertTrue(MediaSession.signedIn())
+        assertEquals("recovered", MediaSession.snapshot().accessToken)
+        assertEquals("owner", MediaSession.snapshot().accountId)
+        assertEquals(generation, MediaSession.snapshot().generation)
+        assertFalse(useDeviceLibrary(LocalLibraryStore(MemoryAuthStore())))
+        assertTrue(MediaSession.updateAccounts(accounts(), generation))
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun recoveringAMissingTokenPublishesSignedInWithoutMovingTheGeneration() = runTest {
+        val http = object : HttpClient {
+            override fun execute(request: HttpRequest) =
+                HttpReply(200, """{"access_token":"recovered","expires_in":3600}""", emptyMap())
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, http) }
+        MediaSession.completeSignIn(client(), token(access = "", expires = 0), accounts())
+        MediaSession.initialize(store)
+        val generation = MediaSession.snapshot().generation
+        val observed = mutableListOf<MediaSessionIdentity>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { MediaSession.changes.toList(observed) }
+
+        MediaSession.freshContext()
+        MediaSession.freshContext()
+
+        assertEquals(listOf(MediaSessionIdentity(generation, false), MediaSessionIdentity(generation, true)), observed)
+        assertEquals(generation, MediaSession.snapshot().generation)
+        MediaSession.signOut()
+        val signedOut = MediaSession.snapshot()
+        assertEquals(MediaSessionIdentity(signedOut.generation, false), observed.last())
+        assertNotEquals(generation, signedOut.generation)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun rotatingAnExistingTokenDoesNotPublishAnIdentityChange() = runTest {
+        val http = object : HttpClient {
+            override fun execute(request: HttpRequest) =
+                HttpReply(200, """{"access_token":"rotated","expires_in":3600}""", emptyMap())
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, http) }
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
+        val identity = MediaSession.changes.value
+        val observed = mutableListOf<MediaSessionIdentity>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { MediaSession.changes.toList(observed) }
+
+        assertEquals("rotated", MediaSession.freshContext().accessToken)
+        MediaSession.freshContext()
+
+        assertEquals(listOf(identity), observed)
+        assertEquals(identity.generation, MediaSession.snapshot().generation)
+    }
+
+    @Test fun reinitializingWithoutCredentialsPublishesTheActualAnonymousIdentity() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        MediaSession.initialize(MemoryAuthStore())
+        val current = MediaSession.snapshot()
+        assertEquals(MediaSessionIdentity(current.generation, false), MediaSession.changes.value)
+    }
+
+    @Test fun aMissingAccessTokenCannotReuseThePersistedFutureExpiry() {
+        var refreshes = 0
+        val http = object : HttpClient {
+            override fun execute(request: HttpRequest): HttpReply {
+                refreshes++
+                return HttpReply(200, """{"access_token":"recovered","expires_in":3600}""", emptyMap())
+            }
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, http) }
+        MediaSession.completeSignIn(client(), token(), accounts())
+        store.write(MediaSession.KEY_ACCESS_TOKEN, null)
+        MediaSession.initialize(store)
+        val generation = MediaSession.snapshot().generation
+
+        assertEquals("recovered", MediaSession.freshContext().accessToken)
+        assertEquals("recovered", MediaSession.freshContext().accessToken)
+        assertEquals(1, refreshes)
+        assertTrue(MediaSession.signedIn())
+        assertEquals("recovered", store.read(MediaSession.KEY_ACCESS_TOKEN))
+        assertEquals(generation, MediaSession.snapshot().generation)
+    }
+
+    @Test fun aRecoveredAccessTokenCanBootstrapTheAccountList() {
+        val http = object : HttpClient {
+            override fun execute(request: HttpRequest) =
+                HttpReply(200, """{"access_token":"recovered","expires_in":3600}""", emptyMap())
+        }
+        MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, http) }
+        MediaSession.completeSignIn(client(), token(access = "", expires = 0), emptyList())
+        MediaSession.initialize(store)
+        MediaSession.freshContext()
+
+        assertTrue(MediaSession.updateAccounts(accounts(), MediaSession.snapshot().generation))
+        assertEquals("owner", MediaSession.snapshot().accountId)
+        assertEquals(2, MediaSession.accounts().size)
+        assertTrue(MediaSession.signedIn())
     }
 
     @Test fun aRefreshCannotRestoreCredentialsAfterSignOut() = refreshAcrossIdentityChange {
@@ -213,6 +434,52 @@ class MediaSessionTest {
         MediaSession.completeSignIn(client(), token("new-account-access", "new-account-refresh"), accounts())
         val verify: () -> Unit = { assertEquals("new-account-access", store.read(MediaSession.KEY_ACCESS_TOKEN)) }
         verify
+    }
+
+    @Test fun aRefreshCannotPersistAcrossTheAnonymousSwitch() = refreshAcrossIdentityChange {
+        MediaSession.setAnonymousMode(true)
+        val verify: () -> Unit = {
+            assertFalse(MediaSession.freshContext().signedIn)
+            assertEquals("access", store.read(MediaSession.KEY_ACCESS_TOKEN))
+            MediaSession.setAnonymousMode(false)
+            assertEquals("old-refreshed", MediaSession.freshContext().accessToken)
+            assertEquals("old-refreshed", store.read(MediaSession.KEY_ACCESS_TOKEN))
+        }
+        verify
+    }
+
+    @Test fun aRefreshCannotPersistAcrossAnAccountSelection() = refreshAcrossIdentityChange {
+        assertTrue(MediaSession.selectAccount("brand"))
+        val verify: () -> Unit = {
+            assertEquals("access", store.read(MediaSession.KEY_ACCESS_TOKEN))
+            val fresh = MediaSession.freshContext()
+            assertEquals("brand", fresh.accountId)
+            assertEquals("brand-page", fresh.onBehalfOfUser)
+            assertEquals("old-refreshed", fresh.accessToken)
+        }
+        verify
+    }
+
+    private class CountingAuthStore(private val delegate: AuthStore) : AuthStore {
+        val writes = mutableListOf<String>()
+        var reads = 0
+        var failOnceOn: String? = null
+        override fun read(key: String): String? {
+            reads++
+            return delegate.read(key)
+        }
+        override fun write(key: String, value: String?) {
+            writes += key
+            if (key == failOnceOn) {
+                failOnceOn = null
+                throw IllegalStateException("auth_write_failed")
+            }
+            delegate.write(key, value)
+        }
+        fun reset() {
+            writes.clear()
+            reads = 0
+        }
     }
 
     private fun refreshAcrossIdentityChange(change: () -> (() -> Unit)) {
@@ -235,6 +502,8 @@ class MediaSessionTest {
             release.countDown()
             assertEquals("session_changed", work.get(3, java.util.concurrent.TimeUnit.SECONDS)?.message)
             verify()
+            val current = MediaSession.snapshot()
+            assertEquals(MediaSessionIdentity(current.generation, current.signedIn), MediaSession.changes.value)
         } finally { release.countDown(); executor.shutdownNow() }
     }
 
@@ -300,14 +569,12 @@ class MediaSessionTest {
         assertTrue(MediaSession.signedIn())
         val generation = MediaSession.snapshot().generation
         assertTrue(MediaSession.setAnonymousMode(true))
-        // The whole app sees the anonymous identity; the account stays selectable.
         assertFalse(MediaSession.signedIn())
         assertFalse(MediaSession.snapshot().signedIn)
         assertNull(MediaSession.snapshot().accessToken)
         assertNull(MediaSession.snapshot().accountId)
         assertTrue(MediaSession.snapshot().generation > generation)
         assertTrue(MediaSession.anonymousMode())
-        // Credentials remain stored for switching back.
         assertEquals("refresh", store.read(MediaSession.KEY_REFRESH_TOKEN))
         assertEquals("owner", store.read(MediaSession.KEY_ACCOUNT_ID))
     }
@@ -323,9 +590,7 @@ class MediaSessionTest {
         val fresh = MediaSession.freshContext()
         assertNull(fresh.accessToken)
         assertFalse(fresh.signedIn)
-        // The stored credential stays (for switching back) but is never attached.
         assertEquals("access", store.read(MediaSession.KEY_ACCESS_TOKEN))
-        // Switching back lets the account identity refresh again.
         MediaSession.setAnonymousMode(false)
         assertEquals("fresh-access", MediaSession.freshContext().accessToken)
     }
@@ -334,10 +599,9 @@ class MediaSessionTest {
         MediaSession.completeSignIn(client(), token(), accounts())
         val owner = MediaSession.snapshot().accountId
         MediaSession.setAnonymousMode(true)
-        MediaSession.initialize(store) // process restart
+        MediaSession.initialize(store)
         assertTrue(MediaSession.anonymousMode())
         assertFalse(MediaSession.signedIn())
-        // Switching back to the account identity restores it from storage.
         assertTrue(MediaSession.setAnonymousMode(false))
         assertTrue(MediaSession.signedIn())
         assertEquals(owner, MediaSession.snapshot().accountId)
@@ -349,7 +613,7 @@ class MediaSessionTest {
     @Test fun signingInAlwaysEndsTheAnonymousSwitch() {
         MediaSession.completeSignIn(client(), token(), accounts())
         MediaSession.setAnonymousMode(true)
-        MediaSession.signOut() // sign-out from the anonymous state keeps the switch honest
+        MediaSession.signOut()
         MediaSession.completeSignIn(client(), token("second-access"), accounts())
         assertFalse(MediaSession.anonymousMode())
         assertTrue(MediaSession.signedIn())

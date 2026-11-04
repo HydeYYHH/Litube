@@ -271,8 +271,8 @@ class DownloadFaultInjectionTest {
     )
 
     private class ReadyResolver : DownloadResolver {
-        override suspend fun resolve(taskId: String) = DownloadResolveOutcome.Ready(taskId, 0)
-        override fun sourcesOf(taskId: String) = listOf(
+        override suspend fun resolve(taskId: String, generation: Long) = DownloadResolveOutcome.Ready(taskId, generation)
+        override fun sourcesOf(taskId: String, generation: Long) = listOf(
             DownloadComponentSource(
                 assetKind = AssetKind.VIDEO,
                 componentKind = InputComponentKind.VIDEO,
@@ -294,6 +294,7 @@ class DownloadFaultInjectionTest {
         override fun cancelInFlight(taskId: String) = Unit
         override suspend fun downloadComponent(
             taskId: String,
+            generation: Long,
             component: InputComponent,
             source: DownloadComponentSource,
             dest: File,
@@ -307,6 +308,7 @@ class DownloadFaultInjectionTest {
         override fun cancelInFlight(taskId: String) = Unit
         override suspend fun downloadComponent(
             taskId: String,
+            generation: Long,
             component: InputComponent,
             source: DownloadComponentSource,
             dest: File,

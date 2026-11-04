@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -86,8 +87,9 @@ fun SaveToPlaylistSheet(
         }
         MenuBottomSheet(
             items = items,
-            onDismiss = onDismiss,
+            onDismiss = { if (!live.pending) onDismiss() },
             onSelect = { index ->
+                if (live.pending) return@MenuBottomSheet
                 when {
                     live.failed -> live.onRetry()
                     choices == null -> Unit
@@ -97,13 +99,13 @@ fun SaveToPlaylistSheet(
             },
             tag = "save-to-playlist",
             paneTitle = "Save to playlist",
+            dismissEnabled = !live.pending,
+            actionsEnabled = !live.pending,
             header = {
-                AppText(
-                    "Save video to...",
-                    Modifier.fillMaxWidth()
-                        .padding(start = MenuSheetLayout.RowStart.dp, end = MenuSheetLayout.RowStart.dp, bottom = 4.dp),
-                    size = 16, line = 22, weight = FontWeight.Medium,
-                )
+                if (live.pending) Box(Modifier.fillMaxWidth().padding(horizontal = MenuSheetLayout.RowStart.dp),
+                    contentAlignment = Alignment.CenterEnd) {
+                    com.hhst.youtubelite.ui.design.ActionProgress()
+                }
             },
         )
         return
@@ -126,14 +128,7 @@ fun SaveToPlaylistSheet(
         },
         tag = "save-to-playlist",
         paneTitle = "Save to playlist",
-        header = {
-            AppText(
-                "Save video to...",
-                Modifier.fillMaxWidth()
-                    .padding(start = MenuSheetLayout.RowStart.dp, end = MenuSheetLayout.RowStart.dp, bottom = 4.dp),
-                size = 16, line = 22, weight = FontWeight.Medium,
-            )
-        },
+
     )
 }
 
@@ -144,6 +139,7 @@ fun NewPlaylistSheet(
     onDismiss: () -> Unit,
     onDraftChange: (NewPlaylistDraft) -> Unit,
     onSubmit: () -> Unit,
+    pending: Boolean = false,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -160,7 +156,7 @@ fun NewPlaylistSheet(
         }
     }
     Box(
-        Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onDismiss() }
+        Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable(enabled = !pending) { onDismiss() }
             .appDescription(R.string.a11y_close_new_playlist),
     )
     BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
@@ -168,15 +164,10 @@ fun NewPlaylistSheet(
             Modifier.padding(bottom = MenuSheetLayout.BottomInset.dp)
                 .width(MenuSheetLayout.sheetWidth(maxWidth.value, maxHeight.value).dp)
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
-                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Background)
+                .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Panel)
                 .verticalScroll(rememberScrollState())
                 .testTag("new-playlist-sheet").semantics { paneTitle = "New playlist" },
         ) {
-            AppText(
-                "New playlist",
-                Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-                size = 18, line = 26, weight = FontWeight.Bold,
-            )
             AppText(
                 "Private",
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
@@ -188,7 +179,8 @@ fun NewPlaylistSheet(
                 tag = "new-playlist-title",
                 description = "Playlist title",
                 focus = focus,
-                onValue = { onDraftChange(draft.copy(title = it)) },
+                onValue = { if (!pending) onDraftChange(draft.copy(title = it)) },
+                readOnly = pending,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
             )
             SheetField(
@@ -196,7 +188,8 @@ fun NewPlaylistSheet(
                 placeholder = "Description (optional)",
                 tag = "new-playlist-description",
                 description = "Playlist description",
-                onValue = { onDraftChange(draft.copy(description = it)) },
+                onValue = { if (!pending) onDraftChange(draft.copy(description = it)) },
+                readOnly = pending,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
             )
             Row(
@@ -204,11 +197,12 @@ fun NewPlaylistSheet(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SheetAction("Cancel", "new-playlist-cancel", onClick = onDismiss)
+                SheetAction("Cancel", "new-playlist-cancel", enabled = !pending, onClick = onDismiss)
                 Spacer(Modifier.width(8.dp))
                 SheetAction(
                     "Create", "new-playlist-create",
-                    enabled = draft.title.isNotBlank(),
+                    enabled = draft.title.isNotBlank() && !pending,
+                    pending = pending,
                     onClick = onSubmit,
                 )
             }
@@ -225,10 +219,12 @@ private fun SheetField(
     onValue: (String) -> Unit,
     modifier: Modifier = Modifier,
     focus: FocusRequester? = null,
+    readOnly: Boolean = false,
 ) {
     BasicTextField(
         value, onValue,
-        modifier.heightIn(min = CommentsLayout.InputHeight.dp).fillMaxWidth()
+        readOnly = readOnly,
+        modifier = modifier.heightIn(min = CommentsLayout.InputHeight.dp).fillMaxWidth()
             .clip(RoundedCornerShape(CommentsLayout.InputRadius.dp))
             .border(1.dp, DesignTokens.Border.copy(alpha = CommentsLayout.DividerAlpha),
                 RoundedCornerShape(CommentsLayout.InputRadius.dp))
@@ -252,6 +248,7 @@ private fun SheetAction(
     label: String,
     tag: String,
     enabled: Boolean = true,
+    pending: Boolean = false,
     onClick: () -> Unit,
 ) {
     Box(
@@ -260,7 +257,8 @@ private fun SheetAction(
             .testTag(tag).padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        AppText(
+        if (pending) com.hhst.youtubelite.ui.design.ActionProgress()
+        else AppText(
             label,
             size = 14, line = 20, weight = FontWeight.Medium,
             color = if (enabled) DesignTokens.Ink else DesignTokens.Secondary.copy(alpha = 0.5f),

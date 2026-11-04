@@ -25,17 +25,13 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 
-/** One retained compressed sample; the reader/writer oracle's unit. */
 data class MediaSample(
     val timeUs: Long,
     val flags: Int,
     val data: ByteArray,
 )
 
-/**
- * Test-only MP4/fMP4 reader and mux writer. Serves as an in-memory oracle for
- * [MediaFileIo] and [Mp4Muxer], which stream samples instead.
- */
+/** Test-only; serves as an in-memory oracle for [MediaFileIo] and [Mp4Muxer], which stream samples instead. */
 data class ExtractedTrack(
     val format: Format,
     val samples: List<MediaSample>,
@@ -44,10 +40,8 @@ data class ExtractedTrack(
     val mime: String? get() = format.sampleMimeType
 }
 
-/** [ExtractedTrack] contents handed back to the muxer for a round trip. */
 data class MuxTrack(val format: Format, val samples: List<MediaSample>)
 
-/** Mp4Muxer write path of the oracle: in-memory samples straight to a file. */
 fun mux(tracks: List<MuxTrack>, dest: File) {
     FileOutputStream(dest).use { stream ->
         @Suppress("DEPRECATION")
@@ -93,8 +87,7 @@ object MediaSampleIo {
             if (result == Extractor.RESULT_SEEK) {
                 check(++hops < 64) { "seek loop" }
                 input.seekTo(seek.position)
-                // RESULT_SEEK repositions the input for the current read;
-                // extractor.seek() would restart sample selection at time 0.
+                // RESULT_SEEK repositions the input for the current read; extractor.seek() would restart sample selection at time 0.
                 result = Extractor.RESULT_CONTINUE
             }
         }
@@ -112,8 +105,7 @@ object MediaSampleIo {
             val mime = track.mime.orEmpty()
             val times = track.samples.map { it.timeUs }
             if (times.any { it < 0L }) return "negative-timestamp"
-            // Video PTS may go backwards in decode order (B-frames). Audio
-            // should be nearly monotonic; allow a small encoder-delay dip.
+            // Audio PTS should be nearly monotonic (video may regress on B-frames); allow a small encoder-delay dip.
             if (MimeTypes.isAudio(mime)) {
                 var prev = Long.MIN_VALUE
                 times.forEach { time ->

@@ -5,7 +5,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Shared metrics for settings labels, action rows and native page chrome. */
 object SettingsTokens {
     const val BodySize = 14
     const val BodyLine = 20

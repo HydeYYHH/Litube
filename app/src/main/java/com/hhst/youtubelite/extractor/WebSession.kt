@@ -2,17 +2,16 @@ package com.hhst.youtubelite.extractor
 
 import kotlinx.serialization.json.JsonObject
 
-/** Account state captured with the page configuration. */
 enum class WebAccount { ANONYMOUS, AUTHENTICATED, PREMIUM }
 
-/** Credentials stay in the host; stream and plan objects only carry the snapshot above. */
+/** Credentials stay in the host; handed-out sessions carry only the identity snapshot. */
 fun interface SessionCredentials {
     fun cookies(origin: String): String
 }
 
 /**
- * Immutable identity snapshot of one YouTube web configuration. Copy semantics
- * keep a handed-out session unaffected by later captures.
+ * Immutable identity snapshot of one YouTube web configuration; copies keep a
+ * handed-out session unaffected by later captures.
  */
 class YoutubeWebSession(
     val key: String,
@@ -29,10 +28,11 @@ class YoutubeWebSession(
     configuration: JsonObject,
     private val credentials: SessionCredentials,
 ) {
-    // kotlinx JsonElement values are effectively immutable, so the handed-out
-    // snapshot stays unaffected by later captures without a defensive copy.
+    /** Internal snapshot marker; native sessions have no browser document yet. */
+    internal val nativeBootstrap: Boolean = configurationSource == "native-session"
+
+    // JsonElement values are effectively immutable; no defensive copy needed.
     private val configuration: JsonObject = configuration
-    /** The page's WEB client version, when the captured configuration is a WEB one. */
     val webClientVersion: String?
 
     /** The web player requests content-bound streaming poTokens for this session. */
@@ -56,7 +56,6 @@ class YoutubeWebSession(
     fun scope(): String = "$key:$networkGeneration"
 
     private companion object {
-        /** Minimal `key=value&key=value` reader for serialized experiment flags. */
         fun queryFlags(serialized: String): Map<String, String> = serialized.split('&')
             .filter { it.contains('=') }
             .associate { it.substringBefore('=') to it.substringAfter('=') }

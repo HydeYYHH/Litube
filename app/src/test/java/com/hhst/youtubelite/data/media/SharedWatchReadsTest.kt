@@ -69,14 +69,38 @@ class SharedWatchReadsTest {
         }.value!!.videoId!!
         assertEquals("r", read(fresh = false))
         assertEquals(1, calls)
-        // Fresh callers skip reuse even when a cached response exists.
         assertEquals("r", read(fresh = true))
         assertEquals(2, calls)
         assertEquals("r", read(fresh = true))
         assertEquals(3, calls)
-        // Non-fresh callers reuse the settled response within the window.
         assertEquals("r", read(fresh = false))
         assertEquals(3, calls)
+    }
+
+    @Test fun equivalentOauthRefreshesShareButProfilesVisitorsCookiesAndLocalesDoNot() {
+        val reads = SharedWatchReads()
+        var calls = 0
+        val base = RequestContext(accountId = "account", accessToken = "first", visitor = "visitor", generation = 1)
+        fun read(context: RequestContext) = reads.read("video", context, FakeHttp, false) { _, _, _ ->
+            calls++
+            ok("r-$calls")
+        }.value!!.videoId
+        assertEquals("r-1", read(base))
+        assertEquals("r-1", read(base.copy(accessToken = "refreshed")))
+        assertEquals("r-2", read(base.anonymous()))
+        assertEquals("r-3", read(base.copy(visitor = "other")))
+        assertEquals("r-4", read(base.copy(language = "zh")))
+        assertEquals("r-5", read(base.copy(region = "CN")))
+        assertEquals("r-6", read(base.copy(generation = 2)))
+        val web = base.copy(accessToken = null,
+            webSession = com.liskovsoft.youtubeapi.videoinfo.V2.WebSession("SAPISID=one", 0))
+        assertEquals("r-7", read(web))
+        assertEquals("r-7", read(web.copy(webSession = com.liskovsoft.youtubeapi.videoinfo.V2.WebSession("SAPISID=one", 0))))
+        assertEquals("r-8", read(web.copy(webSession = com.liskovsoft.youtubeapi.videoinfo.V2.WebSession("SAPISID=two", 0))))
+        assertEquals("r-9", read(web.copy(webSession = com.liskovsoft.youtubeapi.videoinfo.V2.WebSession("SAPISID=one", 1))))
+        assertEquals("r-10", read(base.anonymous().copy(visitorCookie = "VISITOR_INFO1_LIVE=one")))
+        assertEquals("r-11", read(base.anonymous().copy(visitorCookie = "VISITOR_INFO1_LIVE=two")))
+        assertEquals(11, calls)
     }
 
     @Test fun aFreshResponseReplacesThePreviouslyCachedPage() {
@@ -101,7 +125,6 @@ class SharedWatchReadsTest {
             }
             throw AssertionError("expected MediaException")
         } catch (expected: MediaException) {
-            // Surfaced to the caller.
         }
         assertEquals("r", reads.read("video", RequestContext(visitor = "v"), FakeHttp, fresh = false) { _, _, _ ->
             calls++

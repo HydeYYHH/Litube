@@ -4,10 +4,9 @@ package com.hhst.youtubelite.cast.protocol
 
 /**
  * One CASTV2 protocol message - the single protobuf message type the whole Cast v2 wire protocol
- * uses (protocol reference: thibauts/node-castv2). Immutable value object; the byte-level
- * encoding lives in [CastMessageCodec].
+ * uses (protocol reference: thibauts/node-castv2); byte-level encoding lives in [CastMessageCodec].
  *
- * Proto shape (field numbers matter - they are the wire contract):
+ * Proto shape (field numbers are the wire contract):
  * ```
  *   1: protocol_version (enum, always 0 = CASTV2_1_0)
  *   2: source_id        (string)

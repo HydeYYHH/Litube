@@ -12,7 +12,7 @@ import org.junit.Test
 
 /**
  * Read-only public sampling of the signed-out library surfaces: you, history,
- * subscriptions and the notifications prompt. Gated behind `-e network 1`.
+ * subscriptions and the notifications prompt; gated behind `-e network 1`.
  */
 class LibraryReferenceAndroidTest {
     @Test fun collectSignedOutSurfaces() {

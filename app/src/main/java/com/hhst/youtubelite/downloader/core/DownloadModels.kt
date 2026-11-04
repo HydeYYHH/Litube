@@ -68,7 +68,6 @@ enum class PublishPhase {
     DELETED,
 }
 
-/** How a command selects work. */
 sealed interface DownloadTarget {
     data class Task(val taskId: String) : DownloadTarget
     data class Item(val itemId: String) : DownloadTarget
@@ -221,7 +220,6 @@ data class InputComponent(
     val needsRedownload: Boolean = false,
 )
 
-/** Generation-guarded resolve payload written onto component/asset rows. */
 data class ResolvedComponentUpdate(
     val assetKind: AssetKind,
     val componentKind: InputComponentKind,

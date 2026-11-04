@@ -1,5 +1,9 @@
 package com.hhst.youtubelite.library.presentation
 
+import com.hhst.youtubelite.ui.design.CollapsingAppBar
+import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,12 +38,19 @@ import com.hhst.youtubelite.R
 
 @Composable
 fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("you-screen")) {
+    val appBar = rememberAppBarCollapseState(enabled = state.overlay == LibraryOverlay.None && state.content is LibraryContent.Ready)
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("you-screen").nestedScroll(appBar.connection)) {
         val width = maxWidth.value
         val listState = rememberLibraryListState()
         Column(Modifier.fillMaxSize().then(if (state.overlay != LibraryOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-            YouTopBar(state.signedIn, onAction)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            CollapsingAppBar(appBar) {
+                YouTopBar(state.signedIn, onAction)
+
+            }
+            RefreshableContent(value = state, refreshing = state.content == LibraryContent.Loading,
+                    onRefresh = { onAction(LibraryAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = state.overlay == LibraryOverlay.None && state.content !is LibraryContent.SignedOut, contentKey = state.signedIn, tag = "you-refresh",
+                    canPull = { !listState.canScrollBackward }) { state ->
                 when (val content = state.content) {
                     LibraryContent.Loading -> LibrarySkeleton("you-skeleton")
                     LibraryContent.Failed -> if (state.verification != null) VerificationCard(
@@ -51,7 +62,8 @@ fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier
                     is LibraryContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "you-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
-                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, onAction)
+                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn,
+                        state.historyRetrying, state.playlistsRetrying, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, accountAvatar(state)) { tab ->
@@ -83,7 +95,6 @@ private fun YouTopBar(signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
             com.hhst.youtubelite.ui.design.LitubeBrand(Modifier.padding(start = 12.dp))
         }
         Spacer(Modifier.weight(1f))
-        if (signedIn) AppIconButton(AppIcon.Bell, stringResource(R.string.a11y_notifications)) { onAction(LibraryAction.OpenNotifications) }
         AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(LibraryAction.OpenSearch) }
         if (!signedIn) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more)) { onAction(LibraryAction.OpenAccountMenu) }
     }
@@ -91,6 +102,7 @@ private fun YouTopBar(signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
 
 @Composable
 private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, signedIn: Boolean,
+                        historyRetrying: Boolean, playlistsRetrying: Boolean,
     onAction: (LibraryAction) -> Unit) {
     val page = content.page
     LazyColumn(Modifier.fillMaxSize().testTag("you-library"), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
@@ -120,7 +132,7 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
         }
         when {
             page.historyFailed -> item(key = "history-failed") {
-                ShelfRetry("Couldn't load history") { onAction(LibraryAction.Retry) }
+                ShelfRetry("Couldn't load history", historyRetrying) { onAction(LibraryAction.RetryHistoryShelf) }
             }
             page.history.isNotEmpty() -> {
                 item(key = "history-header") { ShelfHeader("History") { onAction(LibraryAction.OpenHistory) } }
@@ -129,7 +141,7 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
         }
         when {
             page.playlistsFailed -> item(key = "playlists-failed") {
-                ShelfRetry("Couldn't load playlists") { onAction(LibraryAction.Retry) }
+                ShelfRetry("Couldn't load playlists", playlistsRetrying) { onAction(LibraryAction.RetryPlaylistsShelf) }
             }
             page.playlists.isNotEmpty() -> {
                 item(key = "playlists-header") { ShelfHeader("Playlists") { onAction(LibraryAction.OpenPlaylists) } }
@@ -139,12 +151,13 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
     }
 }
 
-/** A failed optional shelf keeps the page usable and offers the page retry. */
+/** A failed optional shelf retries independently while the other shelves stay usable. */
 @Composable
-private fun ShelfRetry(message: String, onRetry: () -> Unit) {
+private fun ShelfRetry(message: String, loading: Boolean, onRetry: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         AppText(message, Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
-        PillButton("Retry", onRetry)
+        if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        else PillButton("Retry", onRetry)
     }
 }
 
@@ -179,18 +192,24 @@ private fun ShelfHeader(label: String, onSeeAll: () -> Unit) {
     }
 }
 
-/** The watch history page. */
 @Composable
 fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val appBar = rememberAppBarCollapseState(enabled = state.overlay == LibraryOverlay.None && state.content is HistoryContent.Ready)
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("history-screen")) {
+    BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("history-screen").nestedScroll(appBar.connection)) {
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
-        LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
+        CollapsingAppBar(appBar) {
+            LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
             AppIconButton(AppIcon.More, stringResource(R.string.a11y_history_settings), diameter = 48.dp,
                 modifier = Modifier.testTag("history-manage")) { onAction(LibraryAction.OpenManageHistory) }
         }))
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+
+            }
+            RefreshableContent(value = state, refreshing = state.content == HistoryContent.Loading,
+                    onRefresh = { onAction(LibraryAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = state.overlay == LibraryOverlay.None && state.content !is HistoryContent.SignedOut, contentKey = Unit, tag = "history-refresh",
+                    canPull = { !listState.canScrollBackward }) { state ->
             when (val content = state.content) {
                 HistoryContent.Loading -> LibrarySkeleton("history-skeleton")
                 HistoryContent.Failed -> if (state.verification != null) VerificationCard(
@@ -221,7 +240,7 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
                         // The top bar already reads "History"; the body adds only the
                         // section groups, not a second large title.
                         grouped.forEach { (section, entries) ->
-                            item(key = "section-$section") {
+                            if (section.isNotBlank() && !section.trim().equals("History", ignoreCase = true) && section.trim() !in setOf("历史记录", "历史", "觀看記錄", "观看记录")) item(key = "section-$section") {
                                 AppText(section, Modifier.padding(start = 12.dp, end = 12.dp,
                                         top = if (wide) 4.dp else 0.dp, bottom = if (wide) 8.dp else 4.dp),
                                     size = if (wide) 20 else 18, line = if (wide) 28 else 26, weight = FontWeight.Medium)
@@ -249,14 +268,20 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
     }
 }
 
-/** The personal playlists collection page. */
 @Composable
 fun CollectionScreen(state: CollectionUiState,
                      onAction: (LibraryAction) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val appBar = rememberAppBarCollapseState(enabled = state.overlay == LibraryOverlay.None && state.content is CollectionContent.Ready)
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-    Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen")) {
-        LibrarySubPageBar("Playlists", onBack, onAction)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+    Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen").nestedScroll(appBar.connection)) {
+        CollapsingAppBar(appBar) {
+            LibrarySubPageBar("Playlists", onBack, onAction)
+
+            }
+            RefreshableContent(value = state, refreshing = state.content == CollectionContent.Loading,
+                    onRefresh = { onAction(LibraryAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth(),
+                    enabled = state.overlay == LibraryOverlay.None && state.content !is CollectionContent.SignedOut, contentKey = Unit, tag = "playlists-refresh",
+                    canPull = { !listState.canScrollBackward }) { state ->
             when (val content = state.content) {
                 CollectionContent.Loading -> LibrarySkeleton("playlists-skeleton")
                 CollectionContent.Failed -> if (state.verification != null) VerificationCard(
@@ -312,7 +337,6 @@ fun CollectionScreen(state: CollectionUiState,
     }
 }
 
-/** Shared tail row for library lists that load further pages. */
 @Composable
 internal fun LibraryAppendRow(append: com.hhst.youtubelite.home.domain.AppendState, onRetry: () -> Unit) {
     when (append) {

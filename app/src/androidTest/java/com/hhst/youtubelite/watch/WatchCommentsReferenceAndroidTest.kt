@@ -14,10 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-/**
- * Read-only sampling for the comments panel. The host is a plain WebView in a
- * separate data directory: no app scripts or account/session state are injected.
- */
+/** Read-only sampling for the comments panel: a plain WebView in a separate data directory, with no app scripts or account/session state injected. */
 class WatchCommentsReferenceAndroidTest {
     @Test
     fun collectExpandedRepliesAndWidePanel() {
@@ -219,7 +216,6 @@ class WatchCommentsReferenceAndroidTest {
                         DeviceEvidence.captureScene("watch-comments-$width-sort")
                     }
 
-                    // Return to the panel before locating a reply thread.
                     val panelAgain = probeUntil(probe, PANEL, 5_000) { it.optBoolean("ready") }
                     if (panelAgain.optBoolean("ready")) {
                         val replies = probeUntil(probe, REPLY_ENTRY, 8_000) { it.optBoolean("found") }

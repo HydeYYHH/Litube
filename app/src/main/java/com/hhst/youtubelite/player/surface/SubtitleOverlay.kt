@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 
 /** Base cue look (material bodyMedium); [SubtitleStyle.textScale] multiplies it. */
 private const val BASE_FONT_SP = 14f
+private const val BASE_LINE_HEIGHT_SP = 20f
 
-/** Background alpha per [SubtitleStyle.Background] style. */
 private fun SubtitleStyle.Background.alpha(): Float = when (this) {
     SubtitleStyle.Background.NONE -> 0f
     SubtitleStyle.Background.SEMI -> 0.6f
@@ -50,6 +50,8 @@ fun SubtitleOverlay(
                 text = line,
                 color = textColor,
                 fontSize = fontSp.sp,
+                // Scale wrapped/newline text too; the inherited theme line height stays fixed.
+                lineHeight = (BASE_LINE_HEIGHT_SP * style.textScale).sp,
                 fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
                 textAlign = TextAlign.Center,
                 modifier = Modifier

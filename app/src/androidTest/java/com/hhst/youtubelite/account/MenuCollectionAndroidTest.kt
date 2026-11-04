@@ -23,10 +23,8 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 
 /**
- * Read-only signed-in menu census. Records actual menu rows only (menuServiceItemRenderer):
- * icon type, structural token paths, token count and lengths per row. Ancestor commands,
- * advertising actions and duplicate nodes are never recorded, and full tokens, cookies
- * and authorization values are never written.
+ * Read-only signed-in menu census (menuServiceItemRenderer rows only).
+ * Never writes token material, cookies or authorization values.
  */
 class MenuCollectionAndroidTest {
 
@@ -304,7 +302,6 @@ class MenuCollectionAndroidTest {
         }
     }
 
-    /** Walks one captured response and records each actual menu row once. */
     private fun analyze(surface: String, captured: Map<String, JSONObject>): JSONObject {
         val rows = LinkedHashMap<String, JSONObject>()
         val perRequest = JSONObject()
@@ -367,7 +364,6 @@ class MenuCollectionAndroidTest {
         record.optInt("titleLength"),
     ).joinToString("|")
 
-    /** Records menu rows only; other nodes are traversed without recording. */
     private fun walkRows(node: Any?, key: String?, records: JSONArray, path: String = "") {
         when (node) {
             is JSONObject -> {
@@ -466,11 +462,7 @@ class MenuCollectionAndroidTest {
             else -> emptyList()
         }
 
-    /**
-     * Read-only census of the Watch related rail: production TV context, its continuation page,
-     * and independent WEB/MWEB contexts carrying the account's own OAuth token. Records status,
-     * counts and structural capability presence only; never token material or URLs.
-     */
+    /** Read-only census of the Watch related rail across TV, WEB and MWEB contexts; never records token material or URLs. */
     @Test fun compareWatchReadContextsAndContinuationCapabilities() = runBlocking(Dispatchers.IO) {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1" && args.getString("menuCollection") == "1")
@@ -558,11 +550,7 @@ class MenuCollectionAndroidTest {
         assertTrue("A continuation page was never read", tvSecond != null)
     }
 
-    /**
-     * Records the structural shape of every feedback endpoint and card menu in the TV, WEB and
-     * MWEB watch responses plus the TV continuation. Token values, titles and URLs are never
-     * written; only paths, key names, token lengths and renderer counts.
-     */
+    /** Records feedback endpoint and menu shapes across watch contexts; never writes token values, titles or URLs. */
     @Test fun recordFeedbackEndpointShapesAcrossWatchContexts() = runBlocking(Dispatchers.IO) {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1" && args.getString("menuCollection") == "1")

@@ -90,22 +90,18 @@ class DeArrowServiceTest {
     @Test fun theFirstTitleCandidateDecidesAndLowerRankedOnesAreNeverPromoted() = runBlocking {
         val server = MockWebServer(); server.start()
         try {
-            // Original first: keep original even though a better alternative follows.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(
                 titles = "${title("Original", votes = 5, original = true)},${title("Replacement", votes = 100)}"))))
             assertEquals(null, service(server).branding("V")?.title)
 
-            // Unverified first (downvoted, not locked): keep original.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(
                 titles = "${title("Bad", votes = -2)},${title("Great", votes = 9)}"))))
             assertEquals(null, service(server).branding("V")?.title)
 
-            // Locked first wins regardless of votes.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(
                 titles = "${title("Locked choice", votes = -3, locked = true)},${title("Runner up", votes = 9)}"))))
             assertEquals("Locked choice", service(server).branding("V")?.title)
 
-            // Verified first with positive votes is used.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(titles = title("Community title", votes = 2)))))
             assertEquals("Community title", service(server).branding("V")?.title)
         } finally { server.shutdown() }
@@ -122,23 +118,18 @@ class DeArrowServiceTest {
     @Test fun thumbnailTimesMustBeValidAndInsideKnownDurations() = runBlocking {
         val server = MockWebServer(); server.start()
         try {
-            // Negative timestamp rejected.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(thumbs = thumb(-1.0)))))
             assertNull(service(server).branding("V")?.thumbTime)
 
-            // Beyond the known duration rejected.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(thumbs = thumb(120.0), duration = 100.0))))
             assertNull(service(server).branding("V")?.thumbTime)
 
-            // Valid timestamp with a known duration accepted.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(thumbs = thumb(42.0), duration = 100.0))))
             assertEquals(42.0, service(server).branding("V")?.thumbTime!!, 0.0)
 
-            // Unknown duration only requires non-negative.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(thumbs = thumb(3.5), duration = null))))
             assertEquals(3.5, service(server).branding("V")?.thumbTime!!, 0.0)
 
-            // Original thumbnail (timestamp null) keeps the original.
             server.enqueue(MockResponse().setBody(bucket("V" to entry(thumbs = thumb(null)))))
             assertNull(service(server).branding("V")?.thumbTime)
         } finally { server.shutdown() }
@@ -161,7 +152,6 @@ class DeArrowServiceTest {
             server.enqueue(MockResponse().setResponseCode(429))
             val svc = service(server)
             assertNull(svc.branding("V")?.title)
-            // The failure is negatively cached: a repeat stays local.
             assertNull(svc.branding("V")?.thumbTime)
             assertEquals(1, server.requestCount)
         } finally { server.shutdown() }
@@ -223,11 +213,9 @@ class DeArrowServiceTest {
                 assertEquals("t$i", svc.branding(id)?.title)
             }
             assertEquals(DeArrowService.MAX_ITEMS, server.requestCount)
-            // One more insert evicts the least-recently-used (first) entry.
             server.enqueue(MockResponse().setBody(bucket("EXTRA_ID" to entry(titles = title("extra")))))
             assertEquals("extra", svc.branding("EXTRA_ID")?.title)
             assertEquals(DeArrowService.MAX_ITEMS + 1, server.requestCount)
-            // The evicted entry must refetch instead of answering from cache.
             server.enqueue(MockResponse().setBody(bucket("V0000000000" to entry(titles = title("t0")))))
             assertEquals("t0", svc.branding("V0000000000")?.title)
             assertEquals(DeArrowService.MAX_ITEMS + 2, server.requestCount)

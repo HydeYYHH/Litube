@@ -12,10 +12,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * A filtered search reads each response once: the filter panel travels with the page it
- * belongs to, so applying a chip costs one request, not a re-read of the same document.
- */
 class MediaSearchRepositoryTest {
     private class Recording(val bodies: Map<Int, Pair<Int, String>>, val calls: MutableList<String>) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {

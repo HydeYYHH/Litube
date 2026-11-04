@@ -12,6 +12,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import com.hhst.youtubelite.core.AppNotice
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
@@ -20,6 +21,60 @@ class HomeViewModelTest {
 
     private fun menuVideo(id: String = "video") = FeedItem.Video(id, "Title", "Author", "", "", "", "channel",
         feedbackGeneration = 7, menuEndpoint = FeedMenuEndpoint("menu", id))
+
+    @Test fun homeRecoversMissingChannelBeforeRequestingItsAvatar() = runTest {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val menu = """{"content":{"engagementPanelSectionListRenderer":{"content":{"listViewModel":{"listItems":[{"listItemViewModel":{"onTap":{"innertubeCommand":{"browseEndpoint":{"browseId":"UCabc"}}}}}]}}}}}"""
+        val artwork = "https://yt3.googleusercontent.com/avatar"
+        val header = """{"header":{"musicVisualHeaderRenderer":{"foregroundThumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"$artwork"}]}}}}}}"""
+        val http = okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
+            calls.incrementAndGet()
+            val body = if (chain.request().url.encodedPath.endsWith("get_panel")) menu else header
+            okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200).message("test").body(body.toResponseBody()).build()
+        }.build()
+        val directory = com.hhst.youtubelite.data.media.MediaAvatarDirectory(com.hhst.youtubelite.data.media.MediaClient(http))
+        try {
+            val card = menuVideo().copy(channelId = "", avatar = null)
+            val repo = object : HomeRepository {
+                override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(card))
+            }
+            val vm = HomeViewModel(repo, SavedStateHandle(), loadOnStart = true, avatars = directory)
+            runCurrent()
+            runBlocking { withTimeout(5_000) {
+                directory.channel(card.id, com.liskovsoft.youtubeapi.videoinfo.V2.MenuEndpoint("menu", card.id))
+                directory.avatar("UCabc")
+            } }
+            runCurrent()
+            val row = (vm.uiState.value.content as HomeContent.Feed).page.items.single() as FeedItem.Video
+            assertEquals("UCabc", row.channelId)
+            assertEquals(artwork, row.avatar)
+            assertEquals(2, calls.get())
+        } finally { directory.dispose() }
+    }
+
+    @Test fun signedInHomeLoadsFeedbackWithoutAnInlineMenuEndpoint() = runTest {
+        val card = menuVideo().copy(menuEndpoint = null)
+        var reads = 0
+        val repo = object : HomeRepository {
+            override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(card))
+            override suspend fun menu(video: FeedItem.Video): FeedItem.Video {
+                reads++
+                return video.copy(notInterestedToken = "ni", dontRecommendToken = "dc")
+            }
+        }
+        val vm = HomeViewModel(repo, SavedStateHandle(), saveRepository = FakeSaveRepository())
+        vm.updateSession(true, 7)
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        assertEquals(0, reads)
+        vm.onAction(HomeAction.OpenMenu(card.id))
+        advanceUntilIdle()
+        val loaded = (vm.uiState.value.content as HomeContent.Feed).page.items.single() as FeedItem.Video
+        assertEquals("ni", loaded.notInterestedToken)
+        assertEquals("dc", loaded.dontRecommendToken)
+        assertEquals(1, reads)
+    }
 
     private fun menuViewModel(resolve: suspend (FeedItem.Video) -> FeedItem.Video): HomeViewModel {
         val repo = object : HomeRepository {
@@ -138,7 +193,6 @@ class HomeViewModelTest {
         val vm = HomeViewModel(repository { _, _ ->
             HomePage(listOf(FeedItem.Video("live-1", "Live", "Blender", "2K views", "bunny", "9:56", "blender")))
         }, SavedStateHandle(), snapshots = store, seedDispatcher = UnconfinedTestDispatcher())
-        // The snapshot paints before any request; it carries no cursor and no live claim.
         val seeded = vm.uiState.value.content as HomeContent.Feed
         assertEquals(listOf("cached-1"), seeded.page.items.map { it.id })
         assertTrue(seeded.refreshing)
@@ -171,8 +225,6 @@ class HomeViewModelTest {
         vm.onAction(HomeAction.LoadNext)
         advanceUntilIdle()
         val items = (vm.uiState.value.content as HomeContent.Feed).page.items
-        // A rail continued across the boundary reads as one shelf; the later distinct
-        // shelf survives append deduplication instead of losing its row.
         assertEquals(listOf("v1", "shorts-a", "v2", "shorts-c"), items.map { it.id })
         assertEquals(listOf("a1", "a2"), (items[1] as FeedItem.Shorts).videos.map { it.id })
     }
@@ -190,7 +242,7 @@ class HomeViewModelTest {
         assertEquals(1, loads)
         vm.onAction(HomeAction.Refresh)
         runCurrent()
-        assertEquals(1, loads) // a refresh in flight owns the slot; the repeat is dropped
+        assertEquals(1, loads)
         gate.complete(Unit)
         advanceUntilIdle()
         assertTrue(vm.uiState.value.content is HomeContent.Feed)
@@ -355,8 +407,7 @@ class HomeViewModelTest {
         vm.onAction(HomeAction.OpenMenu("a"))
         vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
         runCurrent()
-        assertEquals(1, calls) // the in-flight write owns the slot; the repeat is dropped
-        // The identity moved on while the write was in flight: its success must not land.
+        assertEquals(1, calls)
         vm.updateSession(true, 2)
         gate.complete(Unit)
         advanceUntilIdle()
@@ -568,7 +619,6 @@ class HomeViewModelTest {
         // First load is challenged before any feed exists: the card state wins, no fake feed.
         assertEquals(HomeContent.Failed, vm.uiState.value.content)
         assertEquals("https://www.google.com/sorry/index?q=x", vm.uiState.value.verification?.challengeUrl)
-        // Completing verification grants exactly one retry, which now succeeds.
         vm.verificationCompleted()
         advanceUntilIdle()
         assertTrue(vm.uiState.value.content is HomeContent.Feed)

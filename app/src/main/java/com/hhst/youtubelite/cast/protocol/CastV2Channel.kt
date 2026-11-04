@@ -3,6 +3,7 @@
 package com.hhst.youtubelite.cast.protocol
 
 import android.os.SystemClock
+import android.net.Network
 import com.hhst.youtubelite.diagnostics.CastDiagnosticTrace
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -26,21 +27,19 @@ import javax.net.ssl.X509TrustManager
 import org.json.JSONObject
 
 /**
- * One CASTV2 socket to one receiver: TLS to port 8009, length-prefixed [CastMessage] frames
- * both ways, plus the two transport-level namespaces every session needs - virtual connections
- * (`CONNECT`/`CLOSE`) and the PING/PONG heartbeat. Everything app-level (receiver
- * control, media) lives above this in [CastV2Session].
+ * One CASTV2 socket to one receiver: TLS to port 8009, length-prefixed [CastMessage] frames both
+ * ways, plus the two transport-level namespaces every session needs - virtual connections
+ * (`CONNECT`/`CLOSE`) and the PING/PONG heartbeat. Everything app-level (receiver control,
+ * media) lives above this in [CastV2Session].
  *
- * **Threading.** [open] and every send are serialized on a single writer executor,
- * so callers may invoke any public method from any thread (including main - no network ever runs
- * on the caller). Inbound messages are decoded on a dedicated reader thread and dispatched to the
- * [Listener] *on that reader thread* - listeners must not block and must post to main
- * themselves if they touch UI.
+ * **Threading.** [open] and every send are serialized on a single writer executor, so any public
+ * method is safe from any thread (including main - no network ever runs on the caller). Inbound
+ * messages are decoded on a dedicated reader thread and dispatched to the [Listener] *on that
+ * reader thread* - listeners must not block and must post to main themselves if they touch UI.
  *
- * **Lifecycle.** Exactly one terminal callback fires per channel: `onError` (socket
- * died, heartbeat timeout, handshake failure) or `onClosed` (local [close]). All
- * dispatch paths are guarded so close-during-callback races collapse into that single terminal
- * event; late messages after the terminal state are dropped silently.
+ * **Lifecycle.** Exactly one terminal callback fires per channel: `onError` (socket died,
+ * heartbeat timeout, handshake failure) or `onClosed` (local [close]). Close-during-callback
+ * races collapse into that single terminal event; late messages after it are dropped silently.
  */
 class CastV2Channel(
     private val host: String,
@@ -49,6 +48,7 @@ class CastV2Channel(
     private val authenticator: Authenticator = Authenticator { socket, input, output ->
         CastDeviceAuth.authenticate(socket, input, output)
     },
+    private val network: Network? = null,
 ) {
 
     /** DeviceAuth over the provisional TLS socket, before any application traffic. */
@@ -77,18 +77,27 @@ class CastV2Channel(
         this.diagnostics = diagnostics
     }
 
-    /**
-     * Single thread for connect + all writes: gives us free write synchronization AND guarantees
-     * ordering (a send queued right after [open] runs strictly after the handshake).
-     */
+    /** Single thread for connect + all writes: free write synchronization and ordering
+     *  (a send queued right after [open] runs strictly after the handshake). */
     private val writer: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "CastV2Writer").apply { isDaemon = true }
     }
 
+    /** A blocked write must not also block the deadline that aborts its socket. */
+    private val closeWorker: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "CastV2Close").apply { isDaemon = true }
+    }
+    private val transportLock = Any()
+    private val callbackLock = Any()
+    private val localCloseFinished = AtomicBoolean()
+
+    @Volatile
+    private var closeDeadline: ScheduledFuture<*>? = null
+
     /** Destinations that received CONNECT; CLOSE goes to each of them on teardown. */
     private val connectedDestinations = ConcurrentHashMap.newKeySet<String>()
 
-    /** Terminal-state latch: set by exactly one of [fail]/[doClose]; gates all callbacks + sends. */
+    /** Terminal-state latch: set by exactly one of [fail]/[close]; gates callbacks + sends. */
     private val terminated = AtomicBoolean()
 
     @Volatile
@@ -103,7 +112,7 @@ class CastV2Channel(
     @Volatile
     private var reader: Thread? = null
 
-    /** Writer thread only. */
+    @Volatile
     private var heartbeat: ScheduledFuture<*>? = null
 
     @Volatile
@@ -113,12 +122,7 @@ class CastV2Channel(
     @Volatile
     private var lastInboundMs = 0L
 
-    /** TLS connected and not yet terminated. */
     fun isOpen(): Boolean = opened && !terminated.get()
-
-    // ---------------------------------------------------------------------------------
-    // Open
-    // ---------------------------------------------------------------------------------
 
     /** Connect asynchronously; `onOpened` or `onError` follows. Call once per instance. */
     fun open() {
@@ -132,38 +136,51 @@ class CastV2Channel(
         try {
             diagnostics.phase("channel_connect_started")
             val socket = provisionalSocketFactory().createSocket() as SSLSocket
-            this.socket = socket
+            val accepted = synchronized(transportLock) {
+                if (terminated.get()) false else {
+                    this.socket = socket
+                    true
+                }
+            }
+            if (!accepted) {
+                socket.close()
+                return
+            }
+            network?.bindSocket(socket)
             socket.soTimeout = CONNECT_TIMEOUT_MS
             socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
             diagnostics.phase("channel_tls_started")
             socket.startHandshake()
-            this.socket = socket
             val inStream = BufferedInputStream(socket.inputStream)
             val outStream = BufferedOutputStream(socket.outputStream)
-            input = inStream
-            output = outStream
+            synchronized(transportLock) {
+                if (terminated.get()) return
+                input = inStream
+                output = outStream
+            }
             diagnostics.phase("device_auth_started")
             authenticator.authenticate(socket, inStream, outStream)
             diagnostics.phase("device_auth_succeeded")
-            socket.soTimeout = 0
-            lastInboundMs = SystemClock.elapsedRealtime()
-            opened = true
-
-            val reader = Thread(::readLoop, "CastV2Reader").apply { isDaemon = true }
-            this.reader = reader
-            reader.start()
-
-            heartbeat = writer.scheduleWithFixedDelay(
-                { heartbeatTick() },
-                HEARTBEAT_INTERVAL_MS,
-                HEARTBEAT_INTERVAL_MS,
-                TimeUnit.MILLISECONDS,
-            )
+            synchronized(transportLock) {
+                // Authentication can finish after a local close aborted the
+                // provisional transport. Never restart its reader or heartbeat.
+                if (terminated.get()) return
+                socket.soTimeout = 0
+                lastInboundMs = SystemClock.elapsedRealtime()
+                opened = true
+                val reader = Thread(::readLoop, "CastV2Reader").apply { isDaemon = true }
+                this.reader = reader
+                reader.start()
+                heartbeat = writer.scheduleWithFixedDelay(
+                    { heartbeatTick() },
+                    HEARTBEAT_INTERVAL_MS,
+                    HEARTBEAT_INTERVAL_MS,
+                    TimeUnit.MILLISECONDS,
+                )
+            }
 
             diagnostics.phase("channel_opened")
-            if (!terminated.get()) {
-                dispatch(listener::onOpened)
-            }
+            dispatch(callback = listener::onOpened)
         } catch (e: Exception) {
             diagnostics.error("channel_connect_or_auth_failed", e)
             fail("Connect to $host:$port failed: $e")
@@ -174,11 +191,9 @@ class CastV2Channel(
     private fun provisionalSocketFactory(): SSLSocketFactory {
         val trustAll = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                // Authentication occurs over this socket before any application traffic.
             }
 
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                // Authentication occurs over this socket before any application traffic.
             }
 
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -188,14 +203,8 @@ class CastV2Channel(
         }.socketFactory
     }
 
-    // ---------------------------------------------------------------------------------
-    // Send
-    // ---------------------------------------------------------------------------------
-
-    /**
-     * Open a virtual connection to a destination. Required once for [RECEIVER_ID] before any
-     * receiver command and once per launched app transportId before media traffic. Idempotent.
-     */
+    /** Open a virtual connection to a destination: required once for [RECEIVER_ID] before any
+     *  receiver command and once per launched app transportId before media traffic. Idempotent. */
     fun connect(destinationId: String?) {
         if (destinationId != null && connectedDestinations.add(destinationId)) {
             send(SENDER_ID, destinationId, NS_CONNECTION, "{\"type\":\"CONNECT\"}")
@@ -222,10 +231,6 @@ class CastV2Channel(
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // Reader + heartbeat
-    // ---------------------------------------------------------------------------------
-
     private fun readLoop() {
         try {
             val inStream = input
@@ -235,6 +240,7 @@ class CastV2Channel(
                     fail("Receiver closed the connection")
                     return
                 }
+                if (terminated.get()) return
                 lastInboundMs = SystemClock.elapsedRealtime()
                 if (NS_HEARTBEAT == message.namespace) {
                     handleHeartbeat(message)
@@ -263,7 +269,6 @@ class CastV2Channel(
         }
     }
 
-    /** Writer thread, every 5s: liveness check first, then an outbound PING. */
     private fun heartbeatTick() {
         if (terminated.get()) {
             return
@@ -276,26 +281,24 @@ class CastV2Channel(
         doSend(SENDER_ID, RECEIVER_ID, NS_HEARTBEAT, "{\"type\":\"PING\"}")
     }
 
-    // ---------------------------------------------------------------------------------
-    // Teardown
-    // ---------------------------------------------------------------------------------
-
     /**
      * Close locally: best-effort CLOSE to every connected destination, then kill the socket and
-     * both threads. Idempotent; `onClosed` fires once (unless `onError` already did).
+     * both threads. A separate deadline aborts a blocked write, including the CLOSE itself.
+     * Idempotent; `onClosed` fires once (unless `onError` already did).
      */
     fun close() {
+        if (!terminated.compareAndSet(false, true)) return
+        closeDeadline = closeWorker.schedule({ finishLocalClose() }, CLOSE_GRACE_MS, TimeUnit.MILLISECONDS)
         execute(::doClose)
     }
 
     /** Writer thread only. */
     private fun doClose() {
-        if (!terminated.compareAndSet(false, true)) {
-            return
-        }
+        if (localCloseFinished.get()) return
         val out = output
         if (out != null) {
             for (destination in connectedDestinations) {
+                if (localCloseFinished.get()) break
                 try {
                     CastMessageCodec.writeFramed(
                         out,
@@ -311,55 +314,70 @@ class CastV2Channel(
                 // ignore
             }
         }
-        teardown()
-        dispatch(listener::onClosed)
+        finishLocalClose()
     }
 
-    /** Any thread. Terminal error path; exactly-once with [doClose] via [terminated]. */
+    /** Writer or deadline thread; only one finishes the local terminal event. */
+    private fun finishLocalClose() {
+        if (!localCloseFinished.compareAndSet(false, true)) return
+        teardown()
+        dispatch(terminal = true, callback = listener::onClosed)
+    }
+
+    /** Any thread. Terminal error path; exactly-once with [close] via [terminated]. */
     private fun fail(reason: String) {
         if (!terminated.compareAndSet(false, true)) {
             return
         }
         diagnostics.error("channel_failed", null)
-        dispatch { listener.onError(reason) }
+        dispatch(terminal = true) { listener.onError(reason) }
         teardown()
     }
 
     private fun teardown() {
-        heartbeat?.cancel(false)
-        socket?.let {
+        val (transport, readerThread) = synchronized(transportLock) {
+            opened = false
+            heartbeat?.cancel(false)
+            heartbeat = null
+            val current = socket to reader
+            socket = null
+            reader = null
+            input = null
+            output = null
+            current
+        }
+        transport?.let {
             try {
                 it.close() // also unblocks the reader's readFramed()
             } catch (e: Exception) {
                 // ignore
             }
         }
-        val readerThread = reader
         if (readerThread != null && readerThread != Thread.currentThread()) {
             readerThread.interrupt()
         }
         writer.shutdown() // lets an in-flight task (possibly this one) finish, accepts no more
+        closeDeadline?.cancel(false)
+        closeWorker.shutdown()
     }
-
-    // ---------------------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------------------
 
     /** Queue on the writer. Rejection after shutdown means the channel has already terminated. */
     private fun execute(task: () -> Unit) {
         try {
             writer.execute { task() }
         } catch (e: RejectedExecutionException) {
-            // already terminated
         }
     }
 
-    /** Listener exceptions must never kill the reader/writer threads. */
-    private fun dispatch(callback: () -> Unit) {
-        try {
-            callback()
-        } catch (e: Exception) {
-            diagnostics.error("channel_listener_failed", e)
+    /** Serialize terminal delivery after any active callback; drop late active callbacks. */
+    private fun dispatch(terminal: Boolean = false, callback: () -> Unit) {
+        synchronized(callbackLock) {
+            if (!terminal && terminated.get()) return
+            try {
+                callback()
+            } catch (e: Exception) {
+                diagnostics.error("channel_listener_failed", e)
+            }
         }
     }
 
@@ -373,11 +391,11 @@ class CastV2Channel(
         const val NS_CONNECTION = "urn:x-cast:com.google.cast.tp.connection"
         const val NS_HEARTBEAT = "urn:x-cast:com.google.cast.tp.heartbeat"
 
-        /**
-         * Cast receivers answer within one LAN round trip. A longer timeout only delays the picker
-         * for an unreachable address.
-         */
+        /** Cast receivers answer within one LAN round trip; a longer timeout only delays the picker for an unreachable address. */
         private const val CONNECT_TIMEOUT_MS = 7_000
+
+        /** Allow a courtesy frame on a healthy LAN without waiting behind a blocked writer. */
+        private const val CLOSE_GRACE_MS = 500L
 
         private const val HEARTBEAT_INTERVAL_MS = 5_000L
 

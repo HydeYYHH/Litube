@@ -50,7 +50,7 @@ class DownloadResolverImplTest {
                 catalog(baseFormats, subtitles = listOf(subtitle("en", mime = "text/vtt"))),
             ),
         )
-        val outcome = resolver.resolve(taskId)
+        val outcome = resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration)
         assertTrue(outcome is DownloadResolveOutcome.Ready)
         val snap = h.repo.transact { snapshot(taskId) }!!
         assertEquals(DownloadPhase.TRANSFER, snap.task.phase)
@@ -78,9 +78,9 @@ class DownloadResolverImplTest {
         val taskId = h.coordinator.enqueue(request("a", config = config), "s1").created.single().taskId
         val catalogs = ImmediateCatalog(catalog(baseFormats))
         val resolver = DownloadResolverImpl(h.coordinator, h.repo, catalogs)
-        resolver.resolve(taskId)
+        resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration)
         val firstItag = resolver.lastPlan!!.video!!.format.itag
-        resolver.resolve(taskId)
+        resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration)
         assertEquals(1440, resolver.lastPlan!!.video!!.format.height)
         assertEquals(firstItag, resolver.lastPlan!!.video!!.format.itag)
         assertEquals("id:en", resolver.lastPlan!!.audio!!.audioTrackKey)
@@ -110,7 +110,7 @@ class DownloadResolverImplTest {
         val resolver = DownloadResolverImpl(h.coordinator, h.repo, spy)
         val playback = async { spy.catalog(TEST_VIDEO_ID) }
         spy.parseStarted.await()
-        val job = launch { resolver.resolve(taskId) }
+        val job = launch { resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration) }
         yield()
         job.cancelAndJoin()
         assertTrue(spy.waitCancelled >= 1)
@@ -138,8 +138,8 @@ class DownloadResolverImplTest {
             catalogs = catalogs,
             poTokens = DownloadPoTokenLifecycle(catalogs, PoTokenEvictor { evictions += it }),
         )
-        resolver.resolve(taskId)
-        val result = resolver.refreshAfter403(taskId)!!
+        resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration)
+        val result = resolver.refreshAfter403(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration)!!
         assertEquals(1, result.round)
         assertTrue(result.evictedPoToken)
         assertEquals(listOf(vid("a")), evictions)
@@ -172,7 +172,7 @@ class DownloadResolverImplTest {
             h.repo,
             ImmediateCatalog(catalog(baseFormats, isLive = true, durationSec = 0L)),
         )
-        val outcome = resolver.resolve(taskId) as DownloadResolveOutcome.Failed
+        val outcome = resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration) as DownloadResolveOutcome.Failed
         assertEquals(DownloadUnavailableReason.LIVE.name, outcome.reason)
         val snap = h.repo.transact { snapshot(taskId) }!!
         assertEquals(DownloadStatus.FAILED, snap.task.status)
@@ -189,7 +189,7 @@ class DownloadResolverImplTest {
             override suspend fun refresh(videoId: String) = catalog(videoId)
         }
         val resolver = DownloadResolverImpl(h.coordinator, h.repo, catalogs)
-        val outcome = resolver.resolve(taskId) as DownloadResolveOutcome.Failed
+        val outcome = resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration) as DownloadResolveOutcome.Failed
         assertEquals(DownloadUnavailableReason.EXTRACTION_FAILED.name, outcome.reason)
         val snapshot = h.repo.transact { snapshot(taskId) }!!
         val row = DownloadUiMapper.item(snapshot)
@@ -204,7 +204,7 @@ class DownloadResolverImplTest {
             AssetKind.VIDEO, InputComponentKind.VIDEO, expectedBytes = 999)))
         val unknown = videoFormat(1080, clen = 0).copy(bitrate = 4_000_000, approxDurationMs = 60_000)
         val resolver = DownloadResolverImpl(h.coordinator, h.repo, ImmediateCatalog(catalog(listOf(unknown, audioFormat()))))
-        assertTrue(resolver.resolve(taskId) is DownloadResolveOutcome.Ready)
+        assertTrue(resolver.resolve(taskId, h.repo.transact { getTask(taskId) }!!.executionGeneration) is DownloadResolveOutcome.Ready)
         val snapshot = h.repo.transact { snapshot(taskId) }!!
         val video = snapshot.assets.first { it.asset.kind == AssetKind.VIDEO }
             .components.first { it.component.kind == InputComponentKind.VIDEO }
@@ -247,10 +247,7 @@ private class SwitchingCatalog(
     override suspend fun refresh(videoId: String) = refreshed
 }
 
-/**
- * Shared parse job plus independent waiters: cancelling one await must not
- * cancel the parse other waiters (playback) still need.
- */
+/** Shared parse job plus independent waiters: cancelling one await must not cancel the parse other waiters (playback) still need. */
 private class SharedParseSpy(
     scope: CoroutineScope,
     private val value: DownloadCatalog,

@@ -140,7 +140,6 @@ class DownloadSelectorTest {
     @Test
     fun specifiedSubtitleLanguage_doesNotSilentFallback() {
         val formats = listOf(videoFormat(720), audioFormat())
-        // An unavailable subtitle fails its own asset; media still resolves.
         val ready = DownloadSelector.select(
             catalog(formats, subtitles = listOf(subtitle("en"))),
             DownloadConfig(includeSubtitle = true, subtitleLanguage = "fr"),
@@ -278,8 +277,7 @@ class DownloadSelectorTest {
         assertEquals(136, hinted.plan.video!!.format.itag)
         assertEquals(720, hinted.plan.video!!.format.height)
 
-        // An explicit confirm-sheet itag is EXACT — a missing itag must
-        // fail with a reselect reason, never silently drop a quality tier.
+        // A confirm-sheet itag is exact: a missing itag fails with a reselect reason rather than silently dropping the tier.
         val missing = DownloadSelector.select(
             catalog(formats),
             DownloadConfig(videoQuality = "1080p", videoItagHint = 999),

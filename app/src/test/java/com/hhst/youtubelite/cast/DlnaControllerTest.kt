@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -16,7 +17,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Session lifecycle of the DLNA route against a scripted UPnPCast seam. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DlnaControllerTest {
     private class FakeEngine : DlnaEngine {
@@ -28,19 +28,27 @@ class DlnaControllerTest {
         val castCalls = mutableListOf<Triple<String, String, String>>()
         val seeks = mutableListOf<Long>()
         var stopCalls = 0
+        var pauseCalls = 0
         var clearedProgress = 0
         var castGate: CompletableDeferred<Boolean>? = null
+        var castDelay = 0L
+        var readyDelay = 0L
+        var seekDelay = 0L
+        var pauseDelay = 0L
+        var readyCalls = 0
 
         override suspend fun search(timeoutMs: Long) = searchResult
         override suspend fun cast(device: DLNACast.Device, url: String, title: String, mimeType: String): Boolean {
             castCalls += Triple(device.id, url, title)
             castError?.let { throw it }
+            delay(castDelay)
             return castGate?.await() ?: castResult
         }
+        override suspend fun awaitMediaReady(url: String) { readyCalls++; delay(readyDelay) }
         override suspend fun play(): Boolean = true
-        override suspend fun pause(): Boolean = true
+        override suspend fun pause(): Boolean { pauseCalls++; delay(pauseDelay); return true }
         override suspend fun stop(): Boolean { stopCalls++; return true }
-        override suspend fun seek(positionMs: Long): Boolean { seeks += positionMs; return true }
+        override suspend fun seek(positionMs: Long): Boolean { seeks += positionMs; delay(seekDelay); return true }
         override suspend fun progress() = progress
         override suspend fun transportState() = transport
         override fun clearProgressCache() { clearedProgress++ }
@@ -51,7 +59,7 @@ class DlnaControllerTest {
         var pos = 0L
         var loads = 0
         var resets = 0
-        override fun loading(source: CastSource, startMs: Long) { loads++; pos = startMs }
+        override fun loading(source: CastSource, startMs: Long, autoplay: Boolean) { loads++; pos = startMs; expects = autoplay }
         override fun status(transport: DLNACast.PlaybackState?, position: Long?, duration: Long?) {
             if (position != null) pos = position
         }
@@ -92,6 +100,87 @@ class DlnaControllerTest {
         assertTrue(engine.castCalls.isEmpty())
         assertFalse(dlna.state.value.session)
         assertTrue(requireNotNull(dlna.state.value.failure).text.contains("Stage: selection"))
+    }
+
+    @Test fun `quality reload restores paused playback after loading and seeking`() = runTest {
+        val dlna = controller(backgroundScope)
+        engine.searchResult = listOf(DLNACast.Device("http://192.168.1.2:1234/desc", "Projector", "192.168.1.2", true))
+        dlna.setDiscoveryEnabled(true)
+        runCurrent()
+        dlna.selectDevice(dlna.state.value.devices.single().id)
+        assertTrue(dlna.startCasting(castSource, 12_000, "http://phone/stream/v?g=2", autoplay = false))
+        assertEquals(listOf(12_000L), engine.seeks)
+        assertEquals(1, engine.pauseCalls)
+        assertFalse(player.expects)
+        assertEquals(12_000L, player.pos)
+        assertEquals(1, engine.readyCalls)
+    }
+
+    @Test fun `slow load readiness seek and pause have independent deadlines`() = runTest {
+        val dlna = controller(backgroundScope)
+        engine.searchResult = listOf(DLNACast.Device("udn-1", "TV", "192.168.1.50", true))
+        dlna.setDiscoveryEnabled(true)
+        runCurrent()
+        dlna.selectDevice(dlna.state.value.devices.single().id)
+        engine.castDelay = 9_000
+        engine.readyDelay = 9_000
+        engine.seekDelay = 9_000
+        engine.pauseDelay = 9_000
+        assertTrue(dlna.startCasting(castSource, 12_000, "http://phone/video", autoplay = false))
+        assertEquals(listOf(12_000L), engine.seeks)
+        assertEquals(1, engine.pauseCalls)
+        assertFalse(player.expects)
+        assertNull(dlna.state.value.failure)
+        dlna.endSession()
+    }
+
+    @Test fun `normal startup confirms readiness and tolerates missing position metadata`() = runTest {
+        val dlna = controller(backgroundScope)
+        engine.searchResult = listOf(DLNACast.Device("udn-1", "TV", "192.168.1.50", true))
+        dlna.setDiscoveryEnabled(true)
+        runCurrent()
+        dlna.selectDevice(dlna.state.value.devices.single().id)
+        engine.readyDelay = 12_000
+        engine.progress = null
+        assertTrue(dlna.startCasting(castSource, 0, "http://phone/video"))
+        advanceTimeBy(35_000)
+        assertEquals(1, engine.readyCalls)
+        assertTrue(dlna.state.value.session)
+        assertNull(dlna.state.value.failure)
+        dlna.endSession()
+    }
+
+    @Test fun `readiness timeout reports its stage and never issues seek or pause`() = runTest {
+        val dlna = controller(backgroundScope)
+        engine.searchResult = listOf(DLNACast.Device("udn-1", "TV", "192.168.1.50", true))
+        dlna.setDiscoveryEnabled(true)
+        runCurrent()
+        dlna.selectDevice(dlna.state.value.devices.single().id)
+        engine.readyDelay = 60_000
+        assertFalse(dlna.startCasting(castSource, 12_000, "http://phone/video", autoplay = false))
+        assertTrue(requireNotNull(dlna.state.value.failure).text.contains("Stage: media_ready"))
+        assertTrue(engine.seeks.isEmpty())
+        assertEquals(0, engine.pauseCalls)
+        dlna.stopCasting()
+    }
+
+    @Test fun `quality reload fences old player commands before waiting for the transport`() = runTest {
+        val dlna = controller(backgroundScope)
+        engine.searchResult = listOf(DLNACast.Device("http://192.168.1.2:1234/desc", "Projector", "192.168.1.2", true))
+        dlna.setDiscoveryEnabled(true)
+        runCurrent()
+        dlna.selectDevice(dlna.state.value.devices.single().id)
+        assertTrue(dlna.startCasting(castSource, 0, "http://phone/stream/v?g=1"))
+        engine.castGate = CompletableDeferred()
+        val reload = backgroundScope.async { dlna.startCasting(castSource, 12_000, "http://phone/stream/v?g=2", autoplay = false) }
+        runCurrent()
+        assertEquals(2, player.loads)
+        assertFalse(player.expects)
+        assertFalse(reload.isCompleted)
+        engine.castGate!!.complete(true)
+        runCurrent()
+        assertTrue(reload.await())
+        assertEquals(2, player.loads)
     }
 
     @Test fun `cast failure retains the device stage and response code until dismissed`() = runTest {
@@ -165,10 +254,7 @@ class DlnaControllerTest {
         advanceTimeBy(5_000)
         dlna.selectDevice(dlna.state.value.devices.single().id)
         assertTrue(dlna.startCasting(castSource, 0L, "http://phone/stream/v"))
-        // Same-session recast (quality change): the player the engine attached
-        // to must keep receiving loads — a rebuilt one would orphan its status
-        // feed and the remote-stop echo, exactly like the chromecast path
-        // reusing CastRemotePlayer across receiver loads.
+        // Recast must reuse the player the engine attached to: a rebuilt one orphans its status feed and remote-stop echo.
         assertTrue(dlna.startCasting(castSource, 0L, "http://phone:8080/stream/v"))
         assertEquals(1, built.size)
         assertEquals(2, built.single().loads)
@@ -268,6 +354,8 @@ class DlnaControllerTest {
         dlna.onSessionFailed = { failures++ }
         engine.transport = DLNACast.PlaybackState.BUFFERING
         advanceTimeBy(20_000)
+        assertTrue(dlna.state.value.session)
+        advanceTimeBy(15_000)
         assertFalse(dlna.state.value.session)
         assertEquals(1, failures)
     }

@@ -21,12 +21,6 @@ import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.library.presentation.CollectionScreen
 import com.hhst.youtubelite.library.presentation.HistoryScreen
 import com.hhst.youtubelite.library.presentation.YouScreen
-import com.hhst.youtubelite.notifications.data.FixtureNotificationsRepository
-import com.hhst.youtubelite.notifications.domain.NotificationsAction
-import com.hhst.youtubelite.notifications.domain.NotificationsContent
-import com.hhst.youtubelite.notifications.domain.NotificationsPage
-import com.hhst.youtubelite.notifications.domain.NotificationsUiState
-import com.hhst.youtubelite.notifications.presentation.NotificationsScreen
 import com.hhst.youtubelite.subscriptions.data.FixtureSubscriptionsRepository
 import com.hhst.youtubelite.subscriptions.data.subscriptionsSignedOutPrompt
 import com.hhst.youtubelite.subscriptions.domain.*
@@ -51,14 +45,13 @@ class LibraryScreenshotAndroidTest {
                     Box(Modifier.requiredSize(320.dp, 240.dp)) {
                         when (scene) {
                             0 -> YouScreen(LibraryUiState(content = LibraryContent.Failed), { if (it == LibraryAction.Retry) retries++ })
-                            1 -> SubscriptionsScreen(SubscriptionsUiState(content = SubscriptionsContent.Failed), { if (it == SubscriptionsAction.Retry) retries++ })
-                            else -> NotificationsScreen(NotificationsUiState(content = NotificationsContent.Failed), { if (it == NotificationsAction.Retry) retries++ }, {})
+                            else -> SubscriptionsScreen(SubscriptionsUiState(content = SubscriptionsContent.Failed), { if (it == SubscriptionsAction.Retry) retries++ })
                         }
                     }
                 }
             }
         }
-        repeat(3) { index ->
+        repeat(2) { index ->
             compose.runOnIdle { scene = index }
             compose.onNodeWithText("Retry").performScrollTo().assertIsDisplayed().performClick()
             compose.runOnIdle { assertEquals(index + 1, retries) }
@@ -107,43 +100,34 @@ class LibraryScreenshotAndroidTest {
         capture("history-error-390", "history-screen", output, record, goldens)
     }
 
-    @Test fun subscriptionsAndNotificationsMatchGoldens() {
+    @Test fun subscriptionsMatchGoldens() {
         var width by mutableIntStateOf(390)
         var height by mutableIntStateOf(844)
         var subscriptions by mutableStateOf(SubscriptionsUiState())
-        var notifications by mutableStateOf(NotificationsUiState())
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
                 Box(Modifier.requiredSize(width.dp, height.dp)) {
-                    key(width, notifications != NotificationsUiState()) {
-                        if (notifications == NotificationsUiState()) SubscriptionsScreen(subscriptions, {})
-                        else NotificationsScreen(notifications, {}, {})
+                    key(width) {
+                        SubscriptionsScreen(subscriptions, {})
                     }
                 }
             }
         }
         // nextKey stays null so the append row never enters the golden frames.
-        // The channel list now rides its own state; the goldens keep the same measured rows.
         val channels = SubscriptionsChannels.Ready(FixtureSubscriptionsRepository.channels())
         val feed = SubscriptionsContent.Feed(
             SubscriptionsPage(FixtureSubscriptionsRepository.sampleVideos(), emptyList()))
         for ((w, h) in listOf(390 to 844, 1280 to 800)) {
-            compose.runOnIdle { width = w; height = h; subscriptions = SubscriptionsUiState(signedIn = true, content = feed, channels = channels); notifications = NotificationsUiState() }
+            compose.runOnIdle { width = w; height = h; subscriptions = SubscriptionsUiState(signedIn = true, content = feed, channels = channels) }
             compose.waitForIdle()
             capture("subscriptions-$w", "subscriptions-screen", output, record, goldens)
             compose.runOnIdle { subscriptions = subscriptions.copy(overlay = SubscriptionsOverlay.Channels) }
             compose.waitForIdle()
             if (w == 390) capture("channels-$w", "channels-overlay", output, record, goldens)
-            compose.runOnIdle { subscriptions = SubscriptionsUiState(); notifications = NotificationsUiState(signedIn = true, content = NotificationsContent.Ready(NotificationsPage(FixtureNotificationsRepository.sample()))) }
-            compose.waitForIdle()
-            if (w == 390) capture("notifications-$w", "notifications-screen", output, record, goldens)
         }
-        compose.runOnIdle { width = 390; height = 844; notifications = NotificationsUiState(); subscriptions = SubscriptionsUiState(content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
+        compose.runOnIdle { width = 390; height = 844; subscriptions = SubscriptionsUiState(content = SubscriptionsContent.SignedOut(subscriptionsSignedOutPrompt())) }
         compose.waitForIdle()
         capture("subscriptions-signed-out-390", "subscriptions-screen", output, record, goldens)
-        compose.runOnIdle { subscriptions = SubscriptionsUiState(); notifications = NotificationsUiState(signedIn = true, content = NotificationsContent.Empty) }
-        compose.waitForIdle()
-        capture("notifications-empty-390", "notifications-screen", output, record, goldens)
     }
 
     private val output: File
@@ -151,8 +135,8 @@ class LibraryScreenshotAndroidTest {
     private val goldens: Set<String>
         get() = setOf("you-390", "you-1280", "history-390", "history-1280", "playlists-390", "playlists-1280",
             "you-signed-out-390", "history-empty-390", "history-error-390",
-            "subscriptions-390", "subscriptions-1280", "channels-390", "notifications-390",
-            "subscriptions-signed-out-390", "notifications-empty-390")
+            "subscriptions-390", "subscriptions-1280", "channels-390",
+            "subscriptions-signed-out-390")
     private val record: Boolean
         get() = InstrumentationRegistry.getArguments().getString("recordLibraryGoldens") == "true"
 

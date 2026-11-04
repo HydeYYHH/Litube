@@ -1,8 +1,9 @@
 package com.hhst.youtubelite.extractor
 
 import java.net.URI
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerClient
+import com.liskovsoft.youtubeapi.videoinfo.V2.playerUserAgent
 
-/** Transport family of a planned media request. */
 enum class MediaProtocol { HTTPS, DASH, HLS }
 
 /** How a byte window is expressed on the wire. */
@@ -26,26 +27,23 @@ enum class StreamClient(
 ) {
     VISIONOS(
         "VISIONOS", 101, "1.02",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 "
-            + "(KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+        playerUserAgent(PlayerClient.VISIONOS),
         false, false,
     ),
     WEB("WEB", 1, "2.20260708.00.00", null, true, true),
     WEB_EMBED(
         "WEB_EMBEDDED_PLAYER", 56, "2.20260708.00.00",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
-            + "(KHTML, like Gecko) Version/15.5 Safari/605.1.15",
+        playerUserAgent(PlayerClient.WEB_EMBED),
         true, false,
     ),
     WEB_SAFARI(
         "WEB", 1, "2.20260708.00.00",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
-            + "(KHTML, like Gecko) Version/15.5 Safari/15.5",
+        playerUserAgent(PlayerClient.WEB_SAFARI),
         true, true,
     ),
     TV(
         "TVHTML5", 7, "5.20260707",
-        "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
+        playerUserAgent(PlayerClient.TV),
         true, false,
     ),
     /** Labels reel-floor muxed URLs minted under the ANDROID identity; never issues /player requests itself. */
@@ -54,8 +52,12 @@ enum class StreamClient(
         "com.google.android.youtube/21.03.36 (Linux; U; Android 16; US) gzip",
         false, false,
     ),
+    TV_TIZEN(
+        "TVHTML5", 7, "5.20260707",
+        playerUserAgent(PlayerClient.TV_TIZEN),
+        true, false,
+    ),
     ;
-    /** Client-fixed UA, else the capturing session's user agent. */
     fun userAgent(session: YoutubeWebSession): String = fixedUserAgent ?: session.userAgent
 
     fun version(session: YoutubeWebSession): String =

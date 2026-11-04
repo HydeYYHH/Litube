@@ -85,7 +85,6 @@ class ChannelScreenshotAndroidTest {
                 capture("$scene-$w", output, true, emptySet())
             }
         }
-        // Landscape and split-screen frames.
         compose.runOnIdle { width.intValue = 840; height.intValue = 390; state.value = stateOf("videos", tab = ChannelTab.Videos) }
         capture("videos-840-landscape", output, true, emptySet())
         compose.runOnIdle { width.intValue = 390; height.intValue = 400; state.value = stateOf("profile") }
@@ -107,17 +106,15 @@ class ChannelScreenshotAndroidTest {
                 // Probe widths above the window size center the composition in the root,
                 // so every check stays relative to the page origin.
                 val pageLeft = boundsOf("channel-page").left
-                // Avatar ladder: 72 under 528, 120 on mid widths, 160 from 700.
                 val avatar = boundsOf("channel-avatar")
                 assertEquals("avatar size at $w", if (w < 600) 72f else if (w < 700) 120f else 160f, avatar.width, 1f)
-                // Subscribe pill: full width before 700, compact afterwards.
                 val subscribe = boundsOf("channel-subscribe")
                 if (w < 700) assertEquals("subscribe width at $w", w - 32f, subscribe.width, 1f)
                 else assertTrue("compact subscribe at $w: ${subscribe.width}", subscribe.width < 200f)
             }
         }
-        // Grid columns change at 1148: the second video's thumb sits at the next cell's start,
-        // so its left edge moves exactly with the flipped column count.
+        // The second video's thumb sits at the next cell's start, so its left edge
+        // moves exactly with the flipped column count.
         for (w in listOf(1147, 1148)) {
             compose.runOnIdle { width.intValue = w }
             compose.waitForIdle()

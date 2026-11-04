@@ -171,7 +171,6 @@ class AnonymousFormationAndroidTest {
         File(context.filesDir, "anonymous-formation.json").writeText(records.toString(2))
     }
 
-    /** Plays one video and keeps it playing for the requested wall time. */
     private suspend fun playAndWatch(videoId: String, targetWatchMs: Long): Long {
         val reporting = koin.get<PlaybackWatchReporting>()
         val engine = koin.get<PlaybackApi>()

@@ -10,9 +10,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 
 /**
- * Coalesces equivalent core Watch reads across the page, resume and chapter
- * consumers. Concurrent callers with the same ledger identity, video, language
- * and region share one in-flight network response; completed responses are
+ * Coalesces equivalent core Watch reads across the page, resume, chapter and comment
+ * consumers. Concurrent callers with the same identity, client profile, visitor,
+ * video and locale share one in-flight network response; completed responses are
  * reused only by non-fresh callers within a short window. Different identities
  * never share anything, and fresh account-progress reads never reuse a
  * completed response.
@@ -26,7 +26,8 @@ class SharedWatchReads(
     private val maxEntries: Int = 8,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
-    private data class Key(val identity: String, val videoId: String)
+    private data class Key(val identity: String, val videoId: String, val language: String, val region: String,
+        val oauth: Boolean, val visitor: String?, val visitorCookie: String?, val webIdentity: String?)
 
     /** A settled response available to non-fresh readers. */
     private data class Cached(val result: ReadResult<WatchPage>, val completedAt: Long)
@@ -52,7 +53,15 @@ class SharedWatchReads(
         fresh: Boolean,
         load: (String, RequestContext, HttpClient) -> ReadResult<WatchPage>,
     ): ReadResult<WatchPage> {
-        val key = Key(context.ledgerScope() + "\u0000" + context.language + "/" + context.region, videoId)
+        // OAuth rotates without changing the account's capabilities. WEB cookies and
+        // visitor identity do change those capabilities, even within one generation.
+        val web = context.webSession?.takeIf { context.accessToken == null && it.signedIn }
+        val webIdentity = web?.let {
+            java.security.MessageDigest.getInstance("SHA-256").digest(it.cookies.toByteArray(Charsets.UTF_8))
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 255) } + ":" + it.accountIndex
+        }
+        val key = Key(context.ledgerScope(), videoId, context.language, context.region, context.accessToken != null,
+            context.visitor, context.visitorCookie?.takeIf { !context.signedIn }, webIdentity)
         while (true) {
             val deferred: CompletableDeferred<ReadResult<WatchPage>>
             val owner: Boolean
@@ -108,7 +117,6 @@ class SharedWatchReads(
         }
     }
 
-    /** Drops every shared entry; explicit refreshes call this. */
     fun clear() = synchronized(lock) {
         cache.clear()
         inFlight.clear()

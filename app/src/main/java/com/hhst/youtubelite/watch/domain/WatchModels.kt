@@ -27,6 +27,8 @@ data class WatchVideo(
     /** Live-chat continuation for live streams; fixtures leave it null so goldens stay put. */
     val chatKey: String? = null,
     val sessionGeneration: Long? = null,
+    /** A failed discovery read can be retried; it does not mean the host disabled chat. */
+    val chatLookupFailed: Boolean = false,
 )
 
 data class WatchComment(val author: String, val text: String, val artwork: String)
@@ -77,6 +79,7 @@ data class WatchUiState(
     val draftQuery: String = "",
     val commentsOpen: Boolean = false,
     val actionPending: Boolean = false,
+    val pendingVideoAction: WatchAction? = null,
     val relatedLoading: Boolean = false,
     val relatedFailed: Boolean = false,
     val menuLoading: Boolean = false,
@@ -110,7 +113,6 @@ sealed interface WatchOverlay {
     data class Feedback(val videoId: String, val kind: WatchFeedbackKind) : WatchOverlay
 }
 
-/** Reason chooser for the video report and recommendation rows. */
 enum class WatchFeedbackKind(val title: String, val reasons: List<String>) {
     Report("Report video", listOf(
         "Spam or misleading", "Harmful content", "Something else",
@@ -204,7 +206,6 @@ sealed interface WatchAction {
     data class MenuAction(val action: WatchVideoMenuAction) : WatchAction
 }
 
-/** Which related-feed geometry the sampled breakpoints call for. */
 enum class WatchRelatedVariant { Phone, Grid, List, Stacked, SidebarCompact, SidebarWide }
 
 /**

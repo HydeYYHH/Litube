@@ -2,6 +2,7 @@ package com.hhst.youtubelite.player.datasource
 
 import com.hhst.youtubelite.extractor.Format
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -156,7 +157,6 @@ class DashManifestFactoryTest {
                 videoFormat(247, 720, "video/webm"),
             ),
         )
-        // Two AdaptationSets (mp4, webm); the mp4 set carries both its formats.
         assertTrue(mpd.contains("<AdaptationSet id=\"0\" mimeType=\"video/mp4\""))
         assertTrue(mpd.contains("<AdaptationSet id=\"1\" mimeType=\"video/webm\""))
         assertTrue(mpd.contains("<Representation id=\"137\""))
@@ -164,6 +164,17 @@ class DashManifestFactoryTest {
         assertTrue(mpd.contains("<Representation id=\"247\""))
         assertTrue(mpd.contains("height=\"1080\""))
         assertTrue(mpd.contains("height=\"720\""))
+    }
+
+    @Test fun codecParametersDoNotSplitAdaptiveResolutionsIntoFixedTracks() {
+        val mpd = DashManifestFactory.buildVideoPool(listOf(
+            videoFormat(137, 1080, "video/mp4; codecs=\"avc1.640028\""),
+            videoFormat(136, 720, "video/mp4; codecs=\"avc1.4d401f\"").copy(codec = "avc1.4d401f"),
+        ))
+        assertEquals(1, Regex("<AdaptationSet ").findAll(mpd).count())
+        assertTrue(mpd.contains("mimeType=\"video/mp4\""))
+        assertTrue(mpd.contains("codecs=\"avc1.640028\""))
+        assertTrue(mpd.contains("codecs=\"avc1.4d401f\""))
     }
 
     @Test
@@ -182,8 +193,7 @@ class DashManifestFactoryTest {
                 videoFormat(136, 720, "video/mp4").copy(itag = null),
             ),
         )
-        // Without an itag the Representation id falls back to a per-format
-        // index so ids stay unique (MPD requires distinct ids).
+        // Without an itag, Representation ids fall back to per-format indexes; MPD requires distinct ids.
         assertTrue(mpd.contains("<Representation id=\"0\""))
         assertTrue(mpd.contains("<Representation id=\"1\""))
     }

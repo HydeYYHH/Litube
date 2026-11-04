@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.player.datasource
 
+import android.net.Uri
+import android.util.Base64
 import com.hhst.youtubelite.core.Markup
 import com.hhst.youtubelite.extractor.Format
 
@@ -18,12 +20,12 @@ import com.hhst.youtubelite.extractor.Format
  */
 object DashManifestFactory {
 
-    /**
-     * Builds a DASH MPD XML string for [format].
-     *
-     * @param durationMsFallback video duration in ms, used when [Format.approxDurationMs] is unknown.
-     * @throws IllegalArgumentException when [format] lacks DASH ranges or duration is unknown.
-     */
+    /** DataSchemeDataSource URL-decodes plain data URIs after Android has decoded them.
+     * Base64 preserves the signed media URL's own percent escapes and plus signs. */
+    internal fun dataUri(mpd: String): Uri = Uri.parse(
+        "data:application/dash+xml;base64," + Base64.encodeToString(mpd.toByteArray(Charsets.UTF_8), Base64.NO_WRAP),
+    )
+
     fun build(format: Format, durationMsFallback: Long = -1L): String {
         require(format.hasDashRanges) {
             "Format lacks DASH ranges: init=${format.initStart}-${format.initEnd} " +
@@ -59,7 +61,7 @@ object DashManifestFactory {
             appendHeader(durationMs)
             append("<Period>")
             var nextFallbackId = 0
-            formats.groupBy { it.mimeType.ifBlank { guessMimeType(it) } }
+            formats.groupBy(::containerMimeType)
                 .entries.forEachIndexed { setId, (_, group) ->
                     appendAdaptationSet(setId, group, nextFallbackId)
                     nextFallbackId += group.size
@@ -89,7 +91,7 @@ object DashManifestFactory {
     private fun StringBuilder.appendAdaptationSet(setId: Int, group: List<Format>, fallbackId: Int) {
         val first = group.first()
         append("<AdaptationSet id=\"$setId\" mimeType=\"${
-            Markup.xml(first.mimeType.ifBlank { guessMimeType(first) })
+            Markup.xml(containerMimeType(first))
         }\" subsegmentAlignment=\"true\"")
         if (first.audioOnly && first.audioLocale != null) {
             append(" lang=\"${Markup.xml(first.audioLocale)}\"")
@@ -125,7 +127,6 @@ object DashManifestFactory {
         append("</Representation>")
     }
 
-    /** Milliseconds → ISO 8601 duration seconds (e.g. "123.456"). */
     private fun formatDuration(ms: Long): String {
         val wholeSec = ms / 1000
         val frac = ms % 1000
@@ -144,6 +145,12 @@ object DashManifestFactory {
             else -> "video/mp4"
         }
     }
+
+    // The player response includes per-rendition codec parameters in mimeType. Keeping
+    // those on the AdaptationSet splits each profile/level into a fixed single track.
+    // Codecs already belong on each Representation; group by the container MIME alone.
+    private fun containerMimeType(format: Format): String =
+        format.mimeType.substringBefore(';').trim().ifBlank { guessMimeType(format) }
 
     /**
      * Conservative per-height bandwidth floors for representations whose

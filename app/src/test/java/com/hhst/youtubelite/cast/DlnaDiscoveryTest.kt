@@ -25,7 +25,6 @@ class DlnaDiscoveryTest {
         }
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
         assertEquals(listOf("Quick"), found.map { it.name })
-        // The budget, not the sixty-second offline candidates, bounds the phase.
         assertTrue("describe phase took ${elapsedMs}ms", elapsedMs < 6_000)
     }
 
@@ -48,7 +47,6 @@ class DlnaDiscoveryTest {
             "Living Room (Projector X)", "Living Room (Projector Y)",
             "Living Room (192.168.1.6)", "Study",
         ), displayName(renderers))
-        // Same friendly name and same model stay host-suffixed; no URL is exposed.
         val twins = listOf(renderer("Box", "Same", "192.168.1.8"), renderer("Box", "Same", "192.168.1.9"))
         assertEquals(listOf("Box (192.168.1.8)", "Box (192.168.1.9)"), displayName(twins))
     }

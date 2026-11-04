@@ -14,14 +14,7 @@ import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** Live core-playback resolution; opt-in via YTL_NETWORK_TESTS=1.
- *
- * These tests hit real media endpoints, which block datacenter/VPN egress
- * in ways a connectivity probe cannot see. They are skipped unless
- * explicitly enabled so a hostile network cannot fail an otherwise-green
- * CI run. The JS solver is unavailable on the JVM, so the coverage here is
- * the solver-free direct-URL path; full challenge coverage runs on device.
- */
+/** Live playback resolution, opt-in via YTL_NETWORK_TESTS=1: real endpoints block datacenter/VPN egress in ways a connectivity probe cannot see. The JS solver is JVM-unavailable, so only the solver-free direct-URL path is covered here; challenge coverage runs on device. */
 class ExtractorTest {
 
     private lateinit var playback: MscPlayback
@@ -76,7 +69,6 @@ class ExtractorTest {
             System.nanoTime() + TimeUnit.SECONDS.toNanos(60), { true }, diagnostics)
     }
 
-    /** No chapter markers. */
     @Test
     fun noChapters_YQHsXMglC9A() {
         val resolved = playback.resolve("YQHsXMglC9A", context("YQHsXMglC9A"), demand = null, fresh = false, deferred = emptySet())
@@ -92,7 +84,6 @@ class ExtractorTest {
         assertTrue("YQHsXMglC9A should have no chapters, got ${chapters.size}", chapters.isEmpty())
     }
 
-    /** Has chapter markers. */
     @Test
     fun hasChapters_gJrjgg1KVL4() {
         val resolved = playback.resolve("gJrjgg1KVL4", context("gJrjgg1KVL4"), demand = null, fresh = false, deferred = emptySet())

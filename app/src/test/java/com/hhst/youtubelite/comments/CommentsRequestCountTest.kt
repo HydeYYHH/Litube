@@ -30,10 +30,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Request-count coverage: every interaction fires a bounded, known number of
- * repository reads, and stale or cancelled reads never reach the UI.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CommentsRequestCountTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
@@ -62,7 +58,6 @@ class CommentsRequestCountTest {
 
     private fun reply(id: String) = CommentReply(id, CommentAuthor("Replier $id", "@$id", "art"), "1 hour ago", "Reply $id", "1")
 
-    /** Five threads served in pages of two. */
     private fun pagingRepository() = CountingRepository({ cursor, _ ->
         val start = cursor?.toInt() ?: 0
         val ids = (start until minOf(start + 2, 5)).map { "t$it" }
@@ -82,13 +77,63 @@ class CommentsRequestCountTest {
         assertEquals(listOf(null to CommentSort.Top), repo.commentsCalls)
     }
 
+    @Test fun anEmptyOpeningPageKeepsItsContinuationUntilCommentsArrive() = runTest {
+        val repo = CountingRepository({ cursor, _ ->
+            if (cursor == null) CommentsPage("12", emptyList(), "next")
+            else CommentsPage("12", listOf(thread("c1")), null)
+        })
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        val pending = vm.uiState.value.content as CommentsContent.Ready
+        assertTrue(pending.threads.isEmpty())
+        assertEquals("next", pending.nextCursor)
+        assertEquals("12", vm.uiState.value.total)
+        vm.onAction(CommentAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(listOf("c1"), readyThreads(vm).map { it.id })
+        assertEquals(2, repo.commentsCalls.size)
+    }
+
+    @Test fun onlyAnExhaustedEmptyContinuationShowsNoComments() = runTest {
+        val repo = CountingRepository({ cursor, _ -> CommentsPage("12", emptyList(), if (cursor == null) "next" else null) })
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(CommentsContent.Empty, vm.uiState.value.content)
+        assertEquals("0", vm.uiState.value.total)
+    }
+
+    @Test fun distinctCursorsWithoutNewCommentsPauseAutomaticReadsAndAllowRetry() = runTest {
+        var recover = false
+        var page = 0
+        val repo = CountingRepository({ _, _ ->
+            page++
+            CommentsPage("12", listOf(thread(if (recover) "recovered" else "c1")), "page-$page")
+        })
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        repeat(10) {
+            if (!(vm.uiState.value.content as CommentsContent.Ready).loadMoreFailed) vm.onAction(CommentAction.LoadMore)
+            advanceUntilIdle()
+        }
+        assertEquals(4, repo.commentsCalls.size)
+        assertTrue((vm.uiState.value.content as CommentsContent.Ready).loadMoreFailed)
+        assertEquals(listOf("c1"), readyThreads(vm).map { it.id })
+        recover = true
+        vm.onAction(CommentAction.Retry)
+        advanceUntilIdle()
+        assertEquals(5, repo.commentsCalls.size)
+        assertFalse((vm.uiState.value.content as CommentsContent.Ready).loadMoreFailed)
+        assertEquals(listOf("c1", "recovered"), readyThreads(vm).map { it.id })
+    }
+
     @Test fun reopeningAClosedPanelRestartsOnlyACancelledFirstRead() = runTest {
         val gate = CompletableDeferred<Unit>()
         val repo = CountingRepository({ _, _ -> gate.await(); CommentsPage("1", listOf(thread("c1")), null) })
         val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
         runCurrent()
         assertEquals(1, repo.commentsCalls.size)
-        // The panel closed mid-read, then reopened: one restart, not more.
         vm.cancelTransient()
         vm.ensureLoaded()
         runCurrent()
@@ -97,7 +142,6 @@ class CommentsRequestCountTest {
         advanceUntilIdle()
         assertEquals(2, repo.commentsCalls.size)
         assertEquals(1, readyThreads(vm).size)
-        // Closing a fully loaded panel and reopening it fires nothing.
         vm.cancelTransient()
         vm.ensureLoaded()
         advanceUntilIdle()
@@ -113,7 +157,6 @@ class CommentsRequestCountTest {
         vm.onAction(CommentAction.SelectSort(CommentSort.Newest))
         advanceUntilIdle()
         assertEquals(listOf(null to CommentSort.Top, null to CommentSort.Newest), repo.commentsCalls)
-        // The new sort's first page replaced the list; the old cursor is not walked.
         assertEquals(listOf("c-Newest-first"), readyThreads(vm).map { it.id })
     }
 
@@ -130,9 +173,7 @@ class CommentsRequestCountTest {
         advanceUntilIdle()
         assertEquals(3, repo.commentsCalls.size)
         assertNull(repo.commentsCalls.last().first)
-        // Only the new first page is visible: the previous video's depth is not restored.
         assertEquals(listOf("t0", "t1"), readyThreads(vm).map { it.id })
-        // And a recreation of the new target restores just that one page.
         val restored = CommentsViewModel(repo, restoredHandle(handle), "ignored")
         advanceUntilIdle()
         assertEquals(4, repo.commentsCalls.size)
@@ -149,7 +190,6 @@ class CommentsRequestCountTest {
         assertEquals(2, repo.commentsCalls.size)
         val restored = CommentsViewModel(repo, restoredHandle(handle), "ignored")
         advanceUntilIdle()
-        // First page plus exactly one backfill page: the loaded depth, nothing more.
         assertEquals(4, repo.commentsCalls.size)
         assertEquals(listOf("t0", "t1", "t2", "t3"), readyThreads(restored).map { it.id })
     }
@@ -169,7 +209,6 @@ class CommentsRequestCountTest {
         val loaded = readyThreads(vm).first()
         assertTrue(loaded.replies.isEmpty())
         assertNull(loaded.repliesNextCursor)
-        // Collapse and re-expand: an answered empty thread is not refetched.
         vm.onAction(CommentAction.ToggleReplies("c1"))
         vm.onAction(CommentAction.ToggleReplies("c1"))
         advanceUntilIdle()
@@ -191,14 +230,12 @@ class CommentsRequestCountTest {
         advanceUntilIdle()
         vm.onAction(CommentAction.ToggleReplies("c1"))
         advanceUntilIdle()
-        // Expansion fetches only the first page even though a cursor remains.
         assertEquals(listOf("c1" to null), repo.repliesCalls)
         assertEquals(listOf("r1"), readyThreads(vm).first().replies.map { it.id })
         vm.onAction(CommentAction.LoadMoreReplies("c1"))
         advanceUntilIdle()
         assertEquals(listOf("c1" to null, "c1" to "k2"), repo.repliesCalls)
         assertEquals(listOf("r1", "r2"), readyThreads(vm).first().replies.map { it.id })
-        // Collapsing keeps the loaded pages; re-expanding fires nothing.
         vm.onAction(CommentAction.ToggleReplies("c1"))
         vm.onAction(CommentAction.ToggleReplies("c1"))
         advanceUntilIdle()
@@ -223,7 +260,6 @@ class CommentsRequestCountTest {
         advanceUntilIdle()
         vm.onAction(CommentAction.LoadMoreReplies("c1"))
         advanceUntilIdle()
-        // The self-pointing cursor closes the thread instead of refetching page two forever.
         assertEquals(listOf("c1" to null, "c1" to "k2"), repo.repliesCalls)
         val thread = readyThreads(vm).first()
         assertEquals(listOf("r1", "r2"), thread.replies.map { it.id })
@@ -231,6 +267,70 @@ class CommentsRequestCountTest {
         vm.onAction(CommentAction.LoadMoreReplies("c1"))
         advanceUntilIdle()
         assertEquals(2, repo.repliesCalls.size)
+    }
+
+    @Test fun aReplyContinuationPointingToItsOpeningKeyIsNeverFetchedTwice() = runTest {
+        val repo = CountingRepository(
+            commentsHandler = { _, _ -> CommentsPage("1", listOf(thread("c1", replyKey = "rk", replyCount = 9)), null) },
+            repliesHandler = { _, _ -> RepliesPage(listOf(reply("r1")), "rk") },
+        )
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.ToggleReplies("c1"))
+        advanceUntilIdle()
+        assertNull(readyThreads(vm).first().repliesNextCursor)
+        repeat(3) { vm.onAction(CommentAction.LoadMoreReplies("c1")) }
+        vm.onAction(CommentAction.ToggleReplies("c1"))
+        vm.onAction(CommentAction.ToggleReplies("c1"))
+        advanceUntilIdle()
+        assertEquals(listOf("c1" to null), repo.repliesCalls)
+    }
+
+    @Test fun aReplyCycleReturningToItsOpeningKeyStopsBeforeRefetchingIt() = runTest {
+        val repo = CountingRepository(
+            commentsHandler = { _, _ -> CommentsPage("1", listOf(thread("c1", replyKey = "rk", replyCount = 9)), null) },
+            repliesHandler = { _, cursor ->
+                if (cursor == null) RepliesPage(listOf(reply("r1")), "k2")
+                else RepliesPage(listOf(reply("r2")), "rk")
+            },
+        )
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.ToggleReplies("c1"))
+        advanceUntilIdle()
+        vm.onAction(CommentAction.LoadMoreReplies("c1"))
+        advanceUntilIdle()
+        vm.onAction(CommentAction.LoadMoreReplies("c1"))
+        advanceUntilIdle()
+        assertEquals(listOf("c1" to null, "c1" to "k2"), repo.repliesCalls)
+        assertEquals(listOf("r1", "r2"), readyThreads(vm).first().replies.map { it.id })
+        assertNull(readyThreads(vm).first().repliesNextCursor)
+    }
+
+    @Test fun reopeningResumesOnlyTheCancelledExpandedFirstReplyRead() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = CountingRepository(
+            commentsHandler = { _, _ -> CommentsPage("2", listOf(
+                thread("open", replyKey = "rk", replyCount = 2),
+                thread("closed", replyKey = "other", replyCount = 2)), null) },
+            repliesHandler = { _, _ -> gate.await(); RepliesPage(listOf(reply("r1")), null) },
+        )
+        val vm = CommentsViewModel(repo, SavedStateHandle(), "v")
+        advanceUntilIdle()
+        vm.onAction(CommentAction.ToggleReplies("open"))
+        runCurrent()
+        vm.cancelTransient()
+        vm.ensureLoaded()
+        runCurrent()
+        assertEquals(listOf("open" to null, "open" to null), repo.repliesCalls)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("r1"), readyThreads(vm).first().replies.map { it.id })
+        vm.cancelTransient()
+        vm.ensureLoaded()
+        advanceUntilIdle()
+        assertEquals(2, repo.repliesCalls.size)
+        assertEquals(1, repo.commentsCalls.size)
     }
 
     @Test fun aCommentsCursorLoopClosesTheList() = runTest {
@@ -251,7 +351,6 @@ class CommentsRequestCountTest {
         assertEquals(listOf<Pair<String?, CommentSort>>(null to CommentSort.Top, "b" to CommentSort.Top, "a" to CommentSort.Top), repo.commentsCalls)
         val ready = vm.uiState.value.content as CommentsContent.Ready
         assertEquals(listOf("a1", "b1", "a2"), ready.threads.map { it.id })
-        // "b" was already consumed, so the list closes instead of looping A→B→A.
         assertNull(ready.nextCursor)
         vm.onAction(CommentAction.LoadMore)
         advanceUntilIdle()
@@ -278,7 +377,6 @@ class CommentsRequestCountTest {
         advanceUntilIdle()
         assertEquals(listOf("c1" to null, "c1" to "k2"), repo.repliesCalls)
         assertTrue(readyThreads(vm).first().repliesFailed)
-        // Retry re-requests the failed page; the loaded prefix stays untouched.
         failK2 = false
         vm.onAction(CommentAction.ToggleReplies("c1"))
         advanceUntilIdle()

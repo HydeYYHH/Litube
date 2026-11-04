@@ -44,6 +44,8 @@ import com.hhst.youtubelite.comments.presentation.CommentsViewModel
 import com.hhst.youtubelite.post.presentation.PostDetailScreen
 import com.hhst.youtubelite.post.presentation.PostDetailViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import com.hhst.youtubelite.ui.renderNotice
 
 class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var postDetailViewModel: PostDetailViewModel
@@ -51,7 +53,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var postCommentsViewModel: CommentsViewModel
         private set
     val postIdentity: PostIdentity
-        get() = PostIdentity(
+        get() = if (::postDetailViewModel.isInitialized) postDetailViewModel.uiState.value.identity else PostIdentity(
             intent.getStringExtra(EXTRA_CHANNEL_ID) ?: "studio",
             intent.getStringExtra(EXTRA_POST_ID) ?: FixturePostRepository.HOME_POST_ID,
         )
@@ -59,6 +61,19 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
         private set
     var lastCommentRequest: CommentNavigationRequest? = null
         private set
+    private val authorizationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == RESULT_OK && ::postDetailViewModel.isInitialized) {
+            postDetailViewModel.refreshAuthorization(com.hhst.youtubelite.data.media.MediaSession.signedIn())
+            postCommentsViewModel.refreshAuthorization()
+        }
+    }
+
+    private fun authorizePost() {
+        authorizationLauncher.launch(Intent(this, com.hhst.youtubelite.account.ChatWebSignInActivity::class.java)
+            .putExtra(com.hhst.youtubelite.account.ChatWebSignInActivity.EXTRA_POST_AUTHORIZATION, true))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,12 +82,12 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
         val postId = intent.getStringExtra(EXTRA_POST_ID)
-        if ((channelId.isNullOrBlank() || postId.isNullOrBlank()) && !fixtures) {
-            // No identity and no fixture seam: rendering a default post would fabricate content.
+        if (postId.isNullOrBlank() && !fixtures) {
+            // A /post link has only the post id; its author is resolved from the response.
             finish()
             return
         }
-        val identity = PostIdentity(channelId ?: "studio", postId ?: FixturePostRepository.HOME_POST_ID)
+        val identity = PostIdentity(channelId ?: if (fixtures) "studio" else "", postId ?: FixturePostRepository.HOME_POST_ID)
         val scenario = if (BuildConfig.DEBUG) PostScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else PostScenario.Content
         postDetailViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -99,7 +114,26 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
         })[CommentsViewModel::class.java]
         bindCommentNotices(postCommentsViewModel)
-        if (!fixtures) observeAccountChanges { postCommentsViewModel.refreshSession() }
+        if (!fixtures) {
+            postDetailViewModel.updateSignedIn(com.hhst.youtubelite.data.media.MediaSession.snapshot().signedIn)
+            observeAccountChanges {
+                postDetailViewModel.refreshSession(com.hhst.youtubelite.data.media.MediaSession.snapshot().signedIn)
+                postCommentsViewModel.refreshSession()
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { postDetailViewModel.actionNotices.collect { renderNotice(it) } }
+                launch { postDetailViewModel.authorizationRequests.collect { authorizePost() } }
+                launch { postCommentsViewModel.authorizationRequests.collect { authorizePost() } }
+            }
+        }
+        if (!fixtures && savedInstanceState == null && intent.hasExtra(EXTRA_FEEDBACK)) {
+            lifecycleScope.launch {
+                postDetailViewModel.uiState.first { it.post != null }
+                postDetailViewModel.onAction(if (intent.getBooleanExtra(EXTRA_FEEDBACK, true)) PostDetailAction.Like else PostDetailAction.Dislike)
+            }
+        }
         if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false)) {
             postDetailViewModel.onAction(PostDetailAction.Comments)
         }
@@ -123,10 +157,8 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             ChannelActivity.intent(this@PostDetailActivity, request.channelId)
                         )
                         is PostDetailNavigationRequest.Destination -> com.hhst.youtubelite.ui.components.MainTabs.intent(
-                            this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), false)?.let { launchNavigation(it); finish() }
-                        is PostDetailNavigationRequest.Feedback -> if (!fixtures) {
-                            com.hhst.youtubelite.post.openPostVoteRoute(this@PostDetailActivity)
-                        }
+                            this@PostDetailActivity, com.hhst.youtubelite.ui.components.MainTab.valueOf(request.destination.name), postDetailViewModel.uiState.value.signedIn)?.let { launchNavigation(it); finish() }
+                        is PostDetailNavigationRequest.Feedback -> Unit
                         // The comments panel is VM overlay state and the Report menu hides in
                         // production, so both are fixture-only typed exits here. No `else`: a new
                         // request type must fail to compile here.
@@ -155,10 +187,6 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
                                 com.hhst.youtubelite.gallery.GalleryActivity.open(this@PostDetailActivity, it, action.index)
                             }
                         }
-                        // Anonymous posts expose no vote endpoints at all — the web itself routes these
-                        // buttons to sign-in (B9 probe). Signed-in votes stay an honest limitation.
-                        !fixtures && (action is PostDetailAction.Like || action is PostDetailAction.Dislike) ->
-                            openPostVoteRoute(this@PostDetailActivity)
                         else -> postDetailViewModel.onAction(action)
                     }
                 },
@@ -175,6 +203,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
         const val EXTRA_CHANNEL_ID = "channelId"
         const val EXTRA_POST_ID = "postId"
         const val EXTRA_SCENARIO = "scenario"
+        const val EXTRA_FEEDBACK = "post_feedback"
 
         fun intent(context: Context, channelId: String, postId: String, scenario: PostScenario? = null): Intent =
             Intent(context, PostDetailActivity::class.java)

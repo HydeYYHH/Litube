@@ -77,7 +77,7 @@ internal fun FullscreenPlayerSheet(onDismiss: () -> Unit, content: @Composable C
         modifier = Modifier.fillMaxSize(),
         scaffoldState = scaffold,
         sheetPeekHeight = 0.dp,
-        sheetContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        sheetContainerColor = AppStyle.Panel,
         sheetShape = AppStyle.SheetShape,
         sheetContentColor = MaterialTheme.colorScheme.onSurface,
         sheetTonalElevation = 0.dp,

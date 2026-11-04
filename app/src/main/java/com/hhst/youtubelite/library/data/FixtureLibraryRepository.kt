@@ -5,7 +5,6 @@ import com.hhst.youtubelite.playlist.data.FixturePlaylistRepository
 import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 import kotlinx.coroutines.delay
 
-/** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureLibraryRepository(private val scenario: LibraryScenario = LibraryScenario.Content,
     override val supportsLocal: Boolean = false) : LibraryRepository {
     // The error models a transient outage: the first load fails and Retry recovers.
@@ -50,7 +49,6 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
                 "Blender Studio", "studio", "dream", "10:53", progress = 1f, section = "Yesterday", views = "3.1M views"),
         )
 
-        /** The library shelf plus the personal lists served by the playlist fixture. */
         fun collections(): List<PlaylistSummary> = listOf(
             FixturePlaylistRepository.personalLists()[0],
             FixturePlaylistRepository.personalLists()[1],

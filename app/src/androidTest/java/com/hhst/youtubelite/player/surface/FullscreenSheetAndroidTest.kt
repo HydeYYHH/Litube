@@ -125,15 +125,20 @@ class FullscreenSheetAndroidTest {
         try {
             repeat(3) { index ->
                 compose.runOnIdle { phase = "more-$index"; sheet = PlayerSheet.More }
-                compose.onNodeWithText(compose.activity.getString(R.string.more_options)).assertIsDisplayed()
+                compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality)).assertIsDisplayed()
                 Thread.sleep(350) // Sample system bars while the fully open sheet stays visible.
                 assertTrue("Opening More changed activity-window focus", decor.hasWindowFocus())
                 DeviceEvidence.captureScene("fullscreen-sheet-more-open-$index")
                 when (index) {
                     0 -> compose.onNodeWithTag("player-sheet-scrim").performTouchInput { click(Offset(8f, 8f)) }
                     1 -> compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-                    else -> compose.onNodeWithText(compose.activity.getString(R.string.more_options)).performTouchInput {
-                        swipeDown(startY = height / 2f, endY = height + 700f, durationMillis = 300)
+                    else -> {
+                        val handle = compose.onNodeWithTag("player-sheet-handle", useUnmergedTree = true)
+                        val bounds = handle.fetchSemanticsNode().boundsInRoot
+                        val endY = decor.height - bounds.top - 16f
+                        handle.performTouchInput {
+                            swipeDown(startY = height / 2f, endY = endY, durationMillis = 300)
+                        }
                     }
                 }
                 compose.waitUntil(10000) { sheet == null }
@@ -189,7 +194,7 @@ class FullscreenSheetAndroidTest {
         compose.runOnIdle { fullscreen = false }
         compose.waitUntil(10_000) { !hidden() }
         compose.runOnIdle { sheet = PlayerSheet.More }
-        compose.onNodeWithText(compose.activity.getString(R.string.more_options)).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality)).assertIsDisplayed()
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.waitUntil(10_000) { sheet == null }
         assertFalse("Regular player should retain visible system bars", hidden())
@@ -220,29 +225,33 @@ class FullscreenSheetAndroidTest {
             PlayerDialogHost(dialog, state, callbacks, { dialog = null })
         } }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText(compose.activity.getString(R.string.more_options))
+            compose.onAllNodesWithText(compose.activity.getString(R.string.player_info_quality))
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality)).performClick()
         compose.onNodeWithTag("player-dialog-quality").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(null, sheet); assertEquals(PlayerDialog.Quality, dialog) }
         compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertDoesNotExist()
         compose.onNodeWithText("720p").assertIsDisplayed().performClick()
         compose.waitUntil(10_000) { dialog == null }
         compose.runOnIdle { assertEquals("720p", quality); assertEquals(null, sheet); sheet = PlayerSheet.More }
         compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed)).performClick()
         compose.onNodeWithTag("player-dialog-speed").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(null, sheet); assertEquals(PlayerDialog.Speed, dialog) }
         compose.onNodeWithText("1.5x").performClick()
         compose.waitUntil(10_000) { dialog == null }
         compose.runOnIdle { assertEquals(1.5f, speed); assertEquals(null, sheet) }
         compose.runOnIdle { sheet = PlayerSheet.More }
         compose.onNodeWithText(compose.activity.getString(R.string.resize_mode)).performClick()
         compose.onNodeWithTag("player-dialog-resize").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(null, sheet); assertEquals(PlayerDialog.Resize, dialog) }
         compose.onNodeWithText(compose.activity.getString(R.string.resize_zoom)).performClick()
         compose.waitUntil(10_000) { dialog == null }
         compose.runOnIdle { assertEquals(ResizeMode.Zoom, resize); assertEquals(null, sheet) }
         compose.runOnIdle { sheet = PlayerSheet.More }
         compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).performClick()
         compose.onNodeWithTag("player-dialog-audio").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(null, sheet); assertEquals(PlayerDialog.Audio, dialog) }
         compose.onNodeWithText(compose.activity.getString(R.string.player_audio_default)).performClick()
         compose.waitUntil(10_000) { dialog == null }
         compose.runOnIdle { assertTrue(audioPicked); assertEquals(null, sheet) }

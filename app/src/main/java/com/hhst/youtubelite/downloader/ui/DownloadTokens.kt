@@ -3,7 +3,6 @@ package com.hhst.youtubelite.downloader.ui
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 
-/** Shared spacing, sizing and touch targets for download components. */
 object DownloadTokens {
     const val ROW_ACTION_WIDTH_DP = 40
     const val SHEET_CORNER_DP = 16

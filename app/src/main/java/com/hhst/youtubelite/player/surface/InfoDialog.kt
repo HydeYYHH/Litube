@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 
@@ -65,18 +66,13 @@ internal fun <T> OptionDialog(
     fullscreen: Boolean = false,
     tag: String = "player-dialog-options",
 ) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     PlayerModalDialog(onDismiss, fullscreen, tag) {
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, Modifier.weight(1f), fontSize = 18.sp, lineHeight = 24.sp,
-                fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            PlayerIconButton(R.drawable.ic_close, stringResource(R.string.close), onDismiss,
-                tint = MaterialTheme.colorScheme.onSurface)
-        }
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
             rows.forEach { row ->
                 val selectedRow = row.value == selected
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .selectable(selected = selectedRow, enabled = row.enabled, role = Role.RadioButton) { onPick(row.value) }
+                    .selectable(selected = selectedRow, enabled = row.enabled, role = Role.RadioButton) { if (!selectedRow) haptic(); onPick(row.value) }
                     .padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(row.label, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (row.enabled) 1f else 0.38f))
@@ -154,7 +150,7 @@ internal fun InfoDialog(state: PlayerUiState, onDismiss: () -> Unit, onCopyHint:
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         title = {
             Text(
                 text = stringResource(R.string.info),

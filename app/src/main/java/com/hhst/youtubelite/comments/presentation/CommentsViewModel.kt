@@ -3,43 +3,57 @@ package com.hhst.youtubelite.comments.presentation
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hhst.youtubelite.comments.domain.CommentActions
-import com.hhst.youtubelite.comments.domain.CommentTarget
 import com.hhst.youtubelite.comments.domain.CommentAction
+import com.hhst.youtubelite.comments.domain.CommentActions
 import com.hhst.youtubelite.comments.domain.CommentMenuAction
+import com.hhst.youtubelite.comments.domain.CommentMutation
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
-import com.hhst.youtubelite.comments.domain.CommentThread
+import com.hhst.youtubelite.comments.domain.CommentReply
 import com.hhst.youtubelite.comments.domain.CommentSort
+import com.hhst.youtubelite.comments.domain.CommentTarget
+import com.hhst.youtubelite.comments.domain.CommentThread
 import com.hhst.youtubelite.comments.domain.CommentsContent
 import com.hhst.youtubelite.comments.domain.CommentsOverlay
+import com.hhst.youtubelite.comments.domain.CommentsPage
 import com.hhst.youtubelite.comments.domain.CommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentsUiState
+import com.hhst.youtubelite.comments.domain.adjustedCommentCount
+import com.hhst.youtubelite.core.AppNotice
+import com.hhst.youtubelite.diagnostics.writeFailureNotice
+import com.hhst.youtubelite.post.domain.PostAuthorizationRequiredException
+import com.hhst.youtubelite.post.domain.PostIdentity
+import com.hhst.youtubelite.watch.domain.SignInRequiredException
+import com.hhst.youtubelite.watch.domain.UnconfirmedActionException
+import com.hhst.youtubelite.watch.domain.VideoRating
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.hhst.youtubelite.core.AppNotice
 
-/**
- * Panel state for one video. Sorting and expanded threads survive recreation through
- * [SavedStateHandle]; the repository supplies the visible list.
- */
 class CommentsViewModel(
     private val repository: CommentsRepository,
     private val savedState: SavedStateHandle,
     initialTarget: CommentTarget,
+    loadOnStart: Boolean = true,
 ) : ViewModel() {
-    constructor(repository: CommentsRepository, savedState: SavedStateHandle, videoId: String) :
-        this(repository, savedState, CommentTarget.Video(videoId))
+    constructor(repository: CommentsRepository, savedState: SavedStateHandle, videoId: String, loadOnStart: Boolean = true) :
+        this(repository, savedState, CommentTarget.Video(videoId), loadOnStart)
+    private var loadsEnabled = loadOnStart
+
+    fun startLoading() {
+        if (loadsEnabled) return
+        loadsEnabled = true
+        load()
+    }
     private var target: CommentTarget = when (savedState.get<String>("commentsTargetKind")) {
-        "post" -> CommentTarget.Post(com.hhst.youtubelite.post.domain.PostIdentity(
+        "post" -> CommentTarget.Post(PostIdentity(
             savedState.get<String>("commentsTargetChannel").orEmpty(), savedState.get<String>("commentsTargetId").orEmpty()))
         "video" -> CommentTarget.Video(savedState.get<String>("commentsTargetId").orEmpty())
         else -> savedState.get<String>(KEY_VIDEO)?.let { CommentTarget.Video(it) } ?: initialTarget
@@ -84,6 +98,8 @@ class CommentsViewModel(
 
     private val notices = Channel<AppNotice>(Channel.BUFFERED)
     val actionNotices = notices.receiveAsFlow()
+    private val authorizations = Channel<Unit>(Channel.BUFFERED)
+    val authorizationRequests = authorizations.receiveAsFlow()
     private var actionJob: Job? = null
     private val actions = repository as? CommentActions
 
@@ -92,9 +108,12 @@ class CommentsViewModel(
     private var generation = 0
     /** Identity epoch: bumped on every session change, captured by in-flight writes. */
     private var sessionGeneration = 0L
+    private var authorizationRefreshFailed = false
     private val replyJobs = mutableMapOf<String, Job>()
     /** Cursors requested in the current load cycle; a repeat means the server loops. */
     private val consumedCursors = mutableSetOf<String>()
+    /** Pause automatic pagination when distinct cursors keep returning no new comments. */
+    private var emptyAppends = 0
     /** Threads whose first replies page was requested in this load cycle. */
     private val repliesStarted = mutableSetOf<String>()
     private val replyCursors = mutableMapOf<String, MutableSet<String>>()
@@ -144,14 +163,84 @@ class CommentsViewModel(
         savedState[KEY_DRAFT] = ""
         savedState[KEY_LOADED] = 0
         overlay(CommentsOverlay.None)
-        _state.update { it.copy(actionPending = false, draft = "") }
+        _state.update { it.copy(actionPending = false, pendingAction = null, draft = "") }
         load()
     }
 
+    /** Web authorization does not change the account or discard the pending comment draft. */
+    fun refreshAuthorization() {
+        sessionGeneration++
+        actionJob?.cancel()
+        _state.update { it.copy(actionPending = false, pendingAction = null) }
+        val retained = _state.value.content as? CommentsContent.Ready
+        if (retained == null) { load(); return }
+        // Restore all loaded pages before publishing; a first-page replacement would clamp
+        // a deep viewport to the top even though the LazyListState itself survives.
+        loadJob?.cancel()
+        pageJob?.cancel()
+        replyJobs.values.forEach(Job::cancel)
+        replyJobs.clear()
+        repliesStarted.clear()
+        replyCursors.clear()
+        consumedCursors.clear()
+        emptyAppends = 0
+        authorizationRefreshFailed = false
+        val requestGeneration = ++generation
+        val requestedSort = _state.value.sort
+        _state.update { it.copy(refreshing = true, content = retained.copy(loadingMore = false)) }
+        loadJob = viewModelScope.launch {
+            try {
+                val threads = linkedMapOf<String, CommentThread>()
+                val visited = mutableSetOf<String>()
+                var cursor: String? = null
+                var first: CommentsPage? = null
+                var emptyPages = 0
+                do {
+                    val page = repository.comments(target, requestedSort, cursor)
+                    currentCoroutineContext().ensureActive()
+                    if (requestGeneration != generation) return@launch
+                    if (first == null) first = page
+                    val previousSize = threads.size
+                    page.threads.forEach { threads[it.id] = it }
+                    emptyPages = if (threads.size > previousSize) 0 else emptyPages + 1
+                    cursor?.let(consumedCursors::add)
+                    cursor = page.nextCursor?.takeIf { visited.add(it) }
+                } while (cursor != null && threads.size < retained.threads.size && emptyPages < MAX_EMPTY_APPENDS)
+                val opening = requireNotNull(first)
+                val old = retained.threads.associateBy { it.id }
+                val content = when {
+                    opening.turnedOff -> CommentsContent.Disabled
+                    threads.isEmpty() && cursor == null -> CommentsContent.Empty
+                    else -> CommentsContent.Ready(threads.values.map { fresh ->
+                        old[fresh.id]?.let { previous -> fresh.copy(replies = previous.replies,
+                            repliesNextCursor = previous.repliesNextCursor, repliesFailed = previous.repliesFailed) } ?: fresh
+                    }, cursor)
+                }
+                savedState[KEY_LOADED] = threads.size
+                if (opening.sortFallback && requestedSort == CommentSort.Newest) {
+                    savedState[KEY_SORT] = CommentSort.Top.name
+                    _state.update { it.copy(sort = CommentSort.Top) }
+                    notices.send(AppNotice.Message("Newest comments aren't offered here. Showing top comments."))
+                }
+                _state.update { it.copy(content = content, total = if (content == CommentsContent.Empty) "0" else opening.total) }
+                _state.value.expanded.forEach { requestReplies(it) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (requestGeneration == generation) {
+                    authorizationRefreshFailed = true
+                    notices.send(writeFailureNotice("comments_refresh", error))
+                }
+            } finally {
+                if (requestGeneration == generation) _state.update { it.copy(refreshing = false) }
+            }
+        }
+    }
+
     fun onAction(action: CommentAction) {
-        if (_state.value.actionPending && action != CommentAction.Retry) return
+        startLoading()
+        if (_state.value.actionPending && action !is CommentAction.ToggleReplies && action !is CommentAction.LoadMoreReplies &&
+            action != CommentAction.LoadMore && action !is CommentAction.OpenAuthor && action !is CommentAction.OpenLink) return
         when (action) {
-            // With a loaded list, Retry re-fetches only the page that failed.
             CommentAction.Retry -> {
                 val content = _state.value.content
                 if (content is CommentsContent.Ready && content.loadMoreFailed) loadMore() else load()
@@ -186,8 +275,8 @@ class CommentsViewModel(
             }
             CommentAction.ConfirmDelete -> confirmDelete()
             CommentAction.CancelDelete -> overlay(CommentsOverlay.None)
-            is CommentAction.LikeThread -> dispatch(CommentNavigationRequest.LikeComment(target, action.commentId))
-            is CommentAction.DislikeThread -> dispatch(CommentNavigationRequest.DislikeComment(target, action.commentId))
+            is CommentAction.LikeThread -> rate(action.commentId, VideoRating.Like)
+            is CommentAction.DislikeThread -> rate(action.commentId, VideoRating.Dislike)
             is CommentAction.ReportThread -> dispatch(
                 CommentNavigationRequest.ReportComment(target, action.commentId, action.commentId),
             )
@@ -202,8 +291,8 @@ class CommentsViewModel(
                 action.commentId.takeUnless { it == action.threadId },
                 editing = false,
             )
-            is CommentAction.LikeReply -> dispatch(CommentNavigationRequest.LikeComment(target, action.replyId))
-            is CommentAction.DislikeReply -> dispatch(CommentNavigationRequest.DislikeComment(target, action.replyId))
+            is CommentAction.LikeReply -> rate(action.replyId, VideoRating.Like)
+            is CommentAction.DislikeReply -> rate(action.replyId, VideoRating.Dislike)
             is CommentAction.ReportReply -> dispatch(
                 CommentNavigationRequest.ReportComment(target, action.commentId, action.replyId),
             )
@@ -214,11 +303,7 @@ class CommentsViewModel(
         }
     }
 
-    /**
-     * Thread and reply menus share their public rows; owner-only rows open a local
-     * composer or confirmation and never mutate the fixture. Every submission leaves
-     * as a typed request carrying the concrete comment identity.
-     */
+    /** Owner-only rows open a local composer or confirmation and never mutate the fixture. */
     private fun selectMenuAction(action: CommentMenuAction) {
         val current = uiState.value.overlay
         val threadId: String
@@ -313,35 +398,148 @@ class CommentsViewModel(
         if (actions == null) overlay(CommentsOverlay.None)
     }
 
+    private fun rate(id: String, selected: VideoRating) {
+        val threads = (_state.value.content as? CommentsContent.Ready)?.threads ?: return
+        val previous = threads.firstNotNullOfOrNull { thread ->
+            if (thread.id == id) thread.rating else thread.replies.firstOrNull { it.id == id }?.rating
+        } ?: return
+        val desired = if (previous == selected) VideoRating.None else selected
+        dispatch(if (selected == VideoRating.Like) CommentNavigationRequest.LikeComment(target, id, desired, previous)
+            else CommentNavigationRequest.DislikeComment(target, id, desired, previous))
+    }
+
     private fun dispatch(request: CommentNavigationRequest) {
         val service = actions ?: run { navigation.trySend(request); return }
         if (_state.value.actionPending) return
+        if (authorizationRefreshFailed && target is CommentTarget.Post) refreshAuthorization()
         val requestedTarget = target
         val closesEditor = request is CommentNavigationRequest.SubmitComment ||
             request is CommentNavigationRequest.SubmitReply || request is CommentNavigationRequest.EditComment ||
             request is CommentNavigationRequest.DeleteComment
-        _state.update { it.copy(actionPending = true) }
+        _state.update { it.copy(actionPending = true, pendingAction = request) }
         // The write is bound to the identity it started under: a result (or the
         // cancellation unwind) from a switched session must not clear the new
         // session's pending state or publish into it.
         val requestSession = sessionGeneration
+        val opening = loadJob
         fun stale() = sessionGeneration != requestSession || target != requestedTarget
         actionJob = viewModelScope.launch {
             try {
-                service.perform(request)
+                // Post action tokens come from the authorized opening read. A tap immediately
+                // after returning from authorization must wait for that read to finish.
+                if (requestedTarget is CommentTarget.Post) opening?.join()
+                currentCoroutineContext().ensureActive()
                 if (stale()) return@launch
-                _state.update { it.copy(actionPending = false) }
+                if (authorizationRefreshFailed) throw UnconfirmedActionException()
+                val mutation = service.perform(request)
+                currentCoroutineContext().ensureActive()
+                if (stale()) return@launch
+                applyMutation(request, mutation)
+                _state.update { it.copy(actionPending = false, pendingAction = null) }
                 if (closesEditor) closeComposer()
-                load()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { if (!stale()) notices.send(AppNotice.SignIn) }
+            catch (_: PostAuthorizationRequiredException) {
+                if (!stale()) authorizations.send(Unit)
+            }
+            catch (_: SignInRequiredException) { if (!stale()) notices.send(AppNotice.SignIn) }
             catch (_: UnsupportedOperationException) { if (!stale()) notices.send(AppNotice.Message("This action is not available.")) }
             catch (error: Exception) {
-                if (!stale()) notices.send(com.hhst.youtubelite.diagnostics.writeFailureNotice(
+                if (!stale()) notices.send(writeFailureNotice(
                     "comment_${request::class.simpleName.orEmpty()}", error))
             }
-            finally { if (!stale()) _state.update { it.copy(actionPending = false) } }
+            finally { if (!stale()) _state.update { it.copy(actionPending = false, pendingAction = null) } }
         }
+    }
+
+    /** Apply the confirmed change to the current list, preserving pagination and replies loaded during the write. */
+    private fun applyMutation(request: CommentNavigationRequest, mutation: CommentMutation) {
+        val changed = mutation.comment
+        _state.update { state ->
+            val ready = state.content as? CommentsContent.Ready
+            var threads = ready?.threads.orEmpty()
+            var expanded = state.expanded
+            var total = state.total
+            fun updateComment(id: String, transform: (VideoRating, String) -> Pair<VideoRating, String>) {
+                threads = threads.map { thread ->
+                    if (thread.id == id) {
+                        val (rating, likes) = transform(thread.rating, thread.likes)
+                        thread.copy(rating = rating, likes = likes)
+                    } else if (thread.replies.any { it.id == id }) thread.copy(replies = thread.replies.map { reply ->
+                        if (reply.id != id) reply else {
+                            val (rating, likes) = transform(reply.rating, reply.likes)
+                            reply.copy(rating = rating, likes = likes)
+                        }
+                    }) else thread
+                }
+            }
+            when (request) {
+                is CommentNavigationRequest.LikeComment, is CommentNavigationRequest.DislikeComment -> {
+                    val id = when (request) {
+                        is CommentNavigationRequest.LikeComment -> request.commentId
+                        is CommentNavigationRequest.DislikeComment -> request.commentId
+                        else -> error("Not a rating")
+                    }
+                    val desired = when (request) {
+                        is CommentNavigationRequest.LikeComment -> request.rating
+                        is CommentNavigationRequest.DislikeComment -> request.rating
+                        else -> error("Not a rating")
+                    }
+                    updateComment(id) { previous, likes ->
+                        val rating = changed?.takeIf { it.id == id }?.rating
+                            ?: desired
+                        val count = changed?.takeIf { it.id == id }?.likes ?: adjustedCommentCount(likes,
+                            (if (rating == VideoRating.Like) 1 else 0) - (if (previous == VideoRating.Like) 1 else 0))
+                        rating to count
+                    }
+                }
+                is CommentNavigationRequest.DeleteComment -> {
+                    if (request.threadId == request.commentId) {
+                        threads = threads.filterNot { it.id == request.commentId }
+                        expanded -= request.threadId
+                        total = adjustedCommentCount(total, -1)
+                    } else threads = threads.map { thread ->
+                        if (thread.id != request.threadId) thread else thread.copy(
+                            replies = thread.replies.filterNot { it.id == request.commentId }, replyCount = (thread.replyCount - 1).coerceAtLeast(0))
+                    }
+                }
+                is CommentNavigationRequest.EditComment -> {
+                    threads = threads.map { thread ->
+                        if (thread.id != request.threadId) thread
+                        else if (request.commentId == thread.id) thread.copy(body = changed?.body ?: request.body, runs = changed?.runs.orEmpty())
+                        else thread.copy(replies = thread.replies.map {
+                            if (it.id == request.commentId) it.copy(body = changed?.body ?: request.body, runs = changed?.runs.orEmpty()) else it
+                        })
+                    }
+                }
+                is CommentNavigationRequest.SubmitComment -> if (changed != null) {
+                    threads = listOf(changed) + threads.filterNot { it.id == changed.id }
+                    total = adjustedCommentCount(total, 1)
+                }
+                is CommentNavigationRequest.SubmitReply -> {
+                    threads = threads.map { thread ->
+                        if (thread.id != request.threadId) thread else thread.copy(replyCount = thread.replyCount + 1,
+                            replies = if (changed == null) thread.replies else (thread.replies + CommentReply(changed.id,
+                                changed.author, changed.age, changed.body, changed.likes, changed.authorChannelId,
+                                changed.ownedByViewer, changed.runs, changed.rating)).distinctBy { it.id })
+                    }
+                    if (changed != null) expanded += request.threadId
+                }
+                else -> Unit // Reporting does not change the visible conversation.
+            }
+            val content = when {
+                threads.isNotEmpty() -> (ready ?: CommentsContent.Ready(emptyList())).copy(threads = threads)
+                ready != null && ready.nextCursor != null -> ready.copy(threads = threads)
+                ready != null -> CommentsContent.Empty
+                else -> state.content
+            }
+            state.copy(content = content, expanded = expanded, total = total)
+        }
+        val state = _state.value
+        savedState[KEY_EXPANDED] = ArrayList(state.expanded)
+        savedState[KEY_LOADED] = (state.content as? CommentsContent.Ready)?.threads?.size ?: 0
+        if (changed == null && (request is CommentNavigationRequest.SubmitComment || request is CommentNavigationRequest.SubmitReply))
+            notices.trySend(AppNotice.Message("Comment posted."))
+        if (request is CommentNavigationRequest.ReportComment) notices.trySend(AppNotice.Message("Comment reported."))
     }
 
     private fun overlay(next: CommentsOverlay) {
@@ -449,6 +647,7 @@ class CommentsViewModel(
             if (requestGeneration != generation) return@launch
             // A repeated or self-pointing cursor ends the thread instead of looping.
             val visited = replyCursors.getOrPut(commentId) { mutableSetOf() }
+            (cursor ?: thread.replyKey)?.let(visited::add)
             val nextCursor = page.nextCursor?.takeUnless { it == cursor || !visited.add(it) }
             updateThread(commentId) { current ->
                 current.copy(
@@ -469,11 +668,14 @@ class CommentsViewModel(
     }
 
     private fun load() {
+        if (!loadsEnabled) return
+        authorizationRefreshFailed = false
         replyJobs.values.forEach(Job::cancel)
         replyJobs.clear()
         repliesStarted.clear()
         replyCursors.clear()
         consumedCursors.clear()
+        emptyAppends = 0
         loadJob?.cancel()
         pageJob?.cancel()
         val requestGeneration = ++generation
@@ -481,7 +683,7 @@ class CommentsViewModel(
         firstLoadCancelled = false
         // Read the restore target before the first page overwrites it with its own size.
         val restoreTarget = savedState.get<Int>(KEY_LOADED) ?: 0
-        _state.update { it.copy(content = CommentsContent.Loading) }
+        _state.update { it.copy(content = CommentsContent.Loading, refreshing = false) }
         loadJob = viewModelScope.launch {
             // The first page publishes as soon as it lands; restoring deeper
             // pages after a recreation walks forward one page at a time, each
@@ -496,10 +698,7 @@ class CommentsViewModel(
         }
     }
 
-    /**
-     * Fetches one page and publishes it. Returns false when the caller's walk
-     * must stop: a failure (state already carries it) or a stale generation.
-     */
+    /** Returns false when the caller's walk must stop: a failure (state already carries it) or a stale generation. */
     private suspend fun fetchPage(cursor: String?, sort: CommentSort, requestGeneration: Int, firstPage: Boolean): Boolean {
         if (requestGeneration != generation) return false
         if (cursor != null && cursor in consumedCursors) {
@@ -533,7 +732,7 @@ class CommentsViewModel(
         if (firstPage) {
             val content = when {
                 page.turnedOff -> CommentsContent.Disabled
-                page.threads.isEmpty() -> CommentsContent.Empty
+                page.threads.isEmpty() && page.nextCursor == null -> CommentsContent.Empty
                 else -> CommentsContent.Ready(page.threads.distinctBy { it.id }, page.nextCursor)
             }
             savedState[KEY_LOADED] = page.threads.size
@@ -542,20 +741,24 @@ class CommentsViewModel(
         } else {
             val ready = _state.value.content as? CommentsContent.Ready ?: return false
             val threads = (ready.threads + page.threads).distinctBy { it.id }
+            val nextCursor = page.nextCursor?.takeUnless { it in consumedCursors }
+            emptyAppends = if (threads.size > ready.threads.size) 0 else emptyAppends + 1
+            val paused = nextCursor != null && emptyAppends >= MAX_EMPTY_APPENDS
             savedState[KEY_LOADED] = threads.size
             _state.update { state ->
                 val current = state.content as? CommentsContent.Ready ?: return@update state
                 state.copy(
-                    total = page.total.ifBlank { state.total },
-                    content = current.copy(
+                    total = if (threads.isEmpty() && nextCursor == null) "0" else page.total.ifBlank { state.total },
+                    content = if (threads.isEmpty() && nextCursor == null) CommentsContent.Empty else current.copy(
                         threads = threads,
-                        nextCursor = page.nextCursor?.takeUnless { it in consumedCursors },
+                        nextCursor = nextCursor,
                         loadingMore = false,
-                        loadMoreFailed = false,
+                        loadMoreFailed = paused,
                     ),
                 )
             }
             _state.value.expanded.forEach { requestReplies(it) }
+            if (paused) return false
         }
         return true
     }
@@ -573,6 +776,7 @@ class CommentsViewModel(
 
     /** Panel closed or the target switched: in-flight reads stop; loaded content stays. */
     fun cancelTransient() {
+        if (_state.value.refreshing) authorizationRefreshFailed = true
         val inFlightReplies = replyJobs.filterValues { it.isActive }.keys.toSet()
         loadJob?.cancel()
         pageJob?.cancel()
@@ -582,7 +786,7 @@ class CommentsViewModel(
         _state.update { state ->
             val ready = state.content as? CommentsContent.Ready ?: return@update state
             state.copy(
-                content = ready.copy(loadingMore = false, threads = ready.threads.map {
+                refreshing = false, content = ready.copy(loadingMore = false, threads = ready.threads.map {
                     if (it.repliesLoading) it.copy(repliesLoading = false) else it
                 }),
             )
@@ -592,8 +796,14 @@ class CommentsViewModel(
 
     /** The panel opened for an existing model: restarts a cancelled first read. */
     fun ensureLoaded() {
-        if (firstLoadCancelled && loadJob?.isActive != true && _state.value.content == CommentsContent.Loading) {
+        if (authorizationRefreshFailed && loadJob?.isActive != true) {
+            refreshAuthorization()
+        } else if (firstLoadCancelled && loadJob?.isActive != true && _state.value.content == CommentsContent.Loading) {
             load()
+        } else {
+            // Closing cancels a first reply read without collapsing its thread.
+            // Resume that read on reopening; settled/failed pages remain untouched.
+            _state.value.expanded.filter { findThread(it)?.repliesFailed != true }.forEach { requestReplies(it) }
         }
     }
 
@@ -607,6 +817,7 @@ class CommentsViewModel(
     override fun onCleared() = dispose()
 
     private companion object {
+        const val MAX_EMPTY_APPENDS = 3
         const val KEY_VIDEO = "commentsVideoId"
         const val KEY_SORT = "commentsSort"
         const val KEY_EXPANDED = "commentsExpanded"

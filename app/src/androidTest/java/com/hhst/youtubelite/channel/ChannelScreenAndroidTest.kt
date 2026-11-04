@@ -24,7 +24,6 @@ import org.junit.Rule
 import org.junit.Test
 import com.hhst.youtubelite.core.DeviceEvidence
 
-/** Host-level behavior of the local channel page: typed requests, tabs, returns and scenarios. */
 class ChannelScreenAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var channel: ActivityScenario<ChannelActivity>? = null
@@ -55,7 +54,7 @@ class ChannelScreenAndroidTest {
         val received = TrafficStats.getUidRxBytes(Process.myUid())
         launchChannel()
         awaitNode("channel-header")
-        compose.onNodeWithTag("channel-name").assertIsDisplayed()
+        compose.onNodeWithTag("channel-title").assertIsDisplayed()
         compose.onNodeWithTag("channel-home-list").assertIsDisplayed()
         channel?.onActivity { channelHost ->
             assertFalse((channelHost.application as App).mediaRuntimeStarted)
@@ -76,7 +75,7 @@ class ChannelScreenAndroidTest {
         awaitNode("channel-videos-list")
         compose.waitForIdle()
         assertEquals(top, compose.onNodeWithTag("channel-header").fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.onNodeWithTag("channel-name").assertIsDisplayed()
+        compose.onNodeWithTag("channel-title").assertIsDisplayed()
     }
 
     @Test fun tabsSwitchLocallyAndKeepTheirScrollsAcrossSwitchesAndRecreation() {
@@ -134,8 +133,8 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-thumb-bunny").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.Watch("bunny"), it.lastNavigationRequest) }
         awaitNode("watch-screen")
-        // GLOBAL_ACTION_BACK == 1; the watch host owns a different back control.
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        // Send the system Back key across activity hosts.
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("channel-home-list")
     }
 
@@ -150,7 +149,7 @@ class ChannelScreenAndroidTest {
         results.onActivity { assertEquals(SearchNavigationRequest.Channel(first.channelId), it.lastNavigationRequest) }
         awaitNode("channel-page")
         awaitNode("channel-home-list")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("search-results-list")
         compose.onNodeWithTag("search-query").assertTextEquals("open movie")
         results.onActivity { assertFalse(it.isFinishing) }
@@ -188,7 +187,7 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-search-list").performScrollToNode(hasTestTag("channel-search-thumb-bunny"))
         compose.onNodeWithTag("channel-search-thumb-bunny").performClick()
         awaitNode("watch-screen")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("channel-search-list")
         host.onActivity { assertEquals("bunny", it.channelViewModel.uiState.value.submittedQuery) }
         DeviceEvidence.captureScene("discovery-channel-search-host")
@@ -202,13 +201,13 @@ class ChannelScreenAndroidTest {
         awaitNode("search-channels-list")
         compose.onNodeWithTag("search-channel-name-studio", true).performClick()
         awaitNode("channel-header")
-        compose.onNodeWithTag("channel-name", true).assertTextEquals("Blender Studio")
+        compose.onNodeWithTag("channel-title", true).assertTextEquals("Blender Studio")
         compose.onNodeWithTag("channel-description").performClick()
         awaitNode("channel-about-panel")
         DeviceEvidence.captureScene("discovery-about-host")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("channel-header")
-        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(1)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("search-channels-list")
         host.recreate()
         awaitNode("search-channels-list")

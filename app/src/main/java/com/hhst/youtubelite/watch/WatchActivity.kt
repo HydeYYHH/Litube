@@ -8,6 +8,9 @@ import com.hhst.youtubelite.data.media.toReportingVideo
 import android.content.Intent
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import kotlin.math.roundToInt
 import android.graphics.Color
 import com.hhst.youtubelite.ui.showMessage
 import android.os.Bundle
@@ -17,6 +20,7 @@ import androidx.activity.compose.BackHandler
 import com.hhst.youtubelite.ui.design.setAppContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.LazyListState
@@ -30,6 +34,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -39,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -66,6 +72,7 @@ import com.hhst.youtubelite.search.SearchResultsActivity
 import com.hhst.youtubelite.ui.design.SearchPanel
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
@@ -80,7 +87,11 @@ import com.hhst.youtubelite.share.VideoShare
 import com.hhst.youtubelite.watch.domain.WatchLayout
 import com.hhst.youtubelite.watch.domain.WatchOverlay
 import com.hhst.youtubelite.watch.presentation.WatchPlayer
+import com.hhst.youtubelite.watch.presentation.withWatchPresentation
 import com.hhst.youtubelite.watch.presentation.WatchScreen
+import com.hhst.youtubelite.watch.presentation.watchPageAlpha
+import com.hhst.youtubelite.watch.presentation.watchPageProgress
+import com.hhst.youtubelite.watch.presentation.watchPageContent
 import com.hhst.youtubelite.watch.presentation.WatchVideoMenu
 import com.hhst.youtubelite.watch.presentation.WatchViewModel
 import kotlinx.coroutines.launch
@@ -93,7 +104,20 @@ import org.koin.compose.koinInject
 import com.hhst.youtubelite.ui.renderNotice
 import com.hhst.youtubelite.ui.observeAccountChanges
 
-class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
+class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity(), com.hhst.youtubelite.ui.components.WatchSheetHost {
+    override var sheetPlayerBottomPx by mutableIntStateOf(0)
+        private set
+    override val sheetWindowHeightPx: Int get() = window.decorView.height
+    private var transitionVersion by mutableIntStateOf(0)
+    private var watchWindowFocused by mutableStateOf(false)
+    private var miniHandoffPending by mutableStateOf(false)
+    private var localMiniCollapse by mutableStateOf(false)
+    private var afterMiniCollapse: ((Rect) -> Unit)? = null
+    private var miniHandoffState by mutableStateOf<com.hhst.youtubelite.player.PlayerUiState?>(null)
+    private var playerWindowBounds: Rect? = null
+    private var entryBackdrop: android.graphics.Bitmap? = null
+    private var waitForEntryDraw = true
+    private var appliedWindowColor: Int? = null
     lateinit var watchViewModel: WatchViewModel
         private set
     lateinit var commentsViewModel: CommentsViewModel
@@ -114,6 +138,10 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             result.data?.getStringExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE))
     }
 
+    private val chatAuthorizationLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { /* Returning keeps the draft. Only an explicit Send can post it. */ }
+
     /** Test seams: recorded payloads plus launch suppression for instrumentation runs. */
     var lastDownloadSpec: DownloadSingleSpec? = null
         private set
@@ -124,9 +152,17 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val dark = com.hhst.youtubelite.ui.theme.AppAppearance.dark ?:
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        applyWatchWindowBackground(if (dark) Color.BLACK else Color.WHITE)
+        val barStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
+            else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(barStyle, barStyle)
+        entryBackdrop = com.hhst.youtubelite.navigation.WatchTransition.backdrop(intent)
+        waitForEntryDraw = savedInstanceState == null
         val sources = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.data.media.ContentRepositories>()
         fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
-        enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val videoId = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId.orEmpty()
         val scenario = if (BuildConfig.DEBUG) WatchScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else WatchScenario.Content
         // Debug seam: attach a chat continuation to the fixture page so instrumentation can
@@ -138,7 +174,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == WatchViewModel::class.java)
-                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario, fixtureChatKey) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves, provisional) as T
+                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario, fixtureChatKey) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves, provisional, loadOnStart = fixtures, avatars = if (fixtures) null else sources.avatars) as T
             }
         })[WatchViewModel::class.java]
         lifecycleScope.launch {
@@ -153,7 +189,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == CommentsViewModel::class.java)
-                return CommentsViewModel(if (fixtures) FixtureCommentsRepository(commentsScenario) else sources.comments(), extras.createSavedStateHandle(), videoId) as T
+                return CommentsViewModel(if (fixtures) FixtureCommentsRepository(commentsScenario) else sources.comments(), extras.createSavedStateHandle(), videoId, loadOnStart = fixtures) as T
             }
         })[CommentsViewModel::class.java]
         bindCommentNotices(commentsViewModel)
@@ -166,13 +202,22 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == com.hhst.youtubelite.watch.chat.LiveChatViewModel::class.java)
                 return com.hhst.youtubelite.watch.chat.LiveChatViewModel(
-                    if (fixtures) null else com.hhst.youtubelite.watch.chat.MediaLiveChatGateway(sources.client),
+                    if (fixtures) null else com.hhst.youtubelite.watch.chat.MediaLiveChatGateway(sources.client,
+                        com.hhst.youtubelite.watch.chat.ChatWebSessionStore(com.hhst.youtubelite.data.media.PreferencesAuthStore(this@WatchActivity))),
                     signedIn = fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn()) as T
             }
         })[com.hhst.youtubelite.watch.chat.LiveChatViewModel::class.java]
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 chatViewModel.actionNotices.collect { notice -> renderNotice(notice) }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chatViewModel.authorizationRequests.collect { request ->
+                    if (chatViewModel.authorizationIsCurrent(request)) chatAuthorizationLauncher.launch(
+                        Intent(this@WatchActivity, com.hhst.youtubelite.account.ChatWebSignInActivity::class.java))
+                }
             }
         }
         lifecycleScope.launch {
@@ -192,7 +237,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                             target.replay -> chatViewModel.openReplay(target.key) {
                                 playerViewModel.positionState.value
                             }
-                            else -> chatViewModel.open(target.key)
+                            else -> chatViewModel.open(target.key, target.messageParams)
                         }
                     }
                 } finally { chatViewModel.close() }
@@ -269,7 +314,8 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                         // itself with server confirmation in production (votes, subscribe, saves);
                         // PageMenu/Comments mirror VM overlay state. No `else`: a new request type
                         // must fail to compile here.
-                        WatchNavigationRequest.PageMenu, is WatchNavigationRequest.Comments,
+                        is WatchNavigationRequest.Comments -> commentsViewModel.startLoading()
+                        WatchNavigationRequest.PageMenu,
                         is WatchNavigationRequest.Like, is WatchNavigationRequest.Dislike,
                         is WatchNavigationRequest.Subscribe, is WatchNavigationRequest.SaveToWatchLater,
                         is WatchNavigationRequest.SaveToPlaylist, is WatchNavigationRequest.CreatePlaylist,
@@ -282,6 +328,21 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             (application as com.hhst.youtubelite.App).startMediaRuntime()
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
                 if (savedInstanceState == null) intent.startSecondsExtra() else null)
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    // Let initial media IO settle before optional page/comments/vote reads.
+                    // A terminal error releases data immediately; automatic recovery stays loading.
+                    // Stalls retain the bounded wait, and explicit page actions can start sooner.
+                    kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                        playerViewModel.uiState.first {
+                            it.videoId == videoId && (it.firstFrameRendered || it.error != null && !it.loading)
+                        }
+                    }
+                    watchViewModel.startLoading()
+                    commentsViewModel.startLoading()
+                    kotlinx.coroutines.awaitCancellation()
+                }
+            }
             // Progress reporting is session-owned (PlaybackWatchReporting): this activity only
             // publishes the loaded page's metadata, so reporting keeps running after the
             // activity stops while playback continues in PiP or the mini player.
@@ -330,9 +391,19 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         setAppContent {
             val pip by inPip.collectAsStateWithLifecycle()
             val playerViewModel: PlayerViewModel = koinInject()
-            val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+            val livePlayerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+            val playerState = livePlayerState.withWatchPresentation(miniHandoffState)
             val state by watchViewModel.uiState.collectAsStateWithLifecycle()
+            com.hhst.youtubelite.ui.design.WriteProgressOverlay(watchViewModel.writes)
             val fullscreen = playerState.fullscreen || pip
+            val windowBackground = if (fullscreen) androidx.compose.ui.graphics.Color.Black
+                else com.hhst.youtubelite.ui.design.DesignTokens.Background
+            // Android can expose the window while a fullscreen/PiP resize is
+            // between content draws. Keep that backing color in the same mode.
+            SideEffect {
+                applyWatchWindowBackground(windowBackground.toArgb())
+                applySystemBarStyle()
+            }
             val commentsState by commentsViewModel.uiState.collectAsStateWithLifecycle()
             val commentsListState = rememberSaveable(commentsState.videoId, commentsState.sort, saver = LazyListState.Saver) { LazyListState() }
             val commentsPosition = remember(commentsListState) {
@@ -383,16 +454,63 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
             BackHandler(onBack = back)
             var revealingSource by remember { mutableStateOf(false) }
             var miniDragProgress by remember { mutableFloatStateOf(0f) }
-            val entryBounds = remember { com.hhst.youtubelite.navigation.WatchTransition.origin(intent) }
-            val sourceImage = remember { com.hhst.youtubelite.navigation.WatchTransition.backdrop?.asImageBitmap() }
+            val contentFullscreenSwipe = remember { com.hhst.youtubelite.player.surface.FullscreenSwipeHandle() }
+            val contentPull = com.hhst.youtubelite.watch.presentation.watchFullscreenPull(
+                contentFullscreenSwipe, enabled = !fullscreen && !pip && !playerState.mini && !playerState.locked &&
+                    !state.searchOpen && !state.commentsOpen && state.overlay == WatchOverlay.None,
+                playerBottomPx = { sheetPlayerBottomPx },
+            )
+            var fullscreenProgress by remember { mutableFloatStateOf(if (fullscreen) 1f else 0f) }
+            val entryBounds = remember(transitionVersion) {
+                com.hhst.youtubelite.navigation.WatchTransition.origin(intent)
+                    .takeIf { savedInstanceState == null || transitionVersion > 0 }
+            }
+            val entryProgress = remember(transitionVersion) { mutableFloatStateOf(if (entryBounds == null) 1f else 0f) }
+            val playerDrawn = remember(transitionVersion) { mutableStateOf(!waitForEntryDraw) }
+            val miniRestoreFrame = remember(transitionVersion) {
+                com.hhst.youtubelite.navigation.WatchTransition.miniRestoreFrame(intent)
+            }
+            val miniPicturePaint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG) }
+            val miniBridgeHost = LocalView.current
+            val entering by remember(entryProgress, playerDrawn) {
+                androidx.compose.runtime.derivedStateOf { !playerDrawn.value || entryProgress.floatValue < 1f }
+            }
+            val pageProgress = {
+                watchPageProgress(if (playerDrawn.value) entryProgress.floatValue else 0f,
+                    if (revealingSource) miniDragProgress else 0f)
+            }
+            val sourceImage = remember(transitionVersion) { entryBackdrop?.asImageBitmap() }
             Box(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)) {
-                if (revealingSource && sourceImage != null) androidx.compose.foundation.Image(
-                    sourceImage, contentDescription = null, modifier = Modifier.fillMaxSize(),
+                if ((revealingSource || entering) && sourceImage != null) androidx.compose.foundation.Image(
+                    sourceImage, contentDescription = null, modifier = Modifier.fillMaxSize().testTag("watch-mini-backdrop"),
                     contentScale = androidx.compose.ui.layout.ContentScale.FillBounds)
-                if (revealingSource) Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - miniDragProgress }
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(
-                        androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
-                        androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)))))
+                // The first root draw can precede the player's slot/layout. The
+                // backdrop omits the mini, so bridge that gap at its source geometry.
+                // Keep this local to the entrance; a later reverse reveal must not
+                // bring back an old mini at its original position.
+                if (!playerDrawn.value && miniRestoreFrame != null &&
+                    miniRestoreFrame.frame.videoId == playerState.videoId && !miniRestoreFrame.frame.image.isRecycled) Canvas(
+                    Modifier.fillMaxSize().testTag("watch-mini-entry-bridge"),
+                ) {
+                    val bounds = miniRestoreFrame.bounds.run { android.graphics.RectF(left, top, right, bottom) }
+                    val video = miniRestoreFrame.videoBounds.run { android.graphics.RectF(left, top, right, bottom) }
+                    val radius = com.hhst.youtubelite.player.surface.MiniPlayerLayout.CORNER_DP * density
+                    val clip = android.graphics.Path().apply {
+                        addRoundRect(bounds, radius, radius, android.graphics.Path.Direction.CW)
+                    }
+                    val canvas = drawContext.canvas.nativeCanvas
+                    val saved = canvas.save()
+                    val position = IntArray(2).also(miniBridgeHost::getLocationInWindow)
+                    canvas.translate(-position[0].toFloat(), -position[1].toFloat())
+                    canvas.clipPath(clip)
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    canvas.drawBitmap(miniRestoreFrame.frame.image, null, video, miniPicturePaint)
+                    canvas.restoreToCount(saved)
+                }
+                // Only the picture morphs. The backdrop and labels follow its clock,
+                // without growing a second, page-sized rectangle from the card.
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = pageProgress() }
+                    .background(com.hhst.youtubelite.ui.design.DesignTokens.Background))
                 // The page reports its player slot geometry; the real player
                 // lives in one stable overlay host that interpolates between
                 // that slot and fullscreen, so a mode switch keeps the
@@ -401,7 +519,8 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 val panelsCover = state.searchOpen || state.commentsOpen ||
                     state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
                     state.overlay is WatchOverlay.Feedback
-                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { alpha = if (revealingSource) 0f else 1f }
+                BoxWithConstraints(Modifier.fillMaxSize()
+                    .watchPageContent { pageProgress() * (1f - fullscreenProgress) }
                     .then(if (revealingSource) Modifier.clearAndSetSemantics {} else Modifier)
                     .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
@@ -410,8 +529,8 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     WatchScreen(
                         state = state,
                         onAction = watchViewModel::onAction,
-                        onBack = back,
-                        modifier = Modifier.fillMaxSize().then(
+                        onBack = { onBackPressedDispatcher.onBackPressed() },
+                        modifier = Modifier.fillMaxSize().then(contentPull).then(
                             if (hideWatchControls) Modifier.clearAndSetSemantics {} else Modifier,
                         ),
                         fullscreen = fullscreen,
@@ -420,38 +539,77 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                             Box(slotModifier.onGloballyPositioned { playerSlotBounds.value = it.boundsInRoot() })
                         },
                         sidebarCovered = state.commentsOpen && !fullscreen && !state.searchOpen,
+                        drawBackground = false,
+                        keepPlayerSlotInFullscreen = true,
                     )
                 }
                 val miniStore: com.hhst.youtubelite.player.surface.MiniPlayerStore = koinInject()
                 val hostDensity = androidx.compose.ui.platform.LocalDensity.current
+                // The browse host docks inside safeDrawing above its 56 dp
+                // navigation area. Match both safe edges before handing over,
+                // including a saved mini placement near the top of the window.
+                val miniTopInset = with(hostDensity) {
+                    WindowInsets.safeDrawing.getTop(this).toDp().value.roundToInt()
+                }
+                val miniBottomInset = with(hostDensity) {
+                    56 + WindowInsets.safeDrawing.getBottom(this).toDp().value.toInt()
+                }
                 val slot = playerSlotBounds.value
                 com.hhst.youtubelite.player.surface.MiniPlayerWindow(
                     screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp,
-                    bottomInsetDp = 0,
+                    bottomInsetDp = miniBottomInset,
+                    topInsetDp = miniTopInset,
                     store = miniStore,
-                    showStroke = false,
+                    showStroke = playerState.controlsVisible,
                     onBackgroundTap = playerViewModel::onToggleControls,
-                    mini = playerState.mini && !pip,
+                    mini = playerState.mini && !pip && (!miniHandoffPending || localMiniCollapse),
                     fillsWindow = fullscreen,
                     fullscreenSwipeEnabled = !pip,
+                    fullscreenSwipeHandle = contentFullscreenSwipe,
                     embeddedLeftDp = slot?.let { with(hostDensity) { it.left.toDp().value.toInt() } } ?: 0,
                     embeddedTopDp = slot?.let { with(hostDensity) { it.top.toDp().value.toInt() } } ?: 0,
                     embeddedWidthDp = slot?.let { with(hostDensity) { it.width.toDp().value.toInt() } } ?: 0,
                     embeddedHeightDp = slot?.let { with(hostDensity) { it.height.toDp().value.toInt() } } ?: 0,
-                    onFullscreenSwipe = { target -> playerViewModel.setFullscreenManual(target) },
+                    onFullscreenSwipe = { target ->
+                        if (target) {
+                            if (!playerViewModel.uiState.value.fullscreen) playerViewModel.onFullscreenToggle()
+                        } else playerViewModel.onFullscreenSwipeExit()
+                    },
+                    onContentFullscreenPull = playerViewModel::setFullscreenManual,
+                    onFullscreenSwipeRestore = playerViewModel::onFullscreenSwipeRestore,
                     onMiniSwipe = playerViewModel::onMiniSwipeRequested,
+                    onBoundsChanged = {
+                        playerWindowBounds = it
+                        sheetPlayerBottomPx = if (fullscreen || playerState.mini || pip) 0 else it.bottom.toInt()
+                    },
                     onMiniDragChanged = { revealingSource = it },
                     onMiniDragProgress = { miniDragProgress = it },
+                    onMiniSettled = { bounds ->
+                        afterMiniCollapse?.also { afterMiniCollapse = null }?.invoke(bounds)
+                    },
                     onMiniSwipeFinished = {
-                        finish()
-                        @Suppress("DEPRECATION")
-                        overridePendingTransition(0, 0)
+                        playerViewModel.prepareWindowHandoff {
+                            if (!isFinishing && playerViewModel.uiState.value.mini) {
+                                finish()
+                                @Suppress("DEPRECATION")
+                                overridePendingTransition(0, 0)
+                            }
+                        }
                     },
                     initialBounds = entryBounds,
+                    entryKey = transitionVersion,
+                    entryAnimationReady = watchWindowFocused,
+                    onEntryProgress = { entryProgress.floatValue = it },
+                    onFullscreenProgress = { fullscreenProgress = it },
+                    // Entrances without a thumbnail have no travel clock.
+                    // Reveal once their real player bounds have drawn instead
+                    // of exposing a page with a temporary zero-height slot.
+                    onReadyForDisplay = { playerDrawn.value = true },
                     onDismiss = playerViewModel::onMiniClose,
                     modifier = Modifier.then(if (panelsCover) Modifier.clearAndSetSemantics {} else Modifier),
                 ) {
-                    WatchPlayer(Modifier.fillMaxSize(), back, pip)
+                    WatchPlayer(Modifier.fillMaxSize(), { onBackPressedDispatcher.onBackPressed() }, pip, presentationState = miniHandoffState,
+                        chromeAlpha = { watchPageAlpha(pageProgress()) })
                 }
                 if (state.searchOpen) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     val query = state.draftQuery.trim()
@@ -512,6 +670,12 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        val prepared = com.hhst.youtubelite.navigation.WatchTransition.hasPreparedBackdrop(intent)
+        if (prepared) entryBackdrop = com.hhst.youtubelite.navigation.WatchTransition.backdrop(intent)
+        // Selecting a recommendation reuses this already visible host. Keep
+        // its browse destination without replaying the browse entrance.
+        waitForEntryDraw = prepared
+        transitionVersion++
         val id = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId ?: return
         val provisional = com.hhst.youtubelite.watch.domain.WatchProvisionalStore.consume(id)
         watchViewModel.selectVideo(id, provisional)
@@ -521,6 +685,10 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
 
     override fun onResume() {
         super.onResume()
+        miniHandoffPending = false
+        localMiniCollapse = false
+        afterMiniCollapse = null
+        miniHandoffState = null
         val playback = playerViewModel.uiState.value
         if (!fixtures || playback.visible && playback.mini && playback.videoId == watchViewModel.uiState.value.videoId)
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId)
@@ -528,6 +696,117 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         val prefs = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         watchViewModel.refreshVoteCounts(prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_SHOW_LIKES),
             prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_DISPLAY_DISLIKES))
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        watchWindowFocused = hasFocus
+    }
+
+    private fun applyWatchWindowBackground(color: Int) {
+        if (appliedWindowColor == color) return
+        appliedWindowColor = color
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(color))
+    }
+
+    @Suppress("DEPRECATION")
+    override fun applySystemBarStyle() {
+        val fullscreen = playerViewModel.uiState.value.withWatchPresentation(miniHandoffState).fullscreen || inPip.value
+        if (!fullscreen) {
+            super.applySystemBarStyle()
+            return
+        }
+        // Native resume/appearance callbacks and presentation changes share
+        // this entry, so a temporarily visible fullscreen/PiP bar stays black.
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.BLACK
+    }
+
+    override fun finish() {
+        handoffToMini(collapseBeforeNavigation = true) { prepared ->
+            super.finish()
+            if (prepared) {
+                @Suppress("DEPRECATION")
+                overridePendingTransition(0, 0)
+            }
+        }
+    }
+
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        val target = intent.component?.takeIf { it.packageName == packageName }?.className
+        val browse = target != null && runCatching {
+            com.hhst.youtubelite.ui.ContentActivity::class.java.isAssignableFrom(
+                Class.forName(target, false, classLoader))
+        }.getOrDefault(false)
+        if (browse) handoffToMini { prepared ->
+            super.startActivity(intent, if (prepared) android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle() else options)
+        } else super.startActivity(intent, options)
+    }
+
+    /** Back keeps the live output through its collapse; new pages own their entry. */
+    private fun handoffToMini(collapseBeforeNavigation: Boolean = false, navigate: (Boolean) -> Unit) {
+        if (miniHandoffPending) return
+        val state = playerViewModel.uiState.value
+        val preferences = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
+        val bounds = playerWindowBounds
+        if (!state.visible || state.mini || playerViewModel.currentMediaKind != com.hhst.youtubelite.player.MediaKind.WATCH ||
+            inPip.value || bounds == null ||
+            !preferences.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) {
+            navigate(false)
+            return
+        }
+        miniHandoffPending = true
+        if (collapseBeforeNavigation) {
+            localMiniCollapse = true
+            afterMiniCollapse = { settledBounds ->
+                val settled = playerViewModel.uiState.value
+                if (settled.videoId != state.videoId || !settled.visible || !settled.mini) {
+                    miniHandoffPending = false
+                    localMiniCollapse = false
+                } else {
+                    // Keep decoding into the original surface for the entire
+                    // visible collapse. The cross-window snapshot is only
+                    // needed once the picture has reached its mini placement.
+                    miniHandoffState = settled
+                    playerViewModel.prepareWindowHandoff {
+                        val current = playerViewModel.uiState.value
+                        if (!isDestroyed && !isFinishing && localMiniCollapse &&
+                            current.videoId == state.videoId && current.visible && current.mini) {
+                            com.hhst.youtubelite.navigation.WatchTransition.miniBounds = settledBounds
+                            navigate(true)
+                        } else if (!isDestroyed && !isFinishing) {
+                            miniHandoffPending = false
+                            localMiniCollapse = false
+                            miniHandoffState = null
+                        }
+                    }
+                }
+            }
+            playerViewModel.enterMiniPlayer()
+            return
+        }
+        miniHandoffState = state
+        playerViewModel.prepareWindowHandoff {
+            if (isDestroyed || isFinishing) return@prepareWindowHandoff
+            val current = playerViewModel.uiState.value
+            if (current.videoId != state.videoId) {
+                miniHandoffPending = false
+                miniHandoffState = null
+                return@prepareWindowHandoff
+            }
+            val prepared = current.visible && !current.mini
+            if (prepared) {
+                // Back can arrive while entry is still expanding. PixelCopy
+                // completes asynchronously, so hand off the current rectangle.
+                com.hhst.youtubelite.navigation.WatchTransition.beginMiniEntry(playerWindowBounds ?: bounds)
+                playerViewModel.enterMiniPlayer()
+            }
+            navigate(prepared)
+        }
     }
 
     /**

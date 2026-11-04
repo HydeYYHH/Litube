@@ -70,6 +70,24 @@ class DlnaRemotePlayerAndroidTest {
         }
     }
 
+    @Test fun stalePlayingStatusCannotUndoPauseDuringAQualityReload() = withPlayer { player, _ ->
+        instrumentation.runOnMainSync {
+            player.pause()
+            player.status(DLNACast.PlaybackState.PLAYING, 1_000, 100_000)
+            assertFalse(player.playWhenReady)
+            player.loading(source, 1_000, autoplay = false)
+            player.status(DLNACast.PlaybackState.PLAYING, 1_000, 100_000)
+            assertFalse(player.playWhenReady)
+            player.status(DLNACast.PlaybackState.PAUSED, 1_000, 100_000)
+            assertFalse(player.playWhenReady)
+            player.play()
+            player.status(DLNACast.PlaybackState.PAUSED, 1_000, 100_000)
+            assertTrue(player.playWhenReady)
+            player.status(DLNACast.PlaybackState.PLAYING, 1_000, 100_000)
+            assertTrue(player.isPlaying)
+        }
+    }
+
     @Test fun aTransportErrorStaysIdleUntilReloaded() = withPlayer { player, _ ->
         instrumentation.runOnMainSync {
             player.status(DLNACast.PlaybackState.ERROR, 0, 100_000)

@@ -3,7 +3,6 @@ package com.hhst.youtubelite.library.domain
 import com.hhst.youtubelite.home.domain.FeedItem
 import com.hhst.youtubelite.playlist.domain.PlaylistSummary
 
-/** Account header shown on the library page. */
 data class AccountProfile(val name: String, val handle: String, val avatar: String, val channelId: String)
 
 data class HistoryEntry(
@@ -21,7 +20,6 @@ data class HistoryEntry(
     val removeToken: String? = null,
 )
 
-/** The signed-in library page: account header plus reusable sections. */
 data class YouPage(
     val account: AccountProfile,
     val history: List<HistoryEntry>,
@@ -45,7 +43,6 @@ data class RemovedHistoryEntry(
     val index: Int,
 )
 
-/** One server page of the personal playlist collection. */
 data class PlaylistCollectionPage(val playlists: List<PlaylistSummary>, val nextKey: String? = null)
 
 data class SignInPrompt(val title: String, val message: String, val action: String)
@@ -96,6 +93,8 @@ data class LibraryUiState(
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
     /** Pending local-history removal the user can still undo. */
     val undo: RemovedHistoryEntry? = null,
+    val historyRetrying: Boolean = false,
+    val playlistsRetrying: Boolean = false,
 )
 
 data class HistoryUiState(
@@ -135,7 +134,6 @@ sealed interface LibraryNavigationRequest {
     data class Search(val query: String) : LibraryNavigationRequest
     data object OpenHistory : LibraryNavigationRequest
     data object OpenPlaylists : LibraryNavigationRequest
-    data object OpenNotifications : LibraryNavigationRequest
     data object OpenQueue : LibraryNavigationRequest
     data object OpenDownloads : LibraryNavigationRequest
     data class MenuAction(val videoId: String, val action: HistoryMenuAction) : LibraryNavigationRequest
@@ -151,6 +149,8 @@ sealed interface LibraryNavigationRequest {
 
 sealed interface LibraryAction {
     data object Retry : LibraryAction
+    data object RetryHistoryShelf : LibraryAction
+    data object RetryPlaylistsShelf : LibraryAction
     data object DismissVerification : LibraryAction
     data class OpenVerification(val challengeUrl: String) : LibraryAction
     data object LoadHistoryNext : LibraryAction
@@ -162,7 +162,6 @@ sealed interface LibraryAction {
     data object SignIn : LibraryAction
     data object OpenAccountMenu : LibraryAction
     data class AccountSelected(val action: com.hhst.youtubelite.account.domain.AccountMenuAction) : LibraryAction
-    data object OpenNotifications : LibraryAction
     data object OpenHistory : LibraryAction
     data object OpenPlaylists : LibraryAction
     data object OpenWatchLater : LibraryAction

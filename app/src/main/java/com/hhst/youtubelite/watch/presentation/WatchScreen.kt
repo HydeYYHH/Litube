@@ -11,7 +11,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -70,13 +70,17 @@ fun WatchScreen(
     playerSlot: @Composable (Modifier) -> Unit = { WatchPlayer(it, onBack) },
     menuContent: @Composable () -> Unit = { WatchVideoMenu(state, onAction) },
     sidebarCovered: Boolean = false,
+    drawBackground: Boolean = true,
+    /** An overlay host still needs the embedded destination measured after rotation. */
+    keepPlayerSlotInFullscreen: Boolean = false,
 ) {
-    val mainScroll = rememberLazyListState()
-    val sidebarMainScroll = rememberLazyListState()
-    val compactRelatedScroll = rememberLazyListState()
-    val wideRelatedScroll = rememberLazyListState()
+    val showPlayer = !fullscreen || keepPlayerSlotInFullscreen
+    val mainScroll = rememberSaveable(state.videoId, saver = LazyListState.Saver) { LazyListState() }
+    val sidebarMainScroll = rememberSaveable(state.videoId, saver = LazyListState.Saver) { LazyListState() }
+    val compactRelatedScroll = rememberSaveable(state.videoId, saver = LazyListState.Saver) { LazyListState() }
+    val wideRelatedScroll = rememberSaveable(state.videoId, saver = LazyListState.Saver) { LazyListState() }
     AppTheme {
-        Box(modifier.fillMaxSize().background(DesignTokens.Background).testTag("watch-screen")) {
+        Box(modifier.fillMaxSize().then(if (drawBackground) Modifier.background(DesignTokens.Background) else Modifier).testTag("watch-screen")) {
             BoxWithConstraints(
                 Modifier.fillMaxSize().then(
                     if (state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
@@ -101,11 +105,11 @@ fun WatchScreen(
                                 playerHeight = playerHeight,
                                 pinned = pinned,
                                 includeRelated = false,
-                                showPlayer = !fullscreen,
+                                showPlayer = showPlayer,
                                 playerSlot = playerSlot,
                                 onAction = onAction,
                             )
-                            if (pinned && !fullscreen) {
+                            if (pinned && showPlayer) {
                                 // The player is fixed over the main column only.
                                 Box(
                                     Modifier.align(Alignment.TopStart)
@@ -130,11 +134,11 @@ fun WatchScreen(
                         playerHeight = playerHeight,
                         pinned = pinned,
                         includeRelated = true,
-                        showPlayer = !fullscreen,
+                        showPlayer = showPlayer,
                         playerSlot = playerSlot,
                         onAction = onAction,
                     )
-                    if (pinned && !fullscreen) {
+                    if (pinned && showPlayer) {
                         Box(
                             Modifier.align(Alignment.TopStart)
                                 .padding(top = WatchLayout.TopBarHeight.dp)
@@ -162,6 +166,7 @@ internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit
             onSelect = { index -> onAction(WatchAction.MenuAction(watchVideoMenuActions(state.live, (state.content as? WatchContent.Ready)?.page?.related?.firstOrNull { it.id == overlay.videoId })[index])) },
             tag = "watch-video-menu",
             paneTitle = "Video actions",
+            fillWatchHeight = false,
             header = if (state.menuLoading || state.menuFailed) ({
                 Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
                     if (state.menuLoading) Box(Modifier.testTag("watch-menu-loading")) { com.hhst.youtubelite.home.presentation.LoadingSpinner() }
@@ -175,6 +180,7 @@ internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit
             onDismiss = { onAction(WatchAction.CloseOverlay) },
             onDraftChange = { onAction(WatchAction.SaveDraftChanged(it.title, it.description)) },
             onSubmit = { onAction(WatchAction.SubmitNewPlaylist) },
+            pending = overlay.pending,
         ) else if (overlay.live) SaveToPlaylistSheet(
             playlists = emptyList(),
             onDismiss = { onAction(WatchAction.CloseOverlay) },
@@ -235,6 +241,10 @@ private fun WatchMainBody(
     modifier: Modifier = Modifier,
 ) {
     if (includeRelated) RelatedPaging(state, scroll, onAction)
+    val columns = if (WatchLayout.relatedVariant(viewportWidth, viewportHeight) == WatchRelatedVariant.Grid)
+        WatchLayout.gridColumns(viewportWidth) else 1
+    val related = (state.content as? WatchContent.Ready)?.page?.related.orEmpty()
+    val relatedRows = remember(related, columns) { related.chunked(columns) }
     Box(modifier.fillMaxSize().clipToBounds()) {
     LazyColumn(Modifier.fillMaxSize().testTag("watch-scroll"), state = scroll) {
         item("player") { Spacer(Modifier.height(playerHeight.dp)) }
@@ -253,11 +263,9 @@ private fun WatchMainBody(
                 item("metadata") { WatchMetadata(content.page.video, state, onAction) }
                 item("comments") { WatchComments(content.page.video, onAction) }
                 if (includeRelated) {
-                    val columns = if (WatchLayout.relatedVariant(viewportWidth, viewportHeight) == WatchRelatedVariant.Grid)
-                        WatchLayout.gridColumns(viewportWidth) else 1
                     val grid = columns > 1
                     item("related-start") { Spacer(Modifier.height(if (grid) 8.dp else 12.dp)) }
-                    items(content.page.related.chunked(columns), key = { row -> row.joinToString(":") { it.id } }) { row ->
+                    items(relatedRows, key = { row -> "related:${row.first().id}" }, contentType = { "related-row" }) { row ->
                         WatchRelatedFeed(row, viewportWidth, viewportHeight, onAction)
                     }
                     item("related-end") { Spacer(Modifier.height(8.dp)) }
@@ -326,7 +334,8 @@ private fun WatchProvisionalHeader(known: WatchProvisional) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).testTag("watch-action-avatar"), contentAlignment = Alignment.Center) {
-                Artwork(known.avatar.orEmpty(), Modifier.size(32.dp).clip(CircleShape))
+                Artwork(known.avatar.orEmpty(),
+                    Modifier.size(32.dp).clip(CircleShape))
             }
             AppText(known.channel, Modifier.weight(1f).padding(end = 8.dp).testTag("watch-channel-name"),
                 size = 14, line = 20, weight = FontWeight.Medium, maxLines = 2)
@@ -425,6 +434,7 @@ private fun WatchError(onAction: (WatchAction) -> Unit) {
 
 @Composable
 private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (WatchAction) -> Unit) {
+    val motionScale = LocalMotionScale.current
     Column(Modifier.fillMaxWidth().testTag("watch-metadata")) {
         Column(Modifier.padding(horizontal = 3.dp)) {
             Column(
@@ -433,7 +443,10 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
                 WatchTitle(rememberDeArrowTitle(video.id, video.title))
                 Spacer(Modifier.height(6.dp))
                 WatchMetaRow(video, state, onAction)
-                if (state.descriptionExpanded) {
+                androidx.compose.animation.AnimatedVisibility(state.descriptionExpanded,
+                    enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(motionDuration(AppMotion.ExpandMs, motionScale))),
+                    exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(motionDuration(AppMotion.CollapseMs, motionScale)))) {
+                    Column {
                     Spacer(Modifier.height(12.dp))
                     WatchDescription(
                         video.description,
@@ -441,11 +454,12 @@ private fun WatchMetadata(video: WatchVideo, state: WatchUiState, onAction: (Wat
                         onLink = { onAction(WatchAction.OpenDescriptionLink(it)) },
                         modifier = Modifier.fillMaxWidth().testTag("watch-description"),
                     )
+                    }
                 }
             }
             Spacer(Modifier.height(3.dp))
         }
-        WatchActionBar(video, state.actionPending, state.live, onAction)
+        WatchActionBar(video, state.actionPending, state.pendingVideoAction, state.live, onAction)
     }
 }
 
@@ -474,7 +488,6 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (video.live) {
-            // The live badge replaces the age text for currently-live entries.
             Box(Modifier.padding(end = 8.dp).background(DesignTokens.Red, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp).testTag("watch-live-badge")) {
                 AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
             }
@@ -495,7 +508,7 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
 }
 
 @Composable
-private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, onAction: (WatchAction) -> Unit) {
+private fun WatchActionBar(video: WatchVideo, pending: Boolean, pendingAction: WatchAction?, live: Boolean, onAction: (WatchAction) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -508,8 +521,8 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                     size = 14, line = 20, weight = FontWeight.Medium, maxLines = 2)
             }
             SubscribeButton(video.subscribed, { onAction(WatchAction.Subscribe) },
-                Modifier.testTag("watch-action-subscribe"), enabled = video.channelId.isNotBlank(),
-                pending = pending, onDarkSurface = false)
+                Modifier.testTag("watch-action-subscribe"), enabled = video.channelId.isNotBlank() && !pending,
+                pending = pendingAction == WatchAction.Subscribe, onDarkSurface = false, channelId = video.channelId)
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("watch-actions")
             .padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -528,6 +541,7 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                     label = when (index) { 0 -> video.likeCount ?: video.likes.removeSuffix(" likes").takeIf { it.isNotBlank() }; 1 -> video.dislikeCount; else -> null },
                     selected = (index == 0 && video.rating == VideoRating.Like) || (index == 1 && video.rating == VideoRating.Dislike),
                     enabled = index > 1 || !pending,
+                    pending = pendingAction == action,
                     testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "save", "open-with", "share", "report")[index]}",
                     onClick = { onAction(action) })
             }
@@ -544,6 +558,7 @@ private fun WatchSlotButton(
     label: String? = null,
     selected: Boolean = false,
     enabled: Boolean = true,
+    pending: Boolean = false,
 ) {
     val surfaceHeight = with(LocalDensity.current) { maxOf(36.dp, 20.sp.toDp() + 12.dp) }
     val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
@@ -557,9 +572,10 @@ private fun WatchSlotButton(
         contentAlignment = Alignment.Center,
     ) {
         Row(Modifier.heightIn(min = surfaceHeight).clip(RoundedCornerShape(18.dp))
-            .background(if (pressed || selected) DesignTokens.Ghost else DesignTokens.Surface)
+            .background(if (selected) DesignTokens.Red.copy(alpha = 0.12f) else if (pressed) DesignTokens.Ghost else DesignTokens.Surface)
             .testTag("$testTag-surface").padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppIcon(icon, Modifier.testTag("$testTag-icon"))
+            if (pending) com.hhst.youtubelite.ui.design.ActionProgress()
+            else AppIcon(icon, Modifier.testTag("$testTag-icon"), color = if (selected) DesignTokens.Red else DesignTokens.Ink)
             if (!label.isNullOrBlank()) {
                 Spacer(Modifier.width(8.dp))
                 AppText(label, Modifier.testTag("$testTag-count"), size = 14, line = 20, maxLines = 1)
@@ -571,9 +587,10 @@ private fun WatchSlotButton(
 @Composable
 private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
     val liveChat = video.live && !video.chatKey.isNullOrBlank()
+    val chatFailed = video.live && video.chatLookupFailed
     // A current live stream without a chat continuation has no usable chat: the
     // card says so instead of offering an ordinary comments panel in its place.
-    val chatUnavailable = video.live && video.chatKey.isNullOrBlank()
+    val chatUnavailable = video.live && video.chatKey.isNullOrBlank() && !chatFailed
     Column(
         Modifier.fillMaxWidth().testTag("watch-comments").heightIn(min = WatchLayout.CommentsSectionHeight.dp).padding(bottom = 13.dp),
     ) {
@@ -585,25 +602,28 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(DesignTokens.Surface)
                 .testTag("watch-comments-card")
-                .clickable(enabled = !chatUnavailable, role = Role.Button) { onAction(WatchAction.OpenComments(video.id)) }
+                .clickable(enabled = !chatUnavailable, role = Role.Button) {
+                    onAction(if (chatFailed) WatchAction.Retry else WatchAction.OpenComments(video.id))
+                }
                 .padding(12.dp),
         ) {
             Column {
                 Row(Modifier.heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppText(if (liveChat || chatUnavailable) {
+                    AppText(if (video.live) {
                         stringResource(R.string.chat_live)
                     } else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
                     Spacer(Modifier.width(4.dp))
-                    if (!liveChat && !chatUnavailable) AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
+                    if (!video.live) AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (!liveChat && !chatUnavailable && video.commentsStatus == WatchCommentsStatus.Ready && video.topComment.text.isNotBlank()) {
+                    if (!video.live && video.commentsStatus == WatchCommentsStatus.Ready && video.topComment.text.isNotBlank()) {
                         Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
                         Spacer(Modifier.width(12.dp))
                     }
                     AppText(when {
                         liveChat -> stringResource(R.string.chat_join_live)
+                        chatFailed -> stringResource(R.string.chat_load_failed)
                         chatUnavailable -> stringResource(R.string.chat_unavailable)
                         else -> when (video.commentsStatus) {
                             WatchCommentsStatus.Loading -> "Loading comments…"
@@ -645,6 +665,7 @@ private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: 
             WatchContent.Failed -> Unit
             is WatchContent.Ready -> {
                 val related = content.page.related
+                val rows = remember(related) { related.chunked(2) }
                 if (wide) {
                     LazyColumn(
                         Modifier.fillMaxWidth().padding(start = 8.dp),
@@ -652,7 +673,7 @@ private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: 
                         contentPadding = PaddingValues(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        items(related.chunked(2), key = { row -> row.joinToString("-") { it.id } }) { row ->
+                        items(rows, key = { row -> "related:${row.first().id}" }, contentType = { "related-row" }) { row ->
                             Row(Modifier.fillMaxWidth()) {
                                 row.forEach { SidebarCell(it, 246f, 238f, onAction) }
                             }
@@ -666,7 +687,7 @@ private fun WatchSidebarPane(state: WatchUiState, viewportWidth: Float, scroll: 
                         contentPadding = PaddingValues(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        items(related, key = { it.id }) { item ->
+                        items(related, key = { it.id }, contentType = { "related" }) { item ->
                             SidebarCell(item, 240f, 240f, onAction)
                         }
                         item("pagination") { RelatedFooter(state, onAction) }
@@ -953,7 +974,7 @@ private fun RelatedDetailsAvatar(item: WatchRelated, onAction: (WatchAction) -> 
         .clickable(role = Role.Button) { onAction(WatchAction.OpenChannel(item.channelId)) }
             .appDescription(R.string.a11y_go_to_channel, item.channel),
     ) {
-        Artwork(item.avatar ?: item.artwork, Modifier.fillMaxSize())
+        Artwork(item.avatar.orEmpty(), Modifier.fillMaxSize())
     }
 }
 

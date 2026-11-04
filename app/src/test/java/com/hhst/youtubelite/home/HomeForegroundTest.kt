@@ -21,11 +21,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Foreground quiet-refresh coverage: one refresh per report signal or staleness
- * window, the visible feed never drops to full-page Loading, and honest empty
- * states stay put.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeForegroundTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
@@ -74,7 +69,6 @@ class HomeForegroundTest {
         assertEquals(2, loads)
         // The feed stayed painted the whole time: no full-page Loading flash.
         assertTrue(vm.uiState.value.content is HomeContent.Feed)
-        // The same signal does not refresh twice.
         vm.onForeground()
         advanceUntilIdle()
         assertEquals(2, loads)
@@ -91,7 +85,6 @@ class HomeForegroundTest {
         vm.onForeground()
         advanceUntilIdle()
         assertEquals(2, loads)
-        // The refresh reset the clock: an immediate second entry does nothing.
         vm.onForeground()
         advanceUntilIdle()
         assertEquals(2, loads)
@@ -112,7 +105,6 @@ class HomeForegroundTest {
         assertEquals(2, loads)
         // The empty card stayed painted the whole time (quiet re-check).
         assertTrue(vm.uiState.value.content is HomeContent.Empty)
-        // The same signal does not refresh twice.
         vm.onForeground()
         advanceUntilIdle()
         assertEquals(2, loads)
@@ -147,16 +139,15 @@ class HomeForegroundTest {
         signal += 1
         vm.onForeground()
         runCurrent()
-        assertEquals(2, loads) // the quiet refresh started
+        assertEquals(2, loads)
         vm.onForeground()
         signal += 1
         vm.onForeground()
         runCurrent()
-        assertEquals(2, loads) // a refreshing feed never doubles its request
+        assertEquals(2, loads)
         gate.complete(Unit)
         advanceUntilIdle()
-        // The signal that arrived mid-load merged as a pending revision and is
-        // consumed by one quiet re-check once the busy request finished.
+        // Signals arriving mid-load merge into one pending re-check once the busy request finishes.
         assertEquals(3, loads)
         assertTrue(vm.uiState.value.content is HomeContent.Feed)
     }

@@ -21,12 +21,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
-/**
- * Control surface the [DlnaController] needs from its remote player. The
- * interface keeps the controller testable without a Looper-backed player.
- */
+/** Control surface [DlnaController] needs from its remote player; the interface keeps the
+ *  controller testable without a Looper-backed player. */
 interface DlnaPlayerDelegate {
-    fun loading(source: CastSource, startMs: Long)
+    fun loading(source: CastSource, startMs: Long, autoplay: Boolean = true)
     fun status(transport: DLNACast.PlaybackState?, position: Long?, duration: Long?)
     fun reset()
     fun expectsPlayback(): Boolean
@@ -34,11 +32,9 @@ interface DlnaPlayerDelegate {
 }
 
 /**
- * Media3 adapter over a DLNA renderer: the same attach point as
- * [CastRemotePlayer], so controls, notification and queue reuse the existing
- * PlaybackApi. State arrives from the controller's 1 s poll ([status]); DLNA
- * has no playback-rate control, so COMMAND_SET_SPEED_AND_PITCH is not
- * advertised and the engine never offers speed changes on this route.
+ * Media3 adapter over a DLNA renderer, the same attach point as [CastRemotePlayer]. State
+ * arrives from the controller's 1 s poll ([status]). This adapter does not implement renderer
+ * playback-rate commands, so COMMAND_SET_SPEED_AND_PITCH is not advertised.
  */
 @UnstableApi
 class DlnaRemotePlayer(
@@ -53,12 +49,13 @@ class DlnaRemotePlayer(
     private var state = STATE_IDLE
     private var playing = false
     private var wanted = false
+    private var pendingPlayWhenReady: Boolean? = null
     private var repeat = REPEAT_MODE_OFF
     private var error: PlaybackException? = null
     private var source: CastSource? = null
     private var generation = 0L
 
-    override fun loading(source: CastSource, startMs: Long) {
+    override fun loading(source: CastSource, startMs: Long, autoplay: Boolean) {
         generation++
         this.source = source
         item = MediaItem.Builder().setMediaId(source.videoId)
@@ -70,13 +67,13 @@ class DlnaRemotePlayer(
         durationMs = source.durationSec * 1000L
         sampledAt = SystemClock.elapsedRealtime()
         playing = false
-        wanted = true
+        wanted = autoplay
+        pendingPlayWhenReady = autoplay
         error = null
         state = STATE_BUFFERING
         invalidateState()
     }
 
-    /** Poll feed: one renderer transport + progress sample. */
     override fun status(transport: DLNACast.PlaybackState?, position: Long?, duration: Long?) {
         if (item == null || error != null) return
         if (position != null && position >= 0) {
@@ -88,14 +85,20 @@ class DlnaRemotePlayer(
             if (position == null) positionMs = currentPosition()
             sampledAt = SystemClock.elapsedRealtime()
             playing = transport == DLNACast.PlaybackState.PLAYING
-            if (transport == DLNACast.PlaybackState.PLAYING) wanted = true
-            if (transport == DLNACast.PlaybackState.PAUSED) wanted = false
+            val observed = when (transport) {
+                DLNACast.PlaybackState.PLAYING -> true
+                DLNACast.PlaybackState.PAUSED -> false
+                else -> null
+            }
+            if (observed != null) {
+                if (observed == pendingPlayWhenReady) pendingPlayWhenReady = null
+                wanted = pendingPlayWhenReady ?: observed
+            }
         }
         state = when (transport) {
             DLNACast.PlaybackState.PLAYING, DLNACast.PlaybackState.PAUSED -> STATE_READY
             DLNACast.PlaybackState.BUFFERING -> STATE_BUFFERING
-            // STOPPED/IDLE only mean ended when the position is at the tail;
-            // otherwise the controller treats it as a remote stop echo.
+            // STOPPED/IDLE mean ended only at the tail; otherwise the controller treats it as a remote stop echo.
             DLNACast.PlaybackState.STOPPED, DLNACast.PlaybackState.IDLE ->
                 if (reachedEnd()) STATE_ENDED else state
             DLNACast.PlaybackState.ERROR -> {
@@ -113,6 +116,7 @@ class DlnaRemotePlayer(
 
     override fun reset() {
         generation++
+        pendingPlayWhenReady = null
         playing = false; wanted = false; item = null; source = null
         state = STATE_IDLE; error = null
         invalidateState()
@@ -153,6 +157,7 @@ class DlnaRemotePlayer(
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
         wanted = playWhenReady
+        pendingPlayWhenReady = playWhenReady
         if (playWhenReady) {
             if (state == STATE_ENDED) reload(0) else command { engine.play() }
         } else command { engine.pause() }

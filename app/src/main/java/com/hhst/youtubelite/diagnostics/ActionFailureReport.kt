@@ -75,7 +75,6 @@ data class ActionFailureReport(val id: String, val operation: String, val summar
     }
 }
 
-/** Builds the notice for a failed write and files the report in the diagnostics log. */
 fun writeFailureNotice(
     operation: String,
     error: Throwable,

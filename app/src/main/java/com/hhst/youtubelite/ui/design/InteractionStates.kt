@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.Dp
  * Shared press/hover/focus state layer. Pressed responds immediately; released
  * states fade back over ~120ms without scaling or moving the content. Keyboard
  * focus gets its own visible layer so focus never lands invisibly.
- *
  */
 fun Modifier.appStateLayer(
     interactions: MutableInteractionSource,

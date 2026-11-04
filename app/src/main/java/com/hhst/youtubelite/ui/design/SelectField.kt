@@ -2,7 +2,6 @@ package com.hhst.youtubelite.ui.design
 
 import android.app.AlertDialog
 import androidx.core.graphics.drawable.toDrawable
-import android.view.ContextThemeWrapper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -18,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.hhst.youtubelite.ui.theme.appDialogContext
 
 @Composable
 fun <T> SelectField(
@@ -69,8 +70,7 @@ fun <T> SelectField(
             AppIcon(AppIcon.ChevronDown, Modifier.size(24.dp).testTag("$tag-icon"))
         }
         if (expanded) DisposableEffect(context, options, selected, palette) {
-            val pickerContext = ContextThemeWrapper(context,
-                if (dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert)
+            val pickerContext = context.appDialogContext(darkTheme = dark)
             val scale = pickerContext.resources.displayMetrics.density
             val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, options.map(labelOf)) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
@@ -91,7 +91,7 @@ fun <T> SelectField(
                 .create()
             dialog.show()
             dialog.listView.setPadding(0, 0, 0, 0)
-            dialog.listView.divider = android.graphics.Color.rgb(221, 221, 221).toDrawable()
+            dialog.listView.divider = palette.border.toArgb().toDrawable()
             dialog.listView.dividerHeight = scale.toInt().coerceAtLeast(1)
             onDispose {
                 dialog.setOnDismissListener(null)

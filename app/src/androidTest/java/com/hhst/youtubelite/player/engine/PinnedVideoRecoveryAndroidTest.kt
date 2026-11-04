@@ -29,16 +29,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PinnedVideoRecoveryAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
 
-    @Test fun repeated403ReleasesOnlyTheCurrentVideoPinAndActuallyDecodesTheBackup() = exercise()
-    @Test fun sourceStillRefusedAfterPinRescueTerminatesWithoutARefreshLoop() = exercise(persistent = true)
+    @Test fun refreshedSourceDecodesAtTheManualHeight() = exercise()
+    @Test fun repeated403KeepsManualQualityAndStopsAtTheRecoveryBudget() = exercise(persistent = true)
+    @Test fun retryKeepsManualQualityWithRememberQualityDisabled() = exercise(persistent = true, remember = false)
+    @Test fun missingManualHeightAutomaticallyAlignsAndKeepsPlaying() = exercise(missingHeight = true)
+    @Test fun shortsMissingManualHeightAutomaticallyAlignsAndKeepsPlaying() = exercise(missingHeight = true, shorts = true)
+    @Test fun rememberedMissingHeightAutomaticallyAlignsAtStartup() = exercise(missingHeight = true, rememberedMissing = true)
+    @Test fun shortsRememberedMissingHeightAutomaticallyAlignsAtStartup() =
+        exercise(missingHeight = true, rememberedMissing = true, shorts = true)
 
-    private fun exercise(persistent: Boolean = false) {
+    private fun exercise(persistent: Boolean = false, remember: Boolean = true, missingHeight: Boolean = false,
+                         rememberedMissing: Boolean = false, shorts: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
         val low = instrumentation.context.assets.open("player/quality-recovery/360.ts").use { it.readBytes() }
         val high = instrumentation.context.assets.open("player/quality-recovery/720.ts").use { it.readBytes() }
         val refused = AtomicInteger()
         val allowHigh = AtomicBoolean()
+        val refreshes = AtomicInteger()
         val server = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
@@ -46,15 +54,17 @@ class PinnedVideoRecoveryAndroidTest {
                     return when (path) {
                         "/high.ts" -> if (allowHigh.get()) MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(high))
                             else { refused.incrementAndGet(); MockResponse().setResponseCode(403) }
-                        "/low.ts" -> if (persistent && refused.get() > 0) MockResponse().setResponseCode(403)
+                        "/low.ts" -> if (persistent && refused.get() > 0 && !allowHigh.get()) MockResponse().setResponseCode(403)
                             else MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(low))
                         "/master.m3u8" -> MockResponse().setBody("""
                             #EXTM3U
                             #EXT-X-STREAM-INF:BANDWIDTH=300000,CODECS="avc1.42c01e,mp4a.40.2",RESOLUTION=640x360,FRAME-RATE=24
                             low.m3u8
-                            #EXT-X-STREAM-INF:BANDWIDTH=900000,CODECS="avc1.42c01f,mp4a.40.2",RESOLUTION=1280x720,FRAME-RATE=24
+                        """.trimIndent() + if (missingHeight) "" else """
+
+                            #EXT-X-STREAM-INF:BANDWIDTH=900000000,CODECS="avc1.42c01f,mp4a.40.2",RESOLUTION=1280x720,FRAME-RATE=24
                             high.m3u8
-                        """.trimIndent())
+                        """.trimIndent().let { "\n$it" })
                         else -> MockResponse().setBody("""
                             #EXTM3U
                             #EXT-X-TARGETDURATION:21
@@ -73,7 +83,33 @@ class PinnedVideoRecoveryAndroidTest {
                 Format(itag = 136, height = 720, videoOnly = true))
         }
         val cache = streamCache(stream)
+        val session = YoutubeWebSession("pin-rescue", WebAccount.ANONYMOUS, 0, null, null, null,
+            "visitor", "fixture-UA", 0, null, "fixture", kotlinx.serialization.json.JsonObject(emptyMap()), { "" })
+        val host = object : PlaybackHost {
+            override fun context(videoId: String, fresh: Boolean, catalog: Boolean, demand: PlaybackDemand?,
+                                 taskCurrent: () -> Boolean, deadlineNanos: Long, playbackPriority: Boolean,
+                                 diagnosticContext: com.hhst.youtubelite.diagnostics.DiagnosticContext) =
+                ExtractionContext(session, object : ExtractionTransport {
+                    override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse =
+                        error("Unexpected extraction HTTP")
+                    override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray): PageResponse =
+                        error("Unexpected extraction HTTP")
+                }, false, catalog, playbackPriority, "", deadlineNanos, taskCurrent, ExtractionDiagnostics())
+            override fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean): MscPlayback.Resolved {
+                assertTrue(fresh)
+                refreshes.incrementAndGet()
+                if (!persistent) allowHigh.set(true)
+                return MscPlayback.Resolved(Metadata().apply { id = videoId; duration = 20 }, stream)
+            }
+            override fun chapters(videoId: String, context: ExtractionContext): List<Chapter> = emptyList()
+            override fun deferredClients(videoId: String): Set<StreamClient> = emptySet()
+            override fun cache(inner: Cache, context: () -> ExtractionContext): Cache = inner
+            override fun invalidateStream(videoId: String) = Unit
+            override fun scopeHint() = "pin-rescue"
+            override fun recoveryScope() = "pin-rescue"
+        }
         val state = MemoryJsonCache()
+        if (rememberedMissing) state.put("player:quality", "1080p60", 60_000)
         val prefs = GlobalContext.get().get<ExtensionManager>()
         val previous = listOf(PreferenceKeys.SKIP_SPONSORS, PreferenceKeys.SKIP_SELF_PROMO,
             PreferenceKeys.SKIP_POI_HIGHLIGHT, PreferenceKeys.REMEMBER_QUALITY).associateWith(prefs::isEnabled)
@@ -96,53 +132,85 @@ class PinnedVideoRecoveryAndroidTest {
             assertTrue("$message: ${engine.snapshot.value}", completed)
         }
         try {
-            previous.keys.forEach { prefs.setEnabled(it, it == PreferenceKeys.REMEMBER_QUALITY) }
+            previous.keys.forEach { prefs.setEnabled(it, remember && it == PreferenceKeys.REMEMBER_QUALITY) }
             instrumentation.runOnMainSync {
-                engine = PlaybackEngine(app, Extractor(cache, scope),
+                engine = PlaybackEngine(app, Extractor(cache, scope, host),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), state, prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
                 engine.setVideoSurface(surface)
+                engine.setShortsMode(shorts)
                 engine.play("https://www.youtube.com/watch?v=pinRescue01&t=5")
+            }
+            if (rememberedMissing) {
+                await("Remembered missing quality must align without failing playback") {
+                    engine.snapshot.value.qualityLabel == "360p" && engine.snapshot.value.error == null
+                }
+                assertEquals("1080p60", state.values["player:quality"])
             }
             await("Initial Auto did not render 360p") {
                 player!!.videoDecoderCounters?.ensureUpdated()
                 player!!.isPlaying && player!!.videoFormat?.height == 360 && (player!!.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0
             }
             instrumentation.runOnMainSync {
-                // Model the already-completed fresh-source attempt; this fixture isolates the
-                // subsequent real Media3 403 and pin rescue from the media API and session refresh.
-                engine.javaClass.getDeclaredField("reExtractAttempts").apply { isAccessible = true }.setInt(engine, 1)
                 engine.setQuality("720p")
             }
-            if (persistent) {
-                await("A source refused after pin rescue must terminate") { engine.snapshot.value.error != null }
-                assertEquals("720p", state.values["player:quality"])
-                assertTrue("The retry budget must bound failed media loads", refused.get() in 1..4)
+            if (missingHeight) {
+                for (label in listOf("720p", "144p", "360p60")) {
+                    instrumentation.runOnMainSync { engine.setQuality(label) }
+                    await("Missing quality $label must align to the supported track") {
+                        engine.snapshot.value.prepared && engine.snapshot.value.error == null &&
+                            engine.snapshot.value.qualityLabel == "360p" && player!!.isPlaying && player!!.videoFormat?.height == 360
+                    }
+                }
                 instrumentation.runOnMainSync {
-                    assertFalse(engine.snapshot.value.prepared)
-                    assertTrue(engine.javaClass.getDeclaredField("videoPinRescued").apply { isAccessible = true }.getBoolean(engine))
+                    assertNull(engine.snapshot.value.failureReport)
+                    assertTrue(player!!.currentPosition >= 5_000)
+                    assertEquals(0, refused.get())
+                    assertEquals(0, refreshes.get())
+                    engine.play("https://www.youtube.com/watch?v=pinNext0001&t=5")
+                }
+                await("The next video must also align the saved quality") {
+                    engine.snapshot.value.videoId == "pinNext0001" && engine.snapshot.value.prepared &&
+                        engine.snapshot.value.error == null && engine.snapshot.value.qualityLabel == "360p" && player!!.isPlaying
+                }
+                instrumentation.runOnMainSync { engine.setQuality(null) }
+                await("Auto must still release the aligned quality") {
+                    engine.snapshot.value.prepared && engine.snapshot.value.error == null &&
+                        engine.snapshot.value.qualityLabel == null && player!!.isPlaying && player!!.videoFormat?.height == 360
                 }
                 return
             }
-            await("The fresh source's refused pin did not recover") {
-                player!!.videoDecoderCounters?.ensureUpdated()
-                refused.get() > 0 && engine.snapshot.value.qualityLabel == null && player!!.isPlaying &&
-                    player!!.videoFormat?.height == 360 && (player!!.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0
+            if (persistent) {
+                await("Repeated refusal must stop without releasing the manual height") { engine.snapshot.value.error != null }
+                assertTrue("The retry budget must bound failed media loads", refused.get() in 1..4)
+                instrumentation.runOnMainSync {
+                    assertFalse(engine.snapshot.value.prepared)
+                    assertEquals("720p", engine.snapshot.value.qualityLabel)
+                    assertEquals(720, engine.prefetchDemand("pinRescue01").height)
+                    allowHigh.set(true)
+                    engine.retry()
+                }
             }
-            assertEquals("Persisted preference must survive the temporary rescue", "720p", state.values["player:quality"])
+            await("Recovery must decode the requested height") {
+                player!!.videoDecoderCounters?.ensureUpdated()
+                refused.get() > 0 && engine.snapshot.value.qualityLabel == "720p" && player!!.isPlaying &&
+                    player!!.videoFormat?.height == 720 && (player!!.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0
+            }
+            assertEquals(if (persistent) 2 else 1, refreshes.get())
+            assertEquals(if (remember) "720p" else null, state.values["player:quality"])
             instrumentation.runOnMainSync {
                 assertNull(engine.snapshot.value.error)
                 assertTrue(player!!.currentPosition >= 5_000)
-                assertTrue(engine.javaClass.getDeclaredField("videoPinRescued").apply { isAccessible = true }.getBoolean(engine))
-                engine.pause()
-                allowHigh.set(true)
                 engine.play("https://www.youtube.com/watch?v=pinNext0001&t=5")
             }
-            await("The next video should honor the remembered manual quality") {
-                player!!.videoDecoderCounters?.ensureUpdated()
-                engine.snapshot.value.qualityLabel == "720p" && player!!.isPlaying && player!!.videoFormat?.height == 720 &&
-                    (player!!.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0
+            await("New video must follow the remember preference") {
+                player!!.isPlaying && player!!.videoFormat?.height == (if (remember) 720 else 360) &&
+                    engine.snapshot.value.qualityLabel == (if (remember) "720p" else null)
+            }
+            instrumentation.runOnMainSync { engine.setQuality(null) }
+            await("Only an explicit Auto selection releases the manual height") {
+                engine.snapshot.value.qualityLabel == null && player!!.isPlaying && player!!.videoFormat?.height == 360
             }
         } finally {
             instrumentation.runOnMainSync { player?.let { engine.stop(); it.release() } }

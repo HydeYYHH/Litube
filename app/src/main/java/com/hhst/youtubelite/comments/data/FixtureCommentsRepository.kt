@@ -9,7 +9,7 @@ import com.hhst.youtubelite.comments.domain.CommentsRepository
 import java.io.IOException
 import kotlinx.coroutines.delay
 
-/** Packaged English samples served in two pages. No network, account or session access. */
+/** Packaged English sample threads; no network, account or session access. */
 class FixtureCommentsRepository(
     private val scenario: CommentsScenario = CommentsScenario.Content,
 ) : CommentsRepository {

@@ -148,6 +148,9 @@
     <string name="clear_queue">Clear queue</string>
     <string name="queue_autoplay">Autoplay</string>
     <string name="player_error">Could not play this video</string>
+    <string name="player_network_offline">No network connection. Connect to Wi-Fi or mobile data, then retry.</string>
+    <string name="player_network_timeout">Connection to YouTube timed out. Check your network or proxy settings, then retry.</string>
+    <string name="player_network_unreachable">Cannot connect to YouTube. Check your network or proxy settings, then retry.</string>
     <string name="retry">Retry</string>
     <string name="load_more">Load more</string>
     <string name="comments_title">Comments</string>
@@ -212,7 +215,10 @@
     <string name="copied">Copied</string>
     <string name="link_copied">Link copied</string>
     <string name="sign_in_no_browser">No browser is available. Open the address on another device.</string>
-    <string name="post_voting_unavailable">Voting on posts isn\'t available yet.</string>
+    <string name="post_auth_close">Cancel post sign-in</string>
+    <string name="post_auth_explanation">Sign in to YouTube as %1$s to vote and comment on posts. Return here and tap Continue when signed in. Your comment draft is kept.</string>
+    <string name="post_auth_webview_update">Update Android System WebView to enable post sign-in.</string>
+    <string name="post_auth_failed">Could not verify post sign-in. Check the account and connection, then try Continue again.</string>
     <string name="playlist_too_large_to_download">This playlist is too large to download at once</string>
     <string name="copy_all">Copy all</string>
     <string name="queue_now_playing">Now playing</string>
@@ -381,6 +387,7 @@
     <string name="chat_replay">Chat replay</string>
     <string name="chat_join_live">Join the live chat</string>
     <string name="chat_unavailable">Live chat isn&#8217;t available for this stream.</string>
+    <string name="chat_load_failed">Couldn&#8217;t load live chat. Tap to retry.</string>
     <string name="chat_replay_available">Chat replay is available</string>
     <string name="chat_ended">Chat has ended</string>
     <string name="chat_replay_empty">No chat replay is available</string>
@@ -399,7 +406,6 @@
     <string name="a11y_dislike_post">Dislike post</string>
     <string name="a11y_share_playlist">Share playlist</string>
     <string name="a11y_save_playlist">Save playlist</string>
-    <string name="a11y_notifications">Notifications</string>
     <string name="a11y_history_settings">History settings</string>
     <string name="a11y_send_message">Send message</string>
     <string name="a11y_explore">Explore</string>
@@ -464,4 +470,19 @@
     <string name="subscriptions_title">Subscriptions</string>
     <string name="all_subscriptions">All subscriptions</string>
     <string name="subscription_new_activity">%1$s, new activity</string>
+    <string name="subscription_visit_channel">Visit channel</string>
+    <string name="chat_auth_close">Cancel chat sign-in</string>
+    <string name="chat_auth_explanation">Sign in to YouTube as %1$s to post in live chat. Your existing app login is preserved. Return here and tap Continue when signed in.</string>
+    <string name="chat_auth_continue">Continue with this account</string>
+    <string name="chat_auth_webview_update">Update Android System WebView to enable separate chat sign-in.</string>
+    <string name="chat_auth_finish_signin">Finish signing in to YouTube first, then tap Continue.</string>
+    <string name="chat_auth_account_mismatch">Choose the same YouTube account and channel used in the app, then tap Continue.</string>
+    <string name="chat_auth_failed">Could not verify chat sign-in. Check the signed-in account and your connection, then try Continue again.</string>
+    <string name="action_in_progress">Working…</string>
+    <string name="unsubscribe">Unsubscribe</string>
+    <string name="unsubscribe_title">Unsubscribe from this channel?</string>
+    <string name="unsubscribe_message">Videos from this channel will no longer appear in your subscriptions.</string>
+    <string name="player_payment_required">This video requires payment to watch.</string>
+    <string name="player_verification_required">YouTube requires verification for the current network or session. Please try again later. If this continues, check your network or proxy and account sign-in status.</string>
+    <string name="action_expand_miniplayer">Expand mini player</string>
 </resources>

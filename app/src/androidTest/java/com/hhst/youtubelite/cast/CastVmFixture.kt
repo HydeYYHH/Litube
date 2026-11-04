@@ -26,18 +26,24 @@ internal object CastVmFixture {
     val root get() = certificate("root.der")
     val tls get() = certificate("tls.der")
     private val key get() = KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(bytes("device.pk8")))
-    fun sign(data: ByteArray) = Signature.getInstance("SHA256withRSA").run { initSign(key); update(data); sign() }
-    fun response(nonce: ByteArray, wrongSignature: Boolean = false, revoked: Boolean = false): ByteArray {
+    fun sign(data: ByteArray, algorithm: String = "SHA256withRSA") =
+        Signature.getInstance(algorithm).run { initSign(key); update(data); sign() }
+    fun response(nonce: ByteArray, wrongSignature: Boolean = false, revoked: Boolean = false, legacy: Boolean = false): ByteArray {
         val hash = MessageDigest.getInstance("SHA-256").digest(certificate("device.der").publicKey.encoded)
         val tbs = if (revoked) Proto.encode(1 to 0L, 2 to (fixedTime.time / 1000 - 60),
             3 to (fixedTime.time / 1000 + 60), 4 to hash)
         else Proto.encode(1 to 0L, 2 to (fixedTime.time / 1000 - 60), 3 to (fixedTime.time / 1000 + 60))
         val bundle = Proto.encode(1 to Proto.encode(1 to tbs, 2 to bytes("device.der"), 3 to sign(tbs)))
-        val signature = sign(nonce + tls.encoded).also { if (wrongSignature) it[0] = (it[0].toInt() xor 1).toByte() }
+        val signature = sign(if (legacy) tls.encoded else nonce + tls.encoded,
+            if (legacy) "SHA1withRSA" else "SHA256withRSA")
+            .also { if (wrongSignature) it[0] = (it[0].toInt() xor 1).toByte() }
+        if (legacy) return Proto.encode(1 to signature, 2 to bytes("device.der"), 7 to bundle)
         return Proto.encode(1 to signature, 2 to bytes("device.der"), 4 to 1L,
             5 to nonce, 6 to 1L, 7 to bundle)
     }
     fun context(): SSLContext {
+        // receiver.p12 uses the legacy PKCS12 MAC/PBE encoding supported by API 24–28.
+        // Its TLS certificate and key match tls.der; this is test material only.
         val store = KeyStore.getInstance("PKCS12")
         store.load(bytes("receiver.p12").inputStream(), "vm-fixture".toCharArray())
         val managers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())

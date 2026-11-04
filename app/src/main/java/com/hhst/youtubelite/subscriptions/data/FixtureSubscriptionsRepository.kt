@@ -39,7 +39,10 @@ class FixtureSubscriptionsRepository(private val scenario: SubscriptionsScenario
     companion object {
         fun sampleVideos(): List<FeedItem.Video> {
             val page = com.hhst.youtubelite.home.data.FixtureHomeRepository.samplePage()
-            return page.items.filterIsInstance<FeedItem.Video>()
+            val avatars = channels().associate { it.channelId to it.avatar }
+            return page.items.filterIsInstance<FeedItem.Video>().map { video ->
+                video.copy(avatar = video.avatar?.takeIf(String::isNotBlank) ?: avatars[video.channelId])
+            }
         }
 
         fun channels() = listOf(

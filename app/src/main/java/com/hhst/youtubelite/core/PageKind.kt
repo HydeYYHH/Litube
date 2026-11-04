@@ -4,7 +4,6 @@ import com.hhst.youtubelite.core.Constants
 import java.net.URI
 import java.util.Locale
 
-/** Maps watch URLs to routing kinds. */
 object PageKind {
 
     /** Bottom-nav surfaces; each reuses one tab. */
@@ -19,7 +18,6 @@ object PageKind {
     fun isPlayerSurface(kind: String?): Boolean =
         kind == Constants.PAGE_WATCH
 
-    /** True when [url] is a /shorts/ URL (case-insensitive). */
     fun isShorts(url: String?): Boolean =
         of(url) == Constants.PAGE_SHORTS
 

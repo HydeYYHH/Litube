@@ -14,6 +14,22 @@
         <item name="colorControlNormal">@color/window_icon_control</item>
     </style>
 
+    <!-- Native pickers/reports use the same black/white panel role as Compose. -->
+    <style name="Theme.App.Dialog.Light" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:colorBackgroundFloating">#FFFFFF</item>
+        <item name="android:textColorPrimary">#0F0F0F</item>
+        <item name="android:textColorSecondary">#606060</item>
+        <item name="android:colorAccent">#0F0F0F</item>
+    </style>
+    <style name="Theme.App.Dialog.Dark" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorBackground">#000000</item>
+        <item name="android:colorBackgroundFloating">#000000</item>
+        <item name="android:textColorPrimary">#F1F1F1</item>
+        <item name="android:textColorSecondary">#AAAAAA</item>
+        <item name="android:colorAccent">#F1F1F1</item>
+    </style>
+
     <style name="Theme.App.DownloadSheet" parent="Theme.App">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
@@ -21,11 +37,27 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
+    <!-- Shorts stay black from the starting window through the first video frame. -->
+    <style name="Theme.App.Shorts.Base" parent="Theme.App.Base">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="Theme.App.Shorts" parent="Theme.App.Shorts.Base" />
+
     <style name="Theme.App.Home" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@android:color/white</item>
         <item name="android:statusBarColor">@android:color/white</item>
         <item name="android:navigationBarColor">@android:color/white</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:colorAccent">#0F0F0F</item>
+    </style>
+
+    <!-- Internal Watch entrances retain the browse window until our first draw;
+         a theme-only preview would insert an unrelated white frame before it. -->
+    <style name="Theme.App.Watch" parent="Theme.App.Home">
+        <item name="android:windowDisablePreview">true</item>
     </style>
 </resources>

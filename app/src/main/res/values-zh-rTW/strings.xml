@@ -390,4 +390,5 @@
     <string name="chat_unavailable">該直播不支援即時聊天。</string>
     <string name="load_more">載入更多</string>
     <string name="subscription_new_activity">%1$s，有新動態</string>
+    <string name="player_payment_required">這部影片需要付費觀看。</string>
 </resources>

@@ -8,7 +8,7 @@ import java.util.Base64
  * Byte-cache identity for googlevideo `/videoplayback` URLs.
  *
  * Two schemes coexist, one per call site, and their prefixes never collide:
- * - [of] keys by the extractor's opaque resource identity ("yt:v3:…"). Rotating
+ * - [of] keys by the extractor's opaque resource identity ("yt:v4:…"). Rotating
  *   `sig` / `expire` / `pot` / `rn` are omitted so a 403 URL refresh still hits
  *   previously cached bytes.
  * - [ofQuery] keys by raw `/videoplayback` query parameters ("yt:v2:…"); [VERSION]
@@ -18,7 +18,7 @@ object YoutubePlaybackCacheKey {
     fun of(format: Format): String {
         val identity = format.resourceIdentity
         return if (identity.isNullOrBlank() || format.formatKey == null) "yt:unproven:" + MessageDigest.getInstance("SHA-256").digest(format.url.toByteArray()).joinToString("") { "%02x".format(it) }
-        else "yt:v3:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
+        else "yt:v4:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
     }
     private const val VERSION = 2
 

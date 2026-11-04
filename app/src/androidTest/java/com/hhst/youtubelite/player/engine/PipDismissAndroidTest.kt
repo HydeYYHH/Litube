@@ -26,13 +26,10 @@ import org.junit.Test
 
 class PipDismissAndroidTest {
     /**
-     * Enters PiP and keeps the original assertion. A rejected request is a system-level
-     * answer, so the surrounding state is captured first to make the rare refusal diagnosable.
-     *
-     * The system accepts PiP entry only from RESUMED (or paused-before-stop). After a
-     * rotation the configuration flips before the shell transition resumes the activity,
-     * so the wait below is the platform's own precondition — entering earlier returns
-     * false by design on API 33+ shell transitions.
+     * PiP entry is accepted only from RESUMED; after a rotation the configuration flips before the shell
+     * transition resumes the activity, so the wait below is the platform's precondition — earlier entry
+     * returns false by design on API 33+ shell transitions. Rejections capture surrounding state first
+     * to make the rare refusal diagnosable.
      */
     private fun enterPip(fixture: OfflineWatchFixture, tag: String) {
         fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
@@ -94,12 +91,11 @@ class PipDismissAndroidTest {
             fun enter(tag: String) = enterPip(fixture, tag)
             enter("round-$background-first")
             systemPipAction(fixture, "expand_button")
-            // Requesting orientation while the exit transition still runs loses the
-            // request on shell-transition devices; resume returns only once it settled.
+            // Requesting orientation while the exit transition still runs loses the request on shell-transition devices; resume returns only once it settles.
             fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                 !fixture.activity.isInPictureInPictureMode && fixture.engine.snapshot.value.isPlaying }
             fixture.instrumentation.runOnMainSync { fixture.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-            // The configuration flips mid-transition; resume only returns once it has settled.
+            // The configuration flips mid-transition; resume returns once it settles.
             fixture.await { fixture.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                 fixture.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && fixture.engine.snapshot.value.isPlaying }
             fixture.instrumentation.runOnMainSync { fixture.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
@@ -137,35 +133,39 @@ class PipDismissAndroidTest {
             flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         try {
-            Thread.sleep(500) // Wait for the PiP transition before opening its system menu.
             fun nodes(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
                 listOf(node) + (0 until node.childCount).flatMap { index -> node.getChild(index)?.let(::nodes).orEmpty() }
             var control: AccessibilityNodeInfo? = null
             var opened = false
-            var lastTap = 0L
             var controls = ""
+            var pipWindow = ""
             val deadline = SystemClock.elapsedRealtime() + 10_000
             while (control == null && SystemClock.elapsedRealtime() < deadline) {
-                if (opened && controlId == "expand_button" && !fixture.activity.isInPictureInPictureMode) return
-                val windowNodes = automation.windows.mapNotNull { it.root }.flatMap(::nodes)
+                val windows = automation.windows
+                val windowNodes = windows.mapNotNull { it.root }.flatMap(::nodes)
                 controls = windowNodes.filter { it.isClickable }.joinToString { "${it.viewIdResourceName}:${it.contentDescription}" }
                 control = windowNodes.firstOrNull {
-                    it.isClickable && it.viewIdResourceName?.startsWith("com.android.") == true &&
+                    it.isClickable && it.isEnabled && it.isVisibleToUser &&
+                        it.viewIdResourceName?.startsWith("com.android.") == true &&
                         it.viewIdResourceName?.substringAfterLast('/') == controlId
                 }
-                if (control == null && SystemClock.elapsedRealtime() - lastTap > 750) {
-                    val bounds = Rect()
-                    automation.windows.firstOrNull { it.isInPictureInPictureMode }?.getBoundsInScreen(bounds)
-                    if (!bounds.isEmpty) {
-                        DeviceEvidence.shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
-                        opened = true
-                        lastTap = SystemClock.elapsedRealtime()
+                val pinned = windows.firstOrNull { it.isInPictureInPictureMode }
+                val root = pinned?.root
+                val bounds = Rect().also { pinned?.getBoundsInScreen(it) }
+                pipWindow = "bounds=$bounds root=${root?.className} actions=${root?.actionList}"
+                if (control == null && !opened && root != null) {
+                    // Android's PiP accessibility replacement maps the root's CLICK to
+                    // showing the system menu; its bounds can still describe the host
+                    // during a transition, so coordinate taps cannot prove the menu
+                    // opened, and EXPAND/DISMISS would bypass the real buttons.
+                    if (root.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                        opened = root.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     }
                 }
                 if (control == null) Thread.sleep(50)
             }
             if (control == null) DeviceEvidence.captureScene("native-pip-$controlId-missing")
-            assertNotNull("System PiP $controlId control missing (pip=${fixture.activity.isInPictureInPictureMode}, opened=$opened, controls=$controls)", control)
+            assertNotNull("System PiP $controlId control missing (pip=${fixture.activity.isInPictureInPictureMode}, opened=$opened, $pipWindow, controls=$controls)", control)
             assertTrue(control!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         } finally {
             automation.serviceInfo = automation.serviceInfo.apply { flags = previousFlags }

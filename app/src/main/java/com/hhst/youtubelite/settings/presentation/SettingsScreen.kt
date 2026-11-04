@@ -189,10 +189,10 @@ private fun NotificationSettings(notificationsEnabled: Boolean, onOpen: () -> Un
         tag = "settings-open-notification-settings", onClick = onOpen)
 }
 
-/** Single-choice settings dialog. */
 @Composable
 internal fun RadioDialog(title: String, options: List<Pair<String, Boolean>>, tag: String,
                         onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     com.hhst.youtubelite.ui.components.AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { AppText(title, size = 16, line = 22, weight = FontWeight.Medium) },
@@ -200,7 +200,7 @@ internal fun RadioDialog(title: String, options: List<Pair<String, Boolean>>, ta
             Column(Modifier.verticalScroll(rememberScrollState()).testTag(tag)) {
                 options.forEachIndexed { index, (label, selected) ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                        .selectable(selected = selected, role = Role.RadioButton, onClick = { onSelect(index) })
+                        .selectable(selected = selected, role = Role.RadioButton, onClick = { if (!selected) haptic(); onSelect(index) })
                         .testTag("$tag-option-$index").padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         AppText(label, Modifier.weight(1f), size = 14, line = 20)

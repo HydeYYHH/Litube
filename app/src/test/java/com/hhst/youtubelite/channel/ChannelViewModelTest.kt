@@ -17,8 +17,54 @@ import com.hhst.youtubelite.core.AppNotice
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChannelViewModelTest {
+    @Test fun signedInNavigationSurvivesLoadingAndAccountRefresh() = runTest {
+        val model = ChannelViewModel(FixtureChannelRepository(), SavedStateHandle(), "blender")
+        model.updateSignedIn(true)
+        advanceUntilIdle()
+        assertTrue(model.uiState.value.signedIn)
+        model.onAction(ChannelAction.SelectDestination(ChannelDestination.Subscriptions))
+        assertEquals(ChannelNavigationRequest.Destination(ChannelDestination.Subscriptions), model.navigationRequests.first())
+        model.updateSignedIn(false)
+        model.refreshSession()
+        advanceUntilIdle()
+        assertFalse(model.uiState.value.signedIn)
+    }
+
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
+
+    @Test fun aRestoredTabReceivesTheOpenedPageAndLaterReadsUseItsCanonicalChannel() = runTest {
+        val base = FixtureChannelRepository()
+        val opened = FixtureChannelRepository.samplePage("UCcanonical").copy(videosDeferred = true,
+            readReference = object : ChannelReadReference {})
+        var received: ChannelPage? = null
+        var pagedId: String? = null
+        val repository = object : ChannelRepository by base {
+            override suspend fun channel(channelId: String): ChannelPage {
+                assertEquals("@handle", channelId)
+                return opened
+            }
+            override suspend fun videos(channelId: String, opened: ChannelPage): ChannelVideosPage {
+                assertEquals("UCcanonical", channelId)
+                received = opened
+                return ChannelVideosPage(opened.videos, "next")
+            }
+            override suspend fun videos(channelId: String, continuation: String?): ChannelVideosPage {
+                assertEquals("next", continuation)
+                pagedId = channelId
+                return ChannelVideosPage(emptyList(), null)
+            }
+        }
+        val state = SavedStateHandle(mapOf("tab" to ChannelTab.Videos.name))
+        val vm = ChannelViewModel(repository, state, "@handle")
+        advanceUntilIdle()
+        assertSame(opened, received)
+        assertEquals("UCcanonical", vm.uiState.value.channelId)
+        assertEquals("UCcanonical", state.get<String>("channelId"))
+        vm.onAction(ChannelAction.LoadVideosNext)
+        advanceUntilIdle()
+        assertEquals("UCcanonical", pagedId)
+    }
 
     private fun repository(block: suspend (String) -> ChannelPage) = object : ChannelRepository {
         override suspend fun channel(channelId: String) = block(channelId)
@@ -45,7 +91,6 @@ class ChannelViewModelTest {
         advanceUntilIdle()
         val shorts = (vm.uiState.value.shorts as ChannelSection.Ready).value
         assertEquals(listOf("s1", "s2", "s3", "s4"), shorts.map { it.id })
-        // Page-local indices restart at zero; the merged list must read as one loaded sequence.
         assertEquals(listOf(0, 1, 2, 3), shorts.map { it.order })
     }
 
@@ -54,7 +99,6 @@ class ChannelViewModelTest {
         val playlist = { id: String -> com.hhst.youtubelite.playlist.domain.PlaylistSummary(id, "Playlist $id", "Blender",
             "blender", null, "", "", null) }
         val repository = object : ChannelRepository by base {
-            // A deferred playlists tab: the landing page does not carry the rows.
             override suspend fun channel(channelId: String) = ChannelPage(
                 ChannelProfile(channelId = channelId, name = "Blender", handle = "@blender", avatar = "",
                     banner = null, subscribers = "30M subscribers", description = "Studio."),
@@ -73,7 +117,6 @@ class ChannelViewModelTest {
         assertEquals("pl-2", vm.uiState.value.playlistsNextKey)
         vm.onAction(ChannelAction.LoadPlaylistsNext)
         advanceUntilIdle()
-        // The next page repeats the cursor: the tab ends instead of scrolling forever.
         assertEquals(listOf("p1", "p2", "p3"), (vm.uiState.value.playlists as ChannelSection.Ready).value.map { it.id })
         assertNull(vm.uiState.value.playlistsNextKey)
     }
@@ -346,26 +389,22 @@ class ChannelViewModelTest {
         }
         val vm = ChannelViewModel(repository, SavedStateHandle(), "blender")
         advanceUntilIdle()
-        // The header painted without either optional tab read.
         assertTrue(vm.uiState.value.content is ChannelContent.Ready)
         assertEquals(0, repository.videosFirstReads)
         assertEquals(0, repository.playlistsReads)
         assertEquals(ChannelSection.Loading, vm.uiState.value.videosTab)
         assertEquals(ChannelSection.Loading, vm.uiState.value.playlists)
-        // The videos tab reads on demand and fills the page.
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Videos))
         advanceUntilIdle()
         assertEquals(1, repository.videosFirstReads)
         val page = (vm.uiState.value.content as ChannelContent.Ready).page
         assertEquals(listOf("v9"), page.videos.map { it.id })
         assertTrue(vm.uiState.value.videosTab is ChannelSection.Ready)
-        // The playlists tab fails on its own; the page stays up.
         vm.onAction(ChannelAction.SelectTab(ChannelTab.Playlists))
         advanceUntilIdle()
         assertEquals(1, repository.playlistsReads)
         assertEquals(ChannelSection.Failed, vm.uiState.value.playlists)
         assertTrue(vm.uiState.value.content is ChannelContent.Ready)
-        // The tab-local retry reloads only the playlists read.
         repository.failPlaylists = false
         vm.onAction(ChannelAction.RetrySection(ChannelTab.Playlists))
         advanceUntilIdle()

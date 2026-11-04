@@ -17,12 +17,6 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
-/**
- * The device/account isolation matrix: which backend answers each library and save call
- * for {anonymous, signed in}, and what identity transitions keep. The library source
- * follows the session identity — the whole-app anonymous switch reads the device store
- * while the signed-in account reads the server; there is no third, manual selection.
- */
 class LibrarySourceIsolationTest {
 
     private lateinit var sessionStore: MemoryAuthStore
@@ -102,12 +96,33 @@ class LibrarySourceIsolationTest {
         saves.saveWatchLater("srv-video")
         assertTrue("signed-in writes must reach the server", calls.size > before)
         assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") && it.contains("srv-video") })
-        // The device store neither answered nor changed.
         assertEquals(listOf("seed"), local.history().entries.map { it.videoId })
         assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
         // "WL" resolves to the server list, not the device one (the parse shape is irrelevant here).
         runCatching { playlist.playlist("WL") }
         assertTrue(calls.last().contains("WL"))
+    }
+
+    @Test fun removingSavedVideosAfterClearingHistoryNeverNeedsTheNetwork() = runBlocking {
+        val seed = entry("saved")
+        local.record(seed)
+        val playlist = local.create("Offline", "", seed)
+        local.setContaining(LocalLibraryStore.WATCH_LATER, seed, true)
+        local.clear()
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        val offline = MediaClient(OkHttpClient.Builder().addInterceptor {
+            requests.incrementAndGet()
+            throw java.io.IOException("offline")
+        }.build())
+        val saves = MediaSaveRepository(offline, local)
+
+        saves.setContaining(playlist.id, seed.videoId, false)
+        saves.setContaining(LocalLibraryStore.WATCH_LATER, seed.videoId, false)
+
+        assertEquals(0, requests.get())
+        assertTrue(local.playlist(playlist.id)!!.entries.isEmpty())
+        assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
+        assertTrue(local.history().entries.isEmpty())
     }
 
     @Test fun theWholeAppAnonymousSwitchKeepsEveryLibraryCallLocalWhileCredentialsStay() = runBlocking {
@@ -125,9 +140,7 @@ class LibrarySourceIsolationTest {
         library.setHistoryPaused(false)
         assertEquals("no server call may fire while the app is anonymous", before, calls.size)
         assertEquals(listOf("seed"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
-        // The account credential is still stored for switching back.
         assertEquals("refresh", sessionStore.read(MediaSession.KEY_REFRESH_TOKEN))
-        // Switching back to the account moves the same repositories onto the server.
         MediaSession.setAnonymousMode(false)
         saves.saveWatchLater("srv-video")
         assertTrue(calls.size > before)
@@ -146,7 +159,6 @@ class LibrarySourceIsolationTest {
         assertEquals("transitions never write the server", callsBefore, calls.size)
         assertEquals(deviceBefore, local.history().entries.map { it.videoId } to
             local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
-        // After sign-out the same repository instance is back on the device store.
         assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
         assertEquals(callsBefore, calls.size)
     }
@@ -162,7 +174,6 @@ class LibrarySourceIsolationTest {
         saves.saveWatchLater("local-one")
         val callsAfterDeviceSave = calls.size
         assertEquals(listOf("local-one"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
-        // Reading "WL" now answers the device list; the account list was a different call earlier.
         assertEquals("Watch later", playlist.playlist("WL")?.summary?.title)
         assertEquals(callsAfterDeviceSave, calls.size)
     }

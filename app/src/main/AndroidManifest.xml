@@ -55,7 +55,6 @@
         tools:replace="android:usesCleartextTraffic">
         <!-- Device discovery and transport control require HTTP to local renderer addresses. -->
 
-
         <service android:name=".extractor.EjsRuntimeService"
             android:exported="false" android:process=":youtube_ejs" />
 
@@ -69,6 +68,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Route external playback links before composing or loading the home feed. -->
+        <activity
+            android:name=".navigation.ContentLinkActivity"
+            android:exported="true"
+            android:theme="@style/Theme.App.Home">
             <!-- Open watch links in-app. autoVerify=false is explicit: this
                  app does not own the domains, so no App Link verification. -->
             <intent-filter android:autoVerify="false">
@@ -84,7 +90,7 @@
             </intent-filter>
             <!-- Share sheet "Open with". text/plain is intentionally broad:
                  intent filters cannot match URL content, so non-link shares
-                 are rejected in code (HomeActivity reports "no link found"). -->
+                 are handled by the home screen when no content link is present. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -92,7 +98,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Native content destinations. -->
         <activity android:name=".playlist.PlaylistActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.YouActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.HistoryActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
@@ -100,14 +105,13 @@
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".settings.AdvancedActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".account.SignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".account.ChatWebSignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".core.TrafficVerificationActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
-        <activity android:name=".notifications.NotificationsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
 
         <!-- Standalone shorts browse host; playback reuses the shared player ViewModel hooks. -->
-        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Shorts" android:windowSoftInputMode="adjustResize" />
 
-        <!-- Explore entry with the four fixed category containers. -->
         <activity android:name=".explore.ExploreActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity
             android:name=".search.SearchResultsActivity"
@@ -115,14 +119,13 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.App.Home" />
 
-        <!-- Video playback and native details. -->
         <activity
             android:name=".watch.WatchActivity"
             android:windowSoftInputMode="adjustResize"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:exported="false"
-            android:theme="@style/Theme.App.Home" />
+            android:theme="@style/Theme.App.Watch" />
 
         <!-- Local channel page; it opens a typed request for every later destination. -->
         <activity

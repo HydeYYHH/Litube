@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.subscriptions
 
+import com.hhst.youtubelite.ui.observeAccountChanges
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -54,7 +56,6 @@ import kotlinx.coroutines.launch
 
 import com.hhst.youtubelite.ui.renderNotice
 
-/** Hosts the subscriptions page. The Shorts tab is wired with its own screen. */
 class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     lateinit var subscriptionsViewModel: SubscriptionsViewModel
         private set
@@ -86,6 +87,7 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     if (fixtures) null else sources.saves) as T
             }
         })[SubscriptionsViewModel::class.java]
+        if (!fixtures) observeAccountChanges(::syncSession)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 subscriptionsViewModel.navigationRequests.collect { request ->
@@ -124,14 +126,17 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
         setAppContent {
             val state by subscriptionsViewModel.uiState.collectAsStateWithLifecycle()
+            com.hhst.youtubelite.ui.design.WriteProgressOverlay(subscriptionsViewModel.writes)
+            subscriptionsViewModel.saveSheet?.let { com.hhst.youtubelite.ui.design.WriteProgressOverlay(it.writes) }
             val back: () -> Unit = {
                 when {
                     subscriptionsViewModel.saveSheet?.state?.value != null -> {
-                        subscriptionsViewModel.saveSheet?.close()
+                        subscriptionsViewModel.saveSheet?.dismiss()
                         Unit
                     }
                     state.overlay == SubscriptionsOverlay.Channels -> subscriptionsViewModel.onAction(SubscriptionsAction.CloseChannels)
                     state.overlay != SubscriptionsOverlay.None -> subscriptionsViewModel.onAction(SubscriptionsAction.CloseOverlay)
+                    state.selectedChannel != null -> subscriptionsViewModel.onAction(SubscriptionsAction.SelectChannel(null))
                     else -> finish()
                 }
             }
@@ -144,12 +149,13 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 sheetState?.let { current ->
                     if (current.newPlaylist) com.hhst.youtubelite.saves.presentation.NewPlaylistSheet(
                         draft = com.hhst.youtubelite.saves.domain.NewPlaylistDraft(current.title, current.description),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onDraftChange = { sheet.draftChanged(it.title, it.description) },
                         onSubmit = sheet::submitNewPlaylist,
+                        pending = current.pending,
                     ) else com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet(
                         playlists = emptyList(),
-                        onDismiss = sheet::close,
+                        onDismiss = sheet::dismiss,
                         onSelect = {},
                         onNewPlaylist = sheet::openNewPlaylist,
                         live = com.hhst.youtubelite.saves.presentation.SaveSheetLive(
@@ -236,9 +242,15 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onResume() {
         super.onResume()
+        syncSession()
+        if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
+            subscriptionsViewModel.onForeground()
+        }
+    }
+
+    private fun syncSession() {
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             com.hhst.youtubelite.data.media.MediaSession.snapshot().let { subscriptionsViewModel.updateSession(it.signedIn, it.generation) }
-            subscriptionsViewModel.onForeground()
         }
     }
 

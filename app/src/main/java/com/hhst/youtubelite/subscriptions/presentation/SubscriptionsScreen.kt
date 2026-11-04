@@ -1,9 +1,14 @@
 package com.hhst.youtubelite.subscriptions.presentation
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,12 +24,23 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -34,6 +50,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,8 +71,8 @@ import com.hhst.youtubelite.ui.design.appDescription
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
+import kotlin.math.roundToInt
 
-/** The subscriptions page: chip strip, feed grid and the channels overlay. */
 @Composable
 fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAction) -> Unit, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("subscriptions-screen")) {
@@ -63,17 +80,84 @@ fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAct
         val gridState = rememberLazyGridState()
         val channelListState = rememberLazyListState()
         val channelStripState = rememberLazyListState()
+        var headerHidden by rememberSaveable { mutableStateOf(false) }
+        var displayedChannel by rememberSaveable { mutableStateOf(state.selectedChannel?.channelId) }
+        var displayedChip by rememberSaveable { mutableStateOf(state.selectedChip) }
+        val headerFraction by animateFloatAsState(if (headerHidden) 0f else 1f,
+            com.hhst.youtubelite.ui.design.AppMotion.scrollResponse(LocalMotionScale.current), label = "subscriptions-header")
+        val headerScroll = remember(gridState) { object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f) headerHidden = false
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                // Only hide after the feed moves, so horizontal strips and pull-to-refresh keep the header.
+                if (source == NestedScrollSource.UserInput && consumed.y < 0f && gridState.canScrollBackward) headerHidden = true
+                return Offset.Zero
+            }
+        } }
+        LaunchedEffect(gridState) {
+            snapshotFlow { gridState.canScrollBackward }.collect { scrolled ->
+                if (!scrolled) headerHidden = false
+            }
+        }
+        val headerRequired = !state.signedIn || state.overlay == SubscriptionsOverlay.Channels ||
+            state.content != SubscriptionsContent.Loading && state.content !is SubscriptionsContent.Feed
+        LaunchedEffect(headerRequired) {
+            if (headerRequired) headerHidden = false
+        }
+        val leadingUpdate = (state.channels as? SubscriptionsChannels.Ready)?.channels
+            ?.firstOrNull()?.takeIf { it.hasNewContent }?.channelId
+        LaunchedEffect(leadingUpdate) {
+            // A keyed LazyRow otherwise keeps the previous first channel anchored after reordering.
+            if (leadingUpdate != null && state.selectedChannel == null) channelStripState.scrollToItem(0)
+        }
+        LaunchedEffect(state.selectedChannel?.channelId) {
+            val id = state.selectedChannel?.channelId ?: return@LaunchedEffect
+            val index = (state.channels as? SubscriptionsChannels.Ready)?.channels?.indexOfFirst { it.channelId == id } ?: -1
+            if (index >= 0) channelStripState.animateScrollToItem((index - 1).coerceAtLeast(0))
+        }
+        LaunchedEffect(state.selectedChannel?.channelId, state.selectedChip) {
+            if (displayedChannel != state.selectedChannel?.channelId || displayedChip != state.selectedChip) {
+                gridState.scrollToItem(0)
+                headerHidden = false
+            }
+            displayedChannel = state.selectedChannel?.channelId
+            displayedChip = state.selectedChip
+        }
         val showingChannels = state.overlay == SubscriptionsOverlay.Channels
         Column(Modifier.fillMaxSize().then(if (state.overlay != SubscriptionsOverlay.None && !showingChannels) Modifier.clearAndSetSemantics {} else Modifier)) {
             if (showingChannels) {
                 ChannelsOverlay(state.channels, channelListState, onAction, Modifier.weight(1f))
             } else {
-                SubscriptionsTopBar(width, onAction)
-                if (state.signedIn) {
-                    ChannelAvatarStrip(state.channels, channelStripState, onAction)
-                    SubscriptionsChipStrip(state.selectedChip, state.chips, onAction)
+                // Measure the full stack (including large text), then release its space as it slides away.
+                Column(Modifier.fillMaxWidth().clipToBounds().layout { measurable, constraints ->
+                    val header = measurable.measure(constraints.copy(minHeight = 0))
+                    val height = (header.height * headerFraction).roundToInt()
+                    layout(header.width, height) { header.placeRelative(0, height - header.height) }
+                }) {
+                    SubscriptionsTopBar(width, state.selectedChannel != null, onAction)
+                    if (state.signedIn) {
+                        ChannelAvatarStrip(state.channels, state.selectedChannel?.channelId, channelStripState, onAction)
+                        val selectedChannel = state.selectedChannel
+                        if (selectedChannel == null) SubscriptionsChipStrip(state.selectedChip, state.chips, onAction)
+                        else Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                            horizontalArrangement = Arrangement.End) {
+                            Row(Modifier.clip(RoundedCornerShape(24.dp)).background(DesignTokens.Surface)
+                                .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(selectedChannel.channelId)) }
+                                .testTag("subscriptions-visit-channel").padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                AppIcon(AppIcon.You, Modifier.size(24.dp))
+                                AppText(stringResource(R.string.subscription_visit_channel), weight = FontWeight.Medium)
+                            }
+                        }
+                    }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                RefreshableContent(value = state, refreshing = state.content == SubscriptionsContent.Loading,
+                    onRefresh = { onAction(SubscriptionsAction.Retry) }, modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(headerScroll),
+                    enabled = state.signedIn && state.overlay == SubscriptionsOverlay.None, contentKey = Triple(state.signedIn, state.selectedChannel?.channelId, state.selectedChip), tag = "subscriptions-refresh",
+                    canPull = { !gridState.canScrollBackward }) { state ->
                     val verification = state.verification
                     when (val content = state.content) {
                     SubscriptionsContent.Loading -> LibrarySkeleton("subscriptions-skeleton")
@@ -96,9 +180,11 @@ fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAct
 }
 
 @Composable
-private fun SubscriptionsTopBar(width: Float, onAction: (SubscriptionsAction) -> Unit) {
+private fun SubscriptionsTopBar(width: Float, selectedChannel: Boolean, onAction: (SubscriptionsAction) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("subscriptions-topbar"), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(if (width < 600f) 53.dp else 48.dp).height(DesignTokens.TopBarHeight)
+        if (selectedChannel) AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back),
+            modifier = Modifier.testTag("subscriptions-back-to-all")) { onAction(SubscriptionsAction.SelectChannel(null)) }
+        else Box(Modifier.width(if (width < 600f) 53.dp else 48.dp).height(DesignTokens.TopBarHeight)
             .clickable(role = Role.Button) { onAction(SubscriptionsAction.Destination(MainTab.Home)) }, contentAlignment = Alignment.Center) {
             LitubeMark(Modifier.size(24.dp))
         }
@@ -125,20 +211,22 @@ private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<Subs
 }
 
 @Composable
-private fun ChannelAvatarStrip(channels: SubscriptionsChannels, listState: LazyListState, onAction: (SubscriptionsAction) -> Unit) {
+private fun ChannelAvatarStrip(channels: SubscriptionsChannels, selectedChannelId: String?, listState: LazyListState, onAction: (SubscriptionsAction) -> Unit) {
     val allDescription = stringResource(R.string.all_subscriptions)
     Row(Modifier.fillMaxWidth().testTag("subscriptions-channels"), verticalAlignment = Alignment.CenterVertically) {
         LazyRow(Modifier.weight(1f), state = listState,
             verticalAlignment = Alignment.Top, contentPadding = PaddingValues(start = 8.dp, top = 8.dp, bottom = 8.dp)) {
             when (channels) {
                 is SubscriptionsChannels.Ready -> listItems(channels.channels, key = { it.channelId }) { channel ->
+                    val isSelected = channel.channelId == selectedChannelId
                     val description = if (channel.hasNewContent) stringResource(R.string.subscription_new_activity, channel.name) else channel.name
-                    Column(Modifier.width(80.dp).clickable(role = Role.Button) {
-                        onAction(SubscriptionsAction.OpenChannel(channel.channelId))
-                    }.semantics(mergeDescendants = true) { contentDescription = description }
+                    Column(Modifier.width(80.dp).clickable(role = Role.Tab) {
+                        onAction(SubscriptionsAction.SelectChannel(channel.channelId))
+                    }.semantics(mergeDescendants = true) { contentDescription = description; selected = isSelected }
                         .testTag("subs-strip-${channel.channelId}"), horizontalAlignment = Alignment.CenterHorizontally) {
-                        SubscriptionAvatar(channel, 64.dp, "subs-new-${channel.channelId}")
-                        AppText(channel.name, Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp), size = 12, line = 16, maxLines = 1)
+                        SubscriptionAvatar(channel, 64.dp, "subs-new-${channel.channelId}", isSelected)
+                        AppText(channel.name, Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp), size = 12, line = 16,
+                            weight = if (isSelected) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
                     }
                 }
                 SubscriptionsChannels.Loading -> items(4) {
@@ -164,9 +252,10 @@ private fun ChannelAvatarStrip(channels: SubscriptionsChannels, listState: LazyL
 }
 
 @Composable
-private fun SubscriptionAvatar(channel: SubscribedChannel, size: androidx.compose.ui.unit.Dp, badgeTag: String) {
+private fun SubscriptionAvatar(channel: SubscribedChannel, size: androidx.compose.ui.unit.Dp, badgeTag: String, selected: Boolean = false) {
     Box(Modifier.size(size)) {
-        Box(Modifier.fillMaxSize().clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
+        Box(Modifier.fillMaxSize().then(if (selected) Modifier.border(2.dp, DesignTokens.Ink, CircleShape).padding(4.dp) else Modifier)
+            .clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
         if (channel.hasNewContent) {
             Box(Modifier.align(Alignment.BottomEnd).size(12.dp)
                 .background(DesignTokens.Background, CircleShape).padding(2.dp)
@@ -179,8 +268,8 @@ private fun SubscriptionAvatar(channel: SubscribedChannel, size: androidx.compos
 private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, verification: com.hhst.youtubelite.core.VerificationRequired?, onAction: (SubscriptionsAction) -> Unit) {
     val compact = width < 600f
     val hidden = com.hhst.youtubelite.ui.design.LocalHideShorts.current
-    val visibleItems = content.page.items.filterNot { hidden && it.short }
-    val nearEnd by remember(content, hidden) { derivedStateOf {
+    val visibleItems = remember(content.page.items, hidden) { content.page.items.filterNot { hidden && it.short } }
+    val nearEnd by remember(gridState, visibleItems.size) { derivedStateOf {
         (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= visibleItems.size - 2
     } }
     androidx.compose.runtime.LaunchedEffect(nearEnd, content.page.nextKey, content.append) {
@@ -204,7 +293,7 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
             horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
         ) {
             items(visibleItems, key = { it.id }, contentType = { "video" }) { item ->
-                Box(Modifier.padding(top = if (compact) 8.dp else 12.dp, bottom = if (compact) 12.dp else 12.dp)) {
+                Box((if (LocalMotionScale.current > 0f) Modifier.animateItem() else Modifier).padding(top = if (compact) 8.dp else 12.dp, bottom = 12.dp)) {
                     SubscriptionsVideoCard(item, compact = compact, onAction)
                 }
             }
@@ -370,7 +459,7 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, listState: LazyList
                     listItems(channels.channels, key = { it.channelId }) { channel ->
                         Row(Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(horizontal = 16.dp, vertical = 8.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(channel.channelId)) }
+                            .clickable(role = Role.Button) { onAction(SubscriptionsAction.SelectChannel(channel.channelId)) }
                             .testTag("channels-row-${channel.channelId}"),
                             verticalAlignment = Alignment.CenterVertically) {
                             SubscriptionAvatar(channel, 48.dp, "channels-new-${channel.channelId}")
@@ -391,7 +480,6 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, listState: LazyList
     }
 }
 
-/** Directory continuation row: loading, retry after failure, or an explicit load-more affordance. */
 @Composable
 private fun DirectoryAppendFooter(append: com.hhst.youtubelite.home.domain.AppendState, onLoadMore: () -> Unit) {
     Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {

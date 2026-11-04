@@ -69,6 +69,23 @@ class GestureMathTest {
         )
     }
 
+    @Test fun embeddedUpwardEntryHasAWiderZoneWithoutTakingOverFullscreenEdgeSliders() {
+        for (x in listOf(250f, 750f)) {
+            assertEquals(GestureMath.DragMode.NONE,
+                GestureMath.resolveDragMode(10f, -50f, x, 1000f, fullscreenEntry = true))
+        }
+        assertEquals(GestureMath.DragMode.BRIGHTNESS,
+            GestureMath.resolveDragMode(10f, -50f, 100f, 1000f, fullscreenEntry = true))
+        assertEquals(GestureMath.DragMode.VOLUME,
+            GestureMath.resolveDragMode(10f, -50f, 900f, 1000f, fullscreenEntry = true))
+        assertEquals(GestureMath.DragMode.BRIGHTNESS,
+            GestureMath.resolveDragMode(10f, -50f, 250f, 1000f))
+        assertEquals(GestureMath.DragMode.VOLUME,
+            GestureMath.resolveDragMode(10f, 50f, 750f, 1000f, fullscreenEntry = true))
+        assertEquals(GestureMath.DragMode.SEEK,
+            GestureMath.resolveDragMode(100f, -50f, 500f, 1000f, fullscreenEntry = true))
+    }
+
     @Test
     fun accumulateLevel_clampsWithoutOscillating() {
         assertEquals(1f, GestureMath.accumulateLevel(0.9f, 0.2f, 0.01f, 1f), 0.001f)
@@ -111,8 +128,7 @@ class VelocityTrackerTest {
     @Test
     fun slowHoldBeforeReleaseIsNotAFLing() {
         val tracker = GestureMath.VelocityTracker()
-        // Fast motion, then a 300 ms stationary hold: the window drops the
-        // old fast samples, so the release reports ~0 instead of a fling.
+        // Fast motion then a 300 ms hold: the window drops the old fast samples, so the release reports ~0 instead of a fling.
         for (i in 0..5) tracker.add(i * 10L, 1000f - i * 20f)
         for (i in 6..36) tracker.add(i * 10L, 900f)
         assertEquals(0f, tracker.velocityY(), 1f)

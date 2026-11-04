@@ -5,10 +5,9 @@ package com.hhst.youtubelite.cast.protocol
 import org.json.JSONObject
 
 /**
- * Parsed snapshot of one Cast MEDIA_STATUS entry.
- *
- * The wire format uses **seconds as doubles**; this class converts to **milliseconds at
- * the parse boundary** and nothing above it ever sees seconds.
+ * Parsed snapshot of one Cast MEDIA_STATUS entry. The wire format uses **seconds as doubles**;
+ * this class converts to **milliseconds at the parse boundary** and nothing above it ever sees
+ * seconds.
  */
 class MediaStatus private constructor(
     /** `mediaSessionId` - required on every transport command; -1 until the receiver assigns one. */
@@ -32,10 +31,9 @@ class MediaStatus private constructor(
     companion object {
 
         /**
-         * Parse one status entry of a MEDIA_STATUS payload
-         * (`{"type":"MEDIA_STATUS","status":[{...}]}`). Null when the entry is not a JSON
-         * object - the status array is legitimately empty, e.g. after the media session ended or on
-         * a rejected LOAD.
+         * Parse one entry of a MEDIA_STATUS payload (`{"type":"MEDIA_STATUS","status":[{...}]}`).
+         * Null when the entry is not a JSON object - the status array is legitimately empty, e.g.
+         * after the media session ended or on a rejected LOAD.
          */
         fun parse(status: JSONObject?): MediaStatus? {
             if (status == null) {

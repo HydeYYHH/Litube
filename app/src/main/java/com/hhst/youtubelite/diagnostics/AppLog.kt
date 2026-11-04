@@ -63,8 +63,7 @@ object AppLog {
         val tickGate = AtomicLong()
         scheduler.scheduleAtFixedRate({
             runCatching {
-                // A frozen process unfreezing can owe several fixed-rate fires at once;
-                // coalesce them into one sample instead of a catch-up burst.
+                // A frozen process unfreezing can owe several fixed-rate fires at once; coalesce them into one sample.
                 val now = SystemClock.elapsedRealtime()
                 if (now - tickGate.getAndSet(now) < 500) return@scheduleAtFixedRate
                 recorder?.tick()
@@ -138,8 +137,7 @@ object AppLog {
             }
             barriers.forEach(CountDownLatch::countDown)
             if (batches.isEmpty() && barriers.isEmpty()) {
-                // Sleep until the next signal instead of spinning; the minute-long cap
-                // is only a liveness net, ordinary traffic wakes the thread immediately.
+                // Sleep until the next signal instead of spinning; the minute cap is only a liveness net, ordinary traffic wakes immediately.
                 try { wake.poll(60, TimeUnit.SECONDS) } catch (_: InterruptedException) { return }
             }
         }

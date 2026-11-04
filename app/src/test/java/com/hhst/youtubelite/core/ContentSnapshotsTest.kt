@@ -9,11 +9,6 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import kotlinx.serialization.Serializable
 
-/**
- * Snapshots are bounded, account-scoped and atomic: the tests pin the scoping (private
- * rows never cross accounts), the query match, the version/age discard, the row cap and
- * the absence of torn temp files.
- */
 class ContentSnapshotsTest {
     @get:Rule val tmp = TemporaryFolder()
     @Serializable

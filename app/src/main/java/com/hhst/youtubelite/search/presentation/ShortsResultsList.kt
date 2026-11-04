@@ -32,11 +32,7 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
 
-/**
- * The Shorts filter results: a two-column 9:16 grid that reuses the shorts
- * shelf card geometry (radius 8, 14/400/20 title, gradient scrim, duration
- * badge hidden — shorts show their length in the title metadata only).
- */
+/** Shorts filter results; reuses the shorts shelf card geometry — no duration badge, the length shows in the title metadata. */
 @Composable
 fun ShortsResultsList(shorts: List<SearchResult>, state: androidx.compose.foundation.lazy.grid.LazyGridState, onAction: (SearchAction) -> Unit, footer: (@Composable () -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {

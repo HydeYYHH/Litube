@@ -24,7 +24,6 @@ import org.junit.Test
 import org.junit.Rule
 import org.koin.core.context.GlobalContext
 
-/** The production engine decodes a three-rendition HLS playlist whose DEFAULT is a dub. */
 class OriginalAudioAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
     @Test fun originalBeatsPlaylistDefaultAndManualDubDoesNotCarryToTheNextVideo() {
