@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetDefaults
@@ -47,26 +48,24 @@ import com.hhst.youtubelite.ui.components.audioTrackLabel
 import com.hhst.youtubelite.ui.components.AppSheetHandle
 import com.hhst.youtubelite.ui.theme.AppStyle
 
-/**
- * Player sheets: More is the root settings page; Quality and Speed are its
- * subpages. They replace the sheet content in place (with an in-sheet back
- * action) instead of closing the sheet and stacking a popup over the player.
- */
 sealed interface PlayerSheet {
     data object More : PlayerSheet
-    data object Quality : PlayerSheet
-    data object Speed : PlayerSheet
+    data object SubtitleStyle : PlayerSheet
     data object Queue : PlayerSheet
     data object Chapters : PlayerSheet
 }
 
 /** Dialog menus. */
 sealed interface PlayerDialog {
+    data object EndBehavior : PlayerDialog
+    data object Quality : PlayerDialog
+    data object Speed : PlayerDialog
     data object Resize : PlayerDialog
     data object Audio : PlayerDialog
+    /** Caption track picker; same onSubtitle semantics as the chrome anchor menu. */
+    data object Captions : PlayerDialog
     data object Info : PlayerDialog
     data object Cast : PlayerDialog
-    data object SubtitleStyle : PlayerDialog
 }
 
 /** Anchored popup menus opened directly from the chrome. */
@@ -104,28 +103,19 @@ fun PlayerSheetHost(
         when (sheet) {
             PlayerSheet.More -> MoreSheet(
                 onQueue = onOpenQueue,
-                onLoop = onOpenQueue?.let { { callbacks.onLoop(); onDismiss() } },
+                onLoop = onOpenQueue?.let { { onDismiss(); onOpenDialog(PlayerDialog.EndBehavior) } },
                 loopMode = state.loopMode,
-                onSpeed = { onNavigate(PlayerSheet.Speed) },
-                onQuality = { onNavigate(PlayerSheet.Quality) },
+                onSpeed = { onDismiss(); onOpenDialog(PlayerDialog.Speed) },
+                onQuality = { onDismiss(); onOpenDialog(PlayerDialog.Quality) },
                 showPip = state.pipAvailable,
-                onResize = {
-                    onDismiss()
-                    onOpenDialog(PlayerDialog.Resize)
-                },
+                onResize = { onDismiss(); onOpenDialog(PlayerDialog.Resize) },
                 onCast = {
                     onDismiss()
                     onOpenDialog(PlayerDialog.Cast)
                 },
                 onPip = { callbacks.onPip(); onDismiss() },
-                onAudio = {
-                    onDismiss()
-                    onOpenDialog(PlayerDialog.Audio)
-                },
-                onSubtitleStyle = {
-                    onDismiss()
-                    onOpenDialog(PlayerDialog.SubtitleStyle)
-                },
+                onAudio = { onDismiss(); callbacks.onAudioMenuOpened(); onOpenDialog(PlayerDialog.Audio) },
+                onSubtitleStyle = { onNavigate(PlayerSheet.SubtitleStyle) },
                 onInfo = {
                     onDismiss()
                     onOpenDialog(PlayerDialog.Info)
@@ -148,26 +138,12 @@ fun PlayerSheetHost(
                     onDismiss()
                 },
             )
-            PlayerSheet.Quality -> OptionSheet(
-                title = stringResource(R.string.player_info_quality),
-                tag = "player-sheet-quality",
+            PlayerSheet.SubtitleStyle -> SubtitleStyleEditor(
+                style = state.subtitleStyle,
+                coverUrl = state.videoId?.let { VideoId.thumbnailUrl(it) },
+                onChange = callbacks::onSubtitleStyle,
                 onBack = { onNavigate(PlayerSheet.More) },
-                onClose = onDismiss,
-                rows = buildList {
-                    add(OptionRow<String>(null, stringResource(R.string.player_quality_auto)))
-                    state.qualities.forEach { add(OptionRow(it, it)) }
-                },
-                selected = state.qualityLabel,
-                onPick = { callbacks.onQuality(it); onDismiss() },
-            )
-            PlayerSheet.Speed -> OptionSheet(
-                title = stringResource(R.string.info_playback_speed),
-                tag = "player-sheet-speed",
-                onBack = { onNavigate(PlayerSheet.More) },
-                onClose = onDismiss,
-                rows = PlayerUi.SpeedChoices.map { OptionRow(it, PlayerUi.speedLabel(it)) },
-                selected = state.speed,
-                onPick = { speed -> speed?.let(callbacks::onSpeed); onDismiss() },
+                onDismiss = onDismiss,
             )
             PlayerSheet.Queue -> QueueSheet(
                 items = state.queueItems,
@@ -176,9 +152,10 @@ fun PlayerSheetHost(
                 onItem = { callbacks.onQueueItem(it); onDismiss() },
                 onClear = callbacks::onQueueClear,
                 onRemove = callbacks::onQueueRemove,
-                onLoop = callbacks::onLoop,
+                onLoop = { onOpenDialog(PlayerDialog.EndBehavior) },
                 onClose = onDismiss,
                 onMove = callbacks::onQueueMove,
+                owner = state.queueOwner,
                 onDownloadAll = {
                     DownloadUi.showBatchConfirm(context, DownloadEntries.queueSnapshot(state.queueItems))
                 },
@@ -188,6 +165,7 @@ fun PlayerSheetHost(
             )
             PlayerSheet.Chapters -> ChaptersSheet(
                 chapters = state.chapters,
+                durationMs = state.durationMs,
                 segments = state.sponsorSegments,
                 positionState = positionState,
                 fallbackThumb = state.videoId?.let { VideoId.thumbnailUrl(it) },
@@ -222,8 +200,9 @@ internal fun PlayerModalSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = AppStyle.SheetShape,
+        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         dragHandle = {
@@ -245,20 +224,68 @@ fun PlayerDialogHost(
 ) {
     if (dialog == null) return
     when (dialog) {
+        PlayerDialog.EndBehavior -> OptionDialog(
+            title = stringResource(R.string.settings_playback),
+            rows = LoopMode.entries.map { OptionRow(it, stringResource(PlayerUi.loopLabelRes(it))) },
+            selected = state.loopMode,
+            onPick = { it?.let(callbacks::onLoopMode); onDismiss() },
+            onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
+            tag = "player-dialog-end-behavior",
+        )
+        PlayerDialog.Quality -> OptionDialog(
+            title = stringResource(R.string.player_info_quality),
+            rows = listOf(OptionRow<String>(null, stringResource(R.string.player_quality_auto))) +
+                state.qualities.map { OptionRow(it, it) },
+            selected = state.qualityLabel,
+            onPick = { callbacks.onQuality(it); onDismiss() },
+            onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
+            tag = "player-dialog-quality",
+        )
+        PlayerDialog.Speed -> OptionDialog(
+            title = stringResource(R.string.info_playback_speed),
+            rows = PlayerUi.SpeedChoices.map { OptionRow(it, PlayerUi.speedLabel(it)) },
+            selected = state.speed,
+            onPick = { it?.let(callbacks::onSpeed); onDismiss() },
+            onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
+            tag = "player-dialog-speed",
+        )
         PlayerDialog.Resize -> ResizeDialog(
             selected = state.resizeMode,
             onPick = { callbacks.onResize(it); onDismiss() },
             onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
         )
         PlayerDialog.Audio -> OptionDialog(
             title = stringResource(R.string.audio_track),
             rows = buildList<OptionRow<String>> {
-                add(OptionRow(null, stringResource(R.string.player_audio_default)))
+                add(OptionRow(null, stringResource(if (state.loading && state.audioTracks.isEmpty()) R.string.a11y_loading else R.string.player_audio_default),
+                    enabled = !state.loading || state.audioTracks.isNotEmpty()))
                 state.audioTracks.forEach { add(OptionRow(it.key, audioTrackLabel(it))) }
             },
             selected = state.audioTrackKey,
             onPick = { callbacks.onAudioTrack(it); onDismiss() },
             onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
+            tag = "player-dialog-audio",
+        )
+        PlayerDialog.Captions -> OptionDialog(
+            title = stringResource(R.string.subtitles),
+            rows = if (state.subtitleTracks.isEmpty()) {
+                listOf(OptionRow<String>(null, stringResource(R.string.no_subtitles), enabled = false))
+            } else {
+                state.subtitleTracks.map { track ->
+                    val lang = PlayerUi.languageLabel(track.language)
+                    OptionRow(track.key, if (track.autoGenerated) "$lang ${stringResource(R.string.subtitle_auto_generated)}" else lang)
+                }
+            },
+            selected = if (state.subtitleEnabled) state.subtitleKey else null,
+            onPick = { it?.let(callbacks::onSubtitle); onDismiss() },
+            onDismiss = onDismiss,
+            fullscreen = state.fullscreen && !state.mini,
+            tag = "player-dialog-captions",
         )
         PlayerDialog.Info -> InfoDialog(
             state = state,
@@ -269,18 +296,11 @@ fun PlayerDialogHost(
             state = state,
             onDevice = { callbacks.onCastDevice(it) },
             onStop = { callbacks.onCastStop(); onDismiss() },
-            onShareLink = callbacks::onShareCastLink,
+            onShareLink = { callbacks.onShareCastLink() },
             onCloseLink = callbacks::onCloseCastLink,
             onRefresh = onRefreshCastState,
             onDiscovery = callbacks::onCastDiscovery,
             onDismiss = onDismiss,
-        )
-        PlayerDialog.SubtitleStyle -> SubtitleStyleDialog(
-            style = state.subtitleStyle,
-            coverUrl = state.videoId?.let { VideoId.thumbnailUrl(it) },
-            onChange = callbacks::onSubtitleStyle,
-            onDismiss = onDismiss,
-            fullscreen = state.fullscreen && !state.mini,
         )
     }
 }
@@ -395,19 +415,19 @@ private fun <T> OptionSheet(
                 Text(
                     text = row.label,
                     modifier = Modifier.weight(1f),
-                    fontSize = SettingsTokens.BodySize.sp,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
                     color = when {
                         !row.enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        isSelected -> MaterialTheme.colorScheme.primary
                         else -> MaterialTheme.colorScheme.onSurface
                     },
                 )
                 if (isSelected) Icon(
                     painter = painterResource(R.drawable.ic_check),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         }
@@ -448,7 +468,8 @@ private fun MoreRow(icon: Int, label: String, onClick: () -> Unit) {
         )
         Text(
             text = label,
-            fontSize = SettingsTokens.BodySize.sp,
+            fontSize = 16.sp,
+            lineHeight = 22.sp,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )

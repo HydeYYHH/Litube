@@ -10,6 +10,10 @@ import android.view.SurfaceView
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import com.hhst.youtubelite.core.DeviceEvidence
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -26,6 +30,25 @@ import org.junit.Test
  * the picture follows the finger, and a reversed or short drag cancels.
  */
 class WatchFullscreenSwipeAndroidTest {
+
+    private fun windowBounds(fixture: OfflineWatchFixture): androidx.compose.ui.geometry.Rect {
+        fun node(root: SemanticsNode): SemanticsNode? =
+            if (root.config.getOrNull(SemanticsProperties.TestTag) == "player-window") root
+            else root.children.firstNotNullOfOrNull(::node)
+        fun find(view: android.view.View): SemanticsNode? {
+            val owner = runCatching { view.javaClass.getMethod("getSemanticsOwner").invoke(view) as SemanticsOwner }.getOrNull()
+            owner?.let { node(it.rootSemanticsNode) }?.let { return it }
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) {
+                find(view.getChildAt(i))?.let { return it }
+            }
+            return null
+        }
+        var bounds: androidx.compose.ui.geometry.Rect? = null
+        val read = { bounds = find(fixture.activity.window.decorView)?.boundsInWindow }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) read()
+        else fixture.instrumentation.runOnMainSync { read() }
+        return requireNotNull(bounds) { "Player window semantics are unavailable" }
+    }
 
     private fun surfaceBounds(fixture: OfflineWatchFixture): Rect? {
         val view = fixture.surface() ?: return null
@@ -62,11 +85,15 @@ class WatchFullscreenSwipeAndroidTest {
     /** Auto-rotate would let the emulator's flat orientation sensor auto-enter fullscreen. */
     private fun <T> withAutoRotateOff(block: () -> T): T {
         val previous = shell("settings get system accelerometer_rotation").trim().ifBlank { "1" }
+        val confirmation = shell("settings get secure immersive_mode_confirmations").trim()
         shell("settings put system accelerometer_rotation 0")
+        shell("settings put secure immersive_mode_confirmations confirmed")
         try {
             return block()
         } finally {
             shell("settings put system accelerometer_rotation $previous")
+            shell(if (confirmation == "null" || confirmation.isEmpty()) "settings delete secure immersive_mode_confirmations"
+                else "settings put secure immersive_mode_confirmations $confirmation")
         }
     }
 
@@ -92,7 +119,7 @@ class WatchFullscreenSwipeAndroidTest {
             val preparesAtStart = engine.mediaPrepareCount
             val positionAtStart = model.positionState.value
 
-            // Slow upward drag held mid-travel: the picture follows the finger.
+            // Hold the upward drag before committing fullscreen.
             // Chrome (center controls, time bar hit canvas) covers the vertical
             // middle of an embedded 16:9 player, so the chrome is hidden first —
             // swiping with hidden chrome is the primary real-world path.
@@ -110,8 +137,9 @@ class WatchFullscreenSwipeAndroidTest {
                 Thread.sleep(40)
             }
             val midBounds = surfaceBounds(fixture)!!
-            assertTrue("The video frame must follow the finger (mid=$midBounds embedded=$embedded)",
-                midBounds.top > embedded.top + 40)
+            assertTrue("The image enlarges inside its fixed frame (mid=$midBounds embedded=$embedded)",
+                midBounds.top <= embedded.top)
+            assertTrue("Dragging keeps the surface height", abs(embedded.height() - midBounds.height()) <= 2)
             assertFalse("Not fullscreen yet mid-drag", model.uiState.value.fullscreen)
             assertSame(embeddedSurface, fixture.surface())
             DeviceEvidence.captureScene("watch-swipe-mid-drag")
@@ -136,8 +164,11 @@ class WatchFullscreenSwipeAndroidTest {
             }
             fixture.await { activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
             fixture.await {
+                val frame = windowBounds(fixture)
                 model.uiState.value.fullscreen &&
-                    (surfaceBounds(fixture)?.height() ?: 0) >= activity.resources.displayMetrics.heightPixels - 20
+                    abs((surfaceBounds(fixture)?.height() ?: 0) - activity.resources.displayMetrics.heightPixels) < 20 &&
+                    abs(frame.width - activity.resources.displayMetrics.widthPixels) < 20 &&
+                    abs(frame.height - activity.resources.displayMetrics.heightPixels) < 20
             }
             assertSame(embeddedSurface, fixture.surface())
             assertEquals(preparesAtStart, engine.mediaPrepareCount)
@@ -169,6 +200,12 @@ class WatchFullscreenSwipeAndroidTest {
 
             // Committed exit: slow downward drag returns to the embedded slot.
             hideChrome(fixture)
+            DeviceEvidence.captureScene("watch-fullscreen-before-exit")
+            DeviceEvidence.writeJson("watch-fullscreen-exit-geometry.json", com.hhst.youtubelite.core.TestJson.any(mapOf(
+                "surface" to surfaceBounds(fixture).toString(), "previousSurface" to landscape.toString(),
+                "frame" to windowBounds(fixture).toString(), "x" to cancelX, "y" to cancelStartY,
+                "width" to activity.resources.displayMetrics.widthPixels, "height" to activity.resources.displayMetrics.heightPixels,
+            )))
             swipe(fixture, cancelX, cancelStartY, cancelStartY + landscape.height() * 0.25f, 12, 40)
             fixture.await { !model.uiState.value.fullscreen }
             fixture.await {
@@ -199,6 +236,101 @@ class WatchFullscreenSwipeAndroidTest {
             assertEquals(embedded, surfaceBounds(fixture))
             assertSame(surface, fixture.surface())
             assertEquals(prepares, fixture.engine.mediaPrepareCount)
+        }
+    }
+
+    @Test fun centerDownwardDragReturnsToTheSourceAndRestoresWithoutPreparingAgain() = withAutoRotateOff {
+        OfflineWatchFixture("swipeMini01").use { fixture ->
+            val sourceIntent = android.content.Intent(fixture.app, com.hhst.youtubelite.home.HomeActivity::class.java)
+                .putExtra("playback_test", true)
+            androidx.test.core.app.ActivityScenario.launch<com.hhst.youtubelite.home.HomeActivity>(sourceIntent).use { source ->
+                lateinit var sourceActivity: com.hhst.youtubelite.home.HomeActivity
+                source.onActivity { sourceActivity = it }
+                fixture.launch(source = sourceActivity)
+                val model = fixture.model
+                if (!model.uiState.value.controlsVisible) {
+                    fixture.instrumentation.runOnMainSync { model.onToggleControls() }
+                }
+                val originalHost = fixture.activity
+                val originalSurface = fixture.surface()
+                fixture.await {
+                    val frame = windowBounds(fixture)
+                    val surface = surfaceBounds(fixture)
+                    surface != null && abs(frame.width - surface.width()) < 2 &&
+                        abs(frame.height - surface.height()) < 2
+                }
+                Thread.sleep(300)
+                val embedded = surfaceBounds(fixture)!!
+                val prepares = fixture.engine.mediaPrepareCount
+                val startX = embedded.centerX().toFloat()
+                val startY = embedded.centerY().toFloat()
+                val endY = startY + fixture.activity.resources.displayMetrics.heightPixels * 0.20f
+                val downTime = SystemClock.uptimeMillis()
+                var halfwayWidth = embedded.width()
+                fixture.instrumentation.sendPointerSync(MotionEvent.obtain(
+                    downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0))
+                for (i in 1..12) {
+                    fixture.instrumentation.sendPointerSync(MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
+                        MotionEvent.ACTION_MOVE, startX, startY + (endY - startY) * i / 12, 0))
+                    Thread.sleep(40)
+                    if (i == 6) halfwayWidth = windowBounds(fixture).width.toInt()
+                }
+                val held = windowBounds(fixture)
+                assertFalse(model.uiState.value.mini)
+                assertTrue("The frame shrinks during the drag", halfwayWidth < embedded.width())
+                assertTrue("Shrinking continues with finger travel", held.width < halfwayWidth)
+                DeviceEvidence.captureScene("watch-mini-held")
+                assertTrue("The center follows the finger (frame=$held start=$embedded finger=$endY)", abs(held.center.y - endY) < 16f)
+                assertSame(originalSurface, fixture.surface())
+                assertEquals(prepares, fixture.engine.mediaPrepareCount)
+                assertTrue(held.top > embedded.top)
+                fixture.instrumentation.sendPointerSync(MotionEvent.obtain(
+                    downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, startX, endY, 0))
+                fixture.await { model.uiState.value.mini && originalHost.isFinishing && sourceActivity.hasWindowFocus() }
+                fun sourceSurface(view: android.view.View): SurfaceView? {
+                    if (view is SurfaceView && view.isShown) return view
+                    if (view is android.view.ViewGroup) for (index in 0 until view.childCount) {
+                        sourceSurface(view.getChildAt(index))?.let { return it }
+                    }
+                    return null
+                }
+                fixture.await { sourceSurface(sourceActivity.window.decorView) != null }
+                assertTrue(model.uiState.value.isPlaying)
+                assertEquals(prepares, fixture.engine.mediaPrepareCount)
+                val monitor = fixture.instrumentation.addMonitor(com.hhst.youtubelite.watch.WatchActivity::class.java.name, null, false)
+                try {
+                    fixture.instrumentation.runOnMainSync { model.onMiniRestore() }
+                    fixture.activity = requireNotNull(monitor.waitForActivityWithTimeout(10_000)) as com.hhst.youtubelite.watch.WatchActivity
+                } finally { fixture.instrumentation.removeMonitor(monitor) }
+                fixture.await { !model.uiState.value.mini && surfaceBounds(fixture) == embedded }
+                assertTrue(model.uiState.value.isPlaying)
+                assertEquals(prepares, fixture.engine.mediaPrepareCount)
+            }
+        }
+    }
+
+    @Test fun cancelledDownwardDragReturnsToItsEmbeddedBounds() = withAutoRotateOff {
+        OfflineWatchFixture("swipeMini02").use { fixture ->
+            fixture.launch()
+            hideChrome(fixture)
+            val surface = fixture.surface()!!
+            val embedded = surfaceBounds(fixture)!!
+            val prepares = fixture.engine.mediaPrepareCount
+            val x = embedded.centerX().toFloat()
+            val startY = embedded.centerY().toFloat()
+            val downTime = SystemClock.uptimeMillis()
+            fixture.instrumentation.sendPointerSync(MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, startY, 0))
+            for (i in 1..8) {
+                fixture.instrumentation.sendPointerSync(MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
+                    MotionEvent.ACTION_MOVE, x, startY + fixture.activity.resources.displayMetrics.heightPixels * 0.10f * i / 8, 0))
+                Thread.sleep(40)
+            }
+            fixture.instrumentation.sendPointerSync(MotionEvent.obtain(
+                downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, x, startY, 0))
+            fixture.await { !fixture.model.uiState.value.mini && surfaceBounds(fixture) == embedded }
+            assertSame(surface, fixture.surface())
+            assertEquals(prepares, fixture.engine.mediaPrepareCount)
+            assertTrue(fixture.model.uiState.value.isPlaying)
         }
     }
 }

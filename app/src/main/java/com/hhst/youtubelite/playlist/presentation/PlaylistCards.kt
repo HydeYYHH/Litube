@@ -36,7 +36,7 @@ internal fun PlaylistArtwork(asset: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PlaylistCover(playlist: PlaylistSummary, modifier: Modifier, onOpen: () -> Unit, compact: Boolean = false) {
+internal fun PlaylistCover(playlist: PlaylistSummary, modifier: Modifier, onOpen: () -> Unit, compact: Boolean = false) {
     Box(modifier.testTag("playlist-cover-${playlist.id}").clickable(role = Role.Button, onClick = onOpen)
         .semantics { contentDescription = listOfNotNull(playlist.title, playlist.countLabel).joinToString(", ") }) {
         Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().height(12.dp)

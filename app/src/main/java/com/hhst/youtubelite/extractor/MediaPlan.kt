@@ -9,7 +9,7 @@ enum class MediaProtocol { HTTPS, DASH, HLS }
 enum class MediaRange { HEADER, QUERY, NONE }
 
 enum class MediaRejection(val code: String) {
-    FORBIDDEN("http_403"), INVALID_BODY("invalid_media_body"),
+    FORBIDDEN("http_403"), INVALID_BODY("invalid_media_body"), UNAVAILABLE("manifest_unavailable"),
 }
 
 /**
@@ -80,7 +80,10 @@ class MediaRequestPlan(
     val allowPostFallback: Boolean = false,
     val resourceLength: Long = -1,
     val expiresAtMillis: Long = Long.MAX_VALUE,
+    availableAfterMillis: Long = 0,
 ) {
+    val availableAtNanos: Long = if (availableAfterMillis > 0)
+        System.nanoTime() + availableAfterMillis.coerceAtMost(30_000) * 1_000_000 else 0
     val userAgent: String = client.userAgent(session)
     val headers: Map<String, String> = mapOf(
         "Origin" to "https://www.youtube.com",

@@ -390,7 +390,11 @@ class SearchResultsScreenAndroidTest {
         results?.recreate()
         awaitNode("search-input")
         compose.onNodeWithTag("search-input").assertTextEquals("draft")
-        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithTag("search-panel-back").performClick()
+        // The close updates state synchronously, but the overlay leaves the
+        // semantics tree on the next frame; older APIs can serve the assert
+        // from the pre-close tree.
+        compose.waitUntil(5_000) { nodeCount("search-overlay") == 0 }
         compose.onNodeWithTag("search-overlay").assertDoesNotExist()
         compose.onNodeWithTag("search-query").assertTextEquals("open movie")
         compose.onNodeWithTag("search-result-workshop").assertIsDisplayed()

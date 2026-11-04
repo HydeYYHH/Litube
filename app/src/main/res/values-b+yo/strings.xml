@@ -166,6 +166,7 @@
     <string name="copy">Ẹda</string>
     <string name="copied">Ti daakọ</string>
     <string name="copy_all">Daakọ gbogbo rẹ</string>
+    <string name="cast_searching">Ṣíṣe àwárí…</string>
     <string name="queue_now_playing">Bayi ti ndun</string>
     <string name="clear_queue_confirm">Ko gbogbo isinyi kuro?</string>
     <string name="ok">O dara</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Ti</string>
     <string name="verification_completed">Ijerọsi ti parun. N gbiyanju lẹẹkansi…</string>
     <string name="verification_still_blocked">Titi wa ni idinilẹ lẹyin ijerọsi. Gbiyanju lẹẹkansi nigba miran.</string>
+    <string name="comments_title">Àwọn àṣàyàn</string>
+    <string name="comments_sort_top">Àwọn àṣàyàn tó ga jù</string>
+    <string name="comments_sort_newest">Tuntun jù lọ</string>
+    <string name="comments_sort_chip_top">Tó ga jù</string>
+    <string name="comments_sort_chip_newest">Tuntun</string>
+    <string name="comments_composer_add">Fi àṣàyàn kun</string>
+    <string name="comments_composer_reply">Dáhùn</string>
+    <string name="comments_composer_edit">Ṣàtúnṣe àṣàyàn</string>
+    <string name="comments_composer_text_hint">Ọ̀rọ̀ àṣàyàn</string>
+    <string name="comments_composer_text_edit_hint">Ṣàtúnṣe ọ̀rọ̀ àṣàyàn</string>
+    <string name="comments_composer_submit">Fi àṣàyàn ránṣẹ́</string>
+    <string name="comments_composer_sending">Ó ń firánṣẹ́…</string>
+    <string name="comments_composer_save">Fipàmọ́</string>
+    <string name="comments_delete_title">Parẹ́</string>
+    <string name="comments_show_more_replies">Fi àwọn ìdáhùn sílẹ̀ si</string>
+    <string name="comments_load_more_failed">Kò lè gbé àwọn àṣàyàn mííràn wá</string>
+    <string name="comments_hide_replies">Fi àwọn ìdáhùn pamọ́</string>
+    <string name="home_music_charts">Àtẹ orin</string>
+    <string name="home_popular_gaming">Gbajúmọ̀ nínú eré fídíò</string>
+    <string name="home_popular_sports">Gbajúmọ̀ nínú eré ìdárayá</string>
+    <string name="home_top_news">Àwọn ìròyìn pàtàkì</string>
 </resources>

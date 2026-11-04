@@ -2,7 +2,7 @@ package com.hhst.youtubelite.downloader.ui
 
 import android.content.Context
 import android.content.Intent
-import com.google.gson.Gson
+import kotlinx.serialization.encodeToString
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadSnapshotGuard
 import com.hhst.youtubelite.downloader.core.SnapshotReject
@@ -62,13 +62,13 @@ sealed class DownloadUiStart {
 
 internal object DownloadUiSessions {
     private val memory = ConcurrentHashMap<String, BatchSnapshot>()
-    private val gson = Gson()
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     fun put(context: Context, snapshot: BatchSnapshot): String {
         val id = UUID.randomUUID().toString()
         memory[id] = snapshot
         runCatching {
-            file(context, id).writeText(gson.toJson(snapshot))
+            file(context, id).writeText(json.encodeToString(BatchSnapshot.serializer(), snapshot))
         }
         return id
     }
@@ -78,7 +78,7 @@ internal object DownloadUiSessions {
         val stored = file(context, id)
         if (!stored.exists()) return null
         return runCatching {
-            gson.fromJson(stored.readText(), BatchSnapshot::class.java)
+            json.decodeFromString(BatchSnapshot.serializer(), stored.readText())
         }.getOrNull()?.also { memory[id] = it }
     }
 

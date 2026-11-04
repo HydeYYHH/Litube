@@ -34,7 +34,7 @@ import com.hhst.youtubelite.settings.presentation.SettingsScreen
 import com.hhst.youtubelite.ui.about.AboutActivity
 import org.koin.android.ext.android.inject
 
-/** Native settings host; preferences are written to the existing MMKV preference store. */
+/** Application settings and system preference entry points. */
 class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private val extensionManager: ExtensionManager by inject()
 
@@ -75,7 +75,15 @@ class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
                     extensionManager.setEnabled(key, enabled)
                 },
                 onAbout = { startActivity(Intent(this@SettingsActivity, AboutActivity::class.java)) },
-                onAdvanced = { startActivity(Intent(this@SettingsActivity, PlaybackSettingsActivity::class.java)) },
+                onAdvanced = { startActivity(Intent(this@SettingsActivity, AdvancedActivity::class.java)) },
+                onSelectTheme = { mode ->
+                    extensionManager.setThemeMode(mode)
+                    com.hhst.youtubelite.ui.theme.AppAppearance.update(mode)
+                },
+                onSelectLanguage = { tag ->
+                    val handledBySystem = com.hhst.youtubelite.core.AppLocale.apply(this@SettingsActivity, tag)
+                    if (!handledBySystem) recreate()
+                },
                 onOpenNotificationSettings = {
                     val settingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

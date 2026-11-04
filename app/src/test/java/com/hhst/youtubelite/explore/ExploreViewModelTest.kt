@@ -359,4 +359,56 @@ class ExploreViewModelTest {
         assertEquals(listOf("music-first", "music-second"), sections.single().videos.map { it.id })
     }
 
+    @Test fun emptyIntermediatePagesKeepTheirContinuations() = runTest {
+        val repository = PagedRepository { cat -> ExplorePage(cat, videosOf(cat, "first"), nextKey = "a") }
+        repository.nextPages.add { cat -> ExplorePage(cat, emptyList(), nextKey = "b") }
+        repository.nextPages.add { cat -> ExplorePage(cat, emptyList(), nextKey = "c") }
+        repository.nextPages.add { cat -> ExplorePage(cat, videosOf(cat, "last")) }
+        val vm = ExploreViewModel(repository, ExploreScenario.Content)
+        advanceUntilIdle()
+        repeat(3) { vm.onAction(ExploreAction.LoadMore); advanceUntilIdle() }
+        val page = (vm.uiState.value.content as ExploreContent.Ready).page
+        assertEquals(listOf("a", "b", "c"), repository.nextKeys)
+        assertEquals(listOf("music-first", "music-last"), page.videos.map { it.id })
+        assertNull(page.nextKey)
+    }
+
+    @Test fun emptyIntermediateShelfPagesKeepTheirContinuations() = runTest {
+        val repository = PagedRepository { cat -> ExplorePage(cat, emptyList(),
+            listOf(ExploreSection("Shelf", videosOf(cat, "first"), "a"))) }
+        repository.shelfResults["a"] = ExploreSection(null, emptyList(), "b")
+        repository.shelfResults["b"] = ExploreSection(null, emptyList(), "c")
+        repository.shelfResults["c"] = ExploreSection(null, videosOf(ExploreCategory.Music, "last"))
+        val vm = ExploreViewModel(repository, ExploreScenario.Content)
+        advanceUntilIdle()
+        repeat(3) { vm.onAction(ExploreAction.LoadShelf(0)); advanceUntilIdle() }
+        val section = (vm.uiState.value.content as ExploreContent.Ready).page.sections.single()
+        assertEquals(listOf("a", "b", "c"), repository.shelfKeys)
+        assertEquals(listOf("music-first", "music-last"), section.videos.map { it.id })
+        assertNull(section.nextKey)
+    }
+
+    @Test fun longerShelfCursorCyclesEndWithoutRepeatingRequests() = runTest {
+        val repository = PagedRepository { cat -> ExplorePage(cat, emptyList(),
+            listOf(ExploreSection("Shelf", videosOf(cat, "first"), "a"))) }
+        repository.shelfResults["a"] = ExploreSection(null, emptyList(), "b")
+        repository.shelfResults["b"] = ExploreSection(null, emptyList(), "a")
+        val vm = ExploreViewModel(repository, ExploreScenario.Content)
+        advanceUntilIdle()
+        repeat(3) { vm.onAction(ExploreAction.LoadShelf(0)); advanceUntilIdle() }
+        assertEquals(listOf("a", "b"), repository.shelfKeys)
+        assertNull((vm.uiState.value.content as ExploreContent.Ready).page.sections.single().nextKey)
+    }
+
+    @Test fun aFlatContinuationRemainsVisibleAfterSectionedContent() = runTest {
+        val repository = PagedRepository { cat -> ExplorePage(cat, videosOf(cat, "first"),
+            listOf(ExploreSection("Shelf", videosOf(cat, "first"))), "a") }
+        repository.nextPages.add { cat -> ExplorePage(cat, videosOf(cat, "last")) }
+        val vm = ExploreViewModel(repository, ExploreScenario.Content)
+        advanceUntilIdle()
+        vm.onAction(ExploreAction.LoadMore)
+        advanceUntilIdle()
+        assertEquals(listOf("music-first", "music-last"),
+            (vm.uiState.value.content as ExploreContent.Ready).page.sections.flatMap { it.videos }.map { it.id })
+    }
 }

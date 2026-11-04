@@ -166,6 +166,7 @@
     <string name="copy">Kwafi</string>
     <string name="copied">An kofe</string>
     <string name="copy_all">Kwafi duka</string>
+    <string name="cast_searching">Neman…</string>
     <string name="queue_now_playing">Yanzu wasa</string>
     <string name="clear_queue_confirm">&lt;&gt; Share dukan jerin gwano?</string>
     <string name="ok">Ok</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Rufe</string>
     <string name="verification_completed">An kammala tabbaci. Ana sake gwadawa…</string>
     <string name="verification_still_blocked">Har yanzu an toshe bayan tabbaci. Sake gwadawa daga baya.</string>
+    <string name="comments_title">Sharhi</string>
+    <string name="comments_sort_top">Manyan sharhi</string>
+    <string name="comments_sort_newest">Sababbi farko</string>
+    <string name="comments_sort_chip_top">Manya</string>
+    <string name="comments_sort_chip_newest">Sababbi</string>
+    <string name="comments_composer_add">Ƙara sharhi</string>
+    <string name="comments_composer_reply">Amsa</string>
+    <string name="comments_composer_edit">Gyara sharhi</string>
+    <string name="comments_composer_text_hint">Rubutun sharhi</string>
+    <string name="comments_composer_text_edit_hint">Gyara rubutun sharhi</string>
+    <string name="comments_composer_submit">Yi sharhi</string>
+    <string name="comments_composer_sending">Ana tura…</string>
+    <string name="comments_composer_save">Ajiye</string>
+    <string name="comments_delete_title">Goge</string>
+    <string name="comments_show_more_replies">Nuna ƙarin amsoshi</string>
+    <string name="comments_load_more_failed">An kasa ɗora ƙarin sharhi</string>
+    <string name="comments_hide_replies">Boye amsoshi</string>
+    <string name="home_music_charts">Jadawalin kiɗa</string>
+    <string name="home_popular_gaming">Wasannin da suka yi fice</string>
+    <string name="home_popular_sports">Wasannin motsa jiki da suka yi fice</string>
+    <string name="home_top_news">Manyan labarai</string>
 </resources>

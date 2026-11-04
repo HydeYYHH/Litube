@@ -166,6 +166,7 @@
     <string name="copy">Kopija</string>
     <string name="copied">Kopirano</string>
     <string name="copy_all">Kopiraj sve</string>
+    <string name="cast_searching">Pretraga…</string>
     <string name="queue_now_playing">Sada se igra</string>
     <string name="clear_queue_confirm">Izbrisati ceo red?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Zatvori</string>
     <string name="verification_completed">Potvrda je završena. Pokušava se ponovo…</string>
     <string name="verification_still_blocked">I dalje blokirano nakon potvrde. Pokušajte ponovo kasnije.</string>
+    <string name="comments_title">Komentari</string>
+    <string name="comments_sort_top">Najbolji komentari</string>
+    <string name="comments_sort_newest">Prvo najnoviji</string>
+    <string name="comments_sort_chip_top">Najbolje</string>
+    <string name="comments_sort_chip_newest">Najnovije</string>
+    <string name="comments_composer_add">Dodajte komentar</string>
+    <string name="comments_composer_reply">Odgovorite</string>
+    <string name="comments_composer_edit">Izmenite komentar</string>
+    <string name="comments_composer_text_hint">Tekst komentara</string>
+    <string name="comments_composer_text_edit_hint">Izmenite tekst komentara</string>
+    <string name="comments_composer_submit">Komentarišite</string>
+    <string name="comments_composer_sending">Slanje…</string>
+    <string name="comments_composer_save">Sačuvaj</string>
+    <string name="comments_delete_title">Izbriši</string>
+    <string name="comments_show_more_replies">Prikaži još odgovora</string>
+    <string name="comments_load_more_failed">Nije moguće učitati još komentara</string>
+    <string name="comments_hide_replies">Sakrij odgovore</string>
+    <string name="home_music_charts">Muzičke top-liste</string>
+    <string name="home_popular_gaming">Popularno u igrama</string>
+    <string name="home_popular_sports">Popularno u sportu</string>
+    <string name="home_top_news">Najvažnije vesti</string>
 </resources>

@@ -69,6 +69,37 @@ class ShortsViewModelTest {
         assertEquals(ShortsOverlay.None, vm.uiState.value.overlay)
     }
 
+    @Test fun saveToPlaylistNeedsASaveRepositoryAndRoutesThroughTheSharedSheet() = runTest {
+        val withoutSaves = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null)
+        advanceUntilIdle()
+        assertNull(withoutSaves.saveSheet)
+        withoutSaves.onAction(ShortsAction.OpenSaveToPlaylist("short-5"))
+        advanceUntilIdle()
+        assertNull(withoutSaves.saveSheet?.state?.value)
+
+        val saves = RecordingSaves()
+        val vm = ShortsViewModel(FixtureShortsRepository(), SavedStateHandle(), ShortsScenario.Content, null, saves = saves)
+        advanceUntilIdle()
+        vm.onAction(ShortsAction.OpenSaveToPlaylist("short-5"))
+        advanceUntilIdle()
+        assertEquals("short-5", vm.saveSheet?.state?.value?.videoId)
+        assertEquals(listOf("short-5"), saves.choicesFor)
+    }
+
+    /** Records the choices read; the sheet's own write paths are covered by the saves suite. */
+    private class RecordingSaves : com.hhst.youtubelite.saves.domain.SaveRepository {
+        val choicesFor = mutableListOf<String>()
+        override suspend fun choices(videoId: String): List<com.hhst.youtubelite.saves.domain.SaveChoice> {
+            choicesFor += videoId
+            return listOf(com.hhst.youtubelite.saves.domain.SaveChoice("pl-1", "Playlist one", false))
+        }
+        override suspend fun setContaining(playlistId: String, videoId: String, contains: Boolean) {}
+        override suspend fun saveWatchLater(videoId: String) {}
+        override suspend fun create(title: String, description: String, videoId: String) =
+            com.hhst.youtubelite.saves.domain.SaveChoice("pl-new", title, true)
+        override suspend fun savePlaylistToLibrary(playlistId: String) {}
+    }
+
     @Test fun errorScenarioShowsFailureAndRetryRecovers() = runTest {
         var fail = true
         val vm = ShortsViewModel(object : ShortsRepository {

@@ -25,11 +25,11 @@ import org.junit.After
 
 class SharedInteractionAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val appearance = com.hhst.youtubelite.ui.theme.AppAppearance.dark
+    private val appearance = com.hhst.youtubelite.ui.theme.AppAppearance.mode
     @After fun restore() { com.hhst.youtubelite.ui.theme.AppAppearance.update(appearance) }
 
     @Test fun darkSelectedControlsAndSearchStayReadable() {
-        com.hhst.youtubelite.ui.theme.AppAppearance.update(true)
+        com.hhst.youtubelite.ui.theme.ThemeMode.Dark.let { com.hhst.youtubelite.ui.theme.AppAppearance.update(it) }
         var screen by mutableIntStateOf(0)
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {

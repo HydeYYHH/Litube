@@ -3,16 +3,16 @@ package com.hhst.youtubelite.data.media
 import com.liskovsoft.youtubeapi.videoinfo.V2.SearchHistory
 import com.liskovsoft.youtubeapi.videoinfo.V2.SearchHistoryStore
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadSearchSuggestions
-import com.tencent.mmkv.MMKV
+import com.hhst.youtubelite.core.PreferenceStore
 
 /** Local search history, keyed per account. */
-class MmkvSearchHistoryStore(private val kv: MMKV) : SearchHistoryStore {
+class PreferenceSearchHistoryStore(private val kv: PreferenceStore) : SearchHistoryStore {
     private fun key(account: String) = "search_history:$account"
     @Synchronized override fun read(account: String): List<String> =
-        kv.decodeString(key(account), null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        kv.readString(key(account))?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
     @Synchronized override fun write(account: String, entries: List<String>) {
-        if (entries.isEmpty()) kv.removeValueForKey(key(account))
-        else kv.encode(key(account), entries.joinToString("\n"))
+        if (entries.isEmpty()) kv.remove(key(account))
+        else kv.putString(key(account), entries.joinToString("\n"))
     }
 }
 
@@ -32,26 +32,40 @@ internal fun mergeSearchRows(history: List<String>, remote: List<String>, query:
  * Live search-panel rows: local per-account history plus best-effort server suggestions.
  * Suggestion failures degrade to an empty remote list — the panel never errors over them.
  */
-class MediaSearchSuggestions(private val client: MediaClient, kv: MMKV) {
-    private val history = SearchHistory(MmkvSearchHistoryStore(kv))
+class MediaSearchSuggestions(private val client: MediaClient, kv: PreferenceStore,
+    private val identity: () -> com.liskovsoft.youtubeapi.videoinfo.V2.RequestContext = MediaSession::snapshot) {
+    private val history = SearchHistory(PreferenceSearchHistoryStore(kv))
 
     suspend fun rows(query: String): SearchRowSet {
-        val local = history.read(MediaSession.snapshot())
+        val captured = identity()
+        fun checkIdentity() {
+            val current = identity()
+            if (current.generation != captured.generation || current.accountId != captured.accountId ||
+                current.onBehalfOfUser != captured.onBehalfOfUser || current.signedIn != captured.signedIn)
+                throw kotlinx.coroutines.CancellationException("Session changed")
+        }
+        val local = history.read(captured)
         val trimmed = query.trim()
         val remote = if (trimmed.isEmpty()) emptyList() else try {
-            client.read { context, http -> loadSearchSuggestions(trimmed, context, http).value.orEmpty() }
+            client.read { context, http ->
+                if (context.generation != captured.generation || context.accountId != captured.accountId ||
+                    context.onBehalfOfUser != captured.onBehalfOfUser || context.signedIn != captured.signedIn)
+                    throw kotlinx.coroutines.CancellationException("Session changed")
+                loadSearchSuggestions(trimmed, context, http).value.orEmpty()
+            }
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) { emptyList() }
+        checkIdentity()
         return mergeSearchRows(local, remote, trimmed)
     }
 
     fun record(query: String) {
         if (query.isBlank()) return
-        history.record(query, MediaSession.snapshot())
+        history.record(query, identity())
     }
 
     fun remove(entry: String) {
-        history.remove(entry, MediaSession.snapshot())
+        history.remove(entry, identity())
     }
 }

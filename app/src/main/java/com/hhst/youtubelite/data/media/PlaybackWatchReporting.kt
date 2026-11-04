@@ -5,6 +5,9 @@ import com.hhst.youtubelite.library.domain.HistoryEntry
 import com.hhst.youtubelite.shorts.domain.ShortDetail
 import com.hhst.youtubelite.watch.domain.WatchVideo
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
+import com.liskovsoft.youtubeapi.videoinfo.V2.loadPlayerDetails
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,12 +50,24 @@ class PlaybackWatchReporting(
     private val localLibrary: () -> LocalLibraryStore?,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val reporter: WatchTimeReporter = WatchTimeReporter(client, scope),
+    private val reloadVideo: suspend (String) -> ReportingVideo? = { id ->
+        client.read { context, http ->
+            val details = loadPlayerDetails(id, context, http).requireValue()
+            ReportingVideo(id, details.title.orEmpty(), details.author.orEmpty(), details.channelId.orEmpty(),
+                details.thumbnail.orEmpty(), details.tracking, context.generation)
+        }
+    },
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     @Volatile private var video: ReportingVideo? = null
     /** Endpoints armed from the playback response; keyed by the media identity they belong to. */
     private data class ArmedTracking(val videoId: String, val tracking: PlayerTracking?, val generation: Long)
     @Volatile private var armed: ArmedTracking? = null
     private var loop: Job? = null
+    private var contextRefresh: Job? = null
+    private var contextRefreshKey: Pair<String, Long>? = null
+    private var contextRefreshAt = 0L
+    @Volatile private var sampledVideoId: String? = null
     @Volatile private var privacyEpoch = 0L
     private var localRecordKey: Triple<String, Long, Long>? = null
     private var localRecordPositionMs = -1L
@@ -67,6 +82,8 @@ class PlaybackWatchReporting(
     fun onPrivacyChanged() {
         privacyEpoch++
         localRecordKey = null
+        contextRefresh?.cancel()
+        contextRefreshKey = null
         reporter.cancelPending()
     }
 
@@ -77,6 +94,10 @@ class PlaybackWatchReporting(
      */
     @Synchronized fun armTracking(videoId: String, tracking: PlayerTracking?, generation: Long = MediaSession.snapshot().generation) {
         if (generation != MediaSession.snapshot().generation) return
+        if (contextRefreshKey?.first?.let { it != videoId } == true) {
+            contextRefresh?.cancel()
+            contextRefreshKey = null
+        }
         armed = ArmedTracking(videoId, tracking, generation)
         val pageTracking = video?.takeIf { it.id == videoId && it.sessionGeneration == generation }?.tracking
         reporter.watch(videoId, usableTracking(tracking) ?: usableTracking(pageTracking), generation)
@@ -116,19 +137,27 @@ class PlaybackWatchReporting(
     fun detach() {
         loop?.cancel()
         loop = null
+        sampledVideoId = null
+        contextRefresh?.cancel()
+        contextRefreshKey = null
         reporter.finish()
     }
 
     fun finishPlayback(sample: PlaybackSample) {
         tick(sample)
         reporter.finish()
+        sampledVideoId = null
+        contextRefresh?.cancel()
+        contextRefreshKey = null
         if (armed?.videoId == sample.videoId) armed = null
     }
 
     internal suspend fun awaitPendingReports() = reporter.awaitPendingReport()
+    internal suspend fun awaitContextRefresh() = contextRefresh?.join()
 
     /** One reporting pass; internal so tests drive it without the wall-clock loop. */
     fun tick(sample: PlaybackSample?) {
+        sampledVideoId = sample?.videoId
         if (MediaSession.privateBrowsing()) {
             // Privacy on: queued reports die here and nothing new is scheduled.
             reporter.cancelPending()
@@ -141,6 +170,9 @@ class PlaybackWatchReporting(
             return
         }
         val generation = MediaSession.snapshot().generation
+        val staleContext = armed?.let { it.videoId == sample.videoId && it.generation != generation } == true ||
+            video?.let { it.id == sample.videoId && it.sessionGeneration != generation } == true
+        if (sample.playing && staleContext) refreshContext(sample.videoId, generation)
         armed?.takeIf { it.videoId == sample.videoId && it.generation == generation }?.let {
             val pageTracking = video?.takeIf { page -> page.id == it.videoId && page.sessionGeneration == generation }?.tracking
             reporter.watch(it.videoId, usableTracking(it.tracking) ?: usableTracking(pageTracking), generation)
@@ -148,6 +180,33 @@ class PlaybackWatchReporting(
         reporter.tick(sample.positionMs, sample.durationMs, sample.playing, sample.videoId,
             sample.discontinuityEpoch)
         recordLocal(sample)
+    }
+
+    @Synchronized private fun refreshContext(videoId: String, generation: Long) {
+        if (ContentSource.fixtures) return
+        val key = videoId to generation
+        val now = clock()
+        if (contextRefreshKey == key &&
+            (contextRefresh?.isActive == true || now - contextRefreshAt < CONTEXT_RETRY_MS)) return
+        contextRefresh?.cancel()
+        contextRefreshKey = key
+        contextRefreshAt = now
+        contextRefresh = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val fresh = reloadVideo(videoId) ?: return@launch
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (contextRefreshKey != key || sampledVideoId != videoId || fresh.sessionGeneration != generation ||
+                    MediaSession.snapshot().generation != generation || MediaSession.privateBrowsing()) return@launch
+                publish(fresh)
+                armTracking(videoId, fresh.tracking, generation)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                AppLog.event(AppLog.Category.PLAYER, "watch_report.context_refresh_failed",
+                    mapOf("reason" to error.javaClass.simpleName), failure = error)
+            }
+        }
+        contextRefresh?.start()
     }
 
     private fun recordLocal(sample: PlaybackSample) {
@@ -186,5 +245,6 @@ class PlaybackWatchReporting(
     private companion object {
         const val TICK_MS = 1_000L
         const val LOCAL_RECORD_EVERY_MS = 5_000L
+        const val CONTEXT_RETRY_MS = 30_000L
     }
 }

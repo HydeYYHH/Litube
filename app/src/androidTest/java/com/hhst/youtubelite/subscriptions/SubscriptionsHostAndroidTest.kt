@@ -74,16 +74,33 @@ class SubscriptionsHostAndroidTest {
         second.onActivity { assertEquals(SubscriptionsNavigationRequest.Channel("blender"), it.lastNavigationRequest) }
     }
 
-    @Test fun channelStripIsThePhoneFilterSurfaceAndOpensChannels() {
+    @Test fun channelStripAndFiltersStayVisibleAndOpenChannels() {
         val host = launch(signedIn = true)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("subscriptions-feed").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("subscriptions-channels").assertIsDisplayed()
         compose.onNodeWithTag("subs-strip-blender").assertIsDisplayed()
-        // The measured mobile feed has no filter chips.
-        compose.onAllNodesWithText("Live").assertCountEquals(0)
+        compose.onNodeWithTag("subs-new-blender", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("subscriptions-chips").assertIsDisplayed()
+        compose.onNodeWithTag("subscriptions-chips").performScrollToNode(hasText("Live"))
+        compose.onNodeWithText("Live").assertIsDisplayed()
         compose.onNodeWithTag("subs-strip-blender").performClick()
         compose.waitForIdle()
         host.onActivity { assertEquals(SubscriptionsNavigationRequest.Channel("blender"), it.lastNavigationRequest) }
+    }
+
+    @Test fun allChannelsKeepsUnreadIndicatorsAndReturnsToTheFeed() {
+        launch(signedIn = true)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("subs-strip-blender").fetchSemanticsNodes().isNotEmpty() }
+        val all = compose.onNodeWithTag("subscriptions-manage").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("subscriptions-channels").performTouchInput { swipeLeft() }
+        assertEquals(all, compose.onNodeWithTag("subscriptions-manage").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("subscriptions-manage").performClick()
+        compose.onNodeWithText("All subscriptions").assertIsDisplayed()
+        compose.onNodeWithTag("channels-new-blender", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("channels-new-openmovies", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithTag("subscriptions-feed").assertIsDisplayed()
+        compose.onNodeWithTag("subs-new-blender", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test fun menuEmitsOnlyTheTypedActionAndStaysOnTheFeed() {

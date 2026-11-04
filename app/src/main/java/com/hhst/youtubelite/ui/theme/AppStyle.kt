@@ -4,18 +4,41 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
+/** User-selectable appearance; System follows the OS dark-mode setting. */
+enum class ThemeMode(val label: String) { System("System"), Light("Light"), Dark("Dark") }
+
 object AppAppearance {
+    /** Resolved darkness for the Compose theme; null means "follow the system". */
     var dark by mutableStateOf<Boolean?>(null)
         private set
+    var mode by mutableStateOf(ThemeMode.System)
+        private set
+    private val listeners = mutableListOf<() -> Unit>()
 
-    fun update(value: Boolean?) { dark = value }
+    /** Publishes a persisted mode change; every Compose theme entry recomposes. */
+    fun update(value: ThemeMode) {
+        mode = value
+        dark = when (value) {
+            ThemeMode.Dark -> true
+            ThemeMode.Light -> false
+            ThemeMode.System -> null
+        }
+        synchronized(listeners) { listeners.toList() }.forEach { it() }
+    }
+
+    /** Registers a non-Compose observer (system bars); returns the unsubscribe handle. */
+    fun onChange(listener: () -> Unit): () -> Unit {
+        synchronized(listeners) { listeners += listener }
+        return { synchronized(listeners) { listeners -= listener } }
+    }
 }
 
 object AppStyle {
@@ -27,6 +50,17 @@ object AppStyle {
     val SheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
     val MenuShape = RoundedCornerShape(12.dp)
     val Action: Color
-        @Composable get() = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-            Color(0xFF3EA6FF) else Color(0xFF065FD4)
+        @Composable get() = LocalActionColors.current?.foreground ?: MaterialTheme.colorScheme.onSurface
+    val OnAction: Color
+        @Composable get() = LocalActionColors.current?.background ?: MaterialTheme.colorScheme.surface
+}
+
+private data class ActionColors(val foreground: Color, val background: Color)
+private val LocalActionColors = staticCompositionLocalOf<ActionColors?> { null }
+
+@Composable
+fun NeutralControls(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalActionColors provides ActionColors(
+        MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surface,
+    ), content = content)
 }

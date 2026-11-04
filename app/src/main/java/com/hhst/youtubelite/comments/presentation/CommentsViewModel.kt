@@ -90,6 +90,8 @@ class CommentsViewModel(
     private var loadJob: Job? = null
     private var pageJob: Job? = null
     private var generation = 0
+    /** Identity epoch: bumped on every session change, captured by in-flight writes. */
+    private var sessionGeneration = 0L
     private val replyJobs = mutableMapOf<String, Job>()
     /** Cursors requested in the current load cycle; a repeat means the server loops. */
     private val consumedCursors = mutableSetOf<String>()
@@ -137,6 +139,7 @@ class CommentsViewModel(
     }
 
     fun refreshSession() {
+        sessionGeneration++
         actionJob?.cancel()
         savedState[KEY_DRAFT] = ""
         savedState[KEY_LOADED] = 0
@@ -193,6 +196,7 @@ class CommentsViewModel(
                 navigation.trySend(CommentNavigationRequest.OpenCommentMenu(target, action.commentId))
             }
             is CommentAction.OpenAuthor -> navigation.trySend(CommentNavigationRequest.OpenAuthor(action.channelId))
+            is CommentAction.OpenLink -> navigation.trySend(CommentNavigationRequest.OpenLink(action.link))
             is CommentAction.Reply -> openComposer(
                 action.threadId,
                 action.commentId.takeUnless { it == action.threadId },
@@ -317,18 +321,26 @@ class CommentsViewModel(
             request is CommentNavigationRequest.SubmitReply || request is CommentNavigationRequest.EditComment ||
             request is CommentNavigationRequest.DeleteComment
         _state.update { it.copy(actionPending = true) }
+        // The write is bound to the identity it started under: a result (or the
+        // cancellation unwind) from a switched session must not clear the new
+        // session's pending state or publish into it.
+        val requestSession = sessionGeneration
+        fun stale() = sessionGeneration != requestSession || target != requestedTarget
         actionJob = viewModelScope.launch {
             try {
                 service.perform(request)
-                if (target != requestedTarget) return@launch
+                if (stale()) return@launch
                 _state.update { it.copy(actionPending = false) }
                 if (closesEditor) closeComposer()
                 load()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.send(AppNotice.SignIn) }
-            catch (_: UnsupportedOperationException) { notices.send(AppNotice.Message("This action is not available.")) }
-            catch (_: Exception) { notices.send(AppNotice.Message("Could not confirm the change. Please refresh and try again.")) }
-            finally { if (target == requestedTarget) _state.update { it.copy(actionPending = false) } }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { if (!stale()) notices.send(AppNotice.SignIn) }
+            catch (_: UnsupportedOperationException) { if (!stale()) notices.send(AppNotice.Message("This action is not available.")) }
+            catch (error: Exception) {
+                if (!stale()) notices.send(com.hhst.youtubelite.diagnostics.writeFailureNotice(
+                    "comment_${request::class.simpleName.orEmpty()}", error))
+            }
+            finally { if (!stale()) _state.update { it.copy(actionPending = false) } }
         }
     }
 

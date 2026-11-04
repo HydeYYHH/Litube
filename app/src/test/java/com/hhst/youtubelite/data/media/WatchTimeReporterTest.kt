@@ -190,7 +190,7 @@ class WatchTimeReporterTest {
         reporter.stop()
     }
 
-    @Test fun failedReportsBackOffAndSuspend() {
+    @Test fun failedReportsBackOffAndRecoverAfterABoundedProbeInterval() {
         failRequests = true
         val reporter = reporter()
         reporter.watch("video", tracking)
@@ -209,11 +209,16 @@ class WatchTimeReporterTest {
             while (requests.size < expected && System.currentTimeMillis() < deadline) Thread.sleep(20)
         }
         assertEquals(5, requests.size)
-        // Suspended: even with time advance, no further attempts leave.
-        fakeNow.addAndGet(600_000)
+        fakeNow.addAndGet(299_999)
         reporter.tick(120_000, 200_000, playing = true)
         Thread.sleep(300)
         assertEquals(5, requests.size)
+        failRequests = false
+        fakeNow.incrementAndGet()
+        reporter.tick(121_000, 200_000, playing = true)
+        awaitRequests(7)
+        reporter.tick(132_000, 200_000, playing = true)
+        awaitRequests(8)
         reporter.stop()
     }
 

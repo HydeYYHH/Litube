@@ -87,6 +87,10 @@ fun ChannelScreen(
     modifier: Modifier = Modifier,
 ) {
     AppTheme {
+        val hideShorts = LocalHideShorts.current
+        LaunchedEffect(hideShorts, state.selectedTab) {
+            if (hideShorts && state.selectedTab == ChannelTab.Shorts) onAction(ChannelAction.SelectTab(ChannelTab.Home))
+        }
         BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("channel-page")) {
             val width = maxWidth.value
             val height = maxHeight.value
@@ -306,7 +310,7 @@ internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Un
             .onSizeChanged { viewport = it.width }
             .horizontalScroll(scroll).testTag("channel-tabs-row"), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(ChannelLayout.TabsStartInset.dp))
-            ChannelTab.entries.forEach { tab ->
+            ChannelTab.entries.filterNot { LocalHideShorts.current && it == ChannelTab.Shorts }.forEach { tab ->
                 val isSelected = tab == selected
                 Box(Modifier.height(ChannelLayout.TabBarHeight.dp)
                     .widthIn(min = ChannelLayout.TabMinWidth.dp)

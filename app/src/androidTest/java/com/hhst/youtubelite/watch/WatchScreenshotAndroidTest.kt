@@ -371,8 +371,8 @@ class WatchScreenshotAndroidTest {
         }
         val output = File(compose.activity.getExternalFilesDir(null), "watch-acceptance").apply { mkdirs() }
         val sheet = compose.onNodeWithTag("watch-video-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
-        assertEquals(8f, sheet.left, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
+        assertEquals(0f, sheet.left, 0.5f)
         assertEquals(844f - 24f, sheet.bottom, 0.5f)
         assertEquals(48f, compose.onNodeWithTag("watch-menu-Share").fetchSemanticsNode().boundsInRoot.height, 0.5f)
         capture("video-menu-390", output, true, emptySet())

@@ -166,6 +166,7 @@
     <string name="copy">မိတ္တူ</string>
     <string name="copied">ကူးယူသည်။</string>
     <string name="copy_all">အားလုံးကို ကူးယူပါ။</string>
+    <string name="cast_searching">ရှာဖွေနေသည်…</string>
     <string name="queue_now_playing">ယခု ကစားနေပါသည်။</string>
     <string name="clear_queue_confirm">တန်းစီတစ်ခုလုံးကို ရှင်းမလား။</string>
     <string name="ok">အိုကေ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">ပိတ်သည်</string>
     <string name="verification_completed">စိစစ်အတည်ပြုခြင်း ပြီးစီးသည်။ ထပ်မံကြိုးစားနေသည်…</string>
     <string name="verification_still_blocked">အတည်ပြုပြီးနောက်လည်း ပိတ်ဆို့နေဆဲဖြစ်သည်။ နောက်မှ ထပ်မံကြိုးစားပါ။</string>
+    <string name="comments_title">ကွမ်တင်များ</string>
+    <string name="comments_sort_top">ထိပ်တန်းကွမ်တင်များ</string>
+    <string name="comments_sort_newest">အသစ်များ အရင်</string>
+    <string name="comments_sort_chip_top">ထိပ်တန်း</string>
+    <string name="comments_sort_chip_newest">အသစ်</string>
+    <string name="comments_composer_add">ကွမ်တင် ထည့်ရန်</string>
+    <string name="comments_composer_reply">ပြန်ကြားရန်</string>
+    <string name="comments_composer_edit">ကွမ်တင် တည်းဖြတ်ရန်</string>
+    <string name="comments_composer_text_hint">ကွမ်တင် စာတို့</string>
+    <string name="comments_composer_text_edit_hint">ကွမ်တင် စာတို့ တည်းဖြတ်ရန်</string>
+    <string name="comments_composer_submit">ကွမ်တင် ရေးရန်</string>
+    <string name="comments_composer_sending">ပေးပို့နေ…</string>
+    <string name="comments_composer_save">သိမ်းရန်</string>
+    <string name="comments_delete_title">ဖျက်ရန်</string>
+    <string name="comments_show_more_replies">ပြန်ကြားချက် ပို၍ ပြရန်</string>
+    <string name="comments_load_more_failed">နောက်ထပ် ကွမ်တင်များ ဖော်ပြ၍ မရပါ</string>
+    <string name="comments_hide_replies">ပြန်ကြားချက်များ ဖျောက်ရန်</string>
+    <string name="home_music_charts">ဂီတဇယားများ</string>
+    <string name="home_popular_gaming">လူကြိုက်များသော ဂိမ်းများ</string>
+    <string name="home_popular_sports">လူကြိုက်များသော အားကစားများ</string>
+    <string name="home_top_news">ထိပ်တန်းသတင်းများ</string>
 </resources>

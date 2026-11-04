@@ -27,7 +27,9 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 enum class MainTab(val label: String) { Home("Home"), Shorts("Shorts"), Subscriptions("Subscriptions"), You("You") }
 
 object MainTabs {
-    fun tabs(signedIn: Boolean) = if (signedIn) MainTab.entries else listOf(MainTab.Home, MainTab.Shorts, MainTab.You)
+    fun tabs(signedIn: Boolean, hideShorts: Boolean = false) =
+        (if (signedIn) MainTab.entries else listOf(MainTab.Home, MainTab.Shorts, MainTab.You))
+            .filterNot { hideShorts && it == MainTab.Shorts }
 
     /**
      * Reuses an existing destination instance instead of stacking a new one on
@@ -43,18 +45,19 @@ object MainTabs {
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         MainTab.Shorts -> com.hhst.youtubelite.shorts.ShortsActivity.intent(context)
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    }
+    }?.putExtra(com.hhst.youtubelite.navigation.WatchTransition.INSTANT, true)
 }
 
 /** The bottom navigation bar shared by the main-tab hosts. */
 @Composable
 fun MainNavigationBar(tag: String, signedIn: Boolean, avatarAsset: String?, selected: MainTab = MainTab.You, onSelect: (MainTab) -> Unit) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.TAB)
     Column(Modifier.fillMaxWidth().testTag("$tag-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(DesignTokens.BottomBarHeight)) {
-            MainTabs.tabs(signedIn).forEach { tab ->
+            MainTabs.tabs(signedIn, com.hhst.youtubelite.ui.design.LocalHideShorts.current).forEach { tab ->
                 Column(Modifier.weight(1f).fillMaxHeight()
-                    .clickable(role = Role.Tab) { onSelect(tab) }
+                    .clickable(role = Role.Tab) { haptic(); onSelect(tab) }
                     .testTag("$tag-nav-${tab.name}").semantics { this.selected = tab == selected },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center) {

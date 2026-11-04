@@ -11,7 +11,7 @@ import android.webkit.WebView
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
 import org.junit.Assume.assumeTrue
@@ -29,7 +29,7 @@ class JavascriptLifecycleAndroidTest {
 
     private fun context(current: AtomicBoolean = AtomicBoolean(true)): ExtractionContext = ExtractionContext(
         YoutubeWebSession("lifecycle", WebAccount.ANONYMOUS, 0, null, null, null,
-            null, "fixture", 0, null, "offline", JsonObject(), { "" }),
+            null, "fixture", 0, null, "offline", JsonObject(emptyMap()), { "" }),
         object : ExtractionTransport {
             override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>) = throw IOException("LIFECYCLE_HAS_NO_NETWORK")
             override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray) = throw IOException("LIFECYCLE_HAS_NO_NETWORK")

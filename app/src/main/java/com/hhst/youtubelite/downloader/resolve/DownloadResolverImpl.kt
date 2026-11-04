@@ -1,7 +1,7 @@
 package com.hhst.youtubelite.downloader.resolve
 
+import kotlinx.serialization.encodeToString
 import com.hhst.youtubelite.downloader.core.AssetKind
-import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.DownloadComponentSource
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadPhase
@@ -37,7 +37,6 @@ class DownloadResolverImpl(
     private val sources = ConcurrentHashMap<String, List<DownloadComponentSource>>()
     private data class FallbackCatalog(val catalog: DownloadCatalog, val scope: String, val expires: Long)
     private val fallbackCatalogs = LinkedHashMap<String, FallbackCatalog>(16, .75f, true)
-    private val gson = Gson()
 
     override fun sourcesOf(taskId: String): List<DownloadComponentSource> = sources[taskId].orEmpty()
 
@@ -149,9 +148,10 @@ class DownloadResolverImpl(
             val expiry = catalog.formats.mapNotNull { it.expiresAtMillis }.minOrNull() ?: now + 120_000
             fallbackCatalogs[task.id] = FallbackCatalog(catalog, catalogs.scope(), minOf(now + 120_000, expiry - 30_000))
             fallbackCatalogs.entries.removeAll { it.value.expires <= now }
-            var size = fallbackCatalogs.values.sumOf { gson.toJson(it.catalog).toByteArray().size }
+            val json = kotlinx.serialization.json.Json
+            var size = fallbackCatalogs.values.sumOf { json.encodeToString(kotlinx.serialization.serializer(DownloadCatalog::class.java), it.catalog).toByteArray().size }
             while ((size > 8 * 1024 * 1024 || fallbackCatalogs.size > 128) && fallbackCatalogs.isNotEmpty()) {
-                size -= gson.toJson(fallbackCatalogs.remove(fallbackCatalogs.keys.first())!!.catalog).toByteArray().size
+                size -= json.encodeToString(kotlinx.serialization.serializer(DownloadCatalog::class.java), fallbackCatalogs.remove(fallbackCatalogs.keys.first())!!.catalog).toByteArray().size
             }
         }
         sources[task.id] = buildSources(task, plan)

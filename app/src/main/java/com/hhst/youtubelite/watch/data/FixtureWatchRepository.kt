@@ -9,7 +9,11 @@ import com.hhst.youtubelite.watch.domain.WatchVideo
 import kotlinx.coroutines.delay
 
 /** All artwork and metadata are packaged locally. This class has no network dependency. */
-class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario.Content) : WatchRepository {
+class FixtureWatchRepository(
+    private val scenario: WatchScenario = WatchScenario.Content,
+    /** Debug instrumentation seam; the default keeps every fixture chatKey null and goldens stable. */
+    private val chatKey: String? = null,
+) : WatchRepository {
     override suspend fun watch(videoId: String): WatchPage {
         delay(140)
         if (scenario == WatchScenario.Error) throw java.io.IOException("Local error scenario")
@@ -17,6 +21,7 @@ class FixtureWatchRepository(private val scenario: WatchScenario = WatchScenario
         if (scenario == WatchScenario.Description) {
             return page.copy(video = page.video.copy(description = linkedSampleDescription))
         }
+        if (chatKey != null) return page.copy(video = page.video.copy(chatKey = chatKey))
         return page
     }
 

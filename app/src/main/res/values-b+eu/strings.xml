@@ -166,6 +166,7 @@
     <string name="copy">Kopiatu</string>
     <string name="copied">Kopiatua</string>
     <string name="copy_all">Kopiatu guztiak</string>
+    <string name="cast_searching">Bilatzen…</string>
     <string name="queue_now_playing">Orain jolasten</string>
     <string name="clear_queue_confirm">Ilara osoa garbitu?</string>
     <string name="ok">Ados</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Itxi</string>
     <string name="verification_completed">Egiaztapena amaitu da. Berriro saiatzen…</string>
     <string name="verification_still_blocked">Egiaztatu ondoren oraindik blokeatuta. Saiatu berriro geroago.</string>
+    <string name="comments_title">Iruzkinak</string>
+    <string name="comments_sort_top">Iruzkin hoberenak</string>
+    <string name="comments_sort_newest">Berrienak lehenik</string>
+    <string name="comments_sort_chip_top">Hoberenak</string>
+    <string name="comments_sort_chip_newest">Berriak</string>
+    <string name="comments_composer_add">Gehitu iruzkin bat</string>
+    <string name="comments_composer_reply">Erantzun</string>
+    <string name="comments_composer_edit">Editatu iruzkina</string>
+    <string name="comments_composer_text_hint">Iruzkinaren testua</string>
+    <string name="comments_composer_text_edit_hint">Editatu iruzkinaren testua</string>
+    <string name="comments_composer_submit">Iruzkindu</string>
+    <string name="comments_composer_sending">Bidaltzen…</string>
+    <string name="comments_composer_save">Gorde</string>
+    <string name="comments_delete_title">Ezabatu</string>
+    <string name="comments_show_more_replies">Erakutsi erantzun gehiago</string>
+    <string name="comments_load_more_failed">Ezin izan dira iruzkin gehiago kargatu</string>
+    <string name="comments_hide_replies">Ezkutatu erantzunak</string>
+    <string name="home_music_charts">Musika-zerrendak</string>
+    <string name="home_popular_gaming">Joerak jokoetan</string>
+    <string name="home_popular_sports">Joerak kiroletan</string>
+    <string name="home_top_news">Albiste nagusiak</string>
 </resources>

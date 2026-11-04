@@ -31,6 +31,11 @@ class FixtureSubscriptionsRepository(private val scenario: SubscriptionsScenario
         return channels()
     }
 
+    override suspend fun subscribedChannelsPage(cursor: String?): ChannelDirectoryPage {
+        delay(140)
+        return ChannelDirectoryPage(channels(), null)
+    }
+
     companion object {
         fun sampleVideos(): List<FeedItem.Video> {
             val page = com.hhst.youtubelite.home.data.FixtureHomeRepository.samplePage()

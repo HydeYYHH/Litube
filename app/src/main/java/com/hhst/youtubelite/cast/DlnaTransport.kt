@@ -1,0 +1,138 @@
+package com.hhst.youtubelite.cast
+
+import com.hhst.youtubelite.core.readCancellable
+import com.yinnho.upnpcast.DLNACast
+import java.io.IOException
+import java.io.ByteArrayOutputStream
+import java.util.Locale
+import kotlinx.coroutines.delay
+import okhttp3.HttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+
+internal class DlnaRequestException(
+    val stage: String,
+    val endpoint: HttpUrl,
+    val status: Int? = null,
+    val code: String? = null,
+    detail: String,
+) : IOException("$stage: $detail")
+
+internal class DlnaTransport(private val client: OkHttpClient) {
+    var renderer: DlnaRenderer? = null
+        private set
+
+    suspend fun describe(location: HttpUrl): DlnaRenderer? {
+        val request = Request.Builder().url(location).header("User-Agent", "Litube/1.0 UPnP/1.1").build()
+        val (status, bytes) = read(request, "description")
+        return try {
+            DlnaDescription.parse(bytes, location)
+        } catch (error: Exception) {
+            throw DlnaRequestException("description", location, status,
+                detail = "parse ${error.message ?: error.javaClass.simpleName}").also { it.initCause(error) }
+        }
+    }
+
+    suspend fun cast(target: DlnaRenderer, url: String, title: String, mimeType: String): Boolean {
+        renderer = target
+        val metadata = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
+            "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
+            "<item id=\"0\" parentID=\"-1\" restricted=\"1\"><dc:title>${xml(title)}</dc:title>" +
+            "<upnp:class>object.item.videoItem</upnp:class><res protocolInfo=\"http-get:*:${xml(mimeType)}:*\">" +
+            "${xml(url)}</res></item></DIDL-Lite>"
+        action("SetAVTransportURI", "<CurrentURI>${xml(url)}</CurrentURI><CurrentURIMetaData>${xml(metadata)}</CurrentURIMetaData>")
+        return play()
+    }
+
+    suspend fun play(): Boolean { action("Play", "<Speed>1</Speed>"); return true }
+    suspend fun pause(): Boolean { action("Pause"); return true }
+    suspend fun stop(): Boolean {
+        if (renderer == null) return false
+        action("Stop")
+        return true
+    }
+    suspend fun seek(positionMs: Long): Boolean {
+        val seconds = positionMs.coerceAtLeast(0) / 1000
+        val time = String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+        repeat(3) { attempt ->
+            try {
+                action("Seek", "<Unit>REL_TIME</Unit><Target>$time</Target>")
+                return true
+            } catch (error: DlnaRequestException) {
+                if (error.code !in setOf("701", "711") || attempt == 2) throw error
+                delay(250L * (attempt + 1))
+            }
+        }
+        return false
+    }
+    suspend fun progress(): Pair<Long, Long>? {
+        val values = action("GetPositionInfo")
+        val position = time(values["RelTime"]) ?: return null
+        return position to (time(values["TrackDuration"]) ?: 0)
+    }
+    suspend fun state(): DLNACast.PlaybackState = when (action("GetTransportInfo")["CurrentTransportState"]) {
+        "PLAYING" -> DLNACast.PlaybackState.PLAYING
+        "PAUSED_PLAYBACK" -> DLNACast.PlaybackState.PAUSED
+        "TRANSITIONING" -> DLNACast.PlaybackState.BUFFERING
+        "STOPPED" -> DLNACast.PlaybackState.STOPPED
+        "NO_MEDIA_PRESENT" -> DLNACast.PlaybackState.IDLE
+        else -> DLNACast.PlaybackState.ERROR
+    }
+
+    private suspend fun action(name: String, parameters: String = ""): Map<String, String> {
+        val target = renderer ?: throw IOException("No renderer selected")
+        val body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+            "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
+            "<s:Body><u:$name xmlns:u=\"${xml(target.serviceType)}\"><InstanceID>0</InstanceID>" +
+            "$parameters</u:$name></s:Body></s:Envelope>"
+        val request = Request.Builder().url(target.control)
+            .header("SOAPAction", "\"${target.serviceType}#$name\"")
+            .post(body.toRequestBody("text/xml; charset=utf-8".toMediaType())).build()
+        val (status, bytes) = read(request, name)
+        return try {
+            DlnaDescription.values(bytes)
+        } catch (error: Exception) {
+            throw DlnaRequestException(name, request.url, status,
+                detail = "parse ${error.message ?: error.javaClass.simpleName}").also { it.initCause(error) }
+        }
+    }
+
+    private suspend fun read(request: Request, stage: String): Pair<Int, ByteArray> = try {
+        client.newCall(request).readCancellable { response ->
+            val bytes = response.body?.byteStream()?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (output.size() <= DlnaDescription.MAX_BYTES) {
+                    val count = input.read(buffer, 0, minOf(buffer.size, DlnaDescription.MAX_BYTES + 1 - output.size()))
+                    if (count < 0) break
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            } ?: byteArrayOf()
+            if (bytes.size > DlnaDescription.MAX_BYTES) throw IOException("Device response exceeds size limit")
+            val fault = runCatching { DlnaDescription.values(bytes) }.getOrDefault(emptyMap())
+            if (!response.isSuccessful || "errorCode" in fault || "faultcode" in fault) {
+                throw DlnaRequestException(stage, request.url, response.code, fault["errorCode"],
+                    fault["errorDescription"] ?: fault["faultstring"] ?: "HTTP ${response.code}")
+            }
+            response.code to bytes
+        }
+    } catch (error: DlnaRequestException) {
+        throw error
+    } catch (error: IOException) {
+        throw DlnaRequestException(stage, request.url, detail = error.message ?: error.javaClass.simpleName).also { it.initCause(error) }
+    }
+
+    private fun xml(value: String) = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&apos;")
+    private fun time(value: String?): Long? {
+        val parts = value?.split(':') ?: return null
+        if (parts.size != 3) return null
+        val h = parts[0].toLongOrNull() ?: return null
+        val m = parts[1].toLongOrNull() ?: return null
+        val s = parts[2].toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return null
+        return ((h * 3600 + m * 60) * 1000 + s * 1000).toLong().coerceAtLeast(0)
+    }
+}

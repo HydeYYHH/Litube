@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,128 +44,50 @@ internal fun ResizeDialog(
     selected: ResizeMode,
     onPick: (ResizeMode) -> Unit,
     onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = {
-            Text(
-                text = stringResource(R.string.resize_mode),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Start,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.titleLarge,
-            )
-        },
-        text = {
-            Column {
-                ResizeMode.entries.forEach { mode ->
-                    val isSelected = mode == selected
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clickable { onPick(mode) }
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            painter = painterResource(mode.iconRes()),
-                            contentDescription = null,
-                            tint = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier
-                                .padding(end = 16.dp)
-                                .size(24.dp),
-                        )
-                        Text(
-                            text = stringResource(mode.labelRes()),
-                            modifier = Modifier.weight(1f),
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            fontSize = SettingsTokens.BodySize.sp,
-                            fontWeight = FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
+    fullscreen: Boolean = false,
+) = OptionDialog(
+    title = stringResource(R.string.resize_mode),
+    rows = ResizeMode.entries.map { OptionRow(it, stringResource(it.labelRes())) },
+    selected = selected,
+    onPick = { it?.let(onPick) },
+    onDismiss = onDismiss,
+    fullscreen = fullscreen,
+    tag = "player-dialog-resize",
+)
 
 @Composable
-internal fun OptionDialog(
+internal fun <T> OptionDialog(
     title: String,
-    rows: List<OptionRow<String>>,
-    selected: String?,
-    onPick: (String?) -> Unit,
+    rows: List<OptionRow<T>>,
+    selected: T?,
+    onPick: (T?) -> Unit,
     onDismiss: () -> Unit,
+    fullscreen: Boolean = false,
+    tag: String = "player-dialog-options",
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = {
-            Text(
-                text = title,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Start,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.titleLarge,
-            )
-        },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                rows.forEach { row ->
-                    val isSelected = row.value == selected
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clickable { onPick(row.value) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = row.label,
-                            modifier = Modifier.weight(1f),
-                            fontSize = SettingsTokens.BodySize.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        if (isSelected) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_check),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
+    PlayerModalDialog(onDismiss, fullscreen, tag) {
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), fontSize = 18.sp, lineHeight = 24.sp,
+                fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            PlayerIconButton(R.drawable.ic_close, stringResource(R.string.close), onDismiss,
+                tint = MaterialTheme.colorScheme.onSurface)
+        }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+            rows.forEach { row ->
+                val selectedRow = row.value == selected
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .selectable(selected = selectedRow, enabled = row.enabled, role = Role.RadioButton) { onPick(row.value) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(row.label, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (row.enabled) 1f else 0.38f))
+                    Spacer(Modifier.size(12.dp))
+                    if (selectedRow) Icon(painterResource(R.drawable.ic_check), null,
+                        Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+                    else Spacer(Modifier.size(24.dp))
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

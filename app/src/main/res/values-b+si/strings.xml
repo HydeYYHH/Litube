@@ -166,6 +166,7 @@
     <string name="copy">පිටපත</string>
     <string name="copied">පිටපත් කරන ලදී</string>
     <string name="copy_all">සියල්ල පිටපත් කරන්න</string>
+    <string name="cast_searching">සොයමින්…</string>
     <string name="queue_now_playing">දැන් සෙල්ලම් කරනවා</string>
     <string name="clear_queue_confirm">සම්පූර්ණ පෝලිම හිස් කරන්නද?</string>
     <string name="ok">හරි</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">වසන්න</string>
     <string name="verification_completed">සත්‍යාපනය සම්පූර්ණයි. නැවත උත්සාහ කරමින්…</string>
     <string name="verification_still_blocked">සත්‍යාපනයෙන් පසුවත් අවහිරයි. කරුණාකර පසුව නැවත උත්සාහ කරන්න.</string>
+    <string name="comments_title">අදහස්</string>
+    <string name="comments_sort_top">ප්‍රධාන අදහස්</string>
+    <string name="comments_sort_newest">නවතම පළමුව</string>
+    <string name="comments_sort_chip_top">ප්‍රධාන</string>
+    <string name="comments_sort_chip_newest">නවතම</string>
+    <string name="comments_composer_add">අදහසක් එක් කරන්න</string>
+    <string name="comments_composer_reply">පිළිතුරු දෙන්න</string>
+    <string name="comments_composer_edit">අදහස සංස්කරණය කරන්න</string>
+    <string name="comments_composer_text_hint">අදහසේ පෙළ</string>
+    <string name="comments_composer_text_edit_hint">අදහසේ පෙළ සංස්කරණය කරන්න</string>
+    <string name="comments_composer_submit">අදහසක් දක්වන්න</string>
+    <string name="comments_composer_sending">යවමින්…</string>
+    <string name="comments_composer_save">සුරකින්න</string>
+    <string name="comments_delete_title">මකන්න</string>
+    <string name="comments_show_more_replies">තවත් පිළිතුරු පෙන්වන්න</string>
+    <string name="comments_load_more_failed">තවත් අදහස් පූරණය කළ නොහැක</string>
+    <string name="comments_hide_replies">පිළිතුරු සඟවන්න</string>
+    <string name="home_music_charts">සංගීත දර්ශක</string>
+    <string name="home_popular_gaming">ක්‍රීඩා වීඩියෝවල ජනප්‍රිය</string>
+    <string name="home_popular_sports">ක්‍රීඩාවල ජනප්‍රිය</string>
+    <string name="home_top_news">ප්‍රධාන පුවත්</string>
 </resources>

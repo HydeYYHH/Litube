@@ -157,6 +157,21 @@ fun CommentsPanel(
                 )
             }
         }
+        val composer = state.overlay as? CommentsOverlay.Composer
+        if (composer != null) CommentComposerSheet(
+            draft = state.draft,
+            pending = state.actionPending,
+            editing = composer.editing,
+            reply = composer.threadId != null,
+            onDraft = { onAction(CommentAction.DraftChanged(it)) },
+            onCancel = { onAction(CommentAction.DismissComposer) },
+            onSubmit = { onAction(CommentAction.SubmitDraft) },
+        )
+        if (state.overlay is CommentsOverlay.DeleteConfirm) DeleteCommentSheet(
+            ownComment = state.overlay.replyId == null,
+            onCancel = { onAction(CommentAction.CancelDelete) },
+            onDelete = { onAction(CommentAction.ConfirmDelete) },
+        )
     }
 }
 
@@ -250,20 +265,7 @@ private fun CommentsSurface(
                     paneTitle = "Comment actions",
                 )
             }
-            is CommentsOverlay.Composer -> CommentComposerSheet(
-                draft = state.draft,
-                pending = state.actionPending,
-                editing = state.overlay.editing,
-                reply = state.overlay.threadId != null,
-                onDraft = { onAction(CommentAction.DraftChanged(it)) },
-                onCancel = { onAction(CommentAction.DismissComposer) },
-                onSubmit = { onAction(CommentAction.SubmitDraft) },
-            )
-            is CommentsOverlay.DeleteConfirm -> DeleteCommentSheet(
-                ownComment = state.overlay.replyId == null,
-                onCancel = { onAction(CommentAction.CancelDelete) },
-                onDelete = { onAction(CommentAction.ConfirmDelete) },
-            )
+            is CommentsOverlay.Composer, is CommentsOverlay.DeleteConfirm -> Unit
             CommentsOverlay.None -> Unit
         }
     }
@@ -299,6 +301,12 @@ private fun CommentComposerSheet(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val hintText = stringResource(R.string.comments_composer_text_hint)
+    val editHintText = stringResource(R.string.comments_composer_text_edit_hint)
+    val cancelText = stringResource(R.string.cancel)
+    val sendingText = stringResource(R.string.comments_composer_sending)
+    val saveText = stringResource(R.string.comments_composer_save)
+    val submitText = stringResource(R.string.comments_composer_submit)
     val editorBottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 8.dp else MenuSheetLayout.BottomInset.dp
     LaunchedEffect(Unit) {
         withFrameNanos {}
@@ -325,7 +333,11 @@ private fun CommentComposerSheet(
                 .testTag("comment-composer").semantics { paneTitle = "Comment editor" },
         ) {
             AppText(
-                if (editing) "Edit comment" else if (reply) "Reply" else "Add a comment",
+                when {
+                    editing -> stringResource(R.string.comments_composer_edit)
+                    reply -> stringResource(R.string.comments_composer_reply)
+                    else -> stringResource(R.string.comments_composer_add)
+                },
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
                 size = 16, line = 22, weight = FontWeight.Medium,
             )
@@ -344,7 +356,7 @@ private fun CommentComposerSheet(
                         .padding(horizontal = CommentsLayout.InputTextInset.dp, vertical = 8.dp)
                         .focusRequester(focus)
                         .testTag("comment-composer-input")
-                        .semantics { contentDescription = if (editing) "Edit comment text" else "Comment text" },
+                        .semantics { contentDescription = if (editing) editHintText else hintText },
                     maxLines = 6,
                     readOnly = pending,
                     textStyle = DesignTokens.text(14, 20),
@@ -365,10 +377,14 @@ private fun CommentComposerSheet(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ComposerAction("Cancel", "comment-composer-cancel", enabled = !pending, onClick = onCancel)
+                ComposerAction(cancelText, "comment-composer-cancel", enabled = !pending, onClick = onCancel)
                 Spacer(Modifier.width(8.dp))
                 ComposerAction(
-                    if (pending) "Sending…" else if (editing) "Save" else "Comment",
+                    when {
+                        pending -> sendingText
+                        editing -> saveText
+                        else -> submitText
+                    },
                     "comment-composer-submit",
                     enabled = draft.isNotBlank() && !pending,
                     onClick = onSubmit,
@@ -380,6 +396,8 @@ private fun CommentComposerSheet(
 
 @Composable
 private fun DeleteCommentSheet(ownComment: Boolean, onCancel: () -> Unit, onDelete: () -> Unit) {
+    val cancelText = stringResource(R.string.cancel)
+    val deleteText = stringResource(R.string.comments_delete_title)
     Box(
         Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onCancel() }
             .appDescription(R.string.a11y_close_delete_confirmation),
@@ -408,9 +426,9 @@ private fun DeleteCommentSheet(ownComment: Boolean, onCancel: () -> Unit, onDele
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ComposerAction("Cancel", "comment-delete-cancel", onClick = onCancel)
+                ComposerAction(cancelText, "comment-delete-cancel", onClick = onCancel)
                 Spacer(Modifier.width(8.dp))
-                ComposerAction("Delete", "comment-delete-confirm", onClick = onDelete, destructive = true)
+                ComposerAction(deleteText, "comment-delete-confirm", onClick = onDelete, destructive = true)
             }
         }
     }
@@ -465,10 +483,13 @@ private fun CommentsHeader(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val measurer = rememberTextMeasurer()
-        val titleWidth = measurer.measure("Comments", DesignTokens.text(
+        val commentsTitle = stringResource(R.string.comments_title)
+        val chipTopText = stringResource(R.string.comments_sort_chip_top)
+        val chipNewestText = stringResource(R.string.comments_sort_chip_newest)
+        val titleWidth = measurer.measure(commentsTitle, DesignTokens.text(
             CommentsLayout.titleSize(panelWidth, docked).toInt(), CommentsLayout.titleLine(panelWidth, docked).toInt(), FontWeight.Bold,
         )).size.width
-        val label = if (sort == CommentSort.Top) "Top" else "Newest"
+        val label = if (sort == CommentSort.Top) chipTopText else chipNewestText
         val sortWidth = measurer.measure(label, DesignTokens.text(14, 20, FontWeight.Medium)).size.width
         val stacked = showSort && titleWidth + sortWidth + 2 + with(density) { 100.dp.roundToPx() } > constraints.maxWidth
         Box(Modifier.fillMaxWidth().height((CommentsLayout.HeaderHeight + if (stacked) 48f else 0f).dp).testTag("comments-header")) {
@@ -512,15 +533,16 @@ private fun TitleBlock(count: String, panelWidth: Float, docked: Boolean, modifi
     val titleStyle = DesignTokens.text(titleSize, titleLine, FontWeight.Bold)
     val countStyle = DesignTokens.text(CommentsLayout.CountSize.toInt(), CommentsLayout.CountLine.toInt())
     BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
-        val titleWidth = measurer.measure("Comments", titleStyle).size.width + 1
+        val commentsTitle = stringResource(R.string.comments_title)
+        val titleWidth = measurer.measure(commentsTitle, titleStyle).size.width + 1
         val countWidth = measurer.measure(count, countStyle).size.width + 1
         val gapWidth = with(density) { CommentsLayout.TitleCountGap.dp.roundToPx() }
         // The count is dropped before the scaled-up title is allowed to ellipsize.
         val showCount = count.isNotEmpty() && titleWidth + gapWidth + countWidth <= constraints.maxWidth
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppText(
-                "Comments",
-                Modifier.widthIn(min = with(density) { titleWidth.toDp() }).testTag("comments-title"),
+                commentsTitle,
+                Modifier.width(with(density) { titleWidth.toDp() }).testTag("comments-title"),
                 size = titleSize,
                 line = titleLine,
                 weight = FontWeight.Bold,
@@ -530,7 +552,7 @@ private fun TitleBlock(count: String, panelWidth: Float, docked: Boolean, modifi
                 Spacer(Modifier.width(CommentsLayout.TitleCountGap.dp))
                 AppText(
                     count,
-                    Modifier.widthIn(min = with(density) { countWidth.toDp() }).testTag("comments-count"),
+                    Modifier.width(with(density) { countWidth.toDp() }).testTag("comments-count"),
                     size = CommentsLayout.CountSize.toInt(),
                     line = CommentsLayout.CountLine.toInt(),
                     color = DesignTokens.Secondary,
@@ -543,14 +565,16 @@ private fun TitleBlock(count: String, panelWidth: Float, docked: Boolean, modifi
 
 @Composable
 private fun SortMenu(selected: CommentSort, onSelect: (CommentSort) -> Unit, modifier: Modifier = Modifier) {
+    val topCommentsText = stringResource(R.string.comments_sort_top)
+    val newestFirstText = stringResource(R.string.comments_sort_newest)
     Column(
         modifier.width(200.dp).messageCardShadow().background(DesignTokens.Background, RoundedCornerShape(12.dp))
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp).testTag("comments-sort-menu")
             .semantics { paneTitle = "Sort comments" },
     ) {
-        SortMenuRow("Top comments", selected == CommentSort.Top, "comments-sort-top") { onSelect(CommentSort.Top) }
-        SortMenuRow("Newest first", selected == CommentSort.Newest, "comments-sort-newest") { onSelect(CommentSort.Newest) }
+        SortMenuRow(topCommentsText, selected == CommentSort.Top, "comments-sort-top") { onSelect(CommentSort.Top) }
+        SortMenuRow(newestFirstText, selected == CommentSort.Newest, "comments-sort-newest") { onSelect(CommentSort.Newest) }
     }
 }
 
@@ -570,9 +594,11 @@ private fun SortMenuRow(label: String, selected: Boolean, tag: String, onClick: 
 
 @Composable
 private fun ColumnScope.CommentsBody(state: CommentsUiState, listState: LazyListState, onAction: (CommentAction) -> Unit) {
+    val retryText = stringResource(R.string.retry)
+    val loadMoreFailedText = stringResource(R.string.comments_load_more_failed)
     val content = state.content
     if (content is CommentsContent.Ready) {
-        ThreadList(content, state.expanded, listState, onAction)
+        ThreadList(content, state.expanded, listState, (state.target as? com.hhst.youtubelite.comments.domain.CommentTarget.Video)?.id, onAction)
     } else BoxWithConstraints(Modifier.fillMaxSize()) {
         val bodyHeight = maxHeight
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)) {
@@ -596,6 +622,7 @@ private fun ColumnScope.CommentsBody(state: CommentsUiState, listState: LazyList
 
 @Composable
 private fun MessageBlock(message: String, minHeight: Dp, onRetry: (() -> Unit)? = null) {
+    val retryText = stringResource(R.string.retry)
     Box(Modifier.fillMaxWidth().heightIn(min = minHeight), contentAlignment = Alignment.Center) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             AppText(
@@ -610,7 +637,7 @@ private fun MessageBlock(message: String, minHeight: Dp, onRetry: (() -> Unit)? 
                         .padding(horizontal = 16.dp).testTag("comments-retry"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = Color(0xFF065FD4))
+                    AppText(retryText, size = 14, line = 20, weight = FontWeight.Medium, color = Color(0xFF065FD4))
                 }
             }
         }
@@ -619,6 +646,7 @@ private fun MessageBlock(message: String, minHeight: Dp, onRetry: (() -> Unit)? 
 
 @Composable
 private fun Simplebox(onAction: (CommentAction) -> Unit) {
+    val retryText = stringResource(R.string.retry)
     Column(Modifier.fillMaxWidth().testTag("comments-simplebox")) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = CommentsLayout.SimpleboxHeight.dp)
@@ -645,7 +673,7 @@ private fun Simplebox(onAction: (CommentAction) -> Unit) {
 }
 
 @Composable
-private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, listState: LazyListState, onAction: (CommentAction) -> Unit) {
+private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, listState: LazyListState, videoId: String?, onAction: (CommentAction) -> Unit) {
     LaunchedEffect(listState, content.threads.size, content.nextCursor, content.loadingMore, content.loadMoreFailed) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
             .collect { lastVisible ->
@@ -659,6 +687,7 @@ private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, li
             ThreadItem(
                 thread = thread,
                 expanded = thread.id in expanded,
+                videoId = videoId,
                 onAction = onAction,
             )
         }
@@ -668,6 +697,8 @@ private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, li
 
 @Composable
 private fun ListFooter(content: CommentsContent.Ready, onAction: (CommentAction) -> Unit) {
+    val retryText = stringResource(R.string.retry)
+    val loadMoreFailedText = stringResource(R.string.comments_load_more_failed)
     when {
         content.loadingMore -> Box(
             Modifier.fillMaxWidth().height(56.dp).testTag("comments-footer-loading"),
@@ -681,23 +712,23 @@ private fun ListFooter(content: CommentsContent.Ready, onAction: (CommentAction)
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp).testTag("comments-footer-error"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AppText("Couldn't load more comments", Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText(loadMoreFailedText, Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
             Box(
                 Modifier.height(40.dp).clip(RoundedCornerShape(20.dp))
                     .clickable(role = Role.Button) { onAction(CommentAction.LoadMore) }
                     .padding(horizontal = 16.dp).testTag("comments-footer-retry"),
                 contentAlignment = Alignment.Center,
-            ) { AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium) }
+            ) { AppText(retryText, size = 14, line = 20, weight = FontWeight.Medium) }
         }
         else -> Spacer(Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (CommentAction) -> Unit) {
+private fun ThreadItem(thread: CommentThread, expanded: Boolean, videoId: String?, onAction: (CommentAction) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("comment-${thread.id}")) {
         Spacer(Modifier.height(CommentsLayout.ThreadTopPad.dp))
-        ThreadContent(thread, onAction)
+        ThreadContent(thread, videoId, onAction)
         if (thread.replies.isNotEmpty() || thread.replyKey != null) {
             Spacer(Modifier.height(CommentsLayout.ReplyToggleTopGap.dp))
             if (expanded) {
@@ -708,7 +739,7 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
                     if (thread.repliesLoading && thread.replies.isEmpty()) AppText("Loading replies…", size = 12, line = 18)
                     if (thread.repliesFailed) AppText("Couldn't load replies. Tap below to retry.", size = 12, line = 18)
                     thread.replies.forEach { reply ->
-                        ReplyContent(thread.id, reply, onAction)
+                        ReplyContent(thread.id, reply, videoId, onAction)
                         Spacer(Modifier.height(CommentsLayout.ReplyRowGap.dp))
                     }
                     // Replies page in one page per tap; the loaded prefix stays.
@@ -734,7 +765,11 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
                 Spacer(Modifier.height(4.dp))
             }
             RepliesToggle(
-                label = if (thread.repliesFailed) "Retry" else if (expanded) "Hide replies" else "Show more replies",
+                label = when {
+                    thread.repliesFailed -> stringResource(R.string.retry)
+                    expanded -> stringResource(R.string.comments_hide_replies)
+                    else -> stringResource(R.string.comments_show_more_replies)
+                },
                 tag = "comment-${thread.id}-reply-toggle",
                 onClick = { onAction(CommentAction.ToggleReplies(thread.id)) },
             )
@@ -744,7 +779,7 @@ private fun ThreadItem(thread: CommentThread, expanded: Boolean, onAction: (Comm
 }
 
 @Composable
-private fun ThreadContent(thread: CommentThread, onAction: (CommentAction) -> Unit) {
+private fun ThreadContent(thread: CommentThread, videoId: String?, onAction: (CommentAction) -> Unit) {
     Row(
         Modifier.fillMaxWidth()
             .padding(start = CommentsLayout.CommentStartInset.dp, end = 20.dp),
@@ -754,13 +789,9 @@ private fun ThreadContent(thread: CommentThread, onAction: (CommentAction) -> Un
         Column(Modifier.weight(1f).padding(top = CommentsLayout.AuthorTopPad.dp)) {
             CommentAuthorRow(thread.author, thread.age, thread.id, thread.authorChannelId, onAction)
             Spacer(Modifier.height(CommentsLayout.AuthorBodyGap.dp))
-            AppText(
-                thread.body,
-                Modifier.testTag("comment-${thread.id}-body"),
-                size = CommentsLayout.BodySize.toInt(),
-                line = CommentsLayout.BodyLine.toInt(),
-                exactLineHeight = CommentsLayout.BodyLine.sp,
-            )
+            CommentRichBody(thread.body, thread.runs, videoId, Modifier.testTag("comment-${thread.id}-body")) {
+                onAction(CommentAction.OpenLink(it))
+            }
             Spacer(Modifier.height(3.dp))
             CommentActions(
                 likes = thread.likes,
@@ -778,20 +809,16 @@ private fun ThreadContent(thread: CommentThread, onAction: (CommentAction) -> Un
 }
 
 @Composable
-private fun ReplyContent(threadId: String, reply: CommentReply, onAction: (CommentAction) -> Unit) {
+private fun ReplyContent(threadId: String, reply: CommentReply, videoId: String?, onAction: (CommentAction) -> Unit) {
     Row(Modifier.fillMaxWidth().testTag("reply-${reply.id}")) {
         CommentAvatar(reply.author, CommentsLayout.ReplyAvatar.dp, reply.authorChannelId, onAction)
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).padding(top = 4.dp)) {
             CommentAuthorRow(reply.author, reply.age, reply.id, reply.authorChannelId, onAction)
             Spacer(Modifier.height(CommentsLayout.AuthorBodyGap.dp))
-            AppText(
-                reply.body,
-                Modifier.testTag("reply-${reply.id}-body"),
-                size = CommentsLayout.BodySize.toInt(),
-                line = CommentsLayout.BodyLine.toInt(),
-                exactLineHeight = CommentsLayout.BodyLine.sp,
-            )
+            CommentRichBody(reply.body, reply.runs, videoId, Modifier.testTag("reply-${reply.id}-body")) {
+                onAction(CommentAction.OpenLink(it))
+            }
             Spacer(Modifier.height(3.dp))
             CommentActions(
                 likes = reply.likes,

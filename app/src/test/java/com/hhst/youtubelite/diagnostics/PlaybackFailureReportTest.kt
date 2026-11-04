@@ -43,4 +43,14 @@ class PlaybackFailureReportTest {
         assertTrue(report.text.length <= 48_000)
         assertTrue(report.text.contains("[report truncated]"))
     }
+
+    @Test fun resolutionAttemptsRemainReadableBeforeMediaPreparation() {
+        val report = PlaybackFailureReport.create("Verification required", IOException("VERIFICATION:playability_bot_check"),
+            "prepare", context, emptyMap(), mapOf("account_state" to "ANONYMOUS", "configuration_source" to "same-session-watch",
+                "player_attempts" to listOf(mapOf("client" to "VISIONOS", "status" to "LOGIN_REQUIRED",
+                    "outcome" to "playability_bot_check", "duration_ms" to 300))), emptyList())
+        listOf("ANONYMOUS", "same-session-watch", "VISIONOS", "LOGIN_REQUIRED", "playability_bot_check", "300").forEach {
+            assertTrue(it, report.text.contains(it))
+        }
+    }
 }

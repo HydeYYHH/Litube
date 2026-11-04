@@ -6,7 +6,7 @@ import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSpec
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import com.hhst.youtubelite.extractor.*
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.engine.streamCache
@@ -58,7 +58,7 @@ class ShortsPreloadAndroidTest {
             start()
         }
         val session = YoutubeWebSession("prefetch", WebAccount.ANONYMOUS, 0, null, null, null,
-            "visitor", "fixture-UA", 0, null, "fixture", JsonObject()) { "" }
+            "visitor", "fixture-UA", 0, null, "fixture", JsonObject(emptyMap())) { "" }
         val plan = MediaRequestPlan(session, StreamClient.VISIONOS, MediaProtocol.HLS, MediaRange.NONE)
         val stream = Stream().apply {
             hlsUrl = server.url("/root/master.m3u8").toString()

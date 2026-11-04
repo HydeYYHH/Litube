@@ -235,7 +235,11 @@ private class Inflight(
     fun start() {
         extraction.metadata.start()
         extraction.stream.start()
-        extraction.chapters.start()
+        // Chapters share the Watch read and the request window with playback:
+        // scheduling them behind the stream promise keeps speculative work off
+        // the foreground path. An eager chapter awaiter still starts the read
+        // on demand (Promise.await/start is idempotent).
+        extraction.stream.whenDone { extraction.chapters.start() }
     }
 
     companion object {

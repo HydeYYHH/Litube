@@ -125,6 +125,29 @@ class DownloadStartupReconcilerTest {
 class DownloadNotificationControllerTest {
 
     @Test
+    fun restoredCompletionStaysDismissedAndANewCompletionStillPosts() = kotlinx.coroutines.runBlocking {
+        val port = RecordingNotificationPort()
+        val controller = DownloadNotificationController(port)
+        val h = SchedulerHarness(33)
+        val restored = h.wired.enqueue(request("old"), "old")
+        h.wired.reportAssetPublished(restored.created.single().taskId, 0,
+            AssetKind.VIDEO, "content://test/old.mp4")
+        val old = h.repo.transact { batchView(restored.batchId) }!!
+        controller.restore(old)
+        controller.publish(old)
+        assertTrue(port.posted.isEmpty())
+        val fresh = h.wired.enqueue(request("new"), "new")
+        controller.publish(h.repo.transact { batchView(fresh.batchId) }!!)
+        h.wired.reportAssetPublished(fresh.created.single().taskId, 0,
+            AssetKind.VIDEO, "content://test/new.mp4")
+        controller.publish(h.repo.transact { batchView(fresh.batchId) }!!)
+        assertEquals(2, port.posted.size)
+        assertTrue(port.posted.last().second.complete)
+        controller.publish(old)
+        assertEquals(2, port.posted.size)
+    }
+
+    @Test
     fun unchangedPayloadIsNotReposted_butPauseFlushesImmediately() {
         val port = RecordingNotificationPort()
         var now = 0L

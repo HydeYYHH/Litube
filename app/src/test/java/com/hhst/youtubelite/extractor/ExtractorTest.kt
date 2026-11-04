@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -56,7 +56,7 @@ class ExtractorTest {
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
         val session = YoutubeWebSession("live-test", WebAccount.ANONYMOUS, 0, null, null, null, null,
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 0, null, "live-test", JsonObject()) { "" }
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 0, null, "live-test", JsonObject(emptyMap())) { "" }
         return ExtractionContext(session, object : ExtractionTransport {
             override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse {
                 val builder = Request.Builder().url(url)

@@ -75,7 +75,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == HistoryViewModel::class.java)
                 return HistoryViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(),
-                    if (fixtures) null else sources.saves, if (fixtures) null else sources.librarySource) as T
+                    if (fixtures) null else sources.saves) as T
             }
         })[HistoryViewModel::class.java]
         lifecycleScope.launch {
@@ -100,7 +100,7 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         // `else`: a new request type must fail to compile here.
                         is LibraryNavigationRequest.Playlist, LibraryNavigationRequest.OpenHistory,
                         LibraryNavigationRequest.OpenPlaylists, LibraryNavigationRequest.OpenNotifications,
-                        LibraryNavigationRequest.OpenDownloads, is LibraryNavigationRequest.Destination,
+                        LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads, is LibraryNavigationRequest.Destination,
                         LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
                         LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit
                     }

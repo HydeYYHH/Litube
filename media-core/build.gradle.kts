@@ -18,4 +18,7 @@ java {
 
 sourceSets.test { resources.srcDir("../external/mediaservicecore/common/src/test/resources") }
 
-dependencies { testImplementation(libs.junit) }
+dependencies {
+    testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
+}

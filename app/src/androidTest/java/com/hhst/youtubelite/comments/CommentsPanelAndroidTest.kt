@@ -8,10 +8,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.geometry.Offset
@@ -46,6 +50,7 @@ class CommentsPanelAndroidTest {
     private var viewportWidth by mutableStateOf(390)
     private var viewportHeight by mutableStateOf(844)
     private var fontScale by mutableStateOf(1f)
+    private var panelLocale by mutableStateOf("en")
 
     private val actions = mutableListOf<CommentAction>()
     private var closes = 0
@@ -57,7 +62,20 @@ class CommentsPanelAndroidTest {
 
     @Composable
     private fun Viewport(width: Int, height: Int, content: @Composable () -> Unit) {
-        CompositionLocalProvider(LocalDensity provides Density(1f, fontScale)) {
+        val base = LocalContext.current
+        val original = LocalConfiguration.current
+        val configuration = remember(original, panelLocale) {
+            android.content.res.Configuration(original).apply {
+                setLocale(java.util.Locale.forLanguageTag(panelLocale))
+            }
+        }
+        val localized = remember(base, configuration) {
+            base.createConfigurationContext(configuration)
+        }
+        val direction = if (configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL)
+            androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
+        CompositionLocalProvider(LocalDensity provides Density(1f, fontScale), LocalContext provides localized,
+            LocalConfiguration provides configuration, LocalLayoutDirection provides direction) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopStart) {
                 Box(Modifier.requiredSize(width.dp, height.dp)) { content() }
             }
@@ -69,7 +87,8 @@ class CommentsPanelAndroidTest {
 
     private fun textLayout(tag: String): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithTag(tag, useUnmergedTree = true)
+        compose.onAllNodes((hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))) and
+            SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true).onFirst()
             .fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
         return results.first()
     }
@@ -420,6 +439,30 @@ class CommentsPanelAndroidTest {
         assertTrue(close.right <= 390f)
         assertTrue(close.height >= 48f)
         compose.onNodeWithTag("comments-close").assertExists()
+    }
+
+    @Test fun translatedHeadersAndSortChoicesRemainReachableAtLargeFont() {
+        fontScale = 2f
+        render()
+        for (locale in listOf("zh", "zh-Hant", "ja", "ko", "de", "fr", "es", "pt", "ru", "hi", "ar")) {
+            compose.runOnIdle {
+                panelLocale = locale
+                panelSort = CommentSort.Top
+            }
+            compose.waitForIdle()
+            val panel = bounds("comments-panel")
+            val close = bounds("comments-close")
+            assertTrue("Close action outside the panel in $locale", close.left >= panel.left && close.right <= panel.right)
+            compose.onNodeWithTag("comments-close").assertIsDisplayed()
+            val title = textLayout("comments-title")
+            assertFalse("Clipped title in $locale: size=${title.size}, constraints=${title.layoutInput.constraints}, " +
+                "width=${title.didOverflowWidth}, height=${title.didOverflowHeight}, lines=${title.lineCount}, " +
+                "text=${title.layoutInput.text.text}", title.hasVisualOverflow)
+            assertNotEquals("Untranslated title in $locale", "Comments", title.layoutInput.text.text)
+            compose.onNodeWithTag("comments-sort").performClick()
+            compose.onNodeWithTag("comments-sort-newest").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithTag("comments-close").assertIsDisplayed()
+        }
     }
 
     @Test fun shortWindowKeepsRetryAndBothSortChoicesReachableAtLargeFont() {

@@ -6,12 +6,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -34,6 +30,7 @@ interface GestureCallbacks {
     fun onVolume(delta: Float) {}
     fun onFullscreenSwipe(up: Boolean) {}
     fun onFullscreenSwipeProgress(distancePx: Float) {}
+    fun onWindowSwipeProgress(dx: Float, dy: Float) { onFullscreenSwipeProgress(dy) }
     fun onFullscreenSwipeCancel() {}
     /**
      * Vertical center-zone drag released. Returns true when a host consumed
@@ -76,9 +73,9 @@ fun Modifier.playerGestures(
     verticalFeed: Boolean = false,
 ): Modifier = composed {
     val tapGuard = remember { TapGuard() }
-    var originInWindow by remember { mutableStateOf(Offset.Zero) }
+    val coordinates = remember { GestureCoordinates() }
     this
-        .onGloballyPositioned { originInWindow = it.positionInWindow() }
+        .onGloballyPositioned { coordinates.layout = it }
         .pointerInput(enabled, callbacks, zoomEnabled, restartKey, verticalFeed) {
             if (!enabled) return@pointerInput
             detectTapGestures(
@@ -101,8 +98,15 @@ fun Modifier.playerGestures(
         }
         .pointerInput(enabled, callbacks, zoomEnabled, restartKey, verticalFeed) {
             if (!enabled) return@pointerInput
-            awaitEachGesture { trackDrag(callbacks, zoneEnabled, tapGuard, zoomEnabled, verticalFeed) { originInWindow } }
+            awaitEachGesture { trackDrag(callbacks, zoneEnabled, tapGuard, zoomEnabled, verticalFeed, coordinates::toWindow) }
         }
+}
+
+private class GestureCoordinates {
+    var layout: androidx.compose.ui.layout.LayoutCoordinates? = null
+
+    fun toWindow(position: Offset): Offset =
+        layout?.takeIf { it.isAttached }?.localToWindow(position) ?: position
 }
 
 private suspend fun AwaitPointerEventScope.trackDrag(
@@ -111,14 +115,12 @@ private suspend fun AwaitPointerEventScope.trackDrag(
     tapGuard: TapGuard,
     zoomEnabled: Boolean,
     verticalFeed: Boolean,
-    windowOffset: () -> Offset,
+    toWindow: (Offset) -> Offset,
 ) {
     val down = awaitFirstDown(requireUnconsumed = false)
-    // A consumed down belongs to a child (time bar, chrome button): tracking
-    // it here would double-drive the same finger.
-    if (down.isConsumed) return
+    val childPressed = down.isConsumed
     val start = down.position
-    val startInWindow = start + windowOffset()
+    val startInWindow = toWindow(start)
     var lastYInWindow = startInWindow.y
     val startTime = SystemClock.uptimeMillis()
     val width = size.width.toFloat()
@@ -126,7 +128,7 @@ private suspend fun AwaitPointerEventScope.trackDrag(
 
     var longPressActive = false
     /** True once the long-press deadline has been applied (hit or skipped). */
-    var longPressResolved = false
+    var longPressResolved = childPressed
     var dragMode = GestureMath.DragMode.NONE
     /** Zone the slop-crossing drag actually started in, before pref gating. */
     var rawMode = GestureMath.DragMode.NONE
@@ -210,8 +212,8 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         if (!change.positionChanged()) continue
         if (zooming) continue
 
-        // The surface moves during fullscreen interpolation; track the finger in window space.
-        val inWindow = change.position + windowOffset()
+        // Include the window's translation and scale when measuring finger travel.
+        val inWindow = toWindow(change.position)
         totalDx = inWindow.x - startInWindow.x
         totalDy = inWindow.y - startInWindow.y
         val stepDy = inWindow.y - lastYInWindow
@@ -241,7 +243,7 @@ private suspend fun AwaitPointerEventScope.trackDrag(
                 }
                 if (dragMode != GestureMath.DragMode.NONE) change.consume()
                 if (!verticalFeed && rawMode == GestureMath.DragMode.NONE &&
-                    zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onFullscreenSwipeProgress(totalDy)
+                    zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onWindowSwipeProgress(totalDx, totalDy)
             }
             continue
         }
@@ -254,7 +256,7 @@ private suspend fun AwaitPointerEventScope.trackDrag(
             GestureMath.DragMode.VOLUME ->
                 callbacks.onVolume(GestureMath.volumeDelta(stepDy, height))
             GestureMath.DragMode.NONE -> if (!verticalFeed && rawMode == GestureMath.DragMode.NONE &&
-                zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onFullscreenSwipeProgress(totalDy)
+                zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) callbacks.onWindowSwipeProgress(totalDx, totalDy)
         }
         change.consume()
     }

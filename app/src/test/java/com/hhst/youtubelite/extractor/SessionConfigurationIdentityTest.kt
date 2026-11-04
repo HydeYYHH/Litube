@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.extractor
 
 import java.io.IOException
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -63,8 +64,7 @@ class SessionConfigurationIdentityTest {
             "DATASYNC_ID" to "another-account", "LOGGED_IN" to false, "DELEGATED_SESSION_ID" to "another-channel",
             "PLAYER_JS_URL" to "another-player",
             "EXPERIMENT_FLAGS" to jsonObjectOf("tokenBinding" to true))) {
-            val changed = initial.deepCopy()
-            changed.add(field, jsonObjectOf(field to value).get(field))
+            val changed = JsonObject(LinkedHashMap(initial).apply { put(field, jsonObjectOf(field to value).get(field)) })
             assertNotEquals(field, YoutubeSessionProvider.configurationIdentity(initial), YoutubeSessionProvider.configurationIdentity(changed))
         }
     }

@@ -72,7 +72,6 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.PlayerUiState
-import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -97,6 +96,7 @@ fun PlayerIconButton(
     iconSize: Int = PlayerUi.CHROME_ICON_DP,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
@@ -108,7 +108,7 @@ fun PlayerIconButton(
                         enabled = enabled,
                         interactionSource = interaction,
                         indication = ripple(bounded = false, radius = 24.dp),
-                        onClick = onClick,
+                        onClick = { haptic(); onClick() },
                         onLongClick = onLongClick,
                     )
                 } else {
@@ -116,7 +116,7 @@ fun PlayerIconButton(
                         enabled = enabled,
                         interactionSource = interaction,
                         indication = ripple(bounded = false, radius = 24.dp),
-                        onClick = onClick,
+                        onClick = { haptic(); onClick() },
                     )
                 },
             ),
@@ -137,138 +137,95 @@ fun TopBar(
     state: PlayerUiState,
     positionState: State<Long>,
     onBack: () -> Unit,
-    onQueue: () -> Unit,
-    onLoop: () -> Unit,
     onMore: () -> Unit,
     onSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
     menu: PlayerAnchorMenu? = null,
     onDismissMenu: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
-    onCast: () -> Unit = {},
     onSubtitleStyle: () -> Unit = {},
     showAuthor: Boolean = true,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
 ) {
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val compact = PlayerUi.compactChrome(maxWidth.value, LocalDensity.current.fontScale,
-            state.casting || state.castDevices.isNotEmpty())
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Row(
+        modifier = modifier.fillMaxWidth().testTag("player-topbar")
+            .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerIconButton(
+            icon = R.drawable.ic_arrow_back,
+            contentDescription = stringResource(R.string.navigate_back),
+            onClick = onBack,
+            iconSize = sizing.iconDp,
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            PlayerIconButton(
-                icon = R.drawable.ic_arrow_back,
-                contentDescription = stringResource(R.string.navigate_back),
-                onClick = onBack,
-                iconSize = sizing.iconDp,
+            Text(
+                text = state.title,
+                style = PlayerUi.TitleStyle.copy(fontSize = (sizing.textSp + 2).sp,
+                    lineHeight = (sizing.textSp + 8).sp),
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
+            state.author?.takeIf { showAuthor }?.let { author ->
                 Text(
-                    text = state.title,
-                    style = PlayerUi.TitleStyle.copy(fontSize = (sizing.textSp + 2).sp,
-                        lineHeight = (sizing.textSp + 8).sp),
+                    text = author,
+                    style = PlayerUi.AuthorStyle.copy(fontSize = (sizing.textSp - 2).sp,
+                        lineHeight = (sizing.textSp + 4).sp),
                     maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                    overflow = TextOverflow.Ellipsis,
                 )
-                state.author?.takeIf { showAuthor }?.let { author ->
-                    Text(
-                        text = author,
-                        style = PlayerUi.AuthorStyle.copy(fontSize = (sizing.textSp - 2).sp,
-                            lineHeight = (sizing.textSp + 4).sp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            Box {
+                PlayerIconButton(
+                    icon = if (state.subtitleEnabled) {
+                        R.drawable.ic_subtitles_on
+                    } else {
+                        R.drawable.ic_subtitles_off
+                    },
+                    contentDescription = stringResource(R.string.subtitles),
+                    onClick = onSubtitle,
+                    modifier = Modifier.width(40.dp),
+                    iconSize = sizing.iconDp,
+                    onLongClick = onSubtitleStyle,
+                    tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
+                )
+                if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
+                    PlayerAnchorDropdown(
+                        menu,
+                        state,
+                        positionState,
+                        callbacks,
+                        onDismissMenu,
+                        onSubtitleStyle = {
+                            onDismissMenu()
+                            onSubtitleStyle()
+                        },
                     )
                 }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
-                if (!compact) {
-                    PlayerIconButton(
-                        icon = R.drawable.ic_queue,
-                        contentDescription = stringResource(R.string.queue),
-                        onClick = onQueue,
-                        iconSize = sizing.iconDp,
-                    )
-
-                }
-                if (!compact) {
-                    PlayerIconButton(
-                        icon = PlayerUi.loopIcon(state.loopMode),
-                        contentDescription = loopDescription(state.loopMode),
-                        onClick = onLoop,
-                        iconSize = sizing.iconDp,
-                        tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
-                    )
-                    // Show the cast control only when a route exists or a session is
-                    // active. Users without a receiver do not get a permanent button.
-                    if (state.casting || state.castDevices.isNotEmpty()) {
-                        PlayerIconButton(
-                            icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
-                            contentDescription = stringResource(R.string.cast),
-                            onClick = onCast,
-                            iconSize = sizing.iconDp,
-                            tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
-                        )
-                    }
-                }
-                Box {
-                    PlayerIconButton(
-                        icon = if (state.subtitleEnabled) {
-                            R.drawable.ic_subtitles_on
-                        } else {
-                            R.drawable.ic_subtitles_off
-                        },
-                        contentDescription = stringResource(R.string.subtitles),
-                        onClick = onSubtitle,
-                        modifier = Modifier.width(40.dp),
-                        iconSize = sizing.iconDp,
-                        onLongClick = onSubtitleStyle,
-                        tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
-                    )
-                    if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
-                        PlayerAnchorDropdown(
-                            menu,
-                            state,
-                            positionState,
-                            callbacks,
-                            onDismissMenu,
-                            onSubtitleStyle = {
-                                onDismissMenu()
-                                onSubtitleStyle()
-                            },
-                        )
-                    }
-                }
-                Box {
-                    PlayerIconButton(
-                        icon = R.drawable.ic_settings,
-                        contentDescription = stringResource(R.string.more_options),
-                        onClick = onMore,
-                        modifier = Modifier.width(40.dp),
-                        iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
-                    )
-                    // Speed/quality open from the More sheet and surface once,
-                    // anchored to the bottom chrome row; the top bar must not
-                    // render a second dropdown for the same menu state.
-                }
+            Box {
+                PlayerIconButton(
+                    icon = R.drawable.ic_settings,
+                    contentDescription = stringResource(R.string.more_options),
+                    onClick = onMore,
+                    modifier = Modifier.width(40.dp),
+                    iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
+                )
             }
         }
     }
 }
-
-@Composable
-private fun loopDescription(mode: LoopMode): String =
-    stringResource(PlayerUi.loopLabelRes(mode))
 
 /** Center prev / play-pause / next. Hidden with the rest of the chrome when locked or auto-hidden; the play slot becomes a spinner while loading. */
 @Composable
@@ -308,11 +265,13 @@ fun CenterControls(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (state.loading) {
+            if (state.error == null && (!state.prepared || state.loading ||
+                    (state.userWantsPlay && !state.firstFrameRendered && !state.casting &&
+                        (state.videoWidth > 0 || state.videoItag != null || state.qualities.isNotEmpty())))) {
                 CircularProgressIndicator(
                     color = Color.White,
                     strokeWidth = 3.dp,
-                    modifier = Modifier.size(minOf(36, playSizeDp - 16).dp),
+                    modifier = Modifier.size(minOf(36, playSizeDp - 16).dp).testTag("player-buffering"),
                 )
             } else {
                 val replay = state.ended && !state.isPlaying

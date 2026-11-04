@@ -166,6 +166,7 @@
     <string name="copy">Kopija</string>
     <string name="copied">Kopēts</string>
     <string name="copy_all">Kopēt visu</string>
+    <string name="cast_searching">Notiek meklēšana…</string>
     <string name="queue_now_playing">Tagad spēlē</string>
     <string name="clear_queue_confirm">Vai notīrīt visu rindu?</string>
     <string name="ok">Labi</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Aizvērt</string>
     <string name="verification_completed">Verifikācija pabeigta. Mēģina vēlreiz…</string>
     <string name="verification_still_blocked">Pēc verifikācijas joprojām bloķēts. Mēģiniet vēlāk vēlreiz.</string>
+    <string name="comments_title">Komentāri</string>
+    <string name="comments_sort_top">Populārākie komentāri</string>
+    <string name="comments_sort_newest">Vispirms jaunākie</string>
+    <string name="comments_sort_chip_top">Populārākie</string>
+    <string name="comments_sort_chip_newest">Jaunākie</string>
+    <string name="comments_composer_add">Pievienot komentāru</string>
+    <string name="comments_composer_reply">Atbildēt</string>
+    <string name="comments_composer_edit">Rediģēt komentāru</string>
+    <string name="comments_composer_text_hint">Komentāra teksts</string>
+    <string name="comments_composer_text_edit_hint">Rediģēt komentāra tekstu</string>
+    <string name="comments_composer_submit">Komentēt</string>
+    <string name="comments_composer_sending">Nosūta…</string>
+    <string name="comments_composer_save">Saglabāt</string>
+    <string name="comments_delete_title">Dzēst</string>
+    <string name="comments_show_more_replies">Rādīt vairāk atbilžu</string>
+    <string name="comments_load_more_failed">Nevarēja ielādēt vairāk komentāru</string>
+    <string name="comments_hide_replies">Paslēpt atbildes</string>
+    <string name="home_music_charts">Mūzikas topi</string>
+    <string name="home_popular_gaming">Populāri spēlēs</string>
+    <string name="home_popular_sports">Populāri sportā</string>
+    <string name="home_top_news">Galvenās ziņas</string>
 </resources>

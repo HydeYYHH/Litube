@@ -155,13 +155,20 @@ fun WatchScreen(
 internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit) {
     when (val overlay = state.overlay) {
         is WatchOverlay.ItemMenu -> MenuBottomSheet(
-            items = watchVideoMenuActions(state.live).map {
+            items = watchVideoMenuActions(state.live, (state.content as? WatchContent.Ready)?.page?.related?.firstOrNull { it.id == overlay.videoId }).map {
                 MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
             },
             onDismiss = { onAction(WatchAction.CloseOverlay) },
-            onSelect = { index -> onAction(WatchAction.MenuAction(watchVideoMenuActions(state.live)[index])) },
+            onSelect = { index -> onAction(WatchAction.MenuAction(watchVideoMenuActions(state.live, (state.content as? WatchContent.Ready)?.page?.related?.firstOrNull { it.id == overlay.videoId })[index])) },
             tag = "watch-video-menu",
             paneTitle = "Video actions",
+            header = if (state.menuLoading || state.menuFailed) ({
+                Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+                    if (state.menuLoading) Box(Modifier.testTag("watch-menu-loading")) { com.hhst.youtubelite.home.presentation.LoadingSpinner() }
+                    else AppText(stringResource(R.string.retry), modifier = Modifier.testTag("watch-menu-retry")
+                        .clickable { onAction(WatchAction.RetryMenu) }.padding(12.dp))
+                }
+            }) else null,
         )
         is WatchOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
             draft = NewPlaylistDraft(overlay.title, overlay.description),
@@ -204,6 +211,8 @@ private val savePlaylists: List<SavePlaylist> =
         .map { SavePlaylist(it.id, it.title) }
 
 private fun WatchVideoMenuAction.icon(): AppIcon = when (this) {
+    WatchVideoMenuAction.Queue -> AppIcon.QueueAdd
+    WatchVideoMenuAction.Download -> AppIcon.Download
     WatchVideoMenuAction.WatchLater -> AppIcon.Clock
     WatchVideoMenuAction.SaveToPlaylist -> AppIcon.Bookmark
     WatchVideoMenuAction.Share -> AppIcon.Share
@@ -230,7 +239,10 @@ private fun WatchMainBody(
     LazyColumn(Modifier.fillMaxSize().testTag("watch-scroll"), state = scroll) {
         item("player") { Spacer(Modifier.height(playerHeight.dp)) }
         when (val content = state.content) {
-            WatchContent.Loading -> item("loading") { WatchSkeleton(includeRelated) }
+            WatchContent.Loading -> item("loading") {
+                val known = state.provisional
+                if (known == null) WatchSkeleton(includeRelated) else WatchProvisionalHeader(known)
+            }
             WatchContent.Failed -> item("error") {
                 if (state.verification != null) VerificationCard(state.verification,
                     onVerify = { onAction(WatchAction.OpenVerification) },
@@ -283,6 +295,44 @@ private fun RelatedFooter(state: WatchUiState, onAction: (WatchAction) -> Unit) 
     }
     if (state.relatedFailed) Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("watch-related-retry")
         .clickable { onAction(WatchAction.LoadRelated) }, contentAlignment = Alignment.Center) { AppText("Retry") }
+}
+
+/**
+ * Paints the tapped card's known fields while the page read is in flight. Unknown
+ * slots stay blank rather than guessed, and no control is rendered that cannot act
+ * yet; the real metadata block replaces this without a full-page reset.
+ */
+@Composable
+private fun WatchProvisionalHeader(known: WatchProvisional) {
+    Column(Modifier.fillMaxWidth().testTag("watch-provisional")) {
+        Column(Modifier.padding(horizontal = 3.dp)) {
+            Column(Modifier.padding(start = 13.dp, end = 13.dp, top = 12.dp, bottom = 5.dp)) {
+                WatchTitle(rememberDeArrowTitle(known.videoId, known.title))
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth().heightIn(min = 18.dp).testTag("watch-meta"),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (known.live) {
+                        Box(Modifier.padding(end = 8.dp).background(DesignTokens.Red, RoundedCornerShape(2.dp))
+                            .padding(horizontal = 4.dp)) {
+                            AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
+                        }
+                    }
+                    if (known.views.isNotBlank()) AppText(known.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
+                    if (!known.live && known.age.isNotBlank()) AppText(known.age, size = 12, line = 18, color = DesignTokens.Secondary)
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+        }
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(48.dp).testTag("watch-action-avatar"), contentAlignment = Alignment.Center) {
+                Artwork(known.avatar.orEmpty(), Modifier.size(32.dp).clip(CircleShape))
+            }
+            AppText(known.channel, Modifier.weight(1f).padding(end = 8.dp).testTag("watch-channel-name"),
+                size = 14, line = 20, weight = FontWeight.Medium, maxLines = 2)
+        }
+        Spacer(Modifier.height(12.dp))
+    }
 }
 
 @Composable
@@ -468,9 +518,9 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                 Triple(AppIcon.Dislike, "Dislike this video", WatchAction.Dislike),
                 Triple(AppIcon.Download, "Download", WatchAction.Download),
                 Triple(AppIcon.QueueAdd, "Add to queue", WatchAction.Queue),
+                Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
                 Triple(AppIcon.OpenWith, "Open with", WatchAction.OpenWith),
                 Triple(AppIcon.Share, "Share", WatchAction.Share),
-                Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
                 Triple(AppIcon.Report, "Report", WatchAction.Report),
             // Report's submission needs a feedback token the page never carries; it hides in production.
             ).filter { !live || it.third != WatchAction.Report }.forEachIndexed { index, (icon, description, action) ->
@@ -478,7 +528,7 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, live: Boolean, o
                     label = when (index) { 0 -> video.likeCount ?: video.likes.removeSuffix(" likes").takeIf { it.isNotBlank() }; 1 -> video.dislikeCount; else -> null },
                     selected = (index == 0 && video.rating == VideoRating.Like) || (index == 1 && video.rating == VideoRating.Dislike),
                     enabled = index > 1 || !pending,
-                    testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "open-with", "share", "save", "report")[index]}",
+                    testTag = "watch-action-${listOf("like", "dislike", "download", "queue", "save", "open-with", "share", "report")[index]}",
                     onClick = { onAction(action) })
             }
         }
@@ -496,11 +546,12 @@ private fun WatchSlotButton(
     enabled: Boolean = true,
 ) {
     val surfaceHeight = with(LocalDensity.current) { maxOf(36.dp, 20.sp.toDp() + 12.dp) }
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     Box(
         Modifier.heightIn(min = surfaceHeight + 12.dp).widthIn(min = 48.dp)
-            .clickable(enabled = enabled, interactionSource = interactions, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = interactions, indication = null, role = Role.Button) { haptic(); onClick() }
             .semantics { contentDescription = description; this.selected = selected }
             .testTag(testTag),
         contentAlignment = Alignment.Center,
@@ -519,6 +570,10 @@ private fun WatchSlotButton(
 
 @Composable
 private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
+    val liveChat = video.live && !video.chatKey.isNullOrBlank()
+    // A current live stream without a chat continuation has no usable chat: the
+    // card says so instead of offering an ordinary comments panel in its place.
+    val chatUnavailable = video.live && video.chatKey.isNullOrBlank()
     Column(
         Modifier.fillMaxWidth().testTag("watch-comments").heightIn(min = WatchLayout.CommentsSectionHeight.dp).padding(bottom = 13.dp),
     ) {
@@ -530,33 +585,33 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(DesignTokens.Surface)
                 .testTag("watch-comments-card")
-                .clickable(role = Role.Button) { onAction(WatchAction.OpenComments(video.id)) }
+                .clickable(enabled = !chatUnavailable, role = Role.Button) { onAction(WatchAction.OpenComments(video.id)) }
                 .padding(12.dp),
         ) {
             Column {
                 Row(Modifier.heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // A chat continuation opens the live chat (live stream) or its
-                    // replay (ended stream); otherwise this card is the comments panel.
-                    AppText(if (video.chatKey != null) {
-                        stringResource(if (video.live) R.string.chat_live else R.string.chat_replay)
+                    AppText(if (liveChat || chatUnavailable) {
+                        stringResource(R.string.chat_live)
                     } else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
                     Spacer(Modifier.width(4.dp))
-                    AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
+                    if (!liveChat && !chatUnavailable) AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (video.commentsStatus == WatchCommentsStatus.Ready && video.topComment.text.isNotBlank()) {
+                    if (!liveChat && !chatUnavailable && video.commentsStatus == WatchCommentsStatus.Ready && video.topComment.text.isNotBlank()) {
                         Artwork(video.topComment.artwork, Modifier.size(24.dp).clip(CircleShape))
                         Spacer(Modifier.width(12.dp))
                     }
-                    AppText(if (video.chatKey != null) {
-                        stringResource(if (video.live) R.string.chat_join_live else R.string.chat_replay_available)
-                    } else when (video.commentsStatus) {
-                        WatchCommentsStatus.Loading -> "Loading comments…"
-                        WatchCommentsStatus.Empty -> "No comments yet"
-                        WatchCommentsStatus.Disabled -> "Comments are turned off"
-                        WatchCommentsStatus.Failed -> "Couldn't load comments. Tap to view."
-                        WatchCommentsStatus.Ready -> video.topComment.text
+                    AppText(when {
+                        liveChat -> stringResource(R.string.chat_join_live)
+                        chatUnavailable -> stringResource(R.string.chat_unavailable)
+                        else -> when (video.commentsStatus) {
+                            WatchCommentsStatus.Loading -> "Loading comments…"
+                            WatchCommentsStatus.Empty -> "No comments yet"
+                            WatchCommentsStatus.Disabled -> "Comments are turned off"
+                            WatchCommentsStatus.Failed -> "Couldn't load comments. Tap to view."
+                            WatchCommentsStatus.Ready -> video.topComment.text
+                        }
                     }, Modifier.weight(1f).testTag("watch-comment-preview"), size = 14, line = 20, maxLines = 2)
                 }
             }
@@ -816,7 +871,10 @@ private fun RelatedThumb(
 ) {
     Box(
         modifier.clip(RoundedCornerShape(radius))
-            .clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) }
+            .clickable(role = Role.Button) {
+                WatchProvisionalStore.put(item.toProvisional())
+                onAction(WatchAction.OpenRelated(item.id))
+            }
             .appDescription(R.string.a11y_title_duration, item.title, item.duration)
             .testTag("watch-thumb-${item.id}"),
     ) {
@@ -845,7 +903,10 @@ private fun RelatedText(
     onAction: (WatchAction) -> Unit,
 ) {
     Column(
-        modifier.clickable(role = Role.Button) { onAction(WatchAction.OpenRelated(item.id)) },
+        modifier.clickable(role = Role.Button) {
+            WatchProvisionalStore.put(item.toProvisional())
+            onAction(WatchAction.OpenRelated(item.id))
+        },
     ) {
         AppText(
             rememberDeArrowTitle(item.id, item.title),

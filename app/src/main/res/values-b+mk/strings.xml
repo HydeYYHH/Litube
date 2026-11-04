@@ -166,6 +166,7 @@
     <string name="copy">Копија</string>
     <string name="copied">Копирано</string>
     <string name="copy_all">Копирај ги сите</string>
+    <string name="cast_searching">Пребарување…</string>
     <string name="queue_now_playing">Сега се игра</string>
     <string name="clear_queue_confirm">Да се исчисти целата редица?</string>
     <string name="ok">Во ред</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Затвори</string>
     <string name="verification_completed">Потврдата е завршена. Се обидува повторно…</string>
     <string name="verification_still_blocked">Сè уште блокирано по потврдата. Обидете се повторно подоцна.</string>
+    <string name="comments_title">Коментари</string>
+    <string name="comments_sort_top">Најдобри коментари</string>
+    <string name="comments_sort_newest">Прво најнови</string>
+    <string name="comments_sort_chip_top">Најдобри</string>
+    <string name="comments_sort_chip_newest">Најнови</string>
+    <string name="comments_composer_add">Додај коментар</string>
+    <string name="comments_composer_reply">Одговори</string>
+    <string name="comments_composer_edit">Уреди го коментарот</string>
+    <string name="comments_composer_text_hint">Текст на коментарот</string>
+    <string name="comments_composer_text_edit_hint">Уреди го текстот на коментарот</string>
+    <string name="comments_composer_submit">Коментирај</string>
+    <string name="comments_composer_sending">Се испраќа…</string>
+    <string name="comments_composer_save">Зачувај</string>
+    <string name="comments_delete_title">Избриши</string>
+    <string name="comments_show_more_replies">Прикажи уште одговори</string>
+    <string name="comments_load_more_failed">Не може да се вчитаат уште коментари</string>
+    <string name="comments_hide_replies">Криј одговори</string>
+    <string name="home_music_charts">Музички топ-листи</string>
+    <string name="home_popular_gaming">Популарно во игрите</string>
+    <string name="home_popular_sports">Популарно во спортот</string>
+    <string name="home_top_news">Главни вести</string>
 </resources>

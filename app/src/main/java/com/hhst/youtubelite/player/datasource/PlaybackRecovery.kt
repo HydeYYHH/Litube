@@ -13,6 +13,7 @@ internal object PlaybackRecovery {
     enum class Reason(val needsLightRefresh: Boolean, val rejection: MediaRejection? = null) {
         HTTP_403(false, MediaRejection.FORBIDDEN),
         INVALID_MEDIA_RESPONSE(false, MediaRejection.INVALID_BODY),
+        MANIFEST_UNAVAILABLE(false, MediaRejection.UNAVAILABLE),
         URL_STALE(true), SESSION_CHANGED(true), TRANSPORT_FAILED(true);
         fun afterLightBudget(): Reason = if (this == URL_STALE) HTTP_403 else this
     }
@@ -24,12 +25,22 @@ internal object PlaybackRecovery {
             if (cause is IOException && cause.message == "MEDIA_ERROR_BODY") return Reason.INVALID_MEDIA_RESPONSE
             if (cause is IOException && cause.message in setOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return Reason.URL_STALE
             when (cause) {
-                is HttpDataSource.InvalidResponseCodeException -> if (cause.responseCode == 403) return Reason.HTTP_403
+                is HttpDataSource.InvalidResponseCodeException ->
+                    classifyHttp(cause.responseCode, cause.dataSpec.uri.toString())?.let { return it }
                 is SocketTimeoutException, is ConnectException, is NoRouteToHostException,
                 is UnknownHostException -> transportFailure = true
             }
             cause = cause.cause
         }
         return if (transportFailure) Reason.TRANSPORT_FAILED else null
+    }
+
+    internal fun classifyHttp(status: Int, url: String): Reason? {
+        if (status == 403) return Reason.HTTP_403
+        if (status != 404 && status != 410) return null
+        val path = runCatching { java.net.URI(url).path }.getOrNull().orEmpty()
+        val manifest = path.endsWith(".m3u8", true) || path.endsWith(".mpd", true) ||
+            path.startsWith("/api/manifest/hls_") || path.startsWith("/api/manifest/dash/")
+        return Reason.MANIFEST_UNAVAILABLE.takeIf { manifest }
     }
 }

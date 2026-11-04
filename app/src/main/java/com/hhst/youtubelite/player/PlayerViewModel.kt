@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.cast.CastDevice
+import com.hhst.youtubelite.cast.DlnaController
+import com.hhst.youtubelite.cast.DlnaUiState
 import com.hhst.youtubelite.cast.LocalStreamProxy
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.core.PipSupport
@@ -24,6 +26,7 @@ import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.engine.PlaybackApi
+import com.hhst.youtubelite.player.engine.CastSource
 import com.hhst.youtubelite.player.engine.PlaybackDiagnostics
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
 import com.hhst.youtubelite.player.engine.SubtitleTrack
@@ -40,8 +43,11 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -69,6 +75,8 @@ data class PlayerUiState(
     val controlsVisible: Boolean = true,
     val loading: Boolean = false,
     val isPlaying: Boolean = false,
+    val userWantsPlay: Boolean = false,
+    val shortPausedByUser: Boolean = false,
     val durationMs: Long = 0L,
     val speed: Float = 1f,
     val title: String = "",
@@ -97,6 +105,8 @@ data class PlayerUiState(
     val locked: Boolean = false,
     val queueItems: List<QueueItem> = emptyList(),
     val queueEnabled: Boolean = false,
+    /** Owner of the published queue; gesture commits carry it back for validation. */
+    val queueOwner: QueueOwner = QueueOwner.DEVICE,
     val sponsorSegments: List<SponsorBlockManager.Segment> = emptyList(),
     val resizeMode: ResizeMode = ResizeMode.Fit,
     val pipAvailable: Boolean = false,
@@ -134,6 +144,7 @@ data class PlayerUiState(
     val castLinkConnected: Boolean = false,
     val castAvailable: Boolean = false,
     val castDevices: List<CastDevice> = emptyList(),
+    val castFailure: com.hhst.youtubelite.cast.CastFailureReport? = null,
     /** User-adjustable subtitle appearance (persists across videos). */
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
 )
@@ -156,11 +167,15 @@ class PlayerViewModel(
     private val prefs: ExtensionManager,
     private val cache: JsonCache,
     private val cast: CastController,
+    /** DLNA route; null in unit tests, where all DLNA branches no-op. */
+    private val dlna: DlnaController? = null,
     private val appContext: Context? = null,
     private val haptics: HapticsController? = null,
     private val nextVideo: (suspend (String) -> String?)? = null,
     /** Session-owned watch reporting; armed with endpoints from playback responses. */
     private val reporting: com.hhst.youtubelite.data.media.PlaybackWatchReporting? = null,
+    /** Session identity changes; queue ownership and navigation context follow it. */
+    private val identityChanges: Flow<Long> = com.hhst.youtubelite.data.media.MediaSession.changes,
 ) : ViewModel(), PlayerPlaybackActions {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -228,6 +243,7 @@ class PlayerViewModel(
 
     /** Supersedes in-flight cast-handoff waiters when a newer play/close wins. */
     private var playbackRequestSeq = 0
+    private var dlnaTransfer: kotlinx.coroutines.Job? = null
     private var handledEndSeq: Int? = null
     private val autoplayRequestId = AtomicLong()
 
@@ -258,6 +274,17 @@ class PlayerViewModel(
 
     private var playlistItems: List<QueueItem> = emptyList()
     private var playlistActive = false
+    /** First [identityChanges] emission is the startup generation, not a switch. */
+    private var identityArmed = false
+    @Volatile private var inShorts = false
+    private var shortsHoldWasPlaying = false
+    private var shortsHeldItemId: String? = null
+    private var shortsResumeOnOpen = false
+    @Volatile private var mediaKind = MediaKind.NONE
+    val currentMediaKind: MediaKind get() = mediaKind
+    private val sessionTrail = ArrayDeque<String>()
+    private var relatedNext: Pair<String, String?>? = null
+    private var relatedJob: kotlinx.coroutines.Job? = null
 
     init {
         val rememberedResize = if (prefs.isEnabled(PreferenceKeys.REMEMBER_RESIZE_MODE)) {
@@ -294,6 +321,8 @@ class PlayerViewModel(
                     it.copy(
                         queueItems = q.items,
                         queueEnabled = q.enabled,
+                        // Attribution for gesture commits (drag reorder), not display data.
+                        queueOwner = queue.currentOwner(),
                         hasNext = nav.next,
                         hasPrevious = nav.previous,
                     )
@@ -301,17 +330,61 @@ class PlayerViewModel(
             }
         }
         viewModelScope.launch {
-            cast.state.collect { c ->
+            identityChanges.collect {
+                queue.activate()
+                // StateFlow skips structurally equal states, so an owner swap
+                // between identical queues publishes nothing: republish the
+                // owner attribution here or drag commits would validate against
+                // a stale owner.
+                _uiState.update { state -> state.copy(queueOwner = queue.currentOwner()) }
+                if (!identityArmed) {
+                    identityArmed = true
+                    return@collect
+                }
+                // The previous identity owned the browsing context: its playlist,
+                // back trail and related prefetch die with it. The current video
+                // keeps playing; every later action uses the new identity.
+                playlistActive = false
+                playlistItems = emptyList()
+                sessionTrail.clear()
+                relatedNext = null
+                relatedJob?.cancel()
+                queuedSignature = null
+                refreshNavAvailability()
+            }
+        }
+        viewModelScope.launch {
+            val dlnaState: Flow<DlnaUiState> = dlna?.state ?: flowOf(DlnaUiState())
+            combine(cast.state, dlnaState) { c, d -> c to d }.collect { (c, d) ->
                 _uiState.update {
                     it.copy(
-                        casting = c.chromecastSession,
-                        castingDeviceName = c.deviceName,
+                        casting = c.chromecastSession || d.session,
+                        castingDeviceName = c.deviceName ?: d.deviceName,
                         castLinkUrl = c.linkUrl,
                         castLinkConnected = c.linkConnected,
-                        castAvailable = c.available,
-                        castDevices = c.devices,
+                        castAvailable = c.available || d.available,
+                        castDevices = c.devices + d.devices,
+                        castFailure = d.failure ?: c.failure ?: it.castFailure,
                     )
                 }
+            }
+        }
+        dlna?.initialize()
+        dlna?.let { d ->
+            d.onSessionEnded = {
+                if (!userCastStop) {
+                    detachCastAndResumeLocal(d.stopCasting(), resume = true)
+                }
+                d.endSession()
+                cast.stopLink()
+            }
+            d.onSessionFailed = {
+                if (!userCastStop) {
+                    detachCastAndResumeLocal(d.stopCasting(), resume = false)
+                    onHint(hintCastFailed)
+                }
+                d.endSession()
+                cast.stopLink()
             }
         }
         engine.onEnded = { onPlaybackEnded() }
@@ -329,9 +402,9 @@ class PlayerViewModel(
             }
         }
         // Receiver error: engine already detached (and resumed local unless
-        // a recast was in flight). End the Cast session.
+        // a recast was in flight). End whichever route is active.
         engine.onCastError = {
-            if (!userCastStop) teardownCast()
+            if (!userCastStop) teardownCasting()
         }
         cast.urlRefresher = object : LocalStreamProxy.UrlRefresher {
             override fun refreshUrl(token: String, videoId: String?, itag: Int?) = engine.refreshCastUrl(token, videoId, itag)
@@ -376,6 +449,7 @@ class PlayerViewModel(
                 diagnostics = s.diagnostics,
                 loading = s.isBuffering && s.userWantsPlay,
                 isPlaying = s.isPlaying,
+                userWantsPlay = s.userWantsPlay,
                 durationMs = s.durationMs,
                 speed = s.speed,
                 title = s.title,
@@ -449,24 +523,9 @@ class PlayerViewModel(
         }
     }
 
-    @Volatile private var inShorts = false
-    /** Play intent captured when a swipe hold pauses the settled short. */
-    private var shortsHoldWasPlaying = false
-
-    /**
-     * Media source of the current playback session, stable across surface and
-     * host changes — unlike [inShorts], which only tracks the transient
-     * Shorts host and is cleared the moment it is left. Mini player, PiP and
-     * autoplay decisions must consult this, not [inShorts].
-     */
-    @Volatile private var mediaKind = MediaKind.NONE
-    val currentMediaKind: MediaKind get() = mediaKind
-
     fun onBrowseOpened() {
         if (!_uiState.value.visible || _uiState.value.mini) return
         if (mediaKind == MediaKind.SHORTS) {
-            // Shorts never collapse into the mini player: presentation ends
-            // here; audio keeps following the background-play preference.
             onShortsStopped()
             return
         }
@@ -491,7 +550,8 @@ class PlayerViewModel(
             engine.setVideoVisible(true)
             return
         }
-        startPlayback(VideoId.watchUrl(id) + (startSeconds?.takeIf { it > 0 }?.let { "&t=" + it } ?: ""), keepMini = false, kind = MediaKind.WATCH)
+        // Any non-null start (0 included) must stay explicit or resume logic overrides it.
+        startPlayback(VideoId.watchUrl(id) + (startSeconds?.let { "&t=" + it } ?: ""), keepMini = false, kind = MediaKind.WATCH)
     }
 
     fun setVideoVisible(visible: Boolean) = engine.setVideoVisible(visible)
@@ -500,6 +560,8 @@ class PlayerViewModel(
         mediaKind = MediaKind.SHORTS
         if (inShorts) {
             engine.setVideoVisible(true)
+            if (shortsResumeOnOpen) engine.play()
+            shortsResumeOnOpen = false
             return
         }
         inShorts = true
@@ -512,15 +574,21 @@ class PlayerViewModel(
     }
 
     fun onShortsClosed() {
-        onSpeedHoldEnd()
+        if (mediaKind != MediaKind.SHORTS) return
+        onShortsStopped()
         inShorts = false
+        shortsResumeOnOpen = false
         stopShortsPresentation()
     }
 
     fun onShortsStopped() {
+        if (mediaKind != MediaKind.SHORTS || !inShorts) return
+        if (_uiState.value.visible) shortsResumeOnOpen = engine.snapshot.value.userWantsPlay
         onSpeedHoldEnd()
+        playbackRequestSeq++
+        engine.cancelPending(pausePlayback = true)
         engine.setVideoVisible(false)
-        if (!prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY)) engine.pause()
+        engine.pause()
         stopShortsPresentation()
     }
 
@@ -549,6 +617,7 @@ class PlayerViewModel(
     /** A swipe started: silence the settled short without leaving the Shorts session. */
     fun holdShortsForSwipe() {
         if (!inShorts) return
+        shortsHeldItemId = engine.snapshot.value.videoId
         shortsHoldWasPlaying = engine.snapshot.value.userWantsPlay
         onSpeedHoldEnd()
         engine.pause()
@@ -562,9 +631,11 @@ class PlayerViewModel(
     fun resumeShortsAfterSwipe(videoId: String) {
         if (!inShorts) return
         val expected = VideoId.parse(videoId)
-        if (expected == null || engine.snapshot.value.videoId != expected) return
-        if (shortsHoldWasPlaying) engine.play()
+        val resume = shortsHoldWasPlaying && expected != null && expected == shortsHeldItemId &&
+            engine.snapshot.value.videoId == expected
+        shortsHeldItemId = null
         shortsHoldWasPlaying = false
+        if (resume) engine.play()
     }
 
     fun onLeaveWatch() {
@@ -591,6 +662,18 @@ class PlayerViewModel(
         }
     }
 
+    /**
+     * A center-area downward drag on the embedded player asks for the mini
+     * player. Honors the same switch as browsing away, and never applies to
+     * Shorts or a fullscreen surface.
+     */
+    fun onMiniSwipeRequested() {
+        if (mediaKind != MediaKind.WATCH || !prefs.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) return
+        val state = _uiState.value
+        if (!state.visible || state.mini || state.fullscreen) return
+        enterMiniPlayer()
+    }
+
     private fun stopAndHide(pausePlayback: Boolean = true) {
         playbackRequestSeq++
         autoplayRequestId.incrementAndGet()
@@ -607,6 +690,7 @@ class PlayerViewModel(
 
     /** Queue navigation keeps the current surface. */
     private fun startPlayback(url: String, keepMini: Boolean, kind: MediaKind? = null, recordHistory: Boolean = true) {
+        if (dlnaTransfer?.isActive == true) onCastStop()
         autoplayRequestId.incrementAndGet()
         playbackRequestSeq++
         val token = playbackRequestSeq
@@ -638,6 +722,11 @@ class PlayerViewModel(
                 url = url,
                 videoId = id ?: it.videoId,
                 loading = if (switching) true else it.loading,
+                prepared = if (switching) false else it.prepared,
+                firstFrameRendered = if (switching) false else it.firstFrameRendered,
+                isPlaying = if (switching) false else it.isPlaying,
+                userWantsPlay = if (switching) true else it.userWantsPlay,
+                shortPausedByUser = if (switching) false else it.shortPausedByUser,
                 pageHeightDp = null,
                 pageTopDp = null,
                 pageLeftDp = 0,
@@ -652,12 +741,12 @@ class PlayerViewModel(
         engine.play(url)
         applyAutoFullscreen()
         // Queue advance mid-cast: the receiver must switch videos too, or the
-        // TV keeps the old stream under the new title.
-        // Skipped when the receiver already plays this exact video (user
-        // re-opened its watch page mid-cast): engine.play short-circuited and
-        // resumed the receiver — re-handing off would reload it at 0.
+        // TV keeps the old stream under the new title. Skipped when the
+        // receiver already plays this exact video (user re-opened its watch
+        // page mid-cast): engine.play short-circuited and resumed the
+        // receiver — re-handing off would reload it at 0.
         if (
-            cast.state.value.chromecastSession &&
+            isCasting() &&
             id != null &&
             engine.currentCastSource()?.videoId != id
         ) {
@@ -668,30 +757,30 @@ class PlayerViewModel(
                 if (token != playbackRequestSeq) return@launch
                 if (ready == null) return@launch
                 if (engine.snapshot.value.error != null) return@launch
-                fun handoffFailed() {
-                    teardownCast()
-                    onHint(hintCastFailed)
-                }
-                val source = engine.prepareCastSource()
-                if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
-                if (source == null) {
-                    handoffFailed()
-                    return@launch
-                }
-                if (cast.startCasting(source, 0L)) {
+                val source = recastToActiveRoute(0L)
+                if (token != playbackRequestSeq) return@launch
+                if (source != null) {
                     engine.markReceiverIdentity(
                         source.videoId, source.title, engine.snapshot.value.author,
                     )
-                    return@launch
+                } else {
+                    teardownCasting()
+                    onHint(hintCastFailed)
                 }
-                handoffFailed()
             }
         }
     }
 
     // -- PlayerPlaybackActions --
 
-    override fun onPlayPause() { autoplayRequestId.incrementAndGet(); engine.playOrPause() }
+    override fun onPlayPause() {
+        autoplayRequestId.incrementAndGet()
+        if (mediaKind == MediaKind.SHORTS) {
+            val pausing = engine.snapshot.value.userWantsPlay
+            _uiState.update { it.copy(shortPausedByUser = pausing) }
+        }
+        engine.playOrPause()
+    }
     override fun onSeek(positionMs: Long) { autoplayRequestId.incrementAndGet(); engine.seekTo(positionMs) }
 
     /** Double-tap seek with accumulation (±10 s per tap, 600 ms window). */
@@ -776,8 +865,8 @@ class PlayerViewModel(
         _gestureState.value = null
     }
 
-    override fun onLoop() {
-        engine.setLoopMode(_uiState.value.loopMode.next())
+    override fun onLoopMode(mode: LoopMode) {
+        engine.setLoopMode(mode)
     }
 
     override fun onQuality(label: String?) { haptics?.perform(HapticsController.Event.SELECTION); engine.setQuality(label) }
@@ -796,6 +885,8 @@ class PlayerViewModel(
     }
 
     override fun onAudioTrack(trackKey: String?) = engine.setAudioTrack(trackKey)
+
+    override fun onAudioMenuOpened() = engine.onAudioMenuOpened()
 
     /** Applies the subtitle appearance live and persists it for next sessions. */
     override fun onSubtitleStyle(style: SubtitleStyle) {
@@ -833,18 +924,6 @@ class PlayerViewModel(
         val id = playbackQueueId() ?: return false
         return queue.state.value.items.any { it.videoId == id }
     }
-
-    /** Watch videos loaded this session, most recent last; Previous walks it back. */
-    private val sessionTrail = ArrayDeque<String>()
-
-    /**
-     * Resolved related-video target as (playing id -> next id or null). Null
-     * next is a resolved "no related video"; an entry for another id (or no
-     * entry) is unresolved and treated optimistically as available until a
-     * resolve proves otherwise.
-     */
-    private var relatedNext: Pair<String, String?>? = null
-    private var relatedJob: kotlinx.coroutines.Job? = null
 
     /**
      * The single navigation decision shared by the surface buttons, the
@@ -936,11 +1015,15 @@ class PlayerViewModel(
         }
         val token = playbackRequestSeq
         val request = autoplayRequestId.incrementAndGet()
+        // The prefetch belongs to the identity it was requested under; an
+        // identity switch discards it so Next never uses another identity's data.
+        val owner = queue.currentOwner()
         viewModelScope.launch {
             val next = try { provider(id) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { null }
             if (request != autoplayRequestId.get() || token != playbackRequestSeq) return@launch
+            if (queue.currentOwner() != owner) return@launch
             if (honorAutoplay && (!prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) ||
                 _uiState.value.loopMode != LoopMode.QUEUE_NEXT || mediaKind != MediaKind.WATCH)) return@launch
             if (relatedNext?.first != id) relatedNext = id to next
@@ -964,11 +1047,13 @@ class PlayerViewModel(
         if (relatedNext?.first == id || relatedJob?.isActive == true) return
         val provider = nextVideo!!
         val token = playbackRequestSeq
+        val owner = queue.currentOwner()
         relatedJob = viewModelScope.launch {
             val next = try { provider(id) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { null }
             if (token != playbackRequestSeq) return@launch
+            if (queue.currentOwner() != owner) return@launch
             if (relatedNext?.first != id) relatedNext = id to next
             refreshNavAvailability()
         }
@@ -1085,7 +1170,8 @@ class PlayerViewModel(
     }
     override fun onQueueClear() = queue.clear()
     override fun onQueueRemove(videoId: String) = queue.remove(videoId)
-    override fun onQueueMove(fromIndex: Int, toIndex: Int) = queue.move(fromIndex, toIndex)
+    /** [owner] is the queue owner captured when the drag started; null applies to the active one. */
+    override fun onQueueMove(fromIndex: Int, toIndex: Int, owner: QueueOwner?) = queue.move(fromIndex, toIndex, owner)
 
     /** Page "Add to queue" (media menu) — the manual queue population path. */
     override fun onQueueAdd(item: QueueItem) {
@@ -1107,6 +1193,15 @@ class PlayerViewModel(
     fun queueContains(videoId: String): Boolean = queue.state.value.items.any { it.videoId == videoId }
 
     override fun onCastStop() {
+        if (dlnaActive() || dlnaTransfer?.isActive == true) {
+            userCastStop = true
+            dlnaTransfer?.cancel()
+            dlnaTransfer = null
+            detachCastAndResumeLocal(dlna?.stopCasting() ?: 0L, resume = true)
+            dlna?.endSession()
+            cast.stopLink()
+            return
+        }
         // Guard against a stop tap after the session already ended: the
         // detached castPlayer keeps its last position, and seeking the local
         // player there would jump the video backward (or to 0) unprompted.
@@ -1119,25 +1214,59 @@ class PlayerViewModel(
     }
 
     override fun onCastDevice(id: String) {
+        onCastFailureDismiss()
+        if (id.startsWith(DlnaController.ID_PREFIX)) {
+            startDlnaCast(id)
+            return
+        }
+        if (dlnaActive() || dlnaTransfer?.isActive == true) onCastStop()
         // Only select the route; onSessionStarted performs the single load
         // once the CastSession actually exists (startCasting before it is a
         // silent no-op and races the session-started path).
         cast.selectDevice(id)
     }
 
-    /** Cast dialog open/close toggles the MediaRouter discovery window. */
-    override fun onCastDiscovery(enabled: Boolean) = cast.setDiscoveryEnabled(enabled)
+    override fun onCastFailureDismiss() {
+        dlna?.clearFailure()
+        cast.clearFailure()
+        _uiState.update { it.copy(castFailure = null) }
+    }
 
-    override fun onShareCastLink() {
+    /** Cast dialog open/close toggles MediaRouter + SSDP discovery windows. */
+    override fun onCastDiscovery(enabled: Boolean) {
+        cast.setDiscoveryEnabled(enabled)
+        dlna?.setDiscoveryEnabled(enabled)
+    }
+
+    override fun onShareCastLink(onReady: () -> Unit) {
+        // A DLNA session owns the proxy for its own stream; reconfiguring it
+        // for the link page would retarget the renderer's byte requests.
+        if (dlnaActive()) return
         val token = playbackRequestSeq
         viewModelScope.launch {
-            val source = engine.prepareCastSource()
-            if (token != playbackRequestSeq) return@launch
-            if (source == null || cast.ensureProxy(source) == null) onHint(hintCastFailed)
+            var stage = "media"
+            try {
+                val source = engine.prepareCastSource()
+                if (token != playbackRequestSeq || dlnaActive() || dlnaTransfer?.isActive == true) return@launch
+                checkNotNull(source) { "No compatible media is available for local sharing" }
+                stage = "proxy"
+                checkNotNull(cast.ensureProxy(source)) { "Could not publish media on the local network" }
+                onReady()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (token != playbackRequestSeq) return@launch
+                val report = com.hhst.youtubelite.cast.CastFailureReport.create(
+                    "LOCAL_LINK", null, _uiState.value.videoId, stage, error)
+                _uiState.update { it.copy(castFailure = report) }
+            }
         }
     }
 
-    override fun onCloseCastLink() = cast.stopLink()
+    override fun onCloseCastLink() {
+        if (isCasting()) return
+        cast.stopLink()
+    }
 
     override fun onSponsorSkipCancel() {
         engine.cancelSponsorSkip()
@@ -1170,10 +1299,13 @@ class PlayerViewModel(
 
     override fun onMiniRestore() {
         val id = _uiState.value.videoId ?: return
-        openVideo(id)
         appContext?.let { context ->
-            context.startActivity(com.hhst.youtubelite.watch.WatchActivity.intent(context, id)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            val intent = com.hhst.youtubelite.watch.WatchActivity.intent(context, id)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            com.hhst.youtubelite.navigation.WatchTransition.miniBounds?.let {
+                com.hhst.youtubelite.navigation.WatchTransition.putOrigin(intent, it)
+            }
+            context.startActivity(intent, android.app.ActivityOptions.makeCustomAnimation(context, 0, 0).toBundle())
         }
     }
 
@@ -1183,6 +1315,123 @@ class PlayerViewModel(
         cast.stopCasting()
         cast.endSession()
         onHint(hintCastFailed)
+    }
+
+    private fun dlnaActive(): Boolean = dlna?.state?.value?.session == true
+
+    private fun isCasting(): Boolean = cast.state.value.chromecastSession || dlnaActive()
+
+    /**
+     * Ends whichever route is active after a receiver error. The engine has
+     * already detached (and resumed local unless a recast was in flight).
+     */
+    private fun teardownCasting() {
+        if (dlnaActive()) {
+            dlna?.stopCasting()
+            dlna?.endSession()
+            cast.stopLink()
+            onHint(hintCastFailed)
+        } else {
+            teardownCast()
+        }
+    }
+
+    /**
+     * Loads the current video on whichever route is active. DLNA needs the
+     * muxed pick and a range-served URL from the shared proxy; chromecast
+     * keeps the adaptive DASH path. Null = load failed, caller tears down.
+     */
+    private suspend fun recastToActiveRoute(positionMs: Long): CastSource? {
+        val token = playbackRequestSeq
+        if (dlnaActive()) {
+            val dlna = dlna ?: return null
+            val source = engine.prepareMuxedCastSource() ?: return null
+            if (token != playbackRequestSeq || !dlnaActive()) return null
+            val streamUrl = cast.dlnaStreamUrl(source) ?: return null
+            return source.takeIf { dlna.startCasting(source, positionMs, streamUrl) && token == playbackRequestSeq }
+        }
+        if (!cast.state.value.chromecastSession) return null
+        val source = engine.prepareCastSource() ?: return null
+        return source.takeIf { cast.startCasting(source, positionMs) }
+    }
+
+    /**
+     * DLNA route selection: no session handshake exists, so the load happens
+     * immediately. One active route — a chromecast session and any live link
+     * proxy yield before the muxed URL is published.
+     */
+    private fun startDlnaCast(deviceId: String) {
+        val dlna = dlna ?: return
+        if (dlna.state.value.session || dlnaTransfer?.isActive == true) onCastStop()
+        dlna.selectDevice(deviceId)
+        val token = playbackRequestSeq
+        val resumeOnFailure = engine.snapshot.value.userWantsPlay
+        dlnaTransfer = viewModelScope.launch {
+            var stage = "media"
+            try {
+                if (cast.state.value.chromecastSession) {
+                    userCastStop = true
+                    detachCastAndResumeLocal(cast.stopCasting(), resume = false)
+                    cast.endSession()
+                }
+                cast.stopLink()
+                val source = engine.prepareMuxedCastSource()
+                if (token != playbackRequestSeq) return@launch
+                if (source == null) {
+                    showCastFailure(deviceId, "media", IllegalStateException("No compatible combined audio and video stream is available"))
+                    dlna.endSession()
+                    onHint(hintCastFailed)
+                    return@launch
+                }
+                stage = "proxy"
+                val streamUrl = cast.dlnaStreamUrl(source)
+                if (streamUrl == null) {
+                    showCastFailure(deviceId, "proxy", IllegalStateException("Could not publish media on the local network"))
+                    dlna.endSession()
+                    onHint(hintCastFailed)
+                    return@launch
+                }
+                engine.pause()
+                stage = "start"
+                if (dlna.startCasting(source, _positionState.longValue, streamUrl)) {
+                    if (token != playbackRequestSeq) {
+                        dlna.stopCasting()
+                        dlna.endSession()
+                        cast.stopLink()
+                        return@launch
+                    }
+                    // Re-arm the remote-stop echo for the new DLNA session: the
+                    // stale userCastStop from a previous user stop (or from the
+                    // chromecast yield above) would suppress TV-side teardown.
+                    userCastStop = false
+                    engine.attachCastPlayer(dlna.remotePlayer())
+                } else {
+                    val report = dlna.state.value.failure
+                    if (report != null) _uiState.update { it.copy(castFailure = report) }
+                    else showCastFailure(deviceId, "start", IllegalStateException("The selected renderer is no longer available"))
+                    dlna.stopCasting()
+                    dlna.endSession()
+                    cast.stopLink()
+                    onHint(hintCastFailed)
+                    if (resumeOnFailure) engine.play()
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (token != playbackRequestSeq) return@launch
+                showCastFailure(deviceId, stage, error)
+                dlna.stopCasting()
+                dlna.endSession()
+                cast.stopLink()
+                if (resumeOnFailure) engine.play()
+            }
+        }
+    }
+
+    private fun showCastFailure(deviceId: String, stage: String, error: Throwable) {
+        val device = _uiState.value.castDevices.firstOrNull { it.id == deviceId }
+        val report = com.hhst.youtubelite.cast.CastFailureReport.create("DLNA", device, _uiState.value.videoId, stage, error)
+        _uiState.update { it.copy(castFailure = report) }
     }
 
     private fun detachCastAndResumeLocal(positionMs: Long, resume: Boolean) {
@@ -1219,6 +1468,11 @@ class PlayerViewModel(
         userCastStop = false
         val token = playbackRequestSeq
         viewModelScope.launch {
+            // One active route: a DLNA session yields the proxy to the receiver.
+            if (dlnaActive()) {
+                dlna?.stopCasting()
+                dlna?.endSession()
+            }
             val source = engine.prepareCastSource()
             if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
             if (source == null) { teardownCast(); return@launch }
@@ -1234,10 +1488,23 @@ class PlayerViewModel(
 
     /**
      * Quality/audio change while casting: publish a new proxy generation and
-     * reload the receiver at the current position with the receiver-capable
-     * tracks from [PlaybackApi.currentCastSource].
+     * reload the active receiver at the current position — the adaptive
+     * receiver-capable pick for chromecast, the best muxed file for DLNA.
      */
     private fun recastPublishedSource() {
+        if (dlnaActive()) {
+            val dlna = dlna ?: return
+            val token = playbackRequestSeq
+            viewModelScope.launch {
+                val source = engine.currentMuxedCastSource() ?: return@launch
+                val streamUrl = cast.dlnaStreamUrl(source) ?: return@launch
+                val position = dlna.remotePlayer()?.currentPosition ?: 0L
+                if (!dlna.startCasting(source, position, streamUrl) && token == playbackRequestSeq) {
+                    teardownCasting()
+                }
+            }
+            return
+        }
         if (!cast.state.value.chromecastSession) return
         val source = engine.currentCastSource() ?: return
         if (!cast.startCasting(source, engine.snapshot.value.positionMs)) {
@@ -1306,7 +1573,7 @@ class PlayerViewModel(
 
     /** Closing the system PiP window explicitly ends local playback. */
     fun onPipDismissed() {
-        val remote = cast.state.value.chromecastSession || cast.state.value.linkConnected
+        val remote = isCasting() || cast.state.value.linkConnected
         stopAndHide(pausePlayback = !remote)
         if (remote) engine.pauseLocal() else engine.stop()
     }
@@ -1344,6 +1611,10 @@ class PlayerViewModel(
             return
         }
         userCastStop = true
+        dlnaTransfer?.cancel()
+        dlnaTransfer = null
+        dlna?.stopCasting()
+        dlna?.endSession()
         if (cast.state.value.chromecastSession) {
             cast.stopCasting()
             cast.endSession()

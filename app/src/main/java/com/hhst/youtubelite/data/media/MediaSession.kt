@@ -9,46 +9,33 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.SignInClient
 import java.net.URLDecoder
 import java.net.URLEncoder
 
-/** Persistent auth fields backing [MediaSession]. MMKV in production, memory in tests. */
+/** Persistent auth fields backing [MediaSession]. Encrypted prefs in production, memory in tests. */
 interface AuthStore {
     fun read(key: String): String?
     fun write(key: String, value: String?)
 }
 
-class MmkvAuthStore(context: android.content.Context) : AuthStore {
-    private val kv = com.tencent.mmkv.MMKV.mmkvWithID("media-auth", com.tencent.mmkv.MMKV.SINGLE_PROCESS_MODE,
-        null, java.io.File(context.noBackupFilesDir, "auth").apply { mkdirs() }.absolutePath)
+/**
+ * Credential storage over SharedPreferences with every value sealed by
+ * [com.hhst.youtubelite.core.CredentialCipher] (AndroidKeyStore AES-GCM).
+ */
+class PreferencesAuthStore(context: android.content.Context) : AuthStore {
+    private val prefs = context.getSharedPreferences("media-auth", android.content.Context.MODE_PRIVATE)
 
-    init {
-        // Migration may only delete a legacy key after its new-location write is
-        // confirmed; a failed encode keeps the legacy copy as the source of truth.
-        val legacy = com.tencent.mmkv.MMKV.defaultMMKV()
-        val keys = legacy.allKeys().orEmpty().filter { it.startsWith("auth:") }
-        val migrated = mutableListOf<String>()
-        keys.forEach { key ->
-            if (kv.containsKey(key)) {
-                migrated += key
-            } else legacy.decodeString(key)?.let { value ->
-                if (kv.encode(key, value)) migrated += key
-            }
-        }
-        kv.sync()
-        migrated.forEach(legacy::removeValueForKey)
-        legacy.sync()
-        if (migrated.size != keys.size) com.hhst.youtubelite.diagnostics.AppLog.event(
-            com.hhst.youtubelite.diagnostics.AppLog.Category.STORAGE, "auth_migration_incomplete",
-            mapOf("legacy" to keys.size, "migrated" to migrated.size))
-    }
-    override fun read(key: String): String? = kv.decodeString(key, null)
+    override fun read(key: String): String? =
+        prefs.getString(key, null)?.let(com.hhst.youtubelite.core.CredentialCipher::decrypt)
+
     override fun write(key: String, value: String?) {
         if (value == null) {
-            kv.removeValueForKey(key)
+            check(prefs.edit().remove(key).commit()) { "auth_write_failed" }
             return
         }
         // Identical values (e.g. an unchanged access token across refreshes)
         // must not rewrite the same credential on every request.
-        if (kv.decodeString(key, null) == value) return
-        check(kv.encode(key, value)) { "auth_write_failed" }
+        if (read(key) == value) return
+        check(prefs.edit().putString(key, com.hhst.youtubelite.core.CredentialCipher.encrypt(value)).commit()) {
+            "auth_write_failed"
+        }
     }
 }
 
@@ -76,6 +63,10 @@ object MediaSession {
     internal const val KEY_ACCOUNT_ID = "auth:account_id"
     internal const val KEY_ACCOUNTS = "auth:accounts"
     internal const val KEY_VISITOR = "visitor:identity"
+    internal const val KEY_VISITOR_COOKIE = "visitor:cookie"
+    internal const val KEY_VISITOR_PAIR = "visitor:pair"
+    /** Persisted "On this device" switch: the whole app runs anonymous; credentials stay. */
+    internal const val KEY_ANONYMOUS_MODE = "auth:anonymous_mode"
 
     private val lock = Any()
     private var store: AuthStore? = null
@@ -83,11 +74,16 @@ object MediaSession {
     private var token: AccountToken? = null
     private var client: SignInClient? = null
     private var visitor: String? = null
+    private var visitorCookie: String? = null
+    private var visitorPairVerified = false
+    private var anonymousMode = false
+    /** Extra generation offset from anonymous-mode flips; the derived generation never collides. */
+    private var identityEpoch = 0L
     private var privateMode: () -> Boolean = { false }
     private val _changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
     val changes: kotlinx.coroutines.flow.StateFlow<Long> = _changes
 
-    private fun changed() { _changes.value = session.snapshot().generation }
+    private fun changed() { _changes.value = snapshot().generation }
 
     /** Test hook: the default [AccountToken] refreshes over the network. */
     internal var tokenFactory: (AccessToken, SignInClient) -> AccountToken = { initial, signInClient ->
@@ -100,6 +96,15 @@ object MediaSession {
             this.store = store
             this.privateMode = privateMode
             visitor = store.read(KEY_VISITOR)?.takeIf { it.isNotBlank() }
+            visitorCookie = store.read(KEY_VISITOR_COOKIE)?.takeIf { it.isNotBlank() }
+            visitorPairVerified = visitor?.let { id -> visitorCookie?.let { cookie ->
+                store.read(KEY_VISITOR_PAIR) == visitorPairDigest(id, cookie)
+            } } == true
+            if (visitorCookie != null && !visitorPairVerified) {
+                visitor = null
+                store.write(KEY_VISITOR, null)
+            }
+            anonymousMode = store.read(KEY_ANONYMOUS_MODE) == "1"
             session = AccountSession()
             token = null
             client = null
@@ -121,14 +126,38 @@ object MediaSession {
         }
     }
 
-    /** Main-thread safe: the cached context, possibly holding a stale access token. */
+    /** Main-thread safe: the cached context, possibly holding a stale access token.
+     *  The persisted anonymous mode forces the whole app (Home, Watch, library) onto
+     *  the device identity while the signed-in account stays selectable. */
     fun snapshot(): RequestContext = synchronized(lock) { session.snapshot().let {
-        if (it.signedIn) it else it.copy(visitor = visitor)
+        val base = when {
+            anonymousMode -> it.anonymous().copy(visitor = visitor, visitorCookie = visitorCookie)
+            it.signedIn -> it
+            else -> it.copy(visitor = visitor, visitorCookie = visitorCookie)
+        }
+        base.copy(generation = base.generation + identityEpoch)
     } }
     fun privateBrowsing(): Boolean = privateMode()
 
+    /** Whether the "On this device" whole-app switch is currently engaged. */
+    fun anonymousMode(): Boolean = synchronized(lock) { anonymousMode }
+
+    /**
+     * Switches the whole app between the device identity and the signed-in account.
+     * Bumps the generation, so in-flight account reads abort with "session_changed"
+     * and caches keyed by identity stop matching. Returns true when the mode changed.
+     */
+    fun setAnonymousMode(enabled: Boolean): Boolean = synchronized(lock) {
+        if (anonymousMode == enabled) return false
+        anonymousMode = enabled
+        identityEpoch += 1
+        store?.write(KEY_ANONYMOUS_MODE, if (enabled) "1" else null)
+        changed()
+        true
+    }
+
     internal fun <T> withAnonymousSession(generation: Long, block: () -> T): T = synchronized(lock) {
-        val current = session.snapshot()
+        val current = snapshot()
         if (current.signedIn || current.generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
         block()
     }
@@ -136,16 +165,34 @@ object MediaSession {
     /** Device-store access for the explicit device library source: guarded against identity
      * changes only, so a signed-in user may still read and write on-device collections. */
     internal fun <T> withUnchangedSession(generation: Long, block: () -> T): T = synchronized(lock) {
-        if (session.snapshot().generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
+        if (snapshot().generation != generation) throw kotlinx.coroutines.CancellationException("Session changed")
         block()
     }
 
     fun rememberVisitor(value: String?, generation: Long) = synchronized(lock) {
-        if (value.isNullOrBlank() || value.length > 4096 || session.snapshot().generation != generation ||
-            session.snapshot().signedIn || visitor != null) return@synchronized
+        if (value.isNullOrBlank() || value.length > 4096 || snapshot().generation != generation ||
+            snapshot().signedIn || visitor != null || visitorCookie != null && !visitorPairVerified) return@synchronized
         visitor = value
         store?.write(KEY_VISITOR, value)
     }
+
+    internal fun rememberVisitorIdentity(value: String?, cookie: String, generation: Long) = synchronized(lock) {
+        val current = snapshot()
+        if (current.signedIn || current.generation != generation || value.isNullOrBlank() || value.length > 4096 ||
+            cookie.length > 4096 || cookie.any { it == '\r' || it == '\n' } || visitorPairVerified) return@synchronized
+        store?.write(KEY_VISITOR, value)
+        store?.write(KEY_VISITOR_COOKIE, cookie)
+        store?.write(KEY_VISITOR_PAIR, visitorPairDigest(value, cookie))
+        visitor = value
+        visitorCookie = cookie
+        visitorPairVerified = true
+    }
+    internal fun anonymousHomeIdentityVerified(context: RequestContext): Boolean = synchronized(lock) {
+        visitorPairVerified && !context.signedIn && context.visitor == visitor && context.visitorCookie == visitorCookie
+    }
+    private fun visitorPairDigest(visitor: String, cookie: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest("$visitor\u0000$cookie".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
     fun signedIn(): Boolean = snapshot().signedIn
     fun accounts(): List<Account> = session.accounts()
     fun signInClient(): SignInClient? = synchronized(lock) { client }
@@ -160,11 +207,13 @@ object MediaSession {
      * generation never moves and in-flight reads stay valid.
      */
     fun freshContext(): RequestContext {
-        val (current, active) = synchronized(lock) { snapshot() to token }
+        val (current, active, anonymous) = synchronized(lock) { Triple(snapshot(), token, anonymousMode) }
         active ?: return current
+        // The anonymous switch keeps credentials stored but must never attach them.
+        if (anonymous) return current
         val fresh = active.token().requireValue()
         return synchronized(lock) {
-            if (token !== active || session.snapshot().generation != current.generation) {
+            if (token !== active || snapshot().generation != current.generation) {
                 throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
                     com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.AUTH, "session_changed"))
             }
@@ -178,6 +227,11 @@ object MediaSession {
         synchronized(lock) {
             this.client = client
             this.token = tokenFactory(token, client)
+            // Signing in always ends the "On this device" switch: the account is the identity.
+            if (anonymousMode) {
+                anonymousMode = false
+                store?.write(KEY_ANONYMOUS_MODE, null)
+            }
             session.replace(token, accounts)
             // Device-flow accounts sometimes arrive with no selection flag: anchor the first enabled one.
             if (session.snapshot().accountId == null) accounts.firstOrNull { !it.disabled }?.let { session.select(it.id) }
@@ -197,7 +251,7 @@ object MediaSession {
     }
 
     fun updateAccounts(accounts: List<Account>, expectedGeneration: Long): Boolean = synchronized(lock) {
-        if (session.snapshot().generation != expectedGeneration || !session.updateAccounts(accounts)) return false
+        if (snapshot().generation != expectedGeneration || !session.updateAccounts(accounts)) return false
         store?.write(KEY_ACCOUNT_ID, session.snapshot().accountId)
         store?.write(KEY_ACCOUNTS, encodeAccounts(session.accounts()))
         changed()
@@ -206,6 +260,11 @@ object MediaSession {
 
     fun selectAccount(id: String): Boolean = synchronized(lock) {
         if (!session.select(id)) return false
+        if (anonymousMode) {
+            anonymousMode = false
+            identityEpoch += 1
+            store?.write(KEY_ANONYMOUS_MODE, null)
+        }
         store?.write(KEY_ACCOUNT_ID, session.snapshot().accountId)
         store?.write(KEY_ACCOUNTS, encodeAccounts(session.accounts()))
         changed()

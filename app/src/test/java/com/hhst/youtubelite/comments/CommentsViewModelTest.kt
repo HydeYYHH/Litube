@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.setMain
@@ -35,6 +36,27 @@ import com.hhst.youtubelite.core.AppNotice
 class CommentsViewModelTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
+
+    /** Write service whose operations wait on caller-supplied gates, one per request. */
+    private class GatedActions : com.hhst.youtubelite.comments.domain.CommentActions,
+        CommentsRepository by FixtureCommentsRepository() {
+        val requests = mutableListOf<CommentNavigationRequest>()
+        private val gates = ArrayDeque<kotlinx.coroutines.CompletableDeferred<Unit>>()
+        /** When set, page reads block so a reload cannot replace the visible threads mid-scenario. */
+        var loadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        fun nextGate() = kotlinx.coroutines.CompletableDeferred<Unit>().also { gates.add(it) }
+        override suspend fun perform(request: CommentNavigationRequest) {
+            requests += request
+            gates.removeFirst().await()
+        }
+        var loadCalls = 0
+        override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget,
+            sort: CommentSort, cursor: String?): CommentsPage {
+            loadCalls++
+            loadGate?.let { it.await() }
+            return FixtureCommentsRepository().comments("bunny", sort, cursor)
+        }
+    }
 
     private fun repository(block: suspend (String?, CommentSort) -> CommentsPage) = object : CommentsRepository {
         override suspend fun comments(target: com.hhst.youtubelite.comments.domain.CommentTarget, sort: CommentSort, cursor: String?) = block(cursor, sort)
@@ -421,7 +443,7 @@ class CommentsViewModelTest {
         assertFalse(vm.uiState.value.actionPending)
         assertEquals("Do not discard", vm.uiState.value.draft)
         assertTrue(vm.uiState.value.overlay is CommentsOverlay.Composer)
-        assertTrue(vm.actionNotices.first() is AppNotice.Message)
+        assertTrue(vm.actionNotices.first() is AppNotice.Failure)
         val restored = CommentsViewModel(repository, saved, "bunny")
         assertEquals("Do not discard", restored.uiState.value.draft)
         assertTrue(restored.uiState.value.overlay is CommentsOverlay.Composer)
@@ -473,4 +495,30 @@ class CommentsViewModelTest {
         model.dispose()
     }
 
+    @Test fun aWriteCancelledByASessionSwitchCannotPublishStaleResults() = runTest {
+        val actions = GatedActions()
+        val notices = mutableListOf<AppNotice>()
+        val gate1 = actions.nextGate()
+        val vm = CommentsViewModel(actions, SavedStateHandle(), "bunny")
+        backgroundScope.launch { vm.actionNotices.collect { notices.add(it) } }
+        advanceUntilIdle()
+        vm.onAction(CommentAction.OpenThreadMenu("c1"))
+        vm.onAction(CommentAction.MenuAction(CommentMenuAction.Report))
+        assertTrue(vm.uiState.value.actionPending)
+        // The identity switches: the write job is cancelled and the session moves on.
+        vm.refreshSession()
+        assertFalse(vm.uiState.value.actionPending)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.actionPending)
+        // The old session's result lands late: it must not flip pending back on,
+        // reopen anything, notify, or restart the page read.
+        gate1.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.actionPending)
+        assertEquals(CommentsOverlay.None, vm.uiState.value.overlay)
+        // No sign-in notice may arrive from the stale write's failure paths.
+        assertTrue(notices.none { it == AppNotice.SignIn })
+        // Two page reads only: the initial load plus the refreshSession reload.
+        assertEquals(2, actions.loadCalls)
+    }
 }

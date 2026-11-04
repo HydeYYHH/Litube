@@ -1,17 +1,18 @@
 package com.hhst.youtubelite.player.surface
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -31,10 +32,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -42,15 +47,16 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.testTag
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.HapticsController
+import com.hhst.youtubelite.ui.design.LocalMotionScale
+import com.hhst.youtubelite.ui.design.motionDuration
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
-
-private val SnapEasing = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
 
 /** Fullscreen swipe: the window travels 40% of its height for a full pass. */
 private const val SWIPE_TRAVEL_FRACTION = 0.4f
@@ -63,9 +69,12 @@ private const val SWIPE_FLING_DP_PER_SEC = 400f
 
 internal val LocalMiniPlayerHandle = compositionLocalOf<MiniPlayerHandle?> { null }
 internal val LocalFullscreenSwipeHandle = compositionLocalOf<FullscreenSwipeHandle?> { null }
+internal val LocalMiniTransitionActive = compositionLocalOf { false }
 
 internal class FullscreenSwipeHandle {
     var drag: (Float) -> Unit = {}
+    var horizontal: Float = 0f
+    var pictureScale by mutableFloatStateOf(1f)
     var end: (Boolean) -> Unit = {}
     /** Finger released mid-swipe: distance and vertical velocity (px/s, y-down). True when this host consumed it. */
     var release: (Float, Float) -> Boolean = { _, _ -> false }
@@ -106,6 +115,12 @@ fun MiniPlayerWindow(
     topInsetDp: Int = 0,
     /** A committed fullscreen swipe reports its target mode here. */
     onFullscreenSwipe: (Boolean) -> Unit = {},
+    /** A committed embedded downward swipe asks for the mini player. */
+    onMiniSwipe: () -> Unit = {},
+    onMiniDragChanged: (Boolean) -> Unit = {},
+    onMiniDragProgress: (Float) -> Unit = {},
+    onMiniSwipeFinished: () -> Unit = {},
+    initialBounds: Rect? = null,
     content: @Composable () -> Unit,
 ) {
     val haptics: HapticsController = koinInject()
@@ -147,16 +162,27 @@ fun MiniPlayerWindow(
     var dismissAlpha by remember { mutableFloatStateOf(1f) }
     var attraction by remember { mutableFloatStateOf(0f) }
     var viewport by remember { mutableStateOf(Rect.Zero) }
+    var windowOffset by remember { mutableStateOf(Offset.Zero) }
+    var windowPositioned by remember { mutableStateOf(false) }
+    val miniEntryBounds = remember { initialBounds.takeIf { mini } }
+    var transitionSize by remember { mutableStateOf(IntSize.Zero) }
     var previousMini by remember { mutableStateOf(mini) }
     var previousFillsWindow by remember { mutableStateOf(fillsWindow) }
+    var previousParentSize by remember { mutableStateOf(parentSize) }
     var swiping by remember { mutableStateOf(false) }
     var swipeParentSize by remember { mutableStateOf(IntSize.Zero) }
     var swipeStartedFullscreen by remember { mutableStateOf(false) }
+    var swipeToMini by remember { mutableStateOf(false) }
     var awaitingFullscreen by remember { mutableStateOf<Boolean?>(null) }
     var swipeRelease by remember { mutableIntStateOf(0) }
     var transitionRunning by remember { mutableStateOf(false) }
+    var transitionToMini by remember { mutableStateOf(false) }
+    var miniSwipeCommitted by remember { mutableStateOf(false) }
+    var entryPending by remember { mutableStateOf(initialBounds != null && !mini) }
+    val motionScale = LocalMotionScale.current
     var placementRestored by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(MiniPlayerLayout.CORNER_DP.dp)
+    val fullscreenSwipe = remember { FullscreenSwipeHandle() }
 
     val widthPx = with(density) { spec.widthDp.dp.toPx() }
     val heightPx = with(density) { spec.heightDp.dp.toPx() }
@@ -177,7 +203,7 @@ fun MiniPlayerWindow(
         store.save(spec.widthDp, x / density.density, y / density.density)
     }
 
-    LaunchedEffect(mini, spec, parentSize, topInsetDp, density.density) {
+    LaunchedEffect(mini, spec, parentSize, topInsetDp, density.density, windowOffset, windowPositioned) {
         if (parentSize.width <= 0 || parentSize.height <= 0 || dismissing) return@LaunchedEffect
         dragAccepted = false
         dragging = false
@@ -190,9 +216,10 @@ fun MiniPlayerWindow(
         // Other window modes must not clamp the saved placement to their bounds.
         if (!mini) return@LaunchedEffect
         if (!placementRestored) {
+            if (miniEntryBounds != null && !windowPositioned) return@LaunchedEffect
             val saved = store.load()
-            dragX = saved.translationXDp * density.density
-            dragY = saved.translationYDp * density.density
+            dragX = miniEntryBounds?.let { it.left - windowOffset.x - restX } ?: (saved.translationXDp * density.density)
+            dragY = miniEntryBounds?.let { it.top - windowOffset.y - restY } ?: (saved.translationYDp * density.density)
             placementRestored = true
         }
         val x = MiniPlayerLayout.snapX(dragX, restX.toInt(), widthPx.toInt(), parentSize.width)
@@ -222,8 +249,13 @@ fun MiniPlayerWindow(
         awaitingFullscreen = null
         val changed = previousMini != mini
         val windowChanged = previousFillsWindow != fillsWindow
+        // A rotation (or any parent resize) re-docks instantly: the pinned
+        // content cannot slide between aspect ratios, and the window must
+        // present its final layout in the same frame the new size lands.
+        val parentChanged = previousParentSize != parentSize
         previousMini = mini
         previousFillsWindow = fillsWindow
+        previousParentSize = parentSize
         if (changed && !mini) {
             dragging = false
             closeArmed = false
@@ -231,20 +263,56 @@ fun MiniPlayerWindow(
             snapJob = null
         }
         val from = viewport
-        if (fullscreenSwipeEnabled && (changed || windowChanged || transitionRunning) && from.width > 0 && from.height > 0) {
+        val entering = entryPending && initialBounds != null && !mini && !fillsWindow
+        entryPending = false
+        if (fullscreenSwipeEnabled && !parentChanged &&
+            (changed || (!windowChanged && transitionRunning)) && from.width > 0 && from.height > 0 &&
+            (from != target || fullscreenSwipe.pictureScale != 1f)) {
+            // The start and end rects are fixed for the whole animation; a new
+            // gesture or a rotation restarts the effect from the current rect.
+            transitionToMini = changed && mini
             transitionRunning = true
-            Animatable(0f).animateTo(1f, tween(MiniPlayerLayout.TRANSITION_MS,
-                easing = if (changed) SnapEasing else FastOutSlowInEasing)) {
+            if (!mini || !swipeToMini) {
+                val measured = if (mini) from else target
+                transitionSize = IntSize(measured.width.roundToInt().coerceAtLeast(1), measured.height.roundToInt().coerceAtLeast(1))
+            }
+            val startScale = fullscreenSwipe.pictureScale
+            Animatable(0f).animateTo(1f, tween(motionDuration(MiniPlayerLayout.TRANSITION_MS, motionScale),
+                easing = FastOutSlowInEasing)) {
                 viewport = lerp(from, target, value)
+                fullscreenSwipe.pictureScale = startScale + (1f - startScale) * value
+            }
+        } else if (entering) {
+            transitionRunning = true
+            transitionSize = IntSize(target.width.roundToInt().coerceAtLeast(1), target.height.roundToInt().coerceAtLeast(1))
+            val origin = requireNotNull(initialBounds)
+            Animatable(0f).animateTo(1f, tween(motionDuration(240, motionScale), easing = FastOutSlowInEasing)) {
+                viewport = lerp(origin, target, value)
             }
         } else viewport = target
+        fullscreenSwipe.pictureScale = 1f
         transitionRunning = false
+        transitionToMini = false
+        if (mini && miniSwipeCommitted) {
+            miniSwipeCommitted = false
+            onMiniSwipeFinished()
+        }
+        if (!mini) {
+            swipeToMini = false
+            miniSwipeCommitted = false
+        }
     }
 
     val handle = remember { MiniPlayerHandle() }
-    val fullscreenSwipe = remember { FullscreenSwipeHandle() }
     val currentOnFullscreenSwipe by rememberUpdatedState(onFullscreenSwipe)
+    val currentOnMiniSwipe by rememberUpdatedState(onMiniSwipe)
+    val revealingSource = swipeToMini && (swiping || mini || transitionRunning)
     SideEffect {
+        onMiniDragChanged(revealingSource)
+        onMiniDragProgress(if (revealingSource) {
+            ((embeddedBounds.width - viewport.width) / (embeddedBounds.width - widthPx).coerceAtLeast(1f)).coerceIn(0f, 1f)
+        } else 0f)
+        if (mini && viewport.width > 0) com.hhst.youtubelite.navigation.WatchTransition.miniBounds = viewport.translate(windowOffset)
         // One travel distance for both the drag interpolation and the release
         // commit: 40% of the window height. Commit needs 35% of that travel or
         // a decisive fling in the swipe direction.
@@ -252,25 +320,62 @@ fun MiniPlayerWindow(
         fullscreenSwipe.drag = fun(distance) {
             if (mini || !fullscreenSwipeEnabled || dismissing || parentSize.width <= 0 || parentSize.height <= 0) return
             if (!swiping) {
-                if ((fillsWindow && distance <= 0f) || (!fillsWindow && distance >= 0f)) return
+                val downward = distance >= 0f
+                if (fillsWindow && !downward) return
                 swiping = true
                 swipeStartedFullscreen = fillsWindow
+                swipeToMini = !fillsWindow && downward
                 swipeParentSize = parentSize
                 awaitingFullscreen = null
+                if (swipeToMini) transitionSize = IntSize(
+                    embeddedBounds.width.roundToInt().coerceAtLeast(1),
+                    embeddedBounds.height.roundToInt().coerceAtLeast(1),
+                )
             }
-            val progress = ((if (swipeStartedFullscreen) distance else -distance) /
-                swipeTravelPx()).coerceIn(0f, 1f)
-            viewport = if (swipeStartedFullscreen) lerp(fullscreenBounds, embeddedBounds, progress)
-                else lerp(embeddedBounds, fullscreenBounds, progress)
+            if (swipeToMini) {
+                val progress = (distance / swipeTravelPx()).coerceIn(0f, 1f)
+                val width = embeddedBounds.width + (widthPx - embeddedBounds.width) * progress
+                val height = embeddedBounds.height + (heightPx - embeddedBounds.height) * progress
+                val center = embeddedBounds.center + Offset(fullscreenSwipe.horizontal, distance.coerceAtLeast(0f))
+                viewport = Rect(center.x - width / 2f, center.y - height / 2f,
+                    center.x + width / 2f, center.y + height / 2f)
+            } else {
+                val source = if (swipeStartedFullscreen) fullscreenBounds else embeddedBounds
+                viewport = if (swipeStartedFullscreen) source.translate(0f, distance.coerceAtLeast(0f)) else source
+                fullscreenSwipe.pictureScale = if (swipeStartedFullscreen) 1f else
+                    1f + (-distance / swipeTravelPx()).coerceIn(0f, 1f) * 0.5f
+            }
         }
         fullscreenSwipe.release = release@{ distance, velocityPxPerSec ->
             if (mini || !fullscreenSwipeEnabled || dismissing) return@release false
             if (!swiping) return@release true
+            if (swipeToMini) {
+                val progress = distance / swipeTravelPx()
+                val fling = velocityPxPerSec >= SWIPE_FLING_DP_PER_SEC * density.density
+                val commit = progress >= SWIPE_COMMIT_PROGRESS || (progress > 0f && fling)
+                awaitingFullscreen = null
+                transitionToMini = commit
+                transitionRunning = true
+                swiping = false
+                // A move and cancellation in one frame still need a settling animation.
+                swipeRelease++
+                if (commit) {
+                    dragX = MiniPlayerLayout.snapX(viewport.center.x - widthPx / 2f - restX,
+                        restX.toInt(), widthPx.toInt(), parentSize.width)
+                    dragY = MiniPlayerLayout.clampTranslation(viewport.center.y - heightPx / 2f - restY,
+                        restY.toInt(), heightPx.toInt(), parentSize.height)
+                    persist(dragX, dragY)
+                    miniSwipeCommitted = true
+                    currentOnMiniSwipe()
+                }
+                return@release true
+            }
             val progress = (if (swipeStartedFullscreen) distance else -distance) / swipeTravelPx()
             val fling = kotlin.math.abs(velocityPxPerSec) >= SWIPE_FLING_DP_PER_SEC * density.density &&
                 (velocityPxPerSec < 0f) != swipeStartedFullscreen
             val commit = progress >= SWIPE_COMMIT_PROGRESS || (progress > 0f && fling)
             awaitingFullscreen = if (commit) !swipeStartedFullscreen else null
+            transitionToMini = false
             transitionRunning = true
             swiping = false
             // A move and cancellation in one frame still need a settling animation.
@@ -280,11 +385,22 @@ fun MiniPlayerWindow(
         }
         fullscreenSwipe.end = { committed ->
             if (swiping) {
-                awaitingFullscreen = if (committed) !swipeStartedFullscreen else null
+                awaitingFullscreen = if (swipeToMini || !committed) null else !swipeStartedFullscreen
+                transitionToMini = swipeToMini && committed
                 transitionRunning = true
                 swiping = false
                 swipeRelease++
-                if (committed) currentOnFullscreenSwipe(!swipeStartedFullscreen)
+                if (swipeToMini) {
+                    if (committed) {
+                        dragX = MiniPlayerLayout.snapX(viewport.center.x - widthPx / 2f - restX,
+                            restX.toInt(), widthPx.toInt(), parentSize.width)
+                        dragY = MiniPlayerLayout.clampTranslation(viewport.center.y - heightPx / 2f - restY,
+                            restY.toInt(), heightPx.toInt(), parentSize.height)
+                        persist(dragX, dragY)
+                        miniSwipeCommitted = true
+                        currentOnMiniSwipe()
+                    }
+                } else if (committed) currentOnFullscreenSwipe(!swipeStartedFullscreen)
             }
         }
         // A plain tap also fires begin(): cancelling the snap here would
@@ -349,7 +465,7 @@ fun MiniPlayerWindow(
             val y = MiniPlayerLayout.clampTranslation(
                 dragY, restY.toInt(), heightPx.toInt(), parentSize.height,
             )
-            val snapSpec = tween<Float>(MiniPlayerLayout.TRANSITION_MS, easing = SnapEasing)
+            val snapSpec = tween<Float>(motionDuration(MiniPlayerLayout.TRANSITION_MS, motionScale), easing = FastOutSlowInEasing)
             snapJob = scope.launch {
                 val ax = Animatable(dragX)
                 val ay = Animatable(dragY)
@@ -374,8 +490,8 @@ fun MiniPlayerWindow(
                 snapJob = null
                 scope.launch {
                     coroutineScope {
-                        launch { Animatable(1f).animateTo(0.5f, tween(MiniPlayerLayout.DISMISS_MS)) { dismissScale = value } }
-                        launch { Animatable(1f).animateTo(0f, tween(MiniPlayerLayout.DISMISS_MS)) { dismissAlpha = value } }
+                        launch { Animatable(1f).animateTo(0.5f, tween(motionDuration(MiniPlayerLayout.DISMISS_MS, motionScale))) { dismissScale = value } }
+                        launch { Animatable(1f).animateTo(0f, tween(motionDuration(MiniPlayerLayout.DISMISS_MS, motionScale))) { dismissAlpha = value } }
                     }
                     onDismiss()
                 }
@@ -384,16 +500,16 @@ fun MiniPlayerWindow(
     }
 
     CompositionLocalProvider(LocalMiniPlayerHandle provides if (mini) handle else null,
+        LocalMiniTransitionActive provides (revealingSource && !mini),
         LocalFullscreenSwipeHandle provides if (!mini && fullscreenSwipeEnabled) fullscreenSwipe else null) {
         Box(
             modifier = modifier
                 .fillMaxSize()
+                .onGloballyPositioned { windowOffset = it.positionInWindow(); windowPositioned = true }
                 .onSizeChanged { if (it.width > 0 && it.height > 0) measuredParentSize = it },
         ) {
-            if (!mini && fullscreenSwipeEnabled && (swiping || transitionRunning || fillsWindow)) {
-                val shade = ((viewport.height - embeddedBounds.height) /
-                    (fullscreenBounds.height - embeddedBounds.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade)))
+            if (!mini && fullscreenSwipeEnabled && (fillsWindow || swipeStartedFullscreen && (swiping || transitionRunning))) {
+                if (!swipeToMini) Box(Modifier.fillMaxSize().background(Color.Black))
             }
             if (mini && dragging && !dismissing) {
                 Box(Modifier.zIndex(2f).absoluteOffset { IntOffset(closeBounds.left.roundToInt(), closeBounds.top.roundToInt()) }
@@ -410,18 +526,23 @@ fun MiniPlayerWindow(
             // at 0, the window would appear at the parent's top-left corner
             // before moving to its dock.
             if (parentSize.width > 0 && parentSize.height > 0 && viewport.width > 0 && viewport.height > 0) {
+                // Keep the surface measured once while the window moves and scales.
+                val inMotion = transitionRunning || (swiping && swipeToMini)
+                val corners = if ((mini && !transitionRunning) || transitionToMini || (swiping && swipeToMini)) shape else RoundedCornerShape(0.dp)
+                val contentSize = transitionSize
                 Box(
-                    modifier = Modifier
-                        .absoluteOffset {
+                    modifier = Modifier.absoluteOffset {
                             IntOffset(viewport.left.roundToInt(), viewport.top.roundToInt())
                         }
                         .size(with(density) { viewport.width.coerceAtLeast(1f).toDp() }, with(density) { viewport.height.coerceAtLeast(1f).toDp() })
+                        .testTag("player-window")
                         .graphicsLayer {
                             alpha = dismissAlpha
                             scaleX = dismissScale * (1f - attraction * 0.35f)
                             scaleY = scaleX
                         }
-                        .clip(if (mini || transitionRunning) shape else RoundedCornerShape(0.dp))
+                        .then(if (inMotion || !mini) Modifier.background(Color.Black) else Modifier)
+                        .clip(corners)
                         .then(
                             if (mini && showStroke) {
                                 Modifier.border(1.dp, Color(MiniPlayerLayout.STROKE_COLOR), shape)
@@ -430,7 +551,20 @@ fun MiniPlayerWindow(
                             },
                         ),
                 ) {
-                    content()
+                    Box(
+                        modifier = if (inMotion) Modifier
+                            .wrapContentSize(Alignment.TopStart, unbounded = true)
+                            .requiredSize(with(density) { contentSize.width.coerceAtLeast(1).toDp() }, with(density) { contentSize.height.coerceAtLeast(1).toDp() })
+                            .graphicsLayer {
+                                transformOrigin = TransformOrigin(0f, 0f)
+                                val scale = viewport.width / contentSize.width.coerceAtLeast(1)
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                        else Modifier.fillMaxSize(),
+                    ) {
+                        content()
+                    }
                 }
             }
         }

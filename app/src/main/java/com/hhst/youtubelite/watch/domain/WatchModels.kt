@@ -44,6 +44,10 @@ data class WatchRelated(
     val badge: String? = null,
     val progress: Float? = null,
     val avatar: String? = null,
+    val notInterestedToken: String? = null,
+    val dontRecommendToken: String? = null,
+    val feedbackGeneration: Long? = null,
+    val menuEndpoint: com.hhst.youtubelite.home.domain.FeedMenuEndpoint? = null,
 )
 
 data class WatchPage(val video: WatchVideo, val related: List<WatchRelated>, val nextKey: String? = null)
@@ -55,6 +59,8 @@ interface WatchRepository {
     /** A read that must bypass any caching layer (explicit user retry). */
     suspend fun watchFresh(videoId: String): WatchPage = watch(videoId)
     suspend fun next(videoId: String, cursor: String): RelatedPage = RelatedPage(emptyList(), null)
+    suspend fun menu(video: WatchRelated): WatchRelated = video
+    suspend fun feedback(video: WatchRelated, action: WatchVideoMenuAction): Unit = throw UnsupportedOperationException()
 }
 
 sealed interface WatchContent {
@@ -73,8 +79,12 @@ data class WatchUiState(
     val actionPending: Boolean = false,
     val relatedLoading: Boolean = false,
     val relatedFailed: Boolean = false,
+    val menuLoading: Boolean = false,
+    val menuFailed: Boolean = false,
     /** Production mode: report/recommendation rows without server tokens hide. Fixtures keep the recorded layouts. */
     val live: Boolean = false,
+    /** Card summary painted while the page read is in flight; cleared once real content lands. */
+    val provisional: WatchProvisional? = null,
     /** Set when the page read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
@@ -113,8 +123,8 @@ enum class WatchFeedbackKind(val title: String, val reasons: List<String>) {
     )),
 }
 
-/** Ordinary-video menu rows. Share is the only row this build performs; the rest stay typed exits. */
 enum class WatchVideoMenuAction(val label: String) {
+    Queue("Add to queue"), Download("Download"),
     WatchLater("Save to Watch later"),
     SaveToPlaylist("Save to playlist"),
     Share("Share"),
@@ -122,14 +132,13 @@ enum class WatchVideoMenuAction(val label: String) {
     DontRecommend("Don't recommend channel"),
 }
 
-/**
- * The menu rows with a real production route. The recommendation rows open a reason sheet whose
- * submission needs a signed-in feedbackToken the watch page never carries, so production menus
- * only offer rows that actually run; fixtures keep the full recorded menu.
- */
-fun watchVideoMenuActions(live: Boolean): List<WatchVideoMenuAction> =
+fun watchVideoMenuActions(live: Boolean, video: WatchRelated? = null): List<WatchVideoMenuAction> =
     if (!live) WatchVideoMenuAction.entries
-    else listOf(WatchVideoMenuAction.WatchLater, WatchVideoMenuAction.SaveToPlaylist, WatchVideoMenuAction.Share)
+    else buildList {
+        addAll(listOf(WatchVideoMenuAction.Queue, WatchVideoMenuAction.Download, WatchVideoMenuAction.WatchLater, WatchVideoMenuAction.SaveToPlaylist, WatchVideoMenuAction.Share))
+        if (!video?.notInterestedToken.isNullOrBlank()) add(WatchVideoMenuAction.NotInterested)
+        if (!video?.dontRecommendToken.isNullOrBlank()) add(WatchVideoMenuAction.DontRecommend)
+    }
 
 /** Typed boundaries only: every entry is recorded by the host, never simulated as a success. */
 sealed interface WatchNavigationRequest {
@@ -188,6 +197,7 @@ sealed interface WatchAction {
     data object CloseComments : WatchAction
     data class OpenRelated(val videoId: String) : WatchAction
     data class OpenItemMenu(val videoId: String) : WatchAction
+    data object RetryMenu : WatchAction
     data object CloseOverlay : WatchAction
     data object DismissVerification : WatchAction
     data object OpenVerification : WatchAction

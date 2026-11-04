@@ -215,24 +215,12 @@ private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     }
 }
 
-/** Scrub / timebar drag: target time + signed delta. */
+/** Signed seek offset; the time bar carries the target position. */
 @Composable
 private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modifier) {
     val deltaLabel = PlayerUi.offsetHint(state.deltaMs)
     GesturePill(modifier = modifier, shape = RoundedCornerShape(16.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = PlayerUi.formatTime(state.targetMs),
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = deltaLabel,
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp,
-            )
-        }
+        Text(deltaLabel, Modifier.testTag("player-seek-offset"), color = Color.White, fontSize = 14.sp)
     }
 }
 

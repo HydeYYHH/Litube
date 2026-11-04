@@ -3,7 +3,6 @@ package com.hhst.youtubelite.extractor
 import android.os.Bundle
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +49,7 @@ class YoutubeStreamReadAndroidTest {
                     "protocol" to plan.protocol.name, "httpStatus" to response.code,
                     "firstReadBytes" to bytes.size, "firstReadMs" to (System.nanoTime() - started) / 1_000_000)
                 records += record
-                instrumentation.sendStatus(2, Bundle().apply { putString("youtubeStreamRead", Gson().toJson(record)) })
+                instrumentation.sendStatus(2, Bundle().apply { putString("youtubeStreamRead", com.hhst.youtubelite.core.TestJson.any(record)) })
             }
         }
         try {
@@ -63,7 +62,7 @@ class YoutubeStreamReadAndroidTest {
                 for (manifest in stream.manifests.distinctBy { it.protocol }) read(id, manifest.url, requireNotNull(manifest.requestPlan), true)
             }
         } finally {
-            File(instrumentation.targetContext.filesDir, "youtube-stream-read.json").writeText(Gson().toJson(records))
+            File(instrumentation.targetContext.filesDir, "youtube-stream-read.json").writeText(com.hhst.youtubelite.core.TestJson.any(records))
             File(instrumentation.targetContext.filesDir, "youtube-stream-diagnostics.txt").writeText(extractor.extractionDiagnostics())
             watchdog.shutdownNow()
             client.dispatcher.executorService.shutdown()

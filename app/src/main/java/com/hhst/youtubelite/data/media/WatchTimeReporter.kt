@@ -160,7 +160,7 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
 
     private fun dispatch(session: Session) {
         if (!scope.isActive || session.job?.isActive == true || session.updates.isEmpty() || !isCurrent(session) ||
-            session.failures >= MAX_FAILURES || now() < session.nextRetryAtMs) return
+            now() < session.nextRetryAtMs) return
         session.job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 while (true) {
@@ -198,6 +198,13 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
                                 mapOf("video" to DiagnosticRedaction.identity(session.videoId), "after_failures" to session.failures))
                             session.failures = 0
                             session.nextRetryAtMs = 0L
+                            AppLog.detail(AppLog.Category.PLAYER, "watch_report.acknowledged", mapOf(
+                                "video" to DiagnosticRedaction.identity(session.videoId),
+                                "identity" to if (MediaSession.signedIn()) "account" else "device",
+                                "kind" to if (update is Update.Range) "interval" else "anchor",
+                                "start_ms" to if (update is Update.Range) update.startMs else (update as Update.Anchor).positionMs,
+                                "end_ms" to if (update is Update.Range) update.endMs else (update as Update.Anchor).positionMs,
+                                "generation" to session.generation))
                             if (update is Update.Range && !MediaSession.signedIn()) onAnonymousReport?.invoke()
                         }
                     } catch (cancelled: CancellationException) {
@@ -205,8 +212,10 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
                     } catch (error: Exception) {
                         synchronized(this@WatchTimeReporter) {
                             if (!isCurrent(session)) return@synchronized
-                            session.failures++
-                            session.nextRetryAtMs = now() + minOf(REPORT_EVERY_MS shl session.failures, MAX_BACKOFF_MS)
+                            session.failures = (session.failures + 1).coerceAtMost(MAX_FAILURES)
+                            val backoff = if (session.failures >= MAX_FAILURES) RECOVERY_PROBE_MS
+                                else minOf(REPORT_EVERY_MS shl session.failures, MAX_BACKOFF_MS)
+                            session.nextRetryAtMs = now() + backoff
                             val fields = mapOf("video" to DiagnosticRedaction.identity(session.videoId), "failures" to session.failures,
                                 "reason" to ((error as? MediaException)?.failure?.code ?: error.javaClass.simpleName))
                             if (session.failures >= MAX_FAILURES) AppLog.event(AppLog.Category.PLAYER, "watch_report.suspended", fields)
@@ -235,6 +244,7 @@ class WatchTimeReporter(private val client: MediaClient, private val scope: Coro
         const val REPORT_EVERY_MS = 10_000L
         const val MAX_FAILURES = 5
         const val MAX_BACKOFF_MS = 60_000L
+        const val RECOVERY_PROBE_MS = 5 * 60_000L
         const val MAX_SESSIONS = 4
         const val MAX_UPDATES = 16
     }

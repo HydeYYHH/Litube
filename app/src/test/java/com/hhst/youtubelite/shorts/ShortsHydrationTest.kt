@@ -70,6 +70,31 @@ class ShortsHydrationTest {
 
     private fun readyItems(vm: ShortsViewModel) = (vm.uiState.value.content as ShortsContent.Ready).page.items
 
+    @Test fun theSelectedPreparationIsRetainedUntilItsFirstFrameBeforeWarmingTheNext() = runTest {
+        val events = mutableListOf<String>()
+        val preloader = object : com.hhst.youtubelite.shorts.data.ShortsPreloader {
+            override fun select(videoId: String) { events += "select:$videoId" }
+            override fun preload(videoId: String?) { events += "preload:$videoId" }
+            override fun cancel() { events += "cancel" }
+        }
+        val vm = ShortsViewModel(HydratingRepository(listOf("s1", "s2", "s3")),
+            SavedStateHandle(), ShortsScenario.Content, "s1", preloader = preloader)
+        advanceUntilIdle()
+        events.clear()
+        vm.onAction(ShortsAction.SelectItem("s1"))
+        advanceUntilIdle()
+        assertEquals(listOf("select:s1"), events)
+        vm.onPlaybackReady("s1")
+        assertEquals(listOf("select:s1", "preload:s2"), events)
+        events.clear()
+        vm.onAction(ShortsAction.SelectItem("s2"))
+        vm.onPlaybackReady("s1")
+        advanceUntilIdle()
+        assertEquals(listOf("select:s2"), events)
+        vm.onPlaybackReady("s2")
+        assertEquals(listOf("select:s2", "preload:s3"), events)
+    }
+
     @Test fun settledItemHydratesOnceAndPrefetchStaysBounded() = runTest {
         val repo = HydratingRepository(listOf("s1", "s2", "s3", "s4"))
         val vm = ShortsViewModel(repo, SavedStateHandle(), ShortsScenario.Content, "s1")

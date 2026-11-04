@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.home.domain.*
+import com.hhst.youtubelite.watch.domain.toProvisional
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
@@ -35,6 +36,19 @@ internal fun FeedCard(item: FeedItem, compact: Boolean, windowWidth: Float, live
     when (item) {
         is FeedItem.Video -> VideoCard(item, compact, onAction)
         is FeedItem.Mix -> MixCard(item, compact, live, onAction)
+        is FeedItem.Playlist -> {
+            val playlist = item.summary
+            val open = { onAction(HomeAction.Navigate(HomeNavigationRequest.Playlist(playlist.id))) }
+            Column(Modifier.padding(horizontal = if (compact) 12.dp else 0.dp).testTag("feed-item-${item.id}")) {
+                com.hhst.youtubelite.playlist.presentation.PlaylistCover(
+                    playlist, Modifier.fillMaxWidth().aspectRatio(16f / 9f), open)
+                Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).padding(top = 8.dp)) {
+                    AppText(playlist.title, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
+                    if (playlist.owner.isNotBlank()) AppText(playlist.owner,
+                        Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
+                }
+            }
+        }
         is FeedItem.Shorts -> ShortsShelf(item, windowWidth, live, onAction)
         is FeedItem.Post -> BoxWithConstraints {
             Box(Modifier.requiredWidth(maxWidth + if (compact) 0.dp else 32.dp)) { PostCard(item, live, onAction) }
@@ -60,9 +74,14 @@ private fun Modifier.semanticsLabel(label: String) = this.then(Modifier.semantic
 
 @Composable
 private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAction) -> Unit) {
+    // The tapped card hands its known fields to the Watch page before navigating.
+    val openWatch = {
+        com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+        onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id)))
+    }
     Column(Modifier.testTag("feed-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }
+            .clickable(role = Role.Button) { openWatch() }
             .semanticsLabel("${item.title}, ${item.duration}")) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
@@ -78,7 +97,7 @@ private fun VideoCard(item: FeedItem.Video, compact: Boolean, onAction: (HomeAct
             Avatar(item.avatar ?: item.artwork, item.author, item.channelId, onAction, size = 36.dp)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
-                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }) {
+                Column(Modifier.padding(end = if (compact) 12.dp else 0.dp).clickable(role = Role.Button) { openWatch() }) {
                     AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
                     AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 2.dp), size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
                 }
@@ -98,7 +117,10 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onActio
             if (compact) Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-8).dp).background(Color(item.palette.stackColor).copy(alpha = 0.5f), RoundedCornerShape(12.dp)))
             Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().aspectRatio(16f / 9).offset(y = (-5).dp).background(Color(item.palette.stackColor), RoundedCornerShape(12.dp)))
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(12.dp))
-                .clickable(role = Role.Button) { onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id))) }.semanticsLabel(item.title)) {
+                .clickable(role = Role.Button) {
+                    com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+                    onAction(HomeAction.Navigate(HomeNavigationRequest.Watch(item.id)))
+                }.semanticsLabel(item.title)) {
                 VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
                 Row(Modifier.align(Alignment.BottomEnd).padding(8.dp).height(24.dp).background(Color(item.palette.badgeColor), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

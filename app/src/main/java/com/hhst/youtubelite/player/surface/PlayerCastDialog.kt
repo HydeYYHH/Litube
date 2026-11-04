@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.cast.CastDevice
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
@@ -98,20 +99,12 @@ internal fun CastDialog(
                 )
                 if (state.castDevices.isEmpty()) {
                     Text(
-                        text = if (state.castAvailable) {
-                            stringResource(R.string.cast_no_devices_found)
-                        } else {
-                            stringResource(R.string.cast_unavailable)
-                        },
+                        text = stringResource(R.string.cast_searching),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = SettingsTokens.DetailSize.sp,
                     )
                     Text(
-                        text = if (state.castAvailable) {
-                            stringResource(R.string.cast_no_devices_hint)
-                        } else {
-                            stringResource(R.string.cast_unavailable_hint)
-                        },
+                        text = stringResource(R.string.cast_no_devices_hint),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 4.dp),
@@ -151,6 +144,15 @@ internal fun CastDialog(
                                 },
                                 modifier = Modifier.weight(1f),
                             )
+                            if (device.kind == CastDevice.KIND_DLNA) {
+                                // Brand tag, not translated prose: it names the protocol.
+                                Text(
+                                    text = "DLNA",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
                         }
                     }
                 }

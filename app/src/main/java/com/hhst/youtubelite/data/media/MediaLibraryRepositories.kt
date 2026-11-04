@@ -13,18 +13,18 @@ import com.hhst.youtubelite.shorts.domain.*
 import com.liskovsoft.youtubeapi.videoinfo.V2.*
 import kotlinx.coroutines.async
 
-class MediaLibraryRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
-    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : LibraryRepository {
+class MediaLibraryRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : LibraryRepository {
     override val supportsLocal get() = local != null
-    private fun useDevice() = useDeviceLibrary(local, source)
+    override val hasSavedAccounts get() = MediaSession.accounts().any { !it.disabled }
+    private fun useDevice() = useDeviceLibrary(local)
     private suspend fun <T> device(block: (LocalLibraryStore) -> T): T {
-        val operation = LibraryOperation(local, source)
+        val operation = LibraryOperation(local)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             operation.local { block(requireNotNull(local)) }
         }
     }
     override suspend fun you(): YouPage = kotlinx.coroutines.coroutineScope {
-        val operation = LibraryOperation(local, source)
+        val operation = LibraryOperation(local)
         if (useDevice()) return@coroutineScope device {
             YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), it.history().entries, it.playlists().playlists)
         }
@@ -84,8 +84,7 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
         try {
             remote { context, http ->
                 if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
-                if (!block(context, http).confirmed)
-                    throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
+                block(context, http).requireConfirmation()
             }
         } catch (error: MediaException) {
             if (error.failure.kind == RequestFailure.AUTH) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
@@ -101,7 +100,7 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
         PlaylistCollectionPage(page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.nextKey)
     }
     private suspend fun <T> remote(block: (RequestContext, HttpClient) -> T): T {
-        val operation = LibraryOperation(local, source)
+        val operation = LibraryOperation(local)
         if (operation.device) throw kotlinx.coroutines.CancellationException("Library source changed")
         return client.read { context, http ->
             operation.check()
@@ -111,11 +110,13 @@ class MediaLibraryRepository(private val client: MediaClient, private val local:
 
 }
 
-class MediaSubscriptionsRepository(private val client: MediaClient) : SubscriptionsRepository {
+class MediaSubscriptionsRepository(private val client: MediaClient,
+    private val now: () -> Long = System::currentTimeMillis) : SubscriptionsRepository {
+    private val menus = DeferredMenuCache(now)
     // Today/Posts have no server-side lane: the subscriptions browse only filters by params we
     // don't have for those two, so they are hidden rather than offered and failed.
     override val supportedFilters = SubscriptionsFilter.entries.toSet() - SubscriptionsFilter.Today - SubscriptionsFilter.Posts
-    override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage = client.read { context, http ->
+    override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?): SubscriptionsPage = client.readIdempotent { context, http ->
         if (filter == SubscriptionsFilter.Today || filter == SubscriptionsFilter.Posts)
             throw MediaException(RequestError(RequestFailure.UNSUPPORTED, "subscription_filter_unavailable"))
         val page = loadLibrary(LibrarySection.SUBSCRIPTIONS, context, continuation, http).requireValue()
@@ -129,9 +130,42 @@ class MediaSubscriptionsRepository(private val client: MediaClient) : Subscripti
     }
 
     // The channel guide is its own read: a rejected guide request must not erase a usable feed.
-    override suspend fun subscribedChannels(): List<SubscribedChannel> = client.read { context, http ->
-        loadSubscribedChannels(context, http).requireValue().map {
-            SubscribedChannel(it.id, it.title.orEmpty(), it.thumbnail.orEmpty(), "")
+    // The directory pages through the channels browse while the server keeps returning keys.
+    override suspend fun subscribedChannelsPage(cursor: String?): com.hhst.youtubelite.subscriptions.domain.ChannelDirectoryPage =
+        client.readIdempotent { context, http ->
+            val page = loadSubscribedChannelsPage(context, cursor, http).requireValue()
+            com.hhst.youtubelite.subscriptions.domain.ChannelDirectoryPage(page.channels.map {
+                SubscribedChannel(it.id, it.title.orEmpty(), it.thumbnail.orEmpty(), "", hasNewContent = it.hasNewContent)
+            }, page.nextKey)
+        }
+
+    override suspend fun menu(video: com.hhst.youtubelite.home.domain.FeedItem.Video): com.hhst.youtubelite.home.domain.FeedItem.Video {
+        val endpoint = video.menuEndpoint ?: return video
+        return client.readIdempotent { context, http ->
+            if (!context.signedIn || video.feedbackGeneration != context.generation)
+                throw kotlinx.coroutines.CancellationException("Session changed")
+            val key = DeferredMenuCache.Key(context.accountId, context.onBehalfOfUser, context.generation, video.id, endpoint)
+            val capabilities = menus.get(key) ?: loadMenu(MenuEndpoint(endpoint.panelId, endpoint.params), context, http)
+                .requireValue().let { actions ->
+                    DeferredMenuCache.Capabilities(now(), actions.firstOrNull { it.kind == MenuActionKind.NotInterested }?.kindToken,
+                        actions.firstOrNull { it.kind == MenuActionKind.DontRecommendChannel }?.kindToken)
+                }.also { loaded -> menus.put(key, loaded) }
+            video.copy(notInterestedToken = capabilities.notInterested, dontRecommendToken = capabilities.dontRecommend,
+                feedbackGeneration = context.generation)
+        }
+    }
+
+    override suspend fun feedback(video: com.hhst.youtubelite.home.domain.FeedItem.Video, action: com.hhst.youtubelite.home.domain.FeedMenuAction) {
+        client.read { context, http ->
+            if (!context.signedIn) throw com.hhst.youtubelite.watch.domain.SignInRequiredException()
+            val token = when (action) {
+                com.hhst.youtubelite.home.domain.FeedMenuAction.NotInterested -> video.notInterestedToken
+                com.hhst.youtubelite.home.domain.FeedMenuAction.DontRecommend -> video.dontRecommendToken
+                else -> null
+            }
+            if (token.isNullOrBlank() || video.feedbackGeneration != context.generation)
+                throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException()
+            sendFeedback(token, context, http).requireValue()
         }
     }
 }
@@ -157,9 +191,11 @@ class MediaExploreRepository(private val client: MediaClient) : ExploreRepositor
         // A shelf continuation answers with that shelf's next items; the server answers
         // a spent shelf with a bookkeeping-only envelope, which parses as an empty page.
         val page = loadHome(section(category), context, key, http).requireValue()
-        val items = (page.groups.singleOrNull()?.items ?: page.items)
-            .filter { it.kind == "video" }.map(MediaItem::feedVideo)
-        ExploreSection(null, items, page.nextKey)
+        val group = page.groups.singleOrNull()
+        val source = group?.items ?: page.items
+        val items = source.filter { it.kind == "video" }.map(MediaItem::feedVideo)
+        ExploreSection(null, items, group?.nextKey ?: page.nextKey,
+            playlists = source.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary))
     }
 
     private fun section(category: ExploreCategory) = HomeSection.valueOf(category.name.uppercase())
@@ -168,11 +204,14 @@ class MediaExploreRepository(private val client: MediaClient) : ExploreRepositor
         // Shelves stay carousels; the flat list keeps the fallback grid useful.
         val sections = groups.mapNotNull { group ->
             val videos = group.items.filter { it.kind == "video" }.map(MediaItem::feedVideo)
-            ExploreSection(group.title, videos, group.nextKey).takeIf { videos.isNotEmpty() }
+            val playlists = group.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary)
+            ExploreSection(group.title, videos, group.nextKey, playlists = playlists)
+                .takeIf { videos.isNotEmpty() || playlists.isNotEmpty() || group.nextKey != null }
         }
         return ExplorePage(category,
             sections.flatMap { it.videos }.ifEmpty { items.filter { it.kind == "video" }.map(MediaItem::feedVideo) },
-            sections, nextKey)
+            sections, nextKey, sections.flatMap { it.playlists }
+                .ifEmpty { items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary) })
     }
 }
 
@@ -214,6 +253,7 @@ class MediaShortsRepository(private val client: MediaClient, private val startId
                 page.viewCount ?: details?.viewCount?.let {
                     java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) + " views"
                 }.orEmpty(), page.likeCount.orEmpty(), page.commentCount.orEmpty(), page.authorThumbnail.orEmpty()),
+            page.description?.takeIf { it.isNotBlank() },
             page.subscribed,
             details?.tracking,
             context.generation,

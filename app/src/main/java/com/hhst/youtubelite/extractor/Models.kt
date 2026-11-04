@@ -1,9 +1,12 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 
 /** Caption track from the player response. */
+@Serializable
 data class Subtitle(
     val url: String = "",
     val languageCode: String = "",
@@ -13,6 +16,7 @@ data class Subtitle(
 )
 
 /** Progressive or adaptive media URL. */
+@Serializable
 data class Format(
     val url: String = "",
     val height: Int = 0,
@@ -21,8 +25,8 @@ data class Format(
     val fps: Int = 0,
     val qualityLabel: String? = null,
     val codec: String? = null,
-    /** NewPipe MediaFormat.name: the container ("WEBM", "MPEG_4"), not the MIME. */
-    @SerializedName("format")
+    /** Container identifier, such as WEBM or MPEG_4. */
+    @SerialName("format")
     val container: String? = null,
     val itag: Int? = null,
     val videoOnly: Boolean = false,
@@ -44,8 +48,8 @@ data class Format(
     val audioTrackType: String? = null,
     /** True for the original audio track (vs. dubbed). */
     val audioTrackOriginal: Boolean = false,
-    /** Stable identity (itag + audio track + codec); v2 key name so legacy object records stay readable. */
-    @SerializedName("formatKey2")
+    /** Stable identity of the format, audio track and codec. */
+    @SerialName("formatKey2")
     val formatKey: String? = null,
     val resourceIdentity: String? = null,
     val expiresAtMillis: Long? = null,
@@ -63,6 +67,7 @@ data class Format(
 }
 
 /** Chapter marker from Innertube `/next`. */
+@Serializable
 data class Chapter(
     val title: String = "",
     val startSeconds: Int = 0,
@@ -72,19 +77,20 @@ data class Chapter(
 /**
  * Stable video fields from [Extraction.metadata].
  *
- * Count fields use `-1` when omitted (NewPipe convention).
+ * Count fields use `-1` when omitted.
  */
-class Metadata {
-    var id: String = ""
-    var title: String = ""
-    var author: String? = null
-    var description: String? = null
+@Serializable
+class Metadata(
+    var id: String = "",
+    var title: String = "",
+    var author: String? = null,
+    var description: String? = null,
     /** Length in seconds. */
-    var duration: Long = 0L
-    var thumbnailUrl: String? = null
+    var duration: Long = 0L,
+    var thumbnailUrl: String? = null,
     /** True for live / premiere streams. */
-    var isLive: Boolean = false
-
+    var isLive: Boolean = false,
+) {
     fun copyFrom(other: Metadata) {
         id = other.id
         title = other.title
@@ -97,6 +103,7 @@ class Metadata {
 }
 
 /** Manifest URL with its transport protocol and expiry. */
+@Serializable
 data class Manifest(
     val url: String,
     val protocol: MediaProtocol,
@@ -104,17 +111,18 @@ data class Manifest(
     val expiresAtMillis: Long = Long.MAX_VALUE,
 )
 
-class Stream {
-    var formats: List<Format> = emptyList()
-    var subtitles: List<Subtitle> = emptyList()
-    var dashUrl: String? = null
-    var hlsUrl: String? = null
-    @Transient var dashRequestPlan: MediaRequestPlan? = null
-    @Transient var hlsRequestPlan: MediaRequestPlan? = null
-    @Transient var manifests: List<Manifest> = emptyList()
+@Serializable
+class Stream(
+    var formats: List<Format> = emptyList(),
+    var subtitles: List<Subtitle> = emptyList(),
+    var dashUrl: String? = null,
+    var hlsUrl: String? = null,
+    @Transient var dashRequestPlan: MediaRequestPlan? = null,
+    @Transient var hlsRequestPlan: MediaRequestPlan? = null,
+    @Transient var manifests: List<Manifest> = emptyList(),
     /** Playback stats endpoints from the same successful player response; never persisted. */
-    @Transient var tracking: PlayerTracking? = null
-
+    @Transient var tracking: PlayerTracking? = null,
+) {
     fun copyFrom(other: Stream) {
         formats = other.formats
         subtitles = other.subtitles
@@ -139,9 +147,10 @@ class Stream {
 }
 
 /** Chapter list from [Extraction.chapters]. */
-class ChapterList {
-    var chapters: List<Chapter> = emptyList()
-
+@Serializable
+class ChapterList(
+    var chapters: List<Chapter> = emptyList(),
+) {
     fun copyFrom(other: ChapterList) {
         chapters = other.chapters
     }

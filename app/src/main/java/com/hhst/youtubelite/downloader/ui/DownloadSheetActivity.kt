@@ -27,6 +27,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.ui.theme.AppTheme
+import com.hhst.youtubelite.ui.theme.NeutralControls
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,7 +43,7 @@ class DownloadSheetActivity : ComponentActivity() {
         val snapshotId = intent.getStringExtra(DownloadUi.EXTRA_SNAPSHOT_ID)
         val snapshot = snapshotId?.let { DownloadUiSessions.get(this, it) }
         setContent {
-            AppTheme {
+            AppTheme { NeutralControls {
                 val vm = koinViewModel<DownloadViewModel>()
                 val snackbar = remember { SnackbarHostState() }
                 var result by remember { mutableStateOf<EnqueueResult?>(null) }
@@ -108,7 +109,7 @@ class DownloadSheetActivity : ComponentActivity() {
                             .padding(16.dp),
                     )
                 }
-            }
+            } }
         }
     }
 

@@ -52,6 +52,7 @@ import com.hhst.youtubelite.extractor.Extractor
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.PlaybackDemand
+import com.hhst.youtubelite.extractor.PlaybackResolutionException
 import com.hhst.youtubelite.extractor.StreamClient
 import com.hhst.youtubelite.extractor.OEmbedTitleFetcher
 import com.hhst.youtubelite.extractor.Stream
@@ -61,6 +62,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking
 import com.hhst.youtubelite.player.PREF_TTL_MS
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
 import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
+import com.hhst.youtubelite.player.datasource.AudioCatalogSupplement
 import com.hhst.youtubelite.player.datasource.CastAudioSelection
 import com.hhst.youtubelite.player.datasource.CodecCapabilities
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
@@ -83,6 +85,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,13 +103,6 @@ enum class LoopMode(val persistedValue: Int, val repeatMode: Int) {
     LOOP_ONE(1, Player.REPEAT_MODE_ONE),
     PAUSE_AT_END(2, Player.REPEAT_MODE_OFF),
     QUEUE_RANDOM(3, Player.REPEAT_MODE_OFF);
-
-    fun next(): LoopMode = when (this) {
-        QUEUE_NEXT -> LOOP_ONE
-        LOOP_ONE -> PAUSE_AT_END
-        PAUSE_AT_END -> QUEUE_RANDOM
-        QUEUE_RANDOM -> QUEUE_NEXT
-    }
 
     companion object {
         fun fromPersisted(value: Int): LoopMode =
@@ -195,10 +191,18 @@ interface PlaybackApi {
     /** False when [trackKey] has no parseable track; the caller keeps its UI state. */
     fun setSubtitle(trackKey: String?): Boolean
     fun setAudioTrack(trackKey: String?)
+    /** The audio menu opened: start the bounded catalog supplement when the current source looks incomplete. */
+    fun onAudioMenuOpened() { }
     /** Adaptive video/audio pair currently loaded, for Cast / link projection. */
     fun currentCastSource(): CastSource?
     /** Materialize file formats only when a receiver actually needs them. */
     suspend fun prepareCastSource(): CastSource? = currentCastSource()
+    /**
+     * Best single-file (muxed) source for DLNA renderers, which cannot take a
+     * separate A/V pair; null when the current video has no muxed format.
+     */
+    fun currentMuxedCastSource(): CastSource?
+    suspend fun prepareMuxedCastSource(): CastSource? = currentMuxedCastSource()
     /** Re-extracts and returns a fresh URL for a published cast track. */
     fun refreshCastUrl(token: String, videoId: String? = null, itag: Int? = null): String?
     fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? = null
@@ -249,11 +253,8 @@ interface PlaybackApi {
     val snapshot: StateFlow<PlaybackSnapshot>
 }
 
-/**
- * Resume-position record persisted in [JsonCache]. Duration is re-derived
- * from a fresh extraction on resume, so only the position is stored; Gson
- * ignores a stale `durationMs` field left over in previously persisted entries.
- */
+/** Saved playback position; duration comes from the current media. */
+@kotlinx.serialization.Serializable
 data class ResumePoint(val positionMs: Long = 0L)
 
 /** Formats + metadata the Cast proxy needs to synthesize a LAN DASH manifest. */
@@ -278,6 +279,7 @@ class PlaybackEngine(
     private val prefs: ExtensionManager,
     private val sponsorBlock: SponsorBlockManager,
     private val titleFetcher: OEmbedTitleFetcher? = null,
+    private val remoteResumePosition: (suspend (String) -> Long?)? = null,
 ) : PlaybackApi {
 
     private val appContext = context.applicationContext
@@ -322,6 +324,10 @@ class PlaybackEngine(
     private val discontinuityEpoch = AtomicLong()
     /** Generation of the media currently attached to [player]. */
     @Volatile private var attachedGeneration = 0L
+    /** Explicit start of the newest fresh load request, held until that load
+        attaches: a first-load failure must retry at "t=" (0 included), not at
+        remembered progress. */
+    @Volatile private var pendingExplicitStartMs: Long? = null
     private val refreshCastMutex = Mutex()
 
     // refreshCastUrl (NanoHTTPD thread) reads both the fields above and the
@@ -497,7 +503,12 @@ class PlaybackEngine(
             }
 
             override fun onRenderedFirstFrame() {
-                if (attachedGeneration == playbackGeneration.get()) firstMediaReady?.complete(Unit)
+                if (attachedGeneration == playbackGeneration.get()) {
+                    firstMediaReady?.complete(Unit)
+                    // First frame proves the explicit start was applied; a later
+                    // retry must follow the playback position, not the request.
+                    pendingExplicitStartMs = null
+                }
             }
 
             override fun onCues(cueGroup: CueGroup) {
@@ -623,6 +634,8 @@ class PlaybackEngine(
         lightRefreshAttempts = 0
         backupAttempted = false
         videoPinRescued = false
+        pendingExplicitStartMs = explicitStart
+        resetAudioSupplement()
         playJob = scope.launch {
             loadInternal(
                 videoId,
@@ -638,8 +651,13 @@ class PlaybackEngine(
         attemptContext = DiagnosticContext(videoId = videoId)
         recoveryHistory.clear()
         val position = player.currentPosition.takeIf {
-            currentMetadata?.id == videoId && attachedGeneration == playbackGeneration.get()
+            currentMetadata?.id == videoId && attachedGeneration == playbackGeneration.get() &&
+                firstMediaReady?.isCompleted == true
         }
+            // The failed load never reached first frame: its request's explicit
+            // start (0 included) must survive the retry instead of falling back
+            // to remembered progress.
+            ?: pendingExplicitStartMs
         userWantsPlay = true
         playbackGeneration.incrementAndGet()
         playJob?.cancel()
@@ -655,6 +673,10 @@ class PlaybackEngine(
     }
 
     private var audioPreference: String? = null
+    /** Menu-open catalog probe: one bounded fresh read per video; never blocks playback. */
+    private var audioSupplementJob: Job? = null
+    @Volatile private var audioSupplement: Pair<Metadata, Stream>? = null
+    @Volatile private var audioSupplementVideo: String? = null
     private var videoPinRescued = false
 
     private suspend fun loadInternal(
@@ -667,6 +689,19 @@ class PlaybackEngine(
         val reportingGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
         val context = beginDiagnostics(videoId, generation)
         val preparing = AppLog.operation(AppLog.Category.PLAYER, "prepare", context.child(), mapOf("reextract" to reExtract))
+        val remoteResume = if (startPositionMs == null && prefs.isEnabled(PreferenceKeys.REMEMBER_LAST_POSITION) &&
+            !com.hhst.youtubelite.data.media.MediaSession.privateBrowsing()) {
+            remoteResumePosition?.let { load -> scope.async {
+                try {
+                    withTimeoutOrNull(3_000) { load(videoId) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    AppLog.detail(AppLog.Category.PLAYER, "resume.read_failed", mapOf("reason" to error.javaClass.simpleName), context)
+                    null
+                }
+            } }
+        } else null
         if (videoId != _snapshot.value.videoId) audioPreference = null
         handler.removeCallbacks(diagnosticTicker); handler.post(diagnosticTicker)
         val speed = rememberedSpeed()
@@ -686,6 +721,7 @@ class PlaybackEngine(
             videoId = videoId,
             url = VideoId.watchUrl(videoId),
             isBuffering = true,
+            userWantsPlay = userWantsPlay,
             speed = speed,
             loopMode = loop,
         )
@@ -718,11 +754,19 @@ class PlaybackEngine(
             sponsorBlock.load(videoId, context)
 
             val durationMs = metadata.duration * 1000L
+            val remoteMs = remoteResume?.await()?.takeIf {
+                !metadata.isLive && reportingGeneration == com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
+            }
+            coroutineContext.ensureActive()
+            if (!stillCurrent(generation)) return
             val startMs = PlaybackProgress.resolveStartMs(
                 startPositionMs,
                 rememberedPosition(videoId, metadata.duration),
                 durationMs,
+                remoteMs,
             )
+            AppLog.detail(AppLog.Category.PLAYER, "resume.selected", mapOf("position_ms" to startMs,
+                "source" to when { startPositionMs != null -> "explicit"; remoteMs != null -> "account"; else -> "local" }), context)
             val mediaReady = CompletableDeferred<Unit>()
             firstMediaReady = mediaReady
             attachedContext = context
@@ -815,7 +859,10 @@ class PlaybackEngine(
                 error = report.summary,
                 failureReport = report,
             )
-        } finally { preparing.finish(DiagnosticOutcome.SUPERSEDED, "generation_replaced") }
+        } finally {
+            remoteResume?.cancel()
+            preparing.finish(DiagnosticOutcome.SUPERSEDED, "generation_replaced")
+        }
     }
 
     override fun stop() {
@@ -835,6 +882,7 @@ class PlaybackEngine(
         player.clearMediaItems()
         adaptiveVideoPool = emptyList()
         pinnedQuality = null
+        resetAudioSupplement()
         _snapshot.value = PlaybackSnapshot()
         diagnosticContext = null; attachedContext = null
         attemptContext = null
@@ -919,7 +967,11 @@ class PlaybackEngine(
         // and handing control back to the receiver pauses the phone.
         if (p === player) castPlayer?.pause() else player.pause()
         when {
-            !_snapshot.value.prepared && _snapshot.value.videoId != null -> retry()
+            !_snapshot.value.prepared && _snapshot.value.videoId != null -> {
+                if (playJob?.isActive == true) {
+                    _snapshot.value = _snapshot.value.copy(userWantsPlay = userWantsPlay)
+                } else retry()
+            }
             _snapshot.value.error != null -> retry()
             p.playbackState == Player.STATE_ENDED -> replayFromStart(p)
             p.playerError != null -> retry()
@@ -1283,9 +1335,70 @@ class PlaybackEngine(
         }
         val stream = currentStream ?: return
         val metadata = currentMetadata ?: return
+        if (trackKey == null) {
+            rebuildAtCurrentPosition(stream, metadata, audioTrackKey = null, reloadCast = true)
+            return
+        }
+        // The catalog supplement may expose tracks the current pool lacks; rebuild
+        // from that source so the picked track actually decodes. Same identity and
+        // generation: the supplement was read for this video under the live session.
+        val supplement = audioSupplement
+        val target = supplement?.takeIf { (supMetadata, supStream) ->
+            supMetadata.id == metadata.id && supStream !== stream &&
+                AudioCatalogSupplement.needsSupplement(stream.formats, supStream.formats, trackKey)
+        }
         rebuildAtCurrentPosition(
-            stream, metadata, audioTrackKey = trackKey, reloadCast = true,
+            target?.second ?: stream, target?.first ?: metadata,
+            audioTrackKey = trackKey, reloadCast = true,
         )
+    }
+
+    /**
+     * The user opened the audio menu while the selected source exposed fewer named
+     * tracks than the service can provide (intermittent client answers). One bounded
+     * fresh read per video, on demand only, never on the playback path; discovered
+     * rows merge into the open menu without touching the running media.
+     */
+    override fun onAudioMenuOpened() {
+        val snapshot = _snapshot.value
+        if (snapshot.isLive == true || snapshot.audioTracks.isNotEmpty()) return
+        val metadata = currentMetadata ?: return
+        if (metadata.id == audioSupplementVideo) return
+        if (audioSupplementJob?.isActive == true) return
+        audioSupplementJob = scope.launch {
+            try {
+                val (supMetadata, supStream) = withContext(Dispatchers.IO) {
+                    extractor.awaitFreshMedia(metadata.id)
+                }
+                if (currentMetadata?.id != metadata.id || attachedGeneration != playbackGeneration.get()) return@launch
+                audioSupplementVideo = metadata.id
+                val known = _snapshot.value.audioTracks.map { it.key }.toSet()
+                val extra = AudioCatalogSupplement.extraChoices(known, supStream.formats)
+                if (extra.isEmpty()) {
+                    AppLog.detail(AppLog.Category.PLAYER, "audio_supplement_empty",
+                        mapOf("video_id" to metadata.id))
+                    return@launch
+                }
+                audioSupplement = supMetadata to supStream
+                _snapshot.value = _snapshot.value.copy(audioTracks = _snapshot.value.audioTracks + extra)
+                AppLog.detail(AppLog.Category.PLAYER, "audio_supplement_added",
+                    mapOf("video_id" to metadata.id, "tracks" to extra.size))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // One bounded attempt per video: a failed probe must not loop behind the menu.
+                audioSupplementVideo = metadata.id
+                AppLog.detail(AppLog.Category.PLAYER, "audio_supplement_failed",
+                    mapOf("video_id" to metadata.id, "reason" to (error.message ?: error.javaClass.simpleName)))
+            }
+        }
+    }
+
+    private fun resetAudioSupplement() {
+        audioSupplementJob?.cancel()
+        audioSupplementJob = null
+        audioSupplement = null
+        audioSupplementVideo = null
     }
 
     /**
@@ -1387,8 +1500,46 @@ class PlaybackEngine(
         )
     }
 
-    override suspend fun prepareCastSource(): CastSource? {
-        currentCastSource()?.let { return it }
+    /**
+     * DLNA renderers play one progressive file: pick the best muxed format
+     * (H.264/AAC first, 1080p cap like the chromecast pick). Separate A/V
+     * tracks have no receiver-side remux, so they are not considered; null
+     * means the caller surfaces the no-muxed failure instead of casting.
+     */
+    override fun currentMuxedCastSource(): CastSource? {
+        val meta = currentMetadata ?: return null
+        val id = _snapshot.value.videoId ?: return null
+        if (meta.id != id) return null
+        val pool = currentStream?.formats
+            ?.filter(StreamSelection::isMuxed)
+            ?.filter { it.url.isNotBlank() }
+            .orEmpty()
+        val preferred = _snapshot.value.qualityLabel
+        val avcCapped = pool.filter { isAvc(it) && it.height <= CAST_MAX_HEIGHT }
+        val video = StreamSelection.selectVideo(avcCapped, preferred)
+            ?: pool.firstOrNull { isAvc(it) && it.height <= CAST_MAX_HEIGHT }
+            ?: pool.firstOrNull { isAvc(it) }
+            ?: pool.firstOrNull { it.height <= CAST_MAX_HEIGHT }
+            ?: pool.firstOrNull()
+            ?: return null
+        return CastSource(
+            videoId = id,
+            title = meta.title.ifBlank { _snapshot.value.title },
+            durationSec = meta.duration,
+            video = video,
+            audio = null,
+            author = meta.author,
+            thumbnailUrl = VideoId.thumbnailUrl(id),
+        )
+    }
+
+    override suspend fun prepareCastSource(): CastSource? = prepareThenPick { currentCastSource() }
+
+    override suspend fun prepareMuxedCastSource(): CastSource? = prepareThenPick { currentMuxedCastSource() }
+
+    /** Waits for extraction when the pick is missing, then re-picks. */
+    private suspend fun prepareThenPick(pick: () -> CastSource?): CastSource? {
+        pick()?.let { return it }
         val id = _snapshot.value.videoId ?: return null
         val generation = playbackGeneration.get()
         val media = try { withContext(Dispatchers.IO) { extractor.awaitMedia(id) } }
@@ -1396,7 +1547,7 @@ class PlaybackEngine(
             catch (_: Exception) { return null }
         if (!stillCurrent(generation) || _snapshot.value.videoId != id || media.first.id != id) return null
         currentStream = media.second
-        return currentCastSource()
+        return pick()
     }
 
     /**
@@ -1607,6 +1758,11 @@ class PlaybackEngine(
 
     private fun handleError(error: PlaybackException) {
         if (attachedGeneration != playbackGeneration.get()) return
+        if (castPlayer != null && !localDivergedFromReceiver()) {
+            playerLog("local_source_failed_while_casting", mapOf("error_code" to error.errorCode))
+            publish()
+            return
+        }
         val videoId = _snapshot.value.videoId
         val metadata = currentMetadata
         // Ownership: an error fired from media a pending load is replacing
@@ -1901,7 +2057,11 @@ class PlaybackEngine(
                 rebuilding.finish(DiagnosticOutcome.FAILURE, "rebuild_failed", t)
                 if (diagnosticContext == context) playbackOperation?.finish(DiagnosticOutcome.FAILURE, "rebuild_failed", t)
                 val report = failureReport(t, "rebuild")
-                _snapshot.value = _snapshot.value.copy(isBuffering = false, error = report.summary, failureReport = report)
+                if (castPlayer != null && !localDivergedFromReceiver()) {
+                    publish()
+                } else {
+                    _snapshot.value = _snapshot.value.copy(isBuffering = false, error = report.summary, failureReport = report)
+                }
             } finally { rebuilding.finish(DiagnosticOutcome.SUPERSEDED, "generation_replaced") }
         }
     }
@@ -1934,7 +2094,7 @@ class PlaybackEngine(
         // Load fence: with a load in flight the snapshot's videoId is the NEW
         // video while position/duration still come from the old player —
         // persisting would write the old position under the new video's key.
-        if (!_snapshot.value.prepared) return
+        if (!_snapshot.value.prepared || com.hhst.youtubelite.data.media.MediaSession.privateBrowsing()) return
         val videoId = _snapshot.value.videoId ?: return
         val p = if (localDivergedFromReceiver()) player else activePlayer()
         val ended = p.playbackState == Player.STATE_ENDED
@@ -1988,12 +2148,19 @@ class PlaybackEngine(
     }
 
     private fun rememberedPosition(videoId: String, durationSec: Long): Long {
-        if (!prefs.isEnabled(PreferenceKeys.REMEMBER_LAST_POSITION)) return 0L
+        if (!prefs.isEnabled(PreferenceKeys.REMEMBER_LAST_POSITION) ||
+            com.hhst.youtubelite.data.media.MediaSession.privateBrowsing()) return 0L
         val point = cache.get(progressKey(videoId), ResumePoint::class.java) ?: return 0L
         val durationMs = durationSec * 1000
         return if (point.positionMs > PlaybackProgress.SAFE_ZONE_MS &&
             (durationMs <= 0 || point.positionMs < durationMs - PlaybackProgress.SAFE_ZONE_MS)
         ) point.positionMs else 0L
+    }
+
+    private fun progressKey(videoId: String): String {
+        val identity = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+        val owner = com.hhst.youtubelite.player.QueueOwner.from(identity.signedIn, identity.accountId, identity.onBehalfOfUser)
+        return PlaybackProgress.cacheKey(videoId, owner.id)
     }
 
     private fun publish() {
@@ -2062,15 +2229,21 @@ class PlaybackEngine(
 
     private fun playbackFailed(t: Throwable): String {
         Log.w(TAG, "playback failed", t)
-        val liveUnavailable = generateSequence(t) { it.cause }.take(12)
-            .any { it.message == "LIVE_STREAM_SOURCE_UNAVAILABLE" }
-        return appContext.getString(if (liveUnavailable) R.string.player_live_unavailable else R.string.player_error)
+        val causes = generateSequence(t) { it.cause }.take(12).toList()
+        val verification = causes.filterIsInstance<PlaybackResolutionException>()
+            .any { it.error.kind == com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.VERIFICATION }
+        return appContext.getString(when {
+            verification -> R.string.verification_title
+            causes.any { it.message == "LIVE_STREAM_SOURCE_UNAVAILABLE" } -> R.string.player_live_unavailable
+            else -> R.string.player_error
+        })
     }
 
     private fun failureReport(error: Throwable, phase: String): PlaybackFailureReport {
         val state = _snapshot.value
         val stream = currentStream.takeIf { currentMetadata?.id == state.videoId }
         val causes = generateSequence(error) { it.cause }.take(8).toList()
+        val resolution = causes.filterIsInstance<PlaybackResolutionException>().firstOrNull()
         val request = causes.filterIsInstance<HttpDataSource.HttpDataSourceException>().firstOrNull()
         val response = causes.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
         val invalidResponse = causes.filterIsInstance<InvalidMediaResponseException>().firstOrNull()
@@ -2089,20 +2262,25 @@ class PlaybackEngine(
             "video_codec" to state.diagnostics.videoCodec, "audio_codec" to state.diagnostics.audioCodec,
             "video_width" to state.diagnostics.width, "video_height" to state.diagnostics.height,
             "video_bitrate" to state.diagnostics.videoBitrate, "audio_bitrate" to state.diagnostics.audioBitrate,
-            "account_state" to plan?.session?.account?.name, "configuration_source" to plan?.session?.configurationSource,
-            "network_generation" to plan?.session?.networkGeneration,
+            "account_state" to (plan?.session?.account?.name ?: resolution?.diagnostics?.accountState),
+            "configuration_source" to (plan?.session?.configurationSource ?: resolution?.diagnostics?.configurationSource),
+            "network_generation" to (plan?.session?.networkGeneration ?: resolution?.diagnostics?.networkGeneration),
             "hls_client" to stream?.hlsRequestPlan?.client?.name, "dash_client" to stream?.dashRequestPlan?.client?.name,
             "format_count" to stream?.formats?.size, "light_refreshes" to lightRefreshAttempts,
             "full_refreshes" to reExtractAttempts, "backup_attempted" to backupAttempted,
             "pin_released" to videoPinRescued, "muxed_fallback" to muxedFallbackActive,
             "recovery_history" to recoveryHistory.toList(),
-            "error_code" to (error as? PlaybackException)?.errorCode,
-            "error_name" to (error as? PlaybackException)?.errorCodeName,
-            "http_status" to (response?.responseCode ?: invalidResponse?.statusCode),
+            "error_code" to ((error as? PlaybackException)?.errorCode ?: resolution?.error?.kind?.name),
+            "error_name" to ((error as? PlaybackException)?.errorCodeName ?: resolution?.error?.code),
+            "http_status" to (response?.responseCode ?: invalidResponse?.statusCode ?: resolution?.error?.status),
             "content_type" to (response?.headerFields?.entries?.firstOrNull { it.key.equals("content-type", true) }?.value?.firstOrNull() ?: invalidResponse?.contentType),
             "transport_method" to invalidResponse?.method, "failed_client" to invalidResponse?.client?.name,
             "request_method" to request?.dataSpec?.httpMethodString,
             "request_position" to request?.dataSpec?.position, "request_length" to request?.dataSpec?.length,
+            "player_attempts" to resolution?.diagnostics?.attempts?.map { attempt ->
+                mapOf("client" to attempt.client.name, "status" to attempt.status,
+                    "outcome" to (attempt.error?.code ?: "PLAYABLE"), "duration_ms" to attempt.elapsedMs)
+            },
         )
         request?.let { fields["request"] = DiagnosticRedaction.resource(it.dataSpec.uri.toString()) }
         val report = PlaybackFailureReport.create(playbackFailed(error), error, phase, diagnosticContext,
@@ -2127,7 +2305,6 @@ class PlaybackEngine(
         private const val KEY_LOOP_MODE = "player:loop_mode"
         private const val KEY_SUBTITLE = "player:subtitle_language"
         private const val KEY_SUBTITLE_OFF = "player:subtitle_off"
-        private fun progressKey(videoId: String) = "player:progress:$videoId"
     }
 }
 

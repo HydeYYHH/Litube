@@ -166,6 +166,7 @@
     <string name="copy">Kopjo</string>
     <string name="copied">E kopjuar</string>
     <string name="copy_all">Kopjo të gjitha</string>
+    <string name="cast_searching">Kërkohet…</string>
     <string name="queue_now_playing">Tani po luhet</string>
     <string name="clear_queue_confirm">Pastro të gjithë radhën?</string>
     <string name="ok">Në rregull</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Mbyll</string>
     <string name="verification_completed">Verifikimi përfundoi. Po provohet përsëri…</string>
     <string name="verification_still_blocked">Ende e bllokuar pas verifikimit. Provoni përsëri më vonë.</string>
+    <string name="comments_title">Komentet</string>
+    <string name="comments_sort_top">Komentet kryesore</string>
+    <string name="comments_sort_newest">Më të rejat së pari</string>
+    <string name="comments_sort_chip_top">Kryesore</string>
+    <string name="comments_sort_chip_newest">Të rejat</string>
+    <string name="comments_composer_add">Shto një koment</string>
+    <string name="comments_composer_reply">Përgjigju</string>
+    <string name="comments_composer_edit">Redakto komentin</string>
+    <string name="comments_composer_text_hint">Teksti i komentit</string>
+    <string name="comments_composer_text_edit_hint">Redakto tekstin e komentit</string>
+    <string name="comments_composer_submit">Komento</string>
+    <string name="comments_composer_sending">Po dërgohet…</string>
+    <string name="comments_composer_save">Ruaj</string>
+    <string name="comments_delete_title">Fshi</string>
+    <string name="comments_show_more_replies">Shfaq më shumë përgjigje</string>
+    <string name="comments_load_more_failed">Nuk mund të ngarkoheshin më shumë komente</string>
+    <string name="comments_hide_replies">Fshih përgjigjet</string>
+    <string name="home_music_charts">Klasifikime muzikore</string>
+    <string name="home_popular_gaming">Në trend në lojëra</string>
+    <string name="home_popular_sports">Në trend në sport</string>
+    <string name="home_top_news">Lajmet kryesore</string>
 </resources>

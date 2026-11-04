@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.home.domain.FeedItem
+import com.hhst.youtubelite.watch.domain.toProvisional
 import com.hhst.youtubelite.home.presentation.LoadingSpinner
 import com.hhst.youtubelite.home.presentation.PillButton
 import com.hhst.youtubelite.library.domain.SignInPrompt
@@ -58,27 +61,36 @@ fun SubscriptionsScreen(state: SubscriptionsUiState, onAction: (SubscriptionsAct
     BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("subscriptions-screen")) {
         val width = maxWidth.value
         val gridState = rememberLazyGridState()
-        Column(Modifier.fillMaxSize().then(if (state.overlay != SubscriptionsOverlay.None) Modifier.clearAndSetSemantics {} else Modifier)) {
-            SubscriptionsTopBar(width, onAction)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (val content = state.content) {
+        val channelListState = rememberLazyListState()
+        val channelStripState = rememberLazyListState()
+        val showingChannels = state.overlay == SubscriptionsOverlay.Channels
+        Column(Modifier.fillMaxSize().then(if (state.overlay != SubscriptionsOverlay.None && !showingChannels) Modifier.clearAndSetSemantics {} else Modifier)) {
+            if (showingChannels) {
+                ChannelsOverlay(state.channels, channelListState, onAction, Modifier.weight(1f))
+            } else {
+                SubscriptionsTopBar(width, onAction)
+                if (state.signedIn) {
+                    ChannelAvatarStrip(state.channels, channelStripState, onAction)
+                    SubscriptionsChipStrip(state.selectedChip, state.chips, onAction)
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    val verification = state.verification
+                    when (val content = state.content) {
                     SubscriptionsContent.Loading -> LibrarySkeleton("subscriptions-skeleton")
-                    SubscriptionsContent.Failed -> if (state.verification != null) VerificationCard(
-                        state.verification,
-                        onVerify = { onAction(SubscriptionsAction.OpenVerification(state.verification!!.challengeUrl)) },
+                    SubscriptionsContent.Failed -> if (verification != null) VerificationCard(
+                        verification,
+                        onVerify = { onAction(SubscriptionsAction.OpenVerification(verification.challengeUrl)) },
                         onDismiss = { onAction(SubscriptionsAction.DismissVerification) },
                         modifier = Modifier.testTag("subscriptions-verification"),
                     ) else SubscriptionsError { onAction(SubscriptionsAction.Retry) }
                     is SubscriptionsContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "subscriptions-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(SubscriptionsAction.SignIn) } }
-                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, state.channels, width, state.selectedChip, state.chips, gridState, state.verification, onAction)
+                    is SubscriptionsContent.Feed -> SubscriptionsFeed(content, width, gridState, state.verification, onAction)
+                    }
                 }
             }
             MainNavigationBar("main", state.signedIn, null, selected = MainTab.Subscriptions) { tab -> onAction(SubscriptionsAction.Destination(tab)) }
-        }
-        if (state.overlay == SubscriptionsOverlay.Channels) {
-            ChannelsOverlay(state.channels, onAction)
         }
     }
 }
@@ -90,7 +102,7 @@ private fun SubscriptionsTopBar(width: Float, onAction: (SubscriptionsAction) ->
             .clickable(role = Role.Button) { onAction(SubscriptionsAction.Destination(MainTab.Home)) }, contentAlignment = Alignment.Center) {
             LitubeMark(Modifier.size(24.dp))
         }
-        AppText("Subscriptions", Modifier.weight(1f).testTag("subscriptions-title"), size = 20, line = 28,
+        AppText(stringResource(R.string.subscriptions_title), Modifier.weight(1f).testTag("subscriptions-title"), size = 20, line = 28,
             weight = FontWeight.Bold, maxLines = 1)
         AppIconButton(AppIcon.Search, stringResource(R.string.a11y_search_youtube)) { onAction(SubscriptionsAction.OpenSearch) }
     }
@@ -98,7 +110,7 @@ private fun SubscriptionsTopBar(width: Float, onAction: (SubscriptionsAction) ->
 
 @Composable
 private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<SubscriptionsChip>, onAction: (SubscriptionsAction) -> Unit) {
-    LazyRow(Modifier.fillMaxWidth().height(48.dp).testTag("subscriptions-chips"), verticalAlignment = Alignment.CenterVertically,
+    LazyRow(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("subscriptions-chips"), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         listItems(chips) { chip ->
             Box(Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
@@ -109,55 +121,76 @@ private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<Subs
                     color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
-        item {
-            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(DesignTokens.Surface)
-                .clickable(role = Role.Button) { onAction(SubscriptionsAction.Manage) }
-                .testTag("subscriptions-manage").padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-                AppText("Manage", size = 14, line = 20, weight = FontWeight.Medium)
-            }
-        }
     }
 }
 
 @Composable
-private fun ChannelAvatarStrip(channels: List<SubscribedChannel>, onAction: (SubscriptionsAction) -> Unit) {
-    LazyRow(Modifier.fillMaxWidth().height(52.dp).testTag("subscriptions-channels"),
-        verticalAlignment = Alignment.CenterVertically,
-        contentPadding = PaddingValues(start = 8.dp, end = 0.dp)) {
-        listItems(channels, key = { it.channelId }) { channel ->
-            Box(Modifier.padding(end = 8.dp).size(41.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(32.dp).clip(CircleShape)
-                    .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(channel.channelId)) }
-                    .semantics { contentDescription = channel.name }.testTag("subs-strip-${channel.channelId}")) {
-                    SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize())
+private fun ChannelAvatarStrip(channels: SubscriptionsChannels, listState: LazyListState, onAction: (SubscriptionsAction) -> Unit) {
+    val allDescription = stringResource(R.string.all_subscriptions)
+    Row(Modifier.fillMaxWidth().testTag("subscriptions-channels"), verticalAlignment = Alignment.CenterVertically) {
+        LazyRow(Modifier.weight(1f), state = listState,
+            verticalAlignment = Alignment.Top, contentPadding = PaddingValues(start = 8.dp, top = 8.dp, bottom = 8.dp)) {
+            when (channels) {
+                is SubscriptionsChannels.Ready -> listItems(channels.channels, key = { it.channelId }) { channel ->
+                    val description = if (channel.hasNewContent) stringResource(R.string.subscription_new_activity, channel.name) else channel.name
+                    Column(Modifier.width(80.dp).clickable(role = Role.Button) {
+                        onAction(SubscriptionsAction.OpenChannel(channel.channelId))
+                    }.semantics(mergeDescendants = true) { contentDescription = description }
+                        .testTag("subs-strip-${channel.channelId}"), horizontalAlignment = Alignment.CenterHorizontally) {
+                        SubscriptionAvatar(channel, 64.dp, "subs-new-${channel.channelId}")
+                        AppText(channel.name, Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp), size = 12, line = 16, maxLines = 1)
+                    }
+                }
+                SubscriptionsChannels.Loading -> items(4) {
+                    Column(Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(64.dp).background(DesignTokens.Ghost, CircleShape))
+                        Box(Modifier.padding(top = 8.dp).size(48.dp, 12.dp).background(DesignTokens.Ghost, RoundedCornerShape(4.dp)))
+                    }
+                }
+                SubscriptionsChannels.Failed -> item {
+                    AppText(stringResource(R.string.retry), Modifier.padding(16.dp).clickable {
+                        onAction(SubscriptionsAction.RetryChannels)
+                    }, color = DesignTokens.Link)
                 }
             }
         }
-        item(key = "all-channels") {
-            AppIconButton(AppIcon.ChannelGrid, stringResource(R.string.a11y_all_channels),
-                modifier = Modifier.testTag("subscriptions-manage"), diameter = 40.dp) {
+        Box(Modifier.width(56.dp).heightIn(min = 64.dp).clickable(role = Role.Button) {
                 onAction(SubscriptionsAction.ShowChannels)
-            }
+            }.testTag("subscriptions-manage").semantics { contentDescription = allDescription }, contentAlignment = Alignment.Center) {
+            AppText(stringResource(R.string.download_filter_all), size = 14, line = 20,
+                color = DesignTokens.Link, weight = FontWeight.Medium)
         }
     }
 }
 
 @Composable
-private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, channels: SubscriptionsChannels, width: Float, selectedChip: SubscriptionsChip, chips: List<SubscriptionsChip>, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, verification: com.hhst.youtubelite.core.VerificationRequired?, onAction: (SubscriptionsAction) -> Unit) {
+private fun SubscriptionAvatar(channel: SubscribedChannel, size: androidx.compose.ui.unit.Dp, badgeTag: String) {
+    Box(Modifier.size(size)) {
+        Box(Modifier.fillMaxSize().clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
+        if (channel.hasNewContent) {
+            Box(Modifier.align(Alignment.BottomEnd).size(12.dp)
+                .background(DesignTokens.Background, CircleShape).padding(2.dp)
+                .background(DesignTokens.Link, CircleShape).testTag(badgeTag))
+        }
+    }
+}
+
+@Composable
+private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, gridState: androidx.compose.foundation.lazy.grid.LazyGridState, verification: com.hhst.youtubelite.core.VerificationRequired?, onAction: (SubscriptionsAction) -> Unit) {
     val compact = width < 600f
-    val nearEnd by remember(content) { derivedStateOf {
-        (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= content.page.items.size - 2
+    val hidden = com.hhst.youtubelite.ui.design.LocalHideShorts.current
+    val visibleItems = content.page.items.filterNot { hidden && it.short }
+    val nearEnd by remember(content, hidden) { derivedStateOf {
+        (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= visibleItems.size - 2
     } }
     androidx.compose.runtime.LaunchedEffect(nearEnd, content.page.nextKey, content.append) {
         // Scroll pages the feed only while it shows rows; an empty filtered feed is
         // continued by the view model within its bound, never by this effect alone.
-        if (nearEnd && content.page.items.isNotEmpty() && content.page.nextKey != null && content.append == AppendState.Idle) {
+        if (nearEnd && visibleItems.isNotEmpty() && content.page.nextKey != null && content.append == AppendState.Idle) {
             onAction(SubscriptionsAction.LoadNext)
         }
     }
     Column(Modifier.fillMaxSize()) {
-        if (compact) ChannelAvatarStrip((channels as? SubscriptionsChannels.Ready)?.channels.orEmpty(), onAction)
-        else SubscriptionsChipStrip(selectedChip, chips, onAction)
         verification?.let { challenge ->
             VerificationBanner(challenge,
                 onVerify = { onAction(SubscriptionsAction.OpenVerification(challenge.challengeUrl)) },
@@ -170,12 +203,12 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, channels: Subs
             contentPadding = PaddingValues(start = SubscriptionsLayout.outerPadding(width).dp, end = SubscriptionsLayout.outerPadding(width).dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
         ) {
-            items(content.page.items, key = { it.id }, contentType = { "video" }) { item ->
+            items(visibleItems, key = { it.id }, contentType = { "video" }) { item ->
                 Box(Modifier.padding(top = if (compact) 8.dp else 12.dp, bottom = if (compact) 12.dp else 12.dp)) {
                     SubscriptionsVideoCard(item, compact = compact, onAction)
                 }
             }
-            if (content.page.items.isEmpty()) {
+            if (visibleItems.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
                     when {
                         // The server said the feed ends here; the filter found nothing in it.
@@ -234,7 +267,10 @@ internal fun SubscriptionsArtwork(asset: String, modifier: Modifier = Modifier) 
 internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (SubscriptionsAction) -> Unit) {
     Column(Modifier.testTag("subs-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }
+            .clickable(role = Role.Button) {
+                    com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+                    onAction(SubscriptionsAction.OpenVideo(item.id))
+                }
             .appDescription(R.string.a11y_title_duration, item.title, item.duration)) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
@@ -248,14 +284,17 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
                 Box(Modifier.size(40.dp).clip(CircleShape).clickable(role = Role.Button) {
                     onAction(SubscriptionsAction.OpenChannel(item.channelId))
                 }.testTag("subs-channel-${item.channelId}").appDescription(R.string.a11y_go_to_channel, item.author)) {
-                    VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
+                    SubscriptionsArtwork(item.avatar.orEmpty(), Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f)) {
                     Column(Modifier.padding(end = 48.dp)
-                        .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
+                        .clickable(role = Role.Button) {
+                    com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+                    onAction(SubscriptionsAction.OpenVideo(item.id))
+                }) {
                         AppText(rememberDeArrowTitle(item.id, item.title), size = 14, exactLineHeight = 17.5.sp, weight = FontWeight.Medium, maxLines = 2)
-                        AppText("${item.author} • ${item.metadata}", Modifier.padding(top = 3.dp),
+                        AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 3.dp),
                             size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
                     }
                     AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
@@ -269,13 +308,16 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
                 Box(Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) {
                     onAction(SubscriptionsAction.OpenChannel(item.channelId))
                 }.testTag("subs-channel-${item.channelId}").appDescription(R.string.a11y_go_to_channel, item.author)) {
-                    VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
+                    SubscriptionsArtwork(item.avatar.orEmpty(), Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    Column(Modifier.clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenVideo(item.id)) }) {
+                    Column(Modifier.clickable(role = Role.Button) {
+                    com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+                    onAction(SubscriptionsAction.OpenVideo(item.id))
+                }) {
                         AppText(rememberDeArrowTitle(item.id, item.title), Modifier.padding(end = 24.dp), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
-                        AppText("${item.author} · ${item.metadata}", Modifier.padding(top = 2.dp), size = 12, line = 18,
+                        AppText(listOf(item.author, item.metadata).filter(String::isNotBlank).joinToString(" · "), Modifier.padding(top = 2.dp), size = 12, line = 18,
                             color = DesignTokens.Secondary, maxLines = 1)
                     }
                     AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
@@ -298,13 +340,12 @@ internal fun SubscriptionsError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun ChannelsOverlay(channels: SubscriptionsChannels, onAction: (SubscriptionsAction) -> Unit) {
-    Box(Modifier.fillMaxSize().background(DesignTokens.Background).testTag("channels-overlay")) {
+private fun ChannelsOverlay(channels: SubscriptionsChannels, listState: LazyListState, onAction: (SubscriptionsAction) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize().background(DesignTokens.Background).testTag("channels-overlay")) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight), verticalAlignment = Alignment.CenterVertically) {
                 AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onAction(SubscriptionsAction.CloseChannels) }
-                AppText("All subscriptions", Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
-                Spacer(Modifier.weight(1f))
+                AppText(stringResource(R.string.all_subscriptions), Modifier.weight(1f).padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold, maxLines = 1)
             }
             when (channels) {
                 SubscriptionsChannels.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -317,7 +358,7 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, onAction: (Subscrip
                         color = DesignTokens.Secondary)
                     PillButton("Retry", retryable@{ onAction(SubscriptionsAction.RetryChannels) })
                 }
-                is SubscriptionsChannels.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("channels-list"),
+                is SubscriptionsChannels.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("channels-list"), state = listState,
                     contentPadding = PaddingValues(top = 13.dp, bottom = 24.dp)) {
                     if (channels.channels.isEmpty()) {
                         item {
@@ -327,19 +368,37 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, onAction: (Subscrip
                         }
                     }
                     listItems(channels.channels, key = { it.channelId }) { channel ->
-                        // Measured row (`library-channels-390.json`): 72px pitch, 48px tap surface,
-                        // 48px circle avatar at x12, name 16/400 at x72; no trailing control.
-                        Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(horizontal = 16.dp, vertical = 8.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(role = Role.Button) { onAction(SubscriptionsAction.OpenChannel(channel.channelId)) }
                             .testTag("channels-row-${channel.channelId}"),
                             verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(48.dp).clip(CircleShape)) { SubscriptionsArtwork(channel.avatar, Modifier.fillMaxSize()) }
-                            AppText(channel.name, Modifier.padding(start = 12.dp), size = 16, line = 24, maxLines = 1)
+                            SubscriptionAvatar(channel, 48.dp, "channels-new-${channel.channelId}")
+                            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                                AppText(channel.name, size = 16, line = 24, maxLines = 1)
+                                if (channel.metadata.isNotBlank()) AppText(channel.metadata, size = 14, line = 20, maxLines = 1, color = DesignTokens.Secondary)
+                            }
+                        }
+                    }
+                    if (channels.nextKey != null) {
+                        item(key = "channels-append") {
+                            DirectoryAppendFooter(channels.append) { onAction(SubscriptionsAction.LoadMoreChannels) }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/** Directory continuation row: loading, retry after failure, or an explicit load-more affordance. */
+@Composable
+private fun DirectoryAppendFooter(append: com.hhst.youtubelite.home.domain.AppendState, onLoadMore: () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        when (append) {
+            com.hhst.youtubelite.home.domain.AppendState.Loading -> LoadingSpinner()
+            com.hhst.youtubelite.home.domain.AppendState.Failed -> PillButton(stringResource(R.string.retry)) { onLoadMore() }
+            com.hhst.youtubelite.home.domain.AppendState.Idle -> PillButton(stringResource(R.string.load_more)) { onLoadMore() }
         }
     }
 }

@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentSort
 import com.hhst.youtubelite.comments.domain.CommentsContent
@@ -156,8 +159,8 @@ class CommentsPanelScreenshotAndroidTest {
         val output = File(compose.activity.getExternalFilesDir(null), "comments-acceptance").apply { mkdirs() }
         var panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
         var sheet = compose.onNodeWithTag("comments-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
-        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
+        assertEquals(panel.left, sheet.left, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
         assertEquals(48f, compose.onNodeWithTag("comment-menu-reply").fetchSemanticsNode().boundsInRoot.height, 0.5f)
         capture("comments-menu-390", output, record, goldens)
@@ -166,8 +169,8 @@ class CommentsPanelScreenshotAndroidTest {
         panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
         sheet = compose.onNodeWithTag("comments-menu").fetchSemanticsNode().boundsInRoot
         assertEquals(500f, panel.width, 0.5f)
-        assertEquals(panel.width - 16f, sheet.width, 0.5f)
-        assertEquals(panel.right - 8f, sheet.right, 0.5f)
+        assertEquals(panel.width, sheet.width, 0.5f)
+        assertEquals(panel.right, sheet.right, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
         capture("comments-menu-1280", output, record, goldens)
     }
@@ -197,10 +200,11 @@ class CommentsPanelScreenshotAndroidTest {
             }
         }
         val output = File(compose.activity.getExternalFilesDir(null), "comments-acceptance").apply { mkdirs() }
+        hideKeyboard()
         var panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
         var sheet = compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
-        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
+        assertEquals(panel.left, sheet.left, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
         assertTrue(compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot.height >= 100f)
         compose.onNodeWithTag("comment-composer-input").assertIsDisplayed()
@@ -212,10 +216,10 @@ class CommentsPanelScreenshotAndroidTest {
         }
         panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
         sheet = compose.onNodeWithTag("comment-composer").fetchSemanticsNode().boundsInRoot
-        assertEquals(panel.width - 16f, sheet.width, 0.5f)
-        assertEquals(panel.left + 8f, sheet.left, 0.5f)
+        assertEquals(400f, sheet.width, 0.5f)
+        assertEquals(width / 2f, sheet.center.x, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
-        capture("comments-composer-1280", output, record, goldens)
+        capture("comments-composer-1280", output, record, goldens, "comment-composer")
 
         compose.runOnIdle {
             width = 390; height = 844; overlay = CommentsOverlay.DeleteConfirm("c1", "c1r1")
@@ -223,16 +227,28 @@ class CommentsPanelScreenshotAndroidTest {
         }
         panel = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
         sheet = compose.onNodeWithTag("comment-delete-sheet").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
         assertEquals(panel.bottom - 24f, sheet.bottom, 0.5f)
         assertEquals(48f, compose.onNodeWithTag("comment-delete-confirm").fetchSemanticsNode().boundsInRoot.height, 0.5f)
         capture("comments-delete-390", output, record, goldens)
     }
 
-    private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>) {
+    private fun hideKeyboard() {
         compose.waitForIdle()
-        val root = compose.onNodeWithTag("comments-panel").fetchSemanticsNode().boundsInRoot
-        val actual = compose.onNodeWithTag("comments-panel").captureToImage().asAndroidBitmap()
+        val decor = compose.activity.window.decorView
+        compose.runOnUiThread {
+            WindowCompat.getInsetsController(compose.activity.window, decor).hide(WindowInsetsCompat.Type.ime())
+        }
+        compose.waitUntil(10_000) {
+            ViewCompat.getRootWindowInsets(decor)?.isVisible(WindowInsetsCompat.Type.ime()) != true
+        }
+        compose.waitForIdle()
+    }
+
+    private fun capture(name: String, output: File, record: Boolean, goldens: Set<String>, tag: String = "comments-panel") {
+        compose.waitForIdle()
+        val root = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        val actual = compose.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
         assertEquals("Capture must contain the whole panel", root.width.toInt(), actual.width)
         assertEquals("Capture must contain the whole panel", root.height.toInt(), actual.height)
         File(output, "$name.png").outputStream().use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }

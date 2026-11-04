@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.net
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import com.hhst.youtubelite.downloader.core.TransferResult
 import com.hhst.youtubelite.downloader.core.InputComponentKind
@@ -14,10 +15,14 @@ import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -293,31 +298,41 @@ class DownloadTransportImplTest {
                 .setBody(okio.Buffer().write(body)),
         )
         server.enqueue(
-            MockResponse()
-                .setResponseCode(206)
-                .addHeader("Content-Range", "bytes 8-15/16")
-                .setBodyDelay(30, TimeUnit.SECONDS)
-                .setBody(okio.Buffer().write(body)),
+            MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE),
         )
         val chunks = mutableListOf<DownloadChunk>()
+        val firstChunkVerified = CompletableDeferred<Unit>()
         val t = transport(chunkBytes = 8)
         val dest = File(dir, "p.part")
-        val job = async {
+        val job = async(Dispatchers.IO) {
             t.downloadComponent(
                 taskId = "t1",
                 component = component(16),
                 source = source(16),
                 dest = dest,
                 verified = emptyList(),
-                onChunk = { chunks += it; true },
+                onChunk = {
+                    chunks += it
+                    firstChunkVerified.complete(Unit)
+                    true
+                },
             )
         }
-        delay(200)
-        t.cancelInFlight("t1")
-        val result = job.await()
-        assertTrue(result == TransferResult.Paused || result is TransferResult.Failed || result == TransferResult.Completed)
-        assertTrue(chunks.isNotEmpty())
-        assertTrue(chunks.all { it.verified })
+        try {
+            withTimeout(10_000) { firstChunkVerified.await() }
+            withContext(Dispatchers.IO) {
+                assertEquals("bytes=0-7", server.takeRequest(10, TimeUnit.SECONDS)?.getHeader("Range"))
+                assertEquals("bytes=8-15", server.takeRequest(10, TimeUnit.SECONDS)?.getHeader("Range"))
+            }
+            t.cancelInFlight("t1")
+            assertEquals(TransferResult.Paused, withTimeout(10_000) { job.await() })
+            assertEquals(1, chunks.size)
+            assertTrue(chunks.single().verified)
+            assertEquals(8L, chunks.single().receivedBytes)
+            assertTrue(FileIntegrity.verify(dest, 0, 8, chunks.single().checksum))
+        } finally {
+            job.cancelAndJoin()
+        }
     }
 
     @Test
@@ -451,7 +466,7 @@ class DownloadTransportImplTest {
         server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
         val session = com.hhst.youtubelite.extractor.YoutubeWebSession(
             "test", com.hhst.youtubelite.extractor.WebAccount.ANONYMOUS,
-            0, null, null, null, null, "UA", 0, null, "test", com.google.gson.JsonObject(), { "" })
+            0, null, null, null, null, "UA", 0, null, "test", kotlinx.serialization.json.JsonObject(emptyMap()), { "" })
         val plan = com.hhst.youtubelite.extractor.MediaRequestPlan(session,
             com.hhst.youtubelite.extractor.StreamClient.VISIONOS,
             com.hhst.youtubelite.extractor.MediaProtocol.HTTPS,

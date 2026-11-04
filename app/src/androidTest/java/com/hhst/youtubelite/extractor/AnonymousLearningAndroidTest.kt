@@ -46,7 +46,8 @@ class AnonymousLearningAndroidTest {
             requireNotNull(VideoId.parse(it.trim()))
         }.take(5)
         val requestedWatchMs = arguments.getString("watchMillis")?.toLongOrNull()?.coerceIn(1_000, 60_000) ?: 12_000L
-        var visitor = MediaSession.snapshot().visitor
+        home.loadHome("All", null)
+        val visitor = requireNotNull(MediaSession.snapshot().visitor)
         val generation = MediaSession.snapshot().generation
         try {
             for (video in videos) {
@@ -98,7 +99,6 @@ class AnonymousLearningAndroidTest {
                 assertTrue("Insufficient playback for $video: $watchedMs < $targetWatchMs", watchedMs >= targetWatchMs)
                 assertTrue("No watched interval for $video", reporting.anonymousReportSignal.value > before)
                 val currentVisitor = requireNotNull(MediaSession.snapshot().visitor)
-                if (visitor == null) visitor = currentVisitor
                 assertEquals("Visitor changed between videos", visitor, currentVisitor)
                 assertEquals(generation, MediaSession.snapshot().generation)
                 val page = home.loadHome("All", null)

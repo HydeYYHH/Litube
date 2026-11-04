@@ -52,6 +52,40 @@ class MediaSessionTest {
         assertNull(MediaSession.snapshot().accessToken)
     }
 
+    @Test fun anonymousVisitorAndCookieRemainPairedAcrossIdentitySwitches() {
+        val generation = MediaSession.snapshot().generation
+        MediaSession.rememberVisitorIdentity("visitor", "VISITOR_INFO1_LIVE=cookie; SOCS=CAI", generation)
+        MediaSession.initialize(store)
+        assertEquals("visitor", MediaSession.freshContext().visitor)
+        assertEquals("VISITOR_INFO1_LIVE=cookie; SOCS=CAI", MediaSession.freshContext().visitorCookie)
+        assertTrue(MediaSession.anonymousHomeIdentityVerified(MediaSession.snapshot()))
+        MediaSession.completeSignIn(client(), token(), accounts())
+        assertNull(MediaSession.snapshot().visitorCookie)
+        MediaSession.setAnonymousMode(true)
+        assertEquals("visitor", MediaSession.snapshot().visitor)
+        assertEquals("VISITOR_INFO1_LIVE=cookie; SOCS=CAI", MediaSession.snapshot().visitorCookie)
+        MediaSession.selectAccount("owner")
+        assertNull(MediaSession.snapshot().visitorCookie)
+    }
+
+    @Test fun unverifiedStoredPairIsRepairedOnceWithoutReplacingTheCookieIdentity() {
+        store.write(MediaSession.KEY_VISITOR, "unrelated-api-visitor")
+        store.write(MediaSession.KEY_VISITOR_COOKIE, "VISITOR_INFO1_LIVE=keep")
+        MediaSession.initialize(store)
+        val context = MediaSession.snapshot()
+        assertNull(context.visitor)
+        assertEquals("VISITOR_INFO1_LIVE=keep", context.visitorCookie)
+        assertFalse(MediaSession.anonymousHomeIdentityVerified(context))
+        MediaSession.rememberVisitor("another-api-visitor", context.generation)
+        assertNull(MediaSession.snapshot().visitor)
+        MediaSession.rememberVisitorIdentity("document-visitor", context.visitorCookie!!, context.generation)
+        MediaSession.initialize(store)
+        assertEquals("document-visitor", MediaSession.snapshot().visitor)
+        assertTrue(MediaSession.anonymousHomeIdentityVerified(MediaSession.snapshot()))
+        MediaSession.rememberVisitorIdentity("late-response", "VISITOR_INFO1_LIVE=other", MediaSession.snapshot().generation)
+        assertEquals("document-visitor", MediaSession.snapshot().visitor)
+    }
+
     @Test fun localOperationCannotCrossAnIdentityChange() {
         val generation = MediaSession.snapshot().generation
         var writes = 0
@@ -104,6 +138,20 @@ class MediaSessionTest {
         assertEquals("brand", store.read(MediaSession.KEY_ACCOUNT_ID))
         assertFalse(MediaSession.selectAccount("missing"))
         MediaSession.initialize(store)
+        assertEquals("brand", MediaSession.snapshot().accountId)
+    }
+
+    @Test fun selectingASavedAccountExitsDeviceIdentityAndSurvivesRestart() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        MediaSession.setAnonymousMode(true)
+        assertFalse(MediaSession.signedIn())
+        assertFalse(MediaSession.selectAccount("missing"))
+        assertFalse(MediaSession.signedIn())
+        assertTrue(MediaSession.selectAccount("brand"))
+        assertTrue(MediaSession.signedIn())
+        assertEquals("brand", MediaSession.snapshot().accountId)
+        MediaSession.initialize(store)
+        assertTrue(MediaSession.signedIn())
         assertEquals("brand", MediaSession.snapshot().accountId)
     }
 
@@ -245,5 +293,73 @@ class MediaSessionTest {
         assertFalse(MediaSession.updateAccounts(accounts(), generation))
         assertFalse(MediaSession.signedIn())
         assertTrue(MediaSession.accounts().isEmpty())
+    }
+
+    @Test fun anonymousModeForcesTheWholeAppOntoTheDeviceIdentityWhileKeepingCredentials() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        assertTrue(MediaSession.signedIn())
+        val generation = MediaSession.snapshot().generation
+        assertTrue(MediaSession.setAnonymousMode(true))
+        // The whole app sees the anonymous identity; the account stays selectable.
+        assertFalse(MediaSession.signedIn())
+        assertFalse(MediaSession.snapshot().signedIn)
+        assertNull(MediaSession.snapshot().accessToken)
+        assertNull(MediaSession.snapshot().accountId)
+        assertTrue(MediaSession.snapshot().generation > generation)
+        assertTrue(MediaSession.anonymousMode())
+        // Credentials remain stored for switching back.
+        assertEquals("refresh", store.read(MediaSession.KEY_REFRESH_TOKEN))
+        assertEquals("owner", store.read(MediaSession.KEY_ACCOUNT_ID))
+    }
+
+    @Test fun freshContextNeverAttachesATokenWhileAnonymousModeIsEngaged() {
+        val refreshHttp = object : HttpClient {
+            override fun execute(request: HttpRequest) =
+                HttpReply(200, """{"access_token":"fresh-access","expires_in":3600}""", emptyMap())
+        }
+        MediaSession.tokenFactory = { initial, refreshClient -> AccountToken(initial, refreshClient, refreshHttp) }
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts()) // already expired
+        MediaSession.setAnonymousMode(true)
+        val fresh = MediaSession.freshContext()
+        assertNull(fresh.accessToken)
+        assertFalse(fresh.signedIn)
+        // The stored credential stays (for switching back) but is never attached.
+        assertEquals("access", store.read(MediaSession.KEY_ACCESS_TOKEN))
+        // Switching back lets the account identity refresh again.
+        MediaSession.setAnonymousMode(false)
+        assertEquals("fresh-access", MediaSession.freshContext().accessToken)
+    }
+
+    @Test fun anonymousModePersistsAcrossARestartAndSwitchingBackSelectsTheAccount() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        val owner = MediaSession.snapshot().accountId
+        MediaSession.setAnonymousMode(true)
+        MediaSession.initialize(store) // process restart
+        assertTrue(MediaSession.anonymousMode())
+        assertFalse(MediaSession.signedIn())
+        // Switching back to the account identity restores it from storage.
+        assertTrue(MediaSession.setAnonymousMode(false))
+        assertTrue(MediaSession.signedIn())
+        assertEquals(owner, MediaSession.snapshot().accountId)
+        MediaSession.initialize(store)
+        assertFalse(MediaSession.anonymousMode())
+        assertTrue(MediaSession.signedIn())
+    }
+
+    @Test fun signingInAlwaysEndsTheAnonymousSwitch() {
+        MediaSession.completeSignIn(client(), token(), accounts())
+        MediaSession.setAnonymousMode(true)
+        MediaSession.signOut() // sign-out from the anonymous state keeps the switch honest
+        MediaSession.completeSignIn(client(), token("second-access"), accounts())
+        assertFalse(MediaSession.anonymousMode())
+        assertTrue(MediaSession.signedIn())
+        assertEquals("second-access", MediaSession.snapshot().accessToken)
+        assertNull(store.read(MediaSession.KEY_ANONYMOUS_MODE))
+    }
+
+    @Test fun setAnonymousModeIsIdempotent() {
+        assertFalse(MediaSession.setAnonymousMode(false)) // already off
+        assertTrue(MediaSession.setAnonymousMode(true))
+        assertFalse(MediaSession.setAnonymousMode(true))
     }
 }

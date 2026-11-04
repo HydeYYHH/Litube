@@ -41,8 +41,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.search.domain.*
+import com.hhst.youtubelite.watch.domain.toProvisional
 import com.hhst.youtubelite.ui.design.*
 import com.hhst.youtubelite.ui.design.appDescription
+import com.hhst.youtubelite.home.presentation.LoadingSpinner
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
 import com.hhst.youtubelite.dearrow.VideoArtwork
@@ -56,6 +58,10 @@ fun SearchResultsScreen(
     searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null,
 ) {
     AppTheme {
+        val hideShorts = LocalHideShorts.current
+        LaunchedEffect(hideShorts, state.filters.type) {
+            if (hideShorts && state.filters.type == SearchResultType.Shorts) onAction(SearchAction.SelectResultType(SearchResultType.All))
+        }
         BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("search-results")) {
             val width = maxWidth.value
             val height = maxHeight.value
@@ -126,11 +132,20 @@ fun SearchResultsScreen(
                 onClose = { onAction(SearchAction.CloseSearch) },
                 onVoiceSearch = { onAction(SearchAction.VoiceSearch) },
             )
-            if (state.overlay is SearchOverlay.ItemMenu) {
-                // Feedback rows need a signed-in feedbackToken the anonymous menus never carry, so
-                // production only offers the rows that write through VideoActions/SaveSheetController.
-                val menuActions = if (state.live) SearchVideoMenuAction.entries.filter {
-                    it == SearchVideoMenuAction.WatchLater || it == SearchVideoMenuAction.SaveToPlaylist || it == SearchVideoMenuAction.Share
+            (state.overlay as? SearchOverlay.ItemMenu)?.let { menu ->
+                // Production rows mirror the card's real capabilities: feedback rows appear
+                // only once its own (inline or get_panel) tokens were resolved for this
+                // session; fixture menus keep the full typed row set.
+                val page = (state.content as? SearchContent.Results)?.page
+                val target = page?.results?.firstOrNull { it.id == menu.videoId }
+                    ?: page?.shorts?.firstOrNull { it.id == menu.videoId }
+                val menuActions = if (state.live) buildList {
+                    addAll(listOf(SearchVideoMenuAction.Queue, SearchVideoMenuAction.Download,
+                        SearchVideoMenuAction.WatchLater, SearchVideoMenuAction.SaveToPlaylist, SearchVideoMenuAction.Share))
+                    if (state.signedInPreview && !target?.notInterestedToken.isNullOrBlank())
+                        add(SearchVideoMenuAction.NotInterested)
+                    if (state.signedInPreview && !target?.dontRecommendToken.isNullOrBlank())
+                        add(SearchVideoMenuAction.DontRecommend)
                 } else SearchVideoMenuAction.entries
                 MenuBottomSheet(
                     items = menuActions.map {
@@ -142,6 +157,15 @@ fun SearchResultsScreen(
                     },
                     tag = "search-video-menu",
                     paneTitle = "Video actions",
+                    header = if (state.menuLoading || state.menuFailed) ({
+                        Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+                            if (state.menuLoading) Box(Modifier.testTag("search-menu-loading")) { LoadingSpinner() }
+                            else AppText(stringResource(R.string.retry), size = 14, line = 20,
+                                modifier = Modifier.testTag("search-menu-retry").clickable(role = Role.Button) {
+                                    onAction(SearchAction.OpenItemMenu(menu.videoId))
+                                }.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                    }) else null,
                 )
             }
             if (state.overlay is SearchOverlay.PlaylistMenu) com.hhst.youtubelite.playlist.presentation.PlaylistShareSheet(
@@ -151,6 +175,8 @@ fun SearchResultsScreen(
 }
 
 private fun SearchVideoMenuAction.icon(): AppIcon = when (this) {
+    SearchVideoMenuAction.Queue -> AppIcon.QueueAdd
+    SearchVideoMenuAction.Download -> AppIcon.Download
     SearchVideoMenuAction.WatchLater -> AppIcon.Clock
     SearchVideoMenuAction.SaveToPlaylist -> AppIcon.Bookmark
     SearchVideoMenuAction.Share -> AppIcon.Share
@@ -180,7 +206,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                     SelectField(
                         tag = "search-filter-type",
                         selected = filters.type,
-                        options = SearchResultType.entries,
+                        options = SearchResultType.entries.filterNot { LocalHideShorts.current && it == SearchResultType.Shorts },
                         labelOf = { it.label },
                         minWidth = SearchResultsLayout.FilterTypeMinWidth,
                         chipHeight = chipHeight,
@@ -244,7 +270,7 @@ private fun SearchNavigationBar(signedIn: Boolean, onAction: (SearchAction) -> U
     Column(Modifier.fillMaxWidth().testTag("search-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(SearchResultsLayout.NavigationHeight.dp)) {
-            destinations.forEach { destination ->
+            destinations.filterNot { LocalHideShorts.current && it == SearchDestination.Shorts }.forEach { destination ->
                 Column(Modifier.weight(1f).fillMaxHeight()
                     .clickable(role = Role.Tab) { onAction(SearchAction.SelectDestination(destination)) }
                     .testTag("search-nav-${destination.name}"),
@@ -344,7 +370,10 @@ private fun ResultThumbnail(
     onAction: (SearchAction) -> Unit,
 ) {
     Box(modifier.testTag("search-thumb-${result.id}").clip(RoundedCornerShape(radius))
-        .clickable(role = Role.Button) { onAction(SearchAction.OpenResult(result.id)) }
+        .clickable(role = Role.Button) {
+            com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(result.toProvisional())
+            onAction(SearchAction.OpenResult(result.id))
+        }
         .appDescription(R.string.a11y_title_duration, result.title, result.duration)) {
         VideoArtwork(result.id, result.artwork, Modifier.fillMaxSize())
         result.progress?.let { progress ->
@@ -363,6 +392,7 @@ private fun ResultThumbnail(
 @Composable
 private fun ResultText(result: SearchResult, modifier: Modifier, onAction: (SearchAction) -> Unit) {
     Column(modifier.testTag("search-text-${result.id}").clickable(role = Role.Button) {
+        com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(result.toProvisional())
         onAction(SearchAction.OpenResult(result.id))
     }) {
         AppText(rememberDeArrowTitle(result.id, result.title), Modifier.fillMaxWidth().testTag("search-title-${result.id}"),

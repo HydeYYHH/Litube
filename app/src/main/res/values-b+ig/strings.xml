@@ -166,6 +166,7 @@
     <string name="copy">Detuo</string>
     <string name="copied">Eṅomiri</string>
     <string name="copy_all">Detuo ihe niile</string>
+    <string name="cast_searching">Na-achọ…</string>
     <string name="queue_now_playing">Ugbu a na-egwu egwu</string>
     <string name="clear_queue_confirm">Kpochapụ kwụ n\'ahịrị niile?</string>
     <string name="ok">Ọ dị mma</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Mechiri</string>
     <string name="verification_completed">Emechaala nyocha. Na-anwa ọzọ…</string>
     <string name="verification_still_blocked">Ka na-egbochi mgbe nyocha gasịrị. Nwalite ọzọ mgbe e mesịrị.</string>
+    <string name="comments_title">Okwu</string>
+    <string name="comments_sort_top">Okwu kachasị</string>
+    <string name="comments_sort_newest">Ohụrụ na mbụ</string>
+    <string name="comments_sort_chip_top">Kachasị</string>
+    <string name="comments_sort_chip_newest">Ohụrụ</string>
+    <string name="comments_composer_add">Tinye okwu</string>
+    <string name="comments_composer_reply">Zaa</string>
+    <string name="comments_composer_edit">Dezie okwu</string>
+    <string name="comments_composer_text_hint">Ederede okwu</string>
+    <string name="comments_composer_text_edit_hint">Dezie ederede okwu</string>
+    <string name="comments_composer_submit">Dee okwu</string>
+    <string name="comments_composer_sending">Na-eziga…</string>
+    <string name="comments_composer_save">Dozie</string>
+    <string name="comments_delete_title">Hichapụ</string>
+    <string name="comments_show_more_replies">Gosi ndị ọzọ zaa</string>
+    <string name="comments_load_more_failed">Enweghị ike ibudata okwu ndị ọzọ</string>
+    <string name="comments_hide_replies">Zoo azịza</string>
+    <string name="home_music_charts">Chaatị egwu</string>
+    <string name="home_popular_gaming">Ihe ewu ewu n’egwuregwu vidio</string>
+    <string name="home_popular_sports">Ihe ewu ewu n’egwuregwu</string>
+    <string name="home_top_news">Akụkọ ndị bụ isi</string>
 </resources>

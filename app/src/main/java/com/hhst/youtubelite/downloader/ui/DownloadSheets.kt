@@ -27,7 +27,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import com.hhst.youtubelite.ui.components.AppRadioButton as RadioButton
 import androidx.compose.material3.SheetState
 import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
@@ -252,6 +251,7 @@ fun SingleVideoConfirmSheet(
         }
     }
     if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
+        sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { AppSheetHandle() },
         tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
@@ -281,27 +281,31 @@ fun SingleVideoConfirmSheet(
 private fun SelectionRow(name: String, selected: String, enabled: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
         .heightIn(min = DownloadTokens.MinTouch).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Normal)
+        Text(name, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp)
         Text(selected, Modifier.weight(1.2f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+            fontSize = 14.sp, lineHeight = 20.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
         Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.padding(start = 8.dp).size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .4f))
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .4f))
     }
 }
 
 @Composable
 private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, selected: String,
     onDismiss: () -> Unit, onSelect: (String) -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium) },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp,
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 options.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth().selectable(selected = selected == key,
                         role = Role.RadioButton, onClick = { onSelect(key) })
-                        .heightIn(min = 52.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected == key, onClick = null)
-                        Text(label, Modifier.padding(start = 12.dp))
+                        .heightIn(min = 48.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        if (selected == key) Icon(painterResource(R.drawable.ic_check), null,
+                            Modifier.padding(start = 12.dp).size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        else Spacer(Modifier.width(36.dp))
                     }
                 }
             }
@@ -346,8 +350,8 @@ private fun SheetIdentity(title: String, author: String) {
 @Composable
 private fun MediaToggle(audioOnly: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        DownloadFilterChip(!audioOnly, stringResource(R.string.download_video)) { onChange(false) }
-        DownloadFilterChip(audioOnly, stringResource(R.string.download_audio)) { onChange(true) }
+        DownloadFilterChip(!audioOnly, stringResource(R.string.download_video), capsule = true) { onChange(false) }
+        DownloadFilterChip(audioOnly, stringResource(R.string.download_audio), capsule = true) { onChange(true) }
     }
 }
 
@@ -635,6 +639,7 @@ fun BatchConfirmSheet(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             dragHandle = { AppSheetHandle() },
             tonalElevation = 0.dp,

@@ -25,7 +25,7 @@ class AccountContentReadAndroidTest {
         assumeTrue(arguments.getString("network") == "1" && arguments.getString("accountReads") == "1")
         if (!MediaSession.signedIn() && arguments.getString("awaitSignIn") == "1") {
             val service = com.hhst.youtubelite.account.data.MediaSignInService(GlobalContext.get().get(),
-                com.hhst.youtubelite.data.media.MmkvAuthStore(instrumentation.targetContext))
+                com.hhst.youtubelite.data.media.PreferencesAuthStore(instrumentation.targetContext))
             val code = service.loadCode()
             File(instrumentation.targetContext.filesDir, "device-authorization-request.json").writeText(
                 JSONObject().put("url", code.verificationUrl).put("code", code.userCode).toString())

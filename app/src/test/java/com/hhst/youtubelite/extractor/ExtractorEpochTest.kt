@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
@@ -80,7 +80,7 @@ class ExtractorEpochTest {
         override fun context(videoId: String, fresh: Boolean, catalog: Boolean, demand: PlaybackDemand?,
                              taskCurrent: () -> Boolean, deadlineNanos: Long, playbackPriority: Boolean,
                              diagnosticContext: com.hhst.youtubelite.diagnostics.DiagnosticContext): ExtractionContext =
-            ExtractionContext(YoutubeWebSession("offline", WebAccount.ANONYMOUS, 0, null, null, null, null, "UA", 0, null, "test", JsonObject()) { "" },
+            ExtractionContext(YoutubeWebSession("offline", WebAccount.ANONYMOUS, 0, null, null, null, null, "UA", 0, null, "test", JsonObject(emptyMap())) { "" },
                 transport, false, catalog, playbackPriority, "", deadlineNanos, taskCurrent, diagnostics)
         override fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean): MscPlayback.Resolved =
             throw IOException("offline epoch test")

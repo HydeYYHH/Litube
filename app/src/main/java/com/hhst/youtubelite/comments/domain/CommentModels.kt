@@ -15,6 +15,7 @@ data class CommentThread(
     val repliesNextCursor: String? = null,
     val repliesLoading: Boolean = false,
     val repliesFailed: Boolean = false,
+    val runs: List<CommentTextRun> = emptyList(),
 )
 
 data class CommentAuthor(val displayName: String, val handle: String, val artwork: String)
@@ -27,6 +28,7 @@ data class CommentReply(
     val likes: String,
     val authorChannelId: String = "",
     val ownedByViewer: Boolean = false,
+    val runs: List<CommentTextRun> = emptyList(),
 )
 
 data class CommentsPage(
@@ -159,6 +161,7 @@ sealed interface CommentNavigationRequest {
         constructor(videoId: String, threadId: String, replyId: String) : this(CommentTarget.Video(videoId), threadId, replyId)
     }
     data class OpenAuthor(val channelId: String) : CommentNavigationRequest
+    data class OpenLink(val link: CommentLink) : CommentNavigationRequest
 }
 
 sealed interface CommentAction {
@@ -184,6 +187,7 @@ sealed interface CommentAction {
     data class OpenThreadMenu(val commentId: String) : CommentAction
     data class Reply(val threadId: String, val commentId: String = threadId) : CommentAction
     data class OpenAuthor(val channelId: String) : CommentAction
+    data class OpenLink(val link: CommentLink) : CommentAction
     data class LikeReply(val commentId: String, val replyId: String) : CommentAction
     data class DislikeReply(val commentId: String, val replyId: String) : CommentAction
     data class ReportReply(val commentId: String, val replyId: String) : CommentAction

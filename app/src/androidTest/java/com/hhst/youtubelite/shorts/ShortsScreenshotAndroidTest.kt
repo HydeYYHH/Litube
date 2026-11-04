@@ -97,6 +97,16 @@ class ShortsScreenshotAndroidTest {
         capture("shorts-390-font2", output, record, goldens)
     }
 
+    @Test fun serverContentKeepsItsTopRightMenu() {
+        val actions = mutableListOf<com.hhst.youtubelite.shorts.domain.ShortsAction>()
+        val item = FixtureShortsRepository.sample().first()
+        compose.setContent {
+            ShortsScreen(ShortsUiState(content = ShortsContent.Ready(ShortsPage(listOf(item))), live = true), { actions += it })
+        }
+        compose.onNodeWithTag("short-more-${item.id}").assertIsDisplayed().performClick()
+        assertEquals(com.hhst.youtubelite.shorts.domain.ShortsAction.OpenMenu(item.id), actions.last())
+    }
+
     private val output: File
         get() = File(compose.activity.getExternalFilesDir(null), "shorts-acceptance").apply { mkdirs() }
     private val goldens: Set<String>

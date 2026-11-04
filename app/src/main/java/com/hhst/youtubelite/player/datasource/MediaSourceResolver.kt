@@ -2,7 +2,6 @@ package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
 import android.os.Bundle
-import com.google.gson.Gson
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -22,6 +21,7 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.text.SubtitleExtractor
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticJson
 import com.hhst.youtubelite.extractor.Format
 import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.Stream
@@ -68,7 +68,7 @@ class MediaSourceResolver(
             .setTitle(m.title)
             .setArtist(m.author)
             .setArtworkUri(m.thumbnailUrl?.toUri())
-            .setExtras(diagnosticContext?.let { diagnostic -> Bundle().apply { putString("litube.diagnostic_context", Gson().toJson(diagnostic)) } })
+            .setExtras(diagnosticContext?.let { diagnostic -> Bundle().apply { putString("litube.diagnostic_context", DiagnosticJson.encodeContext(diagnostic)) } })
             .build()
 
     /**

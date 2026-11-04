@@ -477,11 +477,11 @@ class HomeScreenshotAndroidTest {
         compose.onNodeWithTag("search-input").performImeAction()
         compose.runOnIdle { state = HomeUiState(content = HomeScenario.Feed.initialContent(), signedInPreview = true, overlay = HomeOverlay.Menu("bunny")) }
         val phone = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(8f, phone.left, 0.5f)
-        assertEquals(374f, phone.width, 0.5f)
-        assertEquals(253f, phone.height, 0.5f)
+        assertEquals(0f, phone.left, 0.5f)
+        assertEquals(390f, phone.width, 0.5f)
+        assertEquals(13f + FeedMenuKind.Video.actions.size * 48f, phone.height, 0.5f)
         assertEquals(820f, phone.bottom, 0.5f)
-        assertEquals(72f, compose.onNodeWithText("Save to Watch later", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left, 0.5f)
+        assertEquals(64f, compose.onNodeWithText("Save to Watch later", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left, 0.5f)
         compose.runOnIdle { width = 1280; height = 800 }
         val wide = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
         assertEquals(440f, wide.left, 0.5f)
@@ -489,8 +489,8 @@ class HomeScreenshotAndroidTest {
         assertEquals(776f, wide.bottom, 0.5f)
         compose.runOnIdle { width = 500; height = 844 }
         val portrait = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(8f, portrait.left, 0.5f)
-        assertEquals(484f, portrait.width, 0.5f)
+        assertEquals(0f, portrait.left, 0.5f)
+        assertEquals(500f, portrait.width, 0.5f)
     }
 
     @Test fun overlaysMatchGoldens() {

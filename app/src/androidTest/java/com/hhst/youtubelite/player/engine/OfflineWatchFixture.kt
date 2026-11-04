@@ -27,7 +27,10 @@ import org.junit.Assert.assertTrue
 import org.koin.core.context.GlobalContext
 
 /** Runs the production player against a local HLS fixture. */
-internal class OfflineWatchFixture(val id: String = "menuTest001", private val refuseMedia: Boolean = false) : Closeable {
+internal class OfflineWatchFixture(val id: String = "menuTest001", refuseMedia: Boolean = false,
+    onStreamRead: () -> Unit = {}) : Closeable {
+    /** Flip to fail every media request (tests a load that never reaches first frame). */
+    var mediaRefused = refuseMedia
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val app = instrumentation.targetContext
     val engine = GlobalContext.get().get<PlaybackApi>() as PlaybackEngine
@@ -43,7 +46,7 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", private val r
     private val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
     private val video = instrumentation.context.assets.open("player/quality-recovery/360.ts").use { it.readBytes() }
     private val server = object : NanoHTTPD("127.0.0.1", 0) {
-        override fun serve(session: IHTTPSession): Response = if (refuseMedia) {
+        override fun serve(session: IHTTPSession): Response = if (mediaRefused) {
             newFixedLengthResponse(Response.Status.FORBIDDEN, "text/plain", "Unavailable")
         } else when (session.uri) {
             "/audio.ts", "/video.ts" -> {
@@ -80,17 +83,56 @@ internal class OfflineWatchFixture(val id: String = "menuTest001", private val r
             prefs.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
             // The swipe/rotate flow runs against live playback; a short stream
             // ends mid-test on slow renderers and collapses fullscreen first.
-            extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 600), scope))
+            extractorField.set(engine, Extractor(streamCache(stream, "Offline watch", 600, onStreamRead = onStreamRead), scope))
         }
     }
 
-    fun launch(expectFailure: Boolean = false, settleUi: () -> Unit = {}) {
-        scenario = ActivityScenario.launch(WatchActivity.intent(app, id))
-        scenario!!.onActivity { activity = it }
-        instrumentation.runOnMainSync { model.openVideo(id) }
+    fun launch(expectFailure: Boolean = false, source: android.app.Activity? = null,
+        startSeconds: Long? = null, settleUi: () -> Unit = {}) {
+        if (source == null) {
+            val intent = WatchActivity.intent(app, id)
+                .apply { startSeconds?.let { putExtra(WatchActivity.EXTRA_START_SECONDS, it) } }
+            scenario = ActivityScenario.launch(intent)
+            scenario!!.onActivity { activity = it }
+        } else {
+            val monitor = instrumentation.addMonitor(WatchActivity::class.java.name, null, false)
+            try {
+                instrumentation.runOnMainSync { source.startActivity(WatchActivity.intent(source, id)) }
+                activity = requireNotNull(monitor.waitForActivityWithTimeout(10_000)) as WatchActivity
+            } finally { instrumentation.removeMonitor(monitor) }
+        }
+        // Fixture mode gates off the activity's own openVideo block (no media
+        // runtime), so the fixture drives the same production openVideo entry
+        // point itself; the explicit start (0 included) rides along.
+        instrumentation.runOnMainSync { model.openVideo(id, startSeconds) }
         settleUi()
         await { model.uiState.value.visible &&
             if (expectFailure) engine.snapshot.value.error != null else engine.snapshot.value.isPlaying && surface() != null }
+    }
+
+    /** Re-creates the hosted activity to exercise the savedInstanceState path. */
+    fun recreate() {
+        requireNotNull(scenario).recreate()
+        scenario!!.onActivity { activity = it }
+    }
+
+    private val remoteResumeField by lazy {
+        engine.javaClass.getDeclaredField("remoteResumePosition").apply { isAccessible = true }
+    }
+    private var originalRemoteResume: Any? = null
+
+    /** Stubs the account resume loader; call [restoreRemoteResume] in finally.
+        Enables REMEMBER_LAST_POSITION so the engine consults the stub (close() restores prefs). */
+    fun stubRemoteResume(load: suspend (String) -> Long?) {
+        originalRemoteResume = remoteResumeField.get(engine)
+        instrumentation.runOnMainSync {
+            prefs.setEnabled(PreferenceKeys.REMEMBER_LAST_POSITION, true)
+            remoteResumeField.set(engine, load)
+        }
+    }
+
+    fun restoreRemoteResume() {
+        instrumentation.runOnMainSync { remoteResumeField.set(engine, originalRemoteResume) }
     }
 
     fun await(condition: () -> Boolean) {

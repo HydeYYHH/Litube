@@ -166,6 +166,7 @@
     <string name="copy">Kopija</string>
     <string name="copied">Nukopijuotas</string>
     <string name="copy_all">Kopijuoti viską</string>
+    <string name="cast_searching">Ieškoma…</string>
     <string name="queue_now_playing">Dabar groja</string>
     <string name="clear_queue_confirm">Išvalyti visą eilę?</string>
     <string name="ok">Gerai</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Uždaryti</string>
     <string name="verification_completed">Patikrinimas baigtas. Bandoma dar kartą…</string>
     <string name="verification_still_blocked">Po patikrinimo vis dar užblokuota. Bandykite dar kartą vėliau.</string>
+    <string name="comments_title">Komentarai</string>
+    <string name="comments_sort_top">Populiariausi komentarai</string>
+    <string name="comments_sort_newest">Pirmiausia naujausi</string>
+    <string name="comments_sort_chip_top">Populiariausi</string>
+    <string name="comments_sort_chip_newest">Nauji</string>
+    <string name="comments_composer_add">Pridėti komentarą</string>
+    <string name="comments_composer_reply">Atsakyti</string>
+    <string name="comments_composer_edit">Redaguoti komentarą</string>
+    <string name="comments_composer_text_hint">Komentaro tekstas</string>
+    <string name="comments_composer_text_edit_hint">Redaguoti komentaro tekstą</string>
+    <string name="comments_composer_submit">Komentuoti</string>
+    <string name="comments_composer_sending">Siunčiama…</string>
+    <string name="comments_composer_save">Išsaugoti</string>
+    <string name="comments_delete_title">Ištrinti</string>
+    <string name="comments_show_more_replies">Rodyti daugiau atsakymų</string>
+    <string name="comments_load_more_failed">Nepavyko įkelti daugiau komentarų</string>
+    <string name="comments_hide_replies">Slėpti atsakymus</string>
+    <string name="home_music_charts">Muzikos topai</string>
+    <string name="home_popular_gaming">Populiaru žaidimuose</string>
+    <string name="home_popular_sports">Populiaru sporte</string>
+    <string name="home_top_news">Svarbiausios naujienos</string>
 </resources>

@@ -13,7 +13,11 @@ import com.hhst.youtubelite.home.HomeActivity
 import com.hhst.youtubelite.subscriptions.SubscriptionsActivity
 
 fun ContentLink.intent(context: Context): Intent = when (this) {
-    is ContentLink.Video -> WatchActivity.intent(context, id).putExtra(WatchActivity.EXTRA_START_SECONDS, seconds ?: 0)
+    is ContentLink.Video -> WatchActivity.intent(context, id).apply {
+        // Only a present extra is an explicit start: writing 0 would turn an
+        // unspecified open into "begin at 0".
+        seconds?.let { putExtra(WatchActivity.EXTRA_START_SECONDS, it) }
+    }
     is ContentLink.Short -> ShortsActivity.intent(context, id)
     is ContentLink.Playlist -> PlaylistActivity.intent(context, id)
     is ContentLink.Channel -> ChannelActivity.intent(context, id)

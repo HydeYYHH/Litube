@@ -30,6 +30,8 @@ fun ShortItem.fillFrom(detail: ShortItem): ShortItem = copy(
 /** Full per-item metadata from the watch read; feeds reporting and fills thin feed rows. */
 data class ShortDetail(
     val item: ShortItem,
+    /** Watch-page description text; null when the read carried none. */
+    val description: String? = null,
     /** Server-side subscription state of the item's channel; null when the page didn't say. */
     val subscribed: Boolean? = null,
     /** Playback-tracking endpoints for watch-time reporting; feeds carry none. */
@@ -51,7 +53,7 @@ data class ShortsUiState(
     val currentItemId: String? = startItemId,
     val appendLoading: Boolean = false,
     val appendFailed: Boolean = false,
-    /** Production mode: account writes run in the ViewModel and the feedback-only menu hides. */
+    /** Uses server-backed content and actions. */
     val live: Boolean = false,
     /** Confirmed viewer state per item/channel, applied only after the server confirms. */
     val ratings: Map<String, com.hhst.youtubelite.watch.domain.VideoRating> = emptyMap(),
@@ -88,9 +90,18 @@ sealed interface ShortsAction {
     data object CloseMenu : ShortsAction
     data class OpenMenu(val itemId: String) : ShortsAction
     data class MenuSelected(val action: com.hhst.youtubelite.home.domain.FeedMenuAction) : ShortsAction
+    /** Production menu row: opens the shared save-to-playlist sheet for this item. */
+    data class OpenSaveToPlaylist(val itemId: String) : ShortsAction
     data class Share(val itemId: String) : ShortsAction
     data class Like(val itemId: String) : ShortsAction
     data class Dislike(val itemId: String) : ShortsAction
     data class SelectItem(val itemId: String) : ShortsAction
     data class Subscribe(val channelId: String) : ShortsAction
 }
+
+/**
+ * Production Shorts overflow rows. These are app capabilities rendered from
+ * live player state, not a recorded server menu — report/feedback stay out
+ * because no Shorts path carries those write capabilities.
+ */
+enum class ShortsMenuAction { Description, SaveToPlaylist, Captions, AudioTrack, PlaybackSpeed, Quality, Download, Share }

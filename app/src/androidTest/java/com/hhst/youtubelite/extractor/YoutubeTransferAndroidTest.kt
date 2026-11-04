@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.cast.LocalStreamProxy
 import com.hhst.youtubelite.downloader.core.*
 import com.hhst.youtubelite.downloader.io.FileIntegrity
@@ -118,11 +117,11 @@ class YoutubeTransferAndroidTest {
                 record["proxyBytes"] = bytes.size
                 record["proxyMatchesDownload"] = true
             }
-            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeTransfer", Gson().toJson(record)) })
+            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeTransfer", com.hhst.youtubelite.core.TestJson.any(record)) })
         } finally {
             proxy.stop()
             transport.cancelInFlight("device-transfer")
-            File(app.filesDir, "youtube-transfer.json").writeText(Gson().toJson(record))
+            File(app.filesDir, "youtube-transfer.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
             File(app.filesDir, "youtube-transfer-diagnostics.txt").writeText(extractor.extractionDiagnostics())
             directory.listFiles()?.forEach { it.delete() }
             directory.delete()

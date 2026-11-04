@@ -54,6 +54,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.QueueOwner
 import com.hhst.youtubelite.ui.YoutubeThumb
 
 @Composable
@@ -64,18 +65,22 @@ internal fun QueueSheet(
     onItem: (String) -> Unit,
     onClear: () -> Unit,
     onRemove: (String) -> Unit,
-    onLoop: () -> Unit,
+    onLoop: (() -> Unit)?,
     onClose: () -> Unit,
-    onMove: (Int, Int) -> Unit,
+    onMove: (Int, Int, QueueOwner?) -> Unit,
+    /** Queue owner at composition time; drag commits carry the owner captured at start. */
+    owner: QueueOwner = QueueOwner.DEVICE,
     onDownloadAll: () -> Unit = {},
     onDownloadItem: (QueueItem) -> Unit = {},
 ) {
     var confirmClear by remember { mutableStateOf(false) }
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.HOLD)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val drag = remember(listState) { QueueDragState(listState, scope, items) }
     val source = rememberUpdatedState(items)
     val move = rememberUpdatedState(onMove)
+    val ownerState = rememberUpdatedState(owner)
     val density = LocalDensity.current
     LaunchedEffect(items) { drag.synchronize(items) }
     LaunchedEffect(items.isNotEmpty()) {
@@ -142,7 +147,7 @@ internal fun QueueSheet(
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PlayerIconButton(
+            if (onLoop != null) PlayerIconButton(
                 icon = PlayerUi.loopIcon(loopMode),
                 contentDescription = stringResource(PlayerUi.loopLabelRes(loopMode)),
                 onClick = onLoop,
@@ -219,9 +224,12 @@ internal fun QueueSheet(
                 modifier = Modifier.weight(1f, fill = false).testTag("queue-list")
                     .pointerInput(drag) {
                         detectDragGesturesAfterLongPress(
-                            onDragStart = { drag.start(it.y) },
-                            onDragEnd = { drag.finish(source.value, false, move.value) },
-                            onDragCancel = { drag.finish(source.value, true, move.value) },
+                            onDragStart = {
+                                haptic()
+                                drag.start(it.y, ownerState.value)
+                            },
+                            onDragEnd = { drag.finish(source.value, ownerState.value, false, move.value) },
+                            onDragCancel = { drag.finish(source.value, ownerState.value, true, move.value) },
                         ) { change, amount ->
                             if (drag.draggingKey != null) {
                                 change.consume()
@@ -311,7 +319,7 @@ private fun QueueRow(
             Icon(
                 painter = painterResource(R.drawable.ic_download),
                 contentDescription = stringResource(R.string.download),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
@@ -321,7 +329,7 @@ private fun QueueRow(
             Icon(
                 painter = painterResource(R.drawable.ic_close),
                 contentDescription = stringResource(R.string.queue_remove),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)

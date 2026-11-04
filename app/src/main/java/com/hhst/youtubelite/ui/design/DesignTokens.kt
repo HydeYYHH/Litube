@@ -86,7 +86,7 @@ fun AppTheme(content: @Composable () -> Unit) {
         onPauseOrDispose { }
     }
     CompositionLocalProvider(LocalAppColors provides if (darkTheme) DarkAppPalette else LightAppPalette,
-        LocalMotionScale provides motion.value) {
+        LocalMotionScale provides motion.value, LocalHideShorts provides rememberHideShorts()) {
         com.hhst.youtubelite.ui.theme.AppTheme(darkTheme = darkTheme) { content() }
     }
 }
@@ -196,11 +196,12 @@ fun AppIconButton(
     enabled: Boolean = true, onClick: () -> Unit,
 ) {
     val interactions = rememberAppInteractions()
+    val haptic = rememberHapticAction()
     Box(modifier.size(diameter).clip(CircleShape)
         .then(if (background != Color.Transparent) Modifier.background(background) else Modifier)
         .appStateLayer(interactions, diameter / 2)
         .hoverable(interactions, enabled = enabled)
-        .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+        .clickable(interactionSource = interactions, indication = null, enabled = enabled, role = Role.Button, onClick = { haptic(); onClick() })
         .semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
         AppIcon(icon, color = if (enabled) color else color.copy(alpha = 0.4f))
     }

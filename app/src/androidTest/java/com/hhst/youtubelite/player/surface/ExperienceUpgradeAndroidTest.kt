@@ -19,7 +19,6 @@ import com.hhst.youtubelite.gallery.GalleryImages
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.engine.PlaybackDiagnostics
 import com.hhst.youtubelite.ui.theme.AppTheme
-import com.tencent.mmkv.MMKV
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -31,7 +30,7 @@ class ExperienceUpgradeAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun miniOnlyClosesOnReleaseInsideTargetAndCancellationKeepsIt() {
-        val store = MiniPlayerStore(MMKV.mmkvWithID("upgrade-close-target")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "upgrade-close-target").apply { clearAll() })
         var handle: MiniPlayerHandle? = null
         var density = 1f
         var closed = 0
@@ -66,7 +65,7 @@ class ExperienceUpgradeAndroidTest {
     }
 
     @Test fun closingMiniShrinksAtItsExistingCenter() {
-        val store = MiniPlayerStore(MMKV.mmkvWithID("mini-close-center")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "mini-close-center").apply { clearAll() })
         store.save(200, -30f, -180f)
         var handle: MiniPlayerHandle? = null
         compose.setContent { AppTheme {
@@ -90,7 +89,7 @@ class ExperienceUpgradeAndroidTest {
 
     @Test fun miniTouchShortSwipeAndFastOutsideFlingDoNotClose() {
         var closed = 0
-        val store = MiniPlayerStore(MMKV.mmkvWithID("upgrade-close-touch")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "upgrade-close-touch").apply { clearAll() })
         compose.setContent { AppTheme {
             MiniPlayerWindow(LocalConfiguration.current.screenWidthDp, 0, store, true, {}, onDismiss = { closed++ }) {
                 MiniPlayerChrome(PlayerUiState(mini = true, controlsVisible = false), {}, {}, {}, {}, {}, {}, Modifier.testTag("chrome"))

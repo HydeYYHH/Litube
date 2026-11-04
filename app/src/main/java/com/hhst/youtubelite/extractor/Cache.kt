@@ -30,7 +30,7 @@ interface Cache {
     fun putChapters(videoId: String, chapters: ChapterList)
 }
 
-/** [Cache] backed by [JsonCache] (MMKV in production). */
+/** [Cache] backed by [JsonCache] (SharedPreferences-backed [PreferenceJsonCache] in production). */
 class DiskCache(
     private val store: JsonCache,
 ) : Cache {
@@ -72,7 +72,7 @@ class DiskCache(
     fun getChaptersWithExpiry(videoId: String): Pair<ChapterList, Long>? =
         withExpiry(CHAPTERS_KEY + videoId, ChapterList::class.java, CacheTtl.CHAPTERS_MS)
 
-    private fun <T> withExpiry(key: String, type: Class<T>, ttlMs: Long): Pair<T, Long>? {
+    private fun <T : Any> withExpiry(key: String, type: Class<T>, ttlMs: Long): Pair<T, Long>? {
         val (value, entryUntil) = store.getWithExpiry(key, type) ?: return null
         val until = entryUntil
             // Store cannot report an expiry: assume the full write TTL from now.

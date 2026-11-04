@@ -4,12 +4,62 @@ import android.content.Intent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import com.hhst.youtubelite.home.HomeActivity
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
 class NativePlaybackHostAndroidTest {
     @get:Rule val compose = createEmptyComposeRule()
+
+    @Test fun resumingDuringPreparationKeepsThePendingExtraction() {
+        val reading = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        OfflineWatchFixture(onStreamRead = {
+            reads.incrementAndGet()
+            reading.countDown()
+            check(release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        }).use { fixture ->
+            try {
+                fixture.launch {
+                    assertTrue(reading.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    fixture.instrumentation.runOnMainSync {
+                        assertFalse(fixture.engine.snapshot.value.prepared)
+                        fixture.engine.pause()
+                        fixture.engine.play()
+                        assertTrue(fixture.engine.snapshot.value.userWantsPlay)
+                        assertNull(fixture.engine.snapshot.value.error)
+                    }
+                    release.countDown()
+                    compose.waitForIdle()
+                }
+                fixture.await { fixture.engine.snapshot.value.firstFrameRendered }
+                assertEquals(1, reads.get())
+                assertTrue(fixture.engine.snapshot.value.isPlaying)
+            } finally { release.countDown() }
+        }
+    }
+
+    @Test fun aNewPlaybackKeepsItsPlayIntentThroughoutPreparation() {
+        OfflineWatchFixture().use { fixture ->
+            val snapshots = mutableListOf<PlaybackSnapshot>()
+            val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+            val observer = scope.launch {
+                fixture.engine.snapshot.collect { if (it.videoId == fixture.id) snapshots += it }
+            }
+            try {
+                fixture.launch { compose.waitForIdle() }
+                fixture.await { fixture.engine.snapshot.value.firstFrameRendered }
+                fixture.instrumentation.runOnMainSync {
+                    assertTrue(snapshots.any { !it.prepared && it.isBuffering })
+                    assertTrue("Preparation lost the user's play intent", snapshots.all { it.userWantsPlay })
+                }
+            } finally { observer.cancel(); scope.cancel() }
+        }
+    }
 
     @Test fun firstFrameReadinessBelongsToTheAttachedSurface() {
         OfflineWatchFixture().use { fixture ->

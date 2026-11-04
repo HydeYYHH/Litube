@@ -166,6 +166,7 @@
     <string name="copy">Kopisha</string>
     <string name="copied">Kukopishiwe</string>
     <string name="copy_all">Kopisha konke</string>
+    <string name="cast_searching">Isesha…</string>
     <string name="queue_now_playing">Kuyadlala manje</string>
     <string name="clear_queue_confirm">Sula wonke ulayini?</string>
     <string name="ok">KULUNGILE</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Vala</string>
     <string name="verification_completed">Ukuqinisekisa kuphelile. Izama futhi…</string>
     <string name="verification_still_blocked">Kusavalekile ngemva kokuqinisekisa. Zama futhi ngemva kwesikhathi.</string>
+    <string name="comments_title">Amazwana</string>
+    <string name="comments_sort_top">Amazwana aphezulu</string>
+    <string name="comments_sort_newest">Okusha kuqala</string>
+    <string name="comments_sort_chip_top">Phezulu</string>
+    <string name="comments_sort_chip_newest">Okusha</string>
+    <string name="comments_composer_add">Faka izwana</string>
+    <string name="comments_composer_reply">Phendula</string>
+    <string name="comments_composer_edit">Hlela izwana</string>
+    <string name="comments_composer_text_hint">Umbhalo wezwana</string>
+    <string name="comments_composer_text_edit_hint">Hlela umbhalo wezwana</string>
+    <string name="comments_composer_submit">Bhala izwana</string>
+    <string name="comments_composer_sending">Ithumela…</string>
+    <string name="comments_composer_save">Gcina</string>
+    <string name="comments_delete_title">Susa</string>
+    <string name="comments_show_more_replies">Bonisa izimpendulo ezingeziwe</string>
+    <string name="comments_load_more_failed">Ayikwazi ukulayisha amazwana eminye</string>
+    <string name="comments_hide_replies">Fihla izimpendulo</string>
+    <string name="home_music_charts">Amashadi omculo</string>
+    <string name="home_popular_gaming">Okudumile emidlalweni yevidiyo</string>
+    <string name="home_popular_sports">Okudumile kwezemidlalo</string>
+    <string name="home_top_news">Izindaba eziphambili</string>
 </resources>

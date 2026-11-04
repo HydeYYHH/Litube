@@ -54,12 +54,11 @@ import kotlinx.coroutines.Job
 import com.hhst.youtubelite.R
 
 /** One action in a bottom sheet. */
-data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null)
+data class MenuSheetItem(val icon: AppIcon?, val label: String, val tag: String? = null, val contentStart: Dp? = null, val iconResource: Int? = null)
 
 /** Layout metrics for action sheets. */
 object MenuSheetLayout {
     const val WidthWideShort = 400f
-    const val WidthInset = 16f
     const val BottomInset = 24f
     const val Corner = 12f
     const val RowHeight = 48f
@@ -70,10 +69,10 @@ object MenuSheetLayout {
     const val HandleWidth = 40f
     const val HandleHeight = 4f
 
-    /** Wide-short windows cap the sheet at 400; every other window keeps a 16 px inset. */
+    /** Compact sheets span the window; landscape sheets keep a readable width. */
     fun sheetWidth(width: Float, height: Float): Float =
         if (width >= 416f && width > height && (width * 9f >= height * 13f || width >= 931f)) WidthWideShort
-        else (width - WidthInset).coerceAtLeast(0f)
+        else width.coerceAtLeast(0f)
 }
 
 /** Action sheet with a fading scrim and a draggable handle. */
@@ -174,12 +173,14 @@ fun MenuBottomSheet(
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
                             .then(if (item.tag != null) Modifier.testTag(item.tag) else Modifier)
-                            .clickable(enabled = !closing, role = Role.Button) { onSelect(index) }
+                            .clickable(enabled = !closing, role = Role.Button) { haptics.perform(com.hhst.youtubelite.core.HapticsController.Event.SELECTION); onSelect(index) }
                             .padding(horizontal = item.contentStart ?: rowStart, vertical = MenuSheetLayout.RowVertical.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (item.icon != null) {
-                            AppIcon(item.icon)
+                        if (item.icon != null || item.iconResource != null) {
+                            if (item.icon != null) AppIcon(item.icon)
+                            else androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(requireNotNull(item.iconResource)),
+                                contentDescription = null, modifier = Modifier.size(24.dp), tint = DesignTokens.Ink)
                             Spacer(Modifier.width(iconGap))
                         }
                         AppText(item.label, size = 16, line = 22)

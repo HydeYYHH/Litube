@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.webkit.CookieManager
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.Constants
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -58,12 +57,12 @@ class YoutubeAnonymousReadAndroidTest {
                     }
                 }
                 val html = requireNotNull(page) { "Anonymous page exceeded redirect limit" }
-                val config = YoutubeSessionProvider.parseConfig(html)
-                assertFalse("Page did not remain anonymous", config.flag("LOGGED_IN", false))
-                var js = config.text("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
+                val config0 = YoutubeSessionProvider.parseConfig(html)
+                assertFalse("Page did not remain anonymous", config0.flag("LOGGED_IN", false))
+                var js = config0.text("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
                     .find(html)?.groupValues?.get(1)?.replace("\\/", "/") ?: error("Anonymous player missing")
                 if (js.startsWith('/')) js = YoutubeSessionProvider.ORIGIN + js
-                config.addProperty("PLAYER_JS_URL", js)
+                val config = kotlinx.serialization.json.JsonObject(config0.toMap() + ("PLAYER_JS_URL" to kotlinx.serialization.json.JsonPrimitive(js)))
                 val visitor = config.text("VISITOR_DATA") ?:
                     config.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData")
                 val session = YoutubeWebSession("anonymous-acceptance-$id", WebAccount.ANONYMOUS,
@@ -108,14 +107,14 @@ class YoutubeAnonymousReadAndroidTest {
                                 "httpStatus" to response.code, "firstReadBytes" to bytes.size,
                                 "firstReadMs" to (System.nanoTime() - started) / 1_000_000)
                             records += record
-                            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeAnonymousRead", Gson().toJson(record)) })
+                            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeAnonymousRead", com.hhst.youtubelite.core.TestJson.any(record)) })
                         }
                 }
             }
         } finally {
             assertTrue("Device account cookies changed", cookieSnapshot ==
                 CookieManager.getInstance().getCookie(YoutubeSessionProvider.ORIGIN))
-            File(app.filesDir, "youtube-anonymous-read.json").writeText(Gson().toJson(records))
+            File(app.filesDir, "youtube-anonymous-read.json").writeText(com.hhst.youtubelite.core.TestJson.any(records))
             File(app.filesDir, "youtube-anonymous-diagnostics.txt").writeText(diagnostics.export())
             client.dispatcher.executorService.shutdown()
             client.connectionPool.evictAll()

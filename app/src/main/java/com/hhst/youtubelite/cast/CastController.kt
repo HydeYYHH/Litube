@@ -28,7 +28,14 @@ data class CastDevice(
     val id: String,
     val name: String,
     val selected: Boolean,
-)
+    /** Route family shown in the merged picker; the VM routes taps by it. */
+    val kind: String = KIND_CHROMECAST,
+) {
+    companion object {
+        const val KIND_CHROMECAST = "chromecast"
+        const val KIND_DLNA = "dlna"
+    }
+}
 
 data class CastUiState(
     val available: Boolean = false,
@@ -37,6 +44,7 @@ data class CastUiState(
     val devices: List<CastDevice> = emptyList(),
     val linkUrl: String? = null,
     val linkConnected: Boolean = false,
+    val failure: CastFailureReport? = null,
 )
 
 /** Open-source Cast V2 sender with the existing LAN DASH proxy. */
@@ -109,6 +117,7 @@ class CastController(
     }
     fun selectDevice(id: String) {
         val endpoint = endpoints[id] ?: return
+        clearFailure()
         endSession()
         val generation = ++sessionGeneration
         val trace = CastDiagnosticTrace().also { diagnosticTrace = it }
@@ -129,16 +138,27 @@ class CastController(
             override fun onMediaStatus(raw: String?, position: Long, duration: Long, idleReason: String?) { main.post {
                 if (generation == sessionGeneration) castPlayer?.status(raw, position, duration, idleReason)
             } }
-            override fun onLaunchError(reason: String) { trace.error("receiver_launch_failed", null); failed() }
-            override fun onChannelError(reason: String) { trace.error("channel_failed", null); failed() }
+            override fun onLaunchError(reason: String) { trace.error("receiver_launch_failed", null); failed("launch", reason) }
+            override fun onChannelError(reason: String) { trace.error("channel_failed", null); failed("connection", reason) }
             override fun onLoadFailed(type: String) { main.post {
-                if (generation == sessionGeneration && !loadingUpgrade) finishSession(true, connected)
+                if (generation == sessionGeneration && !loadingUpgrade) {
+                    reportFailure("load", type)
+                    finishSession(true, connected)
+                }
             } }
             override fun onClosed() { main.post {
                 if (generation == sessionGeneration) finishSession(false, connected)
             } }
-            private fun failed() { main.post {
-                if (generation == sessionGeneration) finishSession(true, connected)
+            private fun reportFailure(stage: String, reason: String) {
+                val device = CastDevice(id, endpoint.name, true)
+                val report = CastFailureReport.create("Chromecast", device, trace.context.videoId, stage, IllegalStateException(reason))
+                _state.update { it.copy(failure = report) }
+            }
+            private fun failed(stage: String, reason: String) { main.post {
+                if (generation == sessionGeneration) {
+                    reportFailure(stage, reason)
+                    finishSession(true, connected)
+                }
             } }
         }
         session = sessionFactory(endpoint.host, endpoint.port, listener)
@@ -147,6 +167,7 @@ class CastController(
         publishRoutes()
         session.start()
     }
+    fun clearFailure() { _state.update { it.copy(failure = null) } }
     private fun finishSession(failed: Boolean, hadSession: Boolean) {
         val session = currentSession
         sessionGeneration++
@@ -202,6 +223,25 @@ class CastController(
         _state.update { it.copy(linkConnected = p.isLinkPeerConnected(), linkUrl = p.proxyUrl("/player")) }
     }
 
+    /**
+     * DLNA renderers play one progressive file: configure the proxy for the
+     * muxed-only [source] and return its range-served MP4 URL. Separate A/V
+     * tracks have no receiver-side remux, so they are refused here — the VM
+     * picks a muxed source first; this is the last-line guard.
+     */
+    fun dlnaStreamUrl(source: CastSource): String? {
+        if (chromecastActive) return null
+        val video = source.video
+        if (video == null || video.url.isBlank() || video.videoOnly || video.audioOnly || source.audio != null) return null
+        val p = proxy ?: createProxy() ?: return null
+        return synchronized(configureLock) {
+            configureGen.incrementAndGet()
+            val generation = p.allocateGeneration()
+            applySource(p, null, source, generation)
+            p.proxyUrl("/stream/v?g=$generation")
+        }
+    }
+
     fun stopLink() = stopProxy()
 
     private fun stopProxy() {
@@ -252,7 +292,7 @@ class CastController(
     /** Single configure site: applies the manifest and stream metadata to [p]. */
     private fun applySource(
         p: LocalStreamProxy,
-        manifestXml: String,
+        manifestXml: String?,
         source: CastSource,
         generation: Long,
     ) {

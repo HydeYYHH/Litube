@@ -67,8 +67,8 @@ class AccountSettingsScreenshotAndroidTest {
         }
         compose.runOnIdle { width = 390; height = 844 }
         val phone = compose.onNodeWithTag("account-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(8f, phone.left, 0.5f)
-        assertEquals(374f, phone.width, 0.5f)
+        assertEquals(0f, phone.left, 0.5f)
+        assertEquals(390f, phone.width, 0.5f)
         assertEquals(820f, phone.bottom, 0.5f)
         assertEquals(13f + 58f + 4 * 48f, phone.height, 0.5f)
         compose.runOnIdle { width = 1280; height = 800 }

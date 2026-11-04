@@ -1,10 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.security.MessageDigest
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.FileVisitResult
+import java.nio.file.attribute.BasicFileAttributes
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -25,13 +31,23 @@ android {
 
     defaultConfig {
         applicationId = "com.hhst.litube"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
         versionCode = 400
         versionName = "4.0.0-preview01"
         buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
-        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};Gson=${libs.versions.gson.get()};MSC=external/mediaservicecore\"")
+        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};kotlinx-serialization=${libs.versions.kotlinxSerialization.get()};UPnPCast=${libs.versions.upnpcast.get()};MSC=external/mediaservicecore\"")
         testInstrumentationRunner = "com.hhst.youtubelite.ContentTestRunner"
+    }
+
+    // Keep resource qualifiers aligned with AppLocale.OPTIONS and locales_config.xml.
+    androidResources {
+        localeFilters += setOf(
+            "en", "zh", "zh-rTW", "ar", "bg", "bn", "bs", "cs", "da", "de", "el", "es", "fa", "fi",
+            "fil", "fr", "gu", "hi", "hr", "hu", "in", "iw", "it", "ja", "kn", "ko", "ml", "mr",
+            "ms", "nb", "nl", "pa", "pl", "pt", "ro", "ru", "sk", "sl", "sr", "sv", "ta", "te",
+            "th", "tr", "uk", "ur", "vi",
+        )
     }
 
     buildTypes {
@@ -104,7 +120,39 @@ android {
     }
 }
 
-val diagnosticMappingDir = layout.buildDirectory.dir("outputs/diagnostic-mappings/$diagnosticBuildId")
+val diagnosticArchives = layout.buildDirectory.dir("outputs/diagnostic-mappings")
+val diagnosticMappingDir = diagnosticArchives.map { it.dir(diagnosticBuildId) }
+val pruneDiagnosticArchives = tasks.register("pruneDiagnosticArchives") {
+    val rootDirectory = diagnosticArchives
+    val currentId = diagnosticBuildId
+    val retention = providers.gradleProperty("diagnosticArchiveLimit").map { it.toInt().coerceIn(1, 100) }.orElse(5)
+    doLast {
+        val root = rootDirectory.get().asFile.canonicalFile
+        val archives = root.listFiles().orEmpty().filter { directory ->
+            directory.isDirectory && directory.name.matches(Regex("[0-9a-f]{24}")) &&
+                !Files.isSymbolicLink(directory.toPath()) && directory.canonicalFile.parentFile == root &&
+                listOf(directory.resolve("build-id.txt"), directory.resolve("minifiedDebug/build-id.txt"))
+                    .any { it.isFile && it.readText().trim() == directory.name }
+        }
+        val retained = archives.filter { it.name != currentId }.sortedByDescending { it.lastModified() }
+            .take((retention.get() - 1).coerceAtLeast(0)).toSet()
+        archives.filter { it.name != currentId && it !in retained }.forEach { directory ->
+            check(directory.canonicalFile.parentFile == root)
+            Files.walkFileTree(directory.toPath(), object : SimpleFileVisitor<Path>() {
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+                override fun postVisitDirectory(dir: Path, failure: java.io.IOException?): FileVisitResult {
+                    if (failure != null) throw failure
+                    Files.delete(dir)
+                    return FileVisitResult.CONTINUE
+                }
+            })
+            logger.lifecycle("Removed diagnostic archive ${directory.name}")
+        }
+    }
+}
 listOf("release", "minifiedDebug").forEach { variant ->
     val suffix = variant.replaceFirstChar { it.uppercaseChar() }
     val archive = tasks.register<Copy>("archive${suffix}Diagnostics") {
@@ -115,6 +163,7 @@ listOf("release", "minifiedDebug").forEach { variant ->
         from(layout.buildDirectory.dir("outputs/mapping/$variant"))
         into(destination)
         doLast { destination.resolve("build-id.txt").writeText(identity + "\n") }
+        finalizedBy(pruneDiagnosticArchives)
     }
     tasks.matching { it.name == "assemble$suffix" }.configureEach { finalizedBy(archive) }
 }
@@ -145,8 +194,7 @@ dependencies {
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
     implementation(libs.okhttp)
-    implementation(libs.gson)
-    implementation(libs.mmkv)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.exoplayer.hls)
@@ -160,6 +208,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.nanohttpd)
+    implementation(libs.upnpcast)
 
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
@@ -175,6 +224,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core.ktx)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.koin.test)
     androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio)

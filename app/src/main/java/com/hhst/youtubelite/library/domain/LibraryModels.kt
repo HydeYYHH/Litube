@@ -75,11 +75,8 @@ sealed interface CollectionContent {
 
 enum class LibraryRow(val label: String) {
     History("History"), Playlists("Playlists"), WatchLater("Watch later"), LikedVideos("Liked videos"),
-    Downloads("Downloads");
+    Downloads("Downloads"), Queue("Queue");
 }
-
-/** Which storage backs the library surfaces. Signed out is always the device; the choice is offered after sign-in. */
-enum class LibrarySource(val label: String) { Device("On this device"), Account("Account") }
 
 sealed interface LibraryOverlay {
     data object None : LibraryOverlay
@@ -95,9 +92,6 @@ data class LibraryUiState(
     val content: LibraryContent = LibraryContent.Loading,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
-    /** The active library storage; [sourceSelectable] when the user may switch it. */
-    val source: LibrarySource = LibrarySource.Account,
-    val sourceSelectable: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
     /** Pending local-history removal the user can still undo. */
@@ -109,8 +103,6 @@ data class HistoryUiState(
     val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
-    val source: LibrarySource = LibrarySource.Account,
-    val sourceSelectable: Boolean = false,
     /** Production mode: manage-history entry and live menu writes enabled. */
     val live: Boolean = false,
     /** Two-step confirmation for the destructive clear action. */
@@ -126,8 +118,6 @@ data class CollectionUiState(
     val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
     val overlay: LibraryOverlay = LibraryOverlay.None,
     val query: String = "",
-    val source: LibrarySource = LibrarySource.Account,
-    val sourceSelectable: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
@@ -146,6 +136,7 @@ sealed interface LibraryNavigationRequest {
     data object OpenHistory : LibraryNavigationRequest
     data object OpenPlaylists : LibraryNavigationRequest
     data object OpenNotifications : LibraryNavigationRequest
+    data object OpenQueue : LibraryNavigationRequest
     data object OpenDownloads : LibraryNavigationRequest
     data class MenuAction(val videoId: String, val action: HistoryMenuAction) : LibraryNavigationRequest
     data class Destination(val tab: com.hhst.youtubelite.ui.components.MainTab) : LibraryNavigationRequest
@@ -170,14 +161,13 @@ sealed interface LibraryAction {
     data class SubmitSearch(val query: String) : LibraryAction
     data object SignIn : LibraryAction
     data object OpenAccountMenu : LibraryAction
-    /** The signed-in user switching which storage the library surfaces read and write. */
-    data class SourceSelected(val source: LibrarySource) : LibraryAction
     data class AccountSelected(val action: com.hhst.youtubelite.account.domain.AccountMenuAction) : LibraryAction
     data object OpenNotifications : LibraryAction
     data object OpenHistory : LibraryAction
     data object OpenPlaylists : LibraryAction
     data object OpenWatchLater : LibraryAction
     data object OpenLiked : LibraryAction
+    data object OpenQueue : LibraryAction
     data object OpenDownloads : LibraryAction
     data class OpenVideo(val videoId: String) : LibraryAction
     data class OpenChannel(val channelId: String) : LibraryAction

@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
@@ -44,13 +45,12 @@ import com.hhst.youtubelite.ui.design.SubscribeButton
 import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.ui.design.appDescription
 import com.hhst.youtubelite.dearrow.rememberDeArrowTitle
-import com.hhst.youtubelite.dearrow.VideoArtwork
 
 @Composable
 fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifier: Modifier = Modifier,
     videoContent: (@Composable (String) -> Unit)? = null,
     isVideoReady: (String) -> Boolean = { false },
-    playbackControls: (@Composable (String) -> Unit)? = null,
+    playbackControls: (@Composable (String, Boolean) -> Unit)? = null,
     onSwipeStart: (() -> Unit)? = null, onSwipeCancel: ((String) -> Unit)? = null) {
     Box(modifier.fillMaxSize().background(Color.Black).testTag("shorts-screen")) {
         when (val content = state.content) {
@@ -88,7 +88,7 @@ private fun ShortsSkeleton() {
 @Composable
 private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: (ShortsAction) -> Unit, videoContent: (@Composable (String) -> Unit)?,
     isVideoReady: (String) -> Boolean,
-    playbackControls: (@Composable (String) -> Unit)?,
+    playbackControls: (@Composable (String, Boolean) -> Unit)?,
     state: ShortsUiState, onSwipeStart: (() -> Unit)?, onSwipeCancel: ((String) -> Unit)?) {
     val pagerState = rememberPagerState(initialPage = items.indexOfFirst { it.id == startItemId }.coerceAtLeast(0)) { items.size }
     val currentAction by rememberUpdatedState(onAction)
@@ -121,14 +121,19 @@ private fun ShortsPager(items: List<ShortItem>, startItemId: String?, onAction: 
         }
     }
     Box(Modifier.fillMaxSize()) {
-    VerticalPager(state = pagerState, key = { items[it].id }, modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
+    // Keep one neighbor composed so a fast fling lands on its cover instead of
+    // an unpainted window background; the video surface still attaches to the
+    // settled page only.
+    VerticalPager(state = pagerState, key = { items[it].id }, beyondViewportPageCount = 1,
+        modifier = Modifier.fillMaxSize().testTag("shorts-pager")) { page ->
         ShortPage(items[page], onAction, if (page == pagerState.settledPage) videoContent else null,
             videoReady = page == pagerState.settledPage && isVideoReady(items[page].id),
-            playbackControls = if (page == pagerState.settledPage) playbackControls else null,
+            playbackControls = if (page == pagerState.settledPage) playbackControls?.let { controls ->
+                { id -> controls(id, !pagerState.isScrollInProgress && id == state.currentItemId) }
+            } else null,
             rating = state.ratings[items[page].id] ?: com.hhst.youtubelite.watch.domain.VideoRating.None,
             subscribed = state.subscriptions[items[page].channelId] == true,
-            subscribePending = items[page].channelId in state.subscriptionsPending,
-            menuVisible = !state.live)
+            subscribePending = items[page].channelId in state.subscriptionsPending)
     }
     if (state.appendFailed) AppText(androidx.compose.ui.res.stringResource(R.string.retry),
         Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing)
@@ -147,13 +152,20 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
     subscribed: Boolean = false, subscribePending: Boolean = false, menuVisible: Boolean = true) {
     Box(Modifier.fillMaxSize().testTag("short-page-${item.id}")) {
         videoContent?.invoke(item.id)
-        if (!videoReady) VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize().testTag("short-cover-${item.id}").semantics { contentDescription = "Play ${item.title}" })
+        val coverAlpha by androidx.compose.animation.core.animateFloatAsState(
+            if (videoReady) 0f else 1f,
+            androidx.compose.animation.core.tween(com.hhst.youtubelite.ui.design.motionDuration(
+                140, com.hhst.youtubelite.ui.design.LocalMotionScale.current)), label = "ShortCover")
+        if (coverAlpha > 0f) com.hhst.youtubelite.ui.design.Artwork(item.artwork,
+            Modifier.fillMaxSize().graphicsLayer { alpha = coverAlpha }.background(Color.Black)
+                .testTag("short-cover-${item.id}").semantics { contentDescription = "Play ${item.title}" },
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit)
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         playbackControls?.invoke(item.id)
         BoxWithConstraints(Modifier.matchParentSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         if (menuVisible) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, item.title),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp), diameter = 40.dp, color = Color.White) {
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp).testTag("short-more-${item.id}"), diameter = 40.dp, color = Color.White) {
             onAction(ShortsAction.OpenMenu(item.id))
         }
         val railWidth = if (LocalDensity.current.fontScale > 1.5f) 80.dp else 56.dp

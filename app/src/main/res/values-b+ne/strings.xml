@@ -166,6 +166,7 @@
     <string name="copy">प्रतिलिपि</string>
     <string name="copied">प्रतिलिपि गरिएको</string>
     <string name="copy_all">सबै प्रतिलिपि गर्नुहोस्</string>
+    <string name="cast_searching">खोज्दै…</string>
     <string name="queue_now_playing">अहिले खेल्दैछ</string>
     <string name="clear_queue_confirm">पूरा लाम खाली गर्ने?</string>
     <string name="ok">ठीक छ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">बन्द गर्नुहोस्</string>
     <string name="verification_completed">प्रमाणीकरण सम्पन्न भयो। पुन: प्रयास गर्दै…</string>
     <string name="verification_still_blocked">प्रमाणीकरणपछि पनि रोकिएको छ। पछि फेरि प्रयास गर्नुहोस्।</string>
+    <string name="comments_title">टिप्पणीहरू</string>
+    <string name="comments_sort_top">शीर्ष टिप्पणीहरू</string>
+    <string name="comments_sort_newest">नयाँ पहिला</string>
+    <string name="comments_sort_chip_top">शीर्ष</string>
+    <string name="comments_sort_chip_newest">नयाँ</string>
+    <string name="comments_composer_add">टिप्पणी थप्नुहोस्</string>
+    <string name="comments_composer_reply">जवाफ दिनुहोस्</string>
+    <string name="comments_composer_edit">टिप्पणी सम्पादन गर्नुहोस्</string>
+    <string name="comments_composer_text_hint">टिप्पणीको पाठ</string>
+    <string name="comments_composer_text_edit_hint">टिप्पणीको पाठ सम्पादन गर्नुहोस्</string>
+    <string name="comments_composer_submit">टिप्पणी गर्नुहोस्</string>
+    <string name="comments_composer_sending">पठाइँदै…</string>
+    <string name="comments_composer_save">सुरक्षित गर्नुहोस्</string>
+    <string name="comments_delete_title">मेट्नुहोस्</string>
+    <string name="comments_show_more_replies">थप जवाफहरू देखाउनुहोस्</string>
+    <string name="comments_load_more_failed">थप टिप्पणीहरू लोड गर्न सकिएन</string>
+    <string name="comments_hide_replies">जवाफहरू लुकाउनुहोस्</string>
+    <string name="home_music_charts">सङ्गीत चार्टहरू</string>
+    <string name="home_popular_gaming">गेमिङमा लोकप्रिय</string>
+    <string name="home_popular_sports">खेलकुदमा लोकप्रिय</string>
+    <string name="home_top_news">मुख्य समाचारहरू</string>
 </resources>

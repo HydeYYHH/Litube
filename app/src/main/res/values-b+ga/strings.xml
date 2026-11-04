@@ -166,6 +166,7 @@
     <string name="copy">Cóip</string>
     <string name="copied">Cóipeáladh</string>
     <string name="copy_all">Cóipeáil go léir</string>
+    <string name="cast_searching">Ag cuardach…</string>
     <string name="queue_now_playing">Á sheinm anois</string>
     <string name="clear_queue_confirm">Glan an scuaine ar fad?</string>
     <string name="ok">Ceart go leor</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Dún</string>
     <string name="verification_completed">Tá an fíorú críochnaithe. Ag triail arís…</string>
     <string name="verification_still_blocked">Fós blocáilte tar éis an fhíoraithe. Bain triail eile as níos déanaí.</string>
+    <string name="comments_title">Tuairimí</string>
+    <string name="comments_sort_top">Barr tuairimí</string>
+    <string name="comments_sort_newest">Tuairimí is nuaí ar dtús</string>
+    <string name="comments_sort_chip_top">Barr</string>
+    <string name="comments_sort_chip_newest">Nuaí</string>
+    <string name="comments_composer_add">Cuir tuairim leis</string>
+    <string name="comments_composer_reply">Freagair</string>
+    <string name="comments_composer_edit">Cuir tuairim in eagar</string>
+    <string name="comments_composer_text_hint">Téacs an tuairim</string>
+    <string name="comments_composer_text_edit_hint">Cuir téacs an tuairim in eagar</string>
+    <string name="comments_composer_submit">Tuairimigh</string>
+    <string name="comments_composer_sending">Á sheoladh…</string>
+    <string name="comments_composer_save">Sábháil</string>
+    <string name="comments_delete_title">Scrios</string>
+    <string name="comments_show_more_replies">Taispeáin níos mó freagraí</string>
+    <string name="comments_load_more_failed">Níorbh fhéidir níos mó tuairimí a lódáil</string>
+    <string name="comments_hide_replies">Folaigh freagraí</string>
+    <string name="home_music_charts">Cairteacha ceoil</string>
+    <string name="home_popular_gaming">Ag treochtáil i gcluichí</string>
+    <string name="home_popular_sports">Ag treochtáil sa spórt</string>
+    <string name="home_top_news">Príomhnuacht</string>
 </resources>

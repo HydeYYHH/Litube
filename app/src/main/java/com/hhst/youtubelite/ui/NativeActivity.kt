@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import com.hhst.youtubelite.data.media.ContentRepositories
@@ -12,6 +11,14 @@ import com.hhst.youtubelite.search.SearchResultsActivity
 
 abstract class NativeActivity : ComponentActivity() {
     private var navigationPip: com.hhst.youtubelite.core.PipAutoEnter.Handle? = null
+    private var appearanceListener: (() -> Unit)? = null
+    private var appliedLanguage: String? = null
+
+    /** The persisted app language wraps every activity context below API 33. */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        appliedLanguage = com.hhst.youtubelite.core.AppLocale.tag(newBase)
+        super.attachBaseContext(com.hhst.youtubelite.core.AppLocale.wrap(newBase))
+    }
 
     /** Navigates to another in-app screen, carrying this screen's debug fixture scene with it. */
     protected fun launchNavigation(intent: Intent) {
@@ -20,13 +27,19 @@ abstract class NativeActivity : ComponentActivity() {
     }
 
     override fun startActivity(intent: Intent) {
-        suppressNavigationPip(intent)
-        super.startActivity(intent)
+        startActivity(intent, null)
     }
 
     override fun startActivity(intent: Intent, options: android.os.Bundle?) {
         suppressNavigationPip(intent)
-        super.startActivity(intent, options)
+        val internal = intent.component?.packageName == packageName
+        val watch = intent.component?.className == com.hhst.youtubelite.watch.WatchActivity::class.java.name
+        if (watch && !intent.hasExtra(com.hhst.youtubelite.navigation.WatchTransition.ORIGIN)) {
+            val id = intent.getStringExtra(com.hhst.youtubelite.watch.WatchActivity.EXTRA_VIDEO_ID)
+            if (id != null) com.hhst.youtubelite.navigation.WatchTransition.prepare(window.decorView, id, intent)
+        }
+        val instant = internal && (watch || intent.getBooleanExtra(com.hhst.youtubelite.navigation.WatchTransition.INSTANT, false))
+        super.startActivity(intent, options ?: if (instant) android.app.ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle() else null)
     }
 
     private fun suppressNavigationPip(intent: Intent) {
@@ -37,22 +50,41 @@ abstract class NativeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (android.os.Build.VERSION.SDK_INT < 33 &&
+            appliedLanguage != com.hhst.youtubelite.core.AppLocale.tag(this)) {
+            recreate()
+            return
+        }
         navigationPip?.restore()
         navigationPip = null
+        // Live system-bar response to in-app appearance changes (Compose handles content).
+        appearanceListener = com.hhst.youtubelite.ui.theme.AppAppearance.onChange { applySystemBarStyle() }
+        applySystemBarStyle()
+    }
+
+    override fun onPause() {
+        appearanceListener?.invoke()
+        appearanceListener = null
+        super.onPause()
     }
 
     @Suppress("DEPRECATION")
     override fun onPostResume() {
         super.onPostResume()
-        val dark = com.hhst.youtubelite.ui.theme.AppAppearance.dark ?: (
-            resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+        applySystemBarStyle()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applySystemBarStyle() {
+        val dark = com.hhst.youtubelite.ui.theme.AppAppearance.dark ?:
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
             isAppearanceLightStatusBars = !dark
             isAppearanceLightNavigationBars = !dark
         }
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = if (dark) 0xFF0F0F0F.toInt() else android.graphics.Color.WHITE
+        window.navigationBarColor = if (dark) android.graphics.Color.BLACK else android.graphics.Color.WHITE
     }
 
     override fun onDestroy() {
@@ -136,6 +168,7 @@ abstract class NativeActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        dismissMessage()
         clearVoiceSession()
         super.onStop()
     }
@@ -148,6 +181,6 @@ abstract class NativeActivity : ComponentActivity() {
     }
 
     private fun voiceUnavailable() {
-        Toast.makeText(this, com.hhst.youtubelite.R.string.application_not_found, Toast.LENGTH_LONG).show()
+        showMessage(getString(com.hhst.youtubelite.R.string.application_not_found))
     }
 }

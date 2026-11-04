@@ -166,6 +166,7 @@
     <string name="copy">ასლი</string>
     <string name="copied">გადაწერილი</string>
     <string name="copy_all">დააკოპირეთ ყველა</string>
+    <string name="cast_searching">ძებნა…</string>
     <string name="queue_now_playing">ახლა უკრავს</string>
     <string name="clear_queue_confirm">გაასუფთავე მთელი რიგი?</string>
     <string name="ok">კარგი</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">დახურვა</string>
     <string name="verification_completed">გადამოწმება დასრულდა. ხელახლა ცდა…</string>
     <string name="verification_still_blocked">გადამოწმების შემდეგაც დაბლოკილია. სცადეთ მოგვიანებით.</string>
+    <string name="comments_title">კომენტარები</string>
+    <string name="comments_sort_top">პოპულარული კომენტარები</string>
+    <string name="comments_sort_newest">ჯერ ახალი</string>
+    <string name="comments_sort_chip_top">პოპულარული</string>
+    <string name="comments_sort_chip_newest">ახალი</string>
+    <string name="comments_composer_add">კომენტარის დამატება</string>
+    <string name="comments_composer_reply">პასუხი</string>
+    <string name="comments_composer_edit">კომენტარის რედაქტირება</string>
+    <string name="comments_composer_text_hint">კომენტარის ტექსტი</string>
+    <string name="comments_composer_text_edit_hint">კომენტარის ტექსტის რედაქტირება</string>
+    <string name="comments_composer_submit">კომენტირება</string>
+    <string name="comments_composer_sending">იგზავნება…</string>
+    <string name="comments_composer_save">შენახვა</string>
+    <string name="comments_delete_title">წაშლა</string>
+    <string name="comments_show_more_replies">მეტი პასუხის ჩვენება</string>
+    <string name="comments_load_more_failed">დამატებითი კომენტარების ჩატვირთვა ვერ მოხერხდა</string>
+    <string name="comments_hide_replies">პასუხების დამალვა</string>
+    <string name="home_music_charts">მუსიკალური ჩარტები</string>
+    <string name="home_popular_gaming">პოპულარული თამაშებში</string>
+    <string name="home_popular_sports">პოპულარული სპორტში</string>
+    <string name="home_top_news">მთავარი ამბები</string>
 </resources>

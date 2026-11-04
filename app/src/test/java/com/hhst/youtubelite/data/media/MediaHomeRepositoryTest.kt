@@ -14,7 +14,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaHomeRepositoryTest {
-    private val home = """{"contents":[{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"dismiss-target","title":{"runs":[{"text":"Dismissable video"}]},"ownerText":{"runs":[{"text":"Blender"}]},"menu":{"menuRenderer":{"items":[{"menuServiceItemRenderer":{"text":{"runs":[{"text":"Not interested"}]},"serviceEndpoint":{"clickTrackingParams":"x","feedbackEndpoint":{"feedbackTokens":["dismiss-token"]}}}}]}}}}}},{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"keep-target","title":{"runs":[{"text":"Kept video"}]},"ownerText":{"runs":[{"text":"Blender"}]}}}}}]}"""
+    private val home = """{"contents":[{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"dismiss-target","title":{"runs":[{"text":"Dismissable video"}]},"ownerText":{"runs":[{"text":"Blender"}]},"menu":{"menuRenderer":{"items":[{"menuServiceItemRenderer":{"text":{"runs":[{"text":"Not interested"}]},"icon":{"iconType":"NOT_INTERESTED"},"serviceEndpoint":{"clickTrackingParams":"x","feedbackEndpoint":{"feedbackTokens":["dismiss-token"]}}}}]}}}}}},{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"keep-target","title":{"runs":[{"text":"Kept video"}]},"ownerText":{"runs":[{"text":"Blender"}]}}}}}]}"""
     private val processed = """{"feedbackResponses":[{"isProcessed":true}]}"""
 
 

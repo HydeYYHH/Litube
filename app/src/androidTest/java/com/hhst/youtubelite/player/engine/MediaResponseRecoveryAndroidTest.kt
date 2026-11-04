@@ -8,7 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -42,8 +42,11 @@ class MediaResponseRecoveryAndroidTest {
     @Test fun pauseDuringFreshExtractionPreservesPositionAndIntent() = exercise("text/html", pause = true)
     @Test fun refusedCaptionsDoNotPreventAudioPlayback() = exercise("text/html", captions = true)
     @Test fun refusedCaptionsPreserveThePausedPosition() = exercise("text/html", captions = true, pause = true)
+    @Test fun missingHlsManifestChangesSourceAndDecodes() = exercise("text/html", missingManifest = true)
+    @Test fun persistentlyMissingHlsManifestStopsAfterOneFreshExtraction() = exercise("text/html", missingManifest = true, persistent = true)
 
-    private fun exercise(type: String, persistent: Boolean = false, pause: Boolean = false, captions: Boolean = false) {
+    private fun exercise(type: String, persistent: Boolean = false, pause: Boolean = false, captions: Boolean = false,
+                         missingManifest: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext
         val audio = instrumentation.context.assets.open("player/audio-original/audio.ts").use { it.readBytes() }
@@ -61,6 +64,10 @@ class MediaResponseRecoveryAndroidTest {
                         rejected.incrementAndGet()
                         MockResponse().setHeader("Content-Type", type).setBody("error")
                     }
+                    "/refused.m3u8" -> {
+                        rejected.incrementAndGet()
+                        MockResponse().setResponseCode(404).setHeader("Content-Type", type).setBody("Not found")
+                    }
                     "/audio.ts" -> MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(audio))
                     else -> MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl").setBody("""
                         #EXTM3U
@@ -74,12 +81,18 @@ class MediaResponseRecoveryAndroidTest {
             start()
         }
         val session = YoutubeWebSession("error-doc", WebAccount.ANONYMOUS, 0, null, null, null,
-            "visitor", "fixture-UA", 0, null, "fixture", JsonObject()) { "" }
+            "visitor", "fixture-UA", 0, null, "fixture", JsonObject(emptyMap())) { "" }
         val plan = MediaRequestPlan(session, StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.HEADER)
-        val refusedUrl = server.url("/refused.mp4").toString()
+        val refusedUrl = server.url(if (missingManifest) "/refused.m3u8" else "/refused.mp4").toString()
+        val expectedRejection = if (missingManifest) MediaRejection.UNAVAILABLE else MediaRejection.INVALID_BODY
         val bad = Stream().apply {
-            formats = listOf(Format(url = refusedUrl, height = 360, itag = 18,
-                codec = "avc1.42001e,mp4a.40.2", mimeType = "video/mp4", requestPlan = plan))
+            if (missingManifest) {
+                hlsUrl = refusedUrl
+                hlsRequestPlan = MediaRequestPlan(session, StreamClient.WEB_SAFARI, MediaProtocol.HLS, MediaRange.NONE)
+            } else {
+                formats = listOf(Format(url = refusedUrl, height = 360, itag = 18,
+                    codec = "avc1.42001e,mp4a.40.2", mimeType = "video/mp4", requestPlan = plan))
+            }
         }
         val good = Stream().apply {
             hlsUrl = server.url("/master.m3u8").toString()
@@ -102,7 +115,7 @@ class MediaResponseRecoveryAndroidTest {
 
             override fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean): MscPlayback.Resolved {
                 assertTrue("Recovery must bypass the refused extraction", fresh)
-                assertEquals(listOf(refusedUrl to MediaRejection.INVALID_BODY), feedback.toList())
+                assertEquals(listOf(refusedUrl to expectedRejection), feedback.toList())
                 refreshes.incrementAndGet()
                 if (pause) instrumentation.runOnMainSync { engine.pause() }
                 return MscPlayback.Resolved(Metadata().apply { id = videoId; duration = 20 }, if (persistent) bad else good)
@@ -159,10 +172,10 @@ class MediaResponseRecoveryAndroidTest {
                     assertNotNull(engine.snapshot.value.error)
                     val report = requireNotNull(engine.snapshot.value.failureReport)
                     assertEquals(engine.snapshot.value.videoId, report.videoId)
-                    assertTrue(report.text.contains("MEDIA_ERROR_BODY"))
+                    assertTrue(report.text.contains(if (missingManifest) "MANIFEST_UNAVAILABLE" else "MEDIA_ERROR_BODY"))
                     assertTrue(report.text.contains("full_refreshes: 1"))
-                    assertTrue(report.text.contains("http_status: 200"))
-                    assertTrue(report.text.contains("content_type: application/json"))
+                    assertTrue(report.text.contains("http_status: ${if (missingManifest) 404 else 200}"))
+                    if (!missingManifest) assertTrue(report.text.contains("content_type: application/json"))
                     assertFalse(engine.snapshot.value.prepared)
                 } else {
                     assertNull(engine.snapshot.value.error)

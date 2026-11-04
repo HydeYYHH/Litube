@@ -10,6 +10,9 @@ import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.DownloadSession
 import com.hhst.youtubelite.extractor.VideoId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class DownloadCoordinator(
     private val repository: DownloadRepository,
@@ -18,6 +21,7 @@ class DownloadCoordinator(
     private val publisher: DownloadPublisher = NoOpPublisher,
     private val ids: IdFactory = UuidIdFactory,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    private val effectsDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private suspend fun log(event: String, fields: Map<String, Any?>, critical: Boolean = false) =
         AppLog.event(AppLog.Category.DOWNLOADER, event, fields, critical = critical,
@@ -884,7 +888,7 @@ class DownloadCoordinator(
         if (pending) effects.schedule += taskId else effects.unschedule += taskId
     }
 
-    private suspend fun applyEffects(effects: SideEffects) {
+    private suspend fun applyEffects(effects: SideEffects) = withContext(effectsDispatcher) {
         effects.cancelInFlight.distinct().forEach { transport.cancelInFlight(it) }
         effects.unschedule.distinct().forEach { scheduler.cancel(it) }
         effects.schedule.distinct().forEach { scheduler.schedule(it) }

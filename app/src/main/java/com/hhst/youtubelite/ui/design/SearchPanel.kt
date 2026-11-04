@@ -56,7 +56,14 @@ internal fun SearchPanel(
     val focusManager = LocalFocusManager.current
     val fieldHeight = maxOf(32.dp, with(LocalDensity.current) { 22.sp.toDp() })
     val toolbarHeight = maxOf(48.dp, fieldHeight)
-    val close = { keyboard?.hide(); focusManager.clearFocus(); onClose() }
+    /**
+     * Closing only clears focus and hands the event to the host; the IME hides
+     * through [onDispose]. An explicit hide here must not be issued while the
+     * window may still be animating an earlier IME transition (recreation on
+     * older APIs): that synchronous call can wedge the main thread before
+     * [onClose] runs, leaving the overlay stuck open.
+     */
+    val close: () -> Unit = { focusManager.clearFocus(); onClose() }
     LaunchedEffect(Unit) { focus.requestFocus(); keyboard?.show() }
     DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
     Box(Modifier.fillMaxSize().padding(top = toolbarHeight).background(DesignTokens.Scrim)
@@ -64,7 +71,7 @@ internal fun SearchPanel(
     Column(Modifier.fillMaxWidth().background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
         Row(Modifier.fillMaxWidth().height(toolbarHeight).background(
             if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Surface), verticalAlignment = Alignment.CenterVertically) {
-            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = close)
+            AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = close, modifier = Modifier.testTag("search-panel-back"))
             Row(Modifier.weight(1f).height(fieldHeight).clip(RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp))
                 .background(DesignTokens.Ghost).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 BasicTextField(field, { field = it; onQueryChanged(it.text) },

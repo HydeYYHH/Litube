@@ -1,8 +1,6 @@
 package com.hhst.youtubelite.player.sponsor
 
 import com.hhst.youtubelite.diagnostics.*
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.VideoId
@@ -174,13 +172,11 @@ class SponsorBlockManager(
 /** Parses SponsorBlock responses for one video. */
 object SponsorBlockParser {
 
-    private val gson = Gson()
-    private val type =
-        object : TypeToken<List<Response>>() {}.type
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val type = kotlinx.serialization.builtins.ListSerializer(Response.serializer())
 
-    fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> = try {
-        val responses = gson.fromJson<List<Response>>(json, type)
-            ?: throw IllegalArgumentException("Missing SponsorBlock response")
+    fun parse(text: String, videoId: String): List<SponsorBlockManager.Segment> = try {
+        val responses = json.decodeFromString(type, text)
         responses
             .filter { it.videoID == videoId }
             .flatMap { it.segments }
@@ -199,11 +195,13 @@ object SponsorBlockParser {
         throw SponsorBlockParseException(failure)
     }
 
+    @kotlinx.serialization.Serializable
     private data class Response(
         val videoID: String = "",
         val segments: List<SegmentData> = emptyList(),
     )
 
+    @kotlinx.serialization.Serializable
     private data class SegmentData(
         val category: String = "",
         val segment: List<Double> = emptyList(),

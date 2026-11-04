@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -54,6 +56,7 @@ import androidx.compose.ui.res.stringResource
 fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier,
     searchRows: com.hhst.youtubelite.ui.components.SearchRows? = null) {
     AppTheme {
+        val hideShorts = state.hideShorts || LocalHideShorts.current
         BoxWithConstraints(modifier.fillMaxSize().background(DesignTokens.Background).testTag("home-screen")) {
             val width = maxWidth.value
             val currentWidth by rememberUpdatedState(width)
@@ -61,10 +64,23 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
             val chromeTravel = 108f + chipExtraHeight.value
             val grid = rememberLazyGridState()
             var chromeHidden by rememberSaveable { mutableStateOf(false) }
+            var displayedFilter by rememberSaveable { mutableStateOf(state.selectedChip) }
+            var displayedSession by rememberSaveable { mutableStateOf(state.sessionGeneration) }
+            LaunchedEffect(state.selectedChip, state.sessionGeneration) {
+                if (displayedFilter != state.selectedChip || displayedSession != null && displayedSession != state.sessionGeneration) {
+                    grid.scrollToItem(0)
+                    chromeHidden = false
+                }
+                displayedFilter = state.selectedChip
+                displayedSession = state.sessionGeneration
+            }
             val chromeOffset by animateFloatAsState(if (chromeHidden) 1f else 0f,
                 tween(if (chromeHidden) 195 else 225, easing = if (chromeHidden) FastOutLinearInEasing else LinearOutSlowInEasing), label = "header")
             val density = LocalDensity.current.density
             var pull by remember { mutableFloatStateOf(0f) }
+            var pullPressed by remember { mutableStateOf(false) }
+            var pullCancelled by remember { mutableStateOf(false) }
+            var pullRelease by remember { mutableIntStateOf(0) }
             val latestAction by rememberUpdatedState(onAction)
             val pullConnection = remember(grid, density) { object : NestedScrollConnection {
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
@@ -84,19 +100,32 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     return Offset.Zero
                 }
                 override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (pull >= 56f * density) latestAction(HomeAction.Refresh)
-                    pull = 0f
-                    return Velocity.Zero
+                    return if (pull > 0f) Velocity(0f, available.y) else Velocity.Zero
                 }
             } }
+            LaunchedEffect(pullPressed, pullRelease, pullConnection) {
+                if (!pullPressed && pull > 0f) {
+                    if (!pullCancelled && pull >= 56f * density) latestAction(HomeAction.Refresh)
+                    Animatable(pull).animateTo(0f, tween(150, easing = FastOutSlowInEasing)) { pull = value }
+                }
+            }
             val feed = state.content as? HomeContent.Feed
+            val catalogMode = state.chips == HomeCatalog.filters
+            val userRefreshing = when (val visible = state.content) {
+                is HomeContent.Feed -> visible.refreshing && visible.userRefresh
+                is HomeContent.Empty -> visible.refreshing && visible.userRefresh
+                else -> false
+            }
             LaunchedEffect(grid, feed != null) {
                 if (feed == null) return@LaunchedEffect
                 snapshotFlow { grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset }.collect { current ->
                     if (current.first == 0 && current.second == 0) chromeHidden = false
                 }
             }
-            val nearEnd by remember(grid, feed?.page?.items?.size) { derivedStateOf { (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= (feed?.page?.items?.size ?: Int.MAX_VALUE) - 2 } }
+            val nearEnd by remember(grid) { derivedStateOf {
+                val layout = grid.layoutInfo
+                layout.totalItemsCount > 0 && (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) >= layout.totalItemsCount - 3
+            } }
             LaunchedEffect(nearEnd, feed?.page?.nextKey, feed?.append, feed?.refreshing) {
                 if (nearEnd && feed?.page?.nextKey != null && feed.append == AppendState.Idle && !feed.refreshing) onAction(HomeAction.LoadNext)
             }
@@ -106,25 +135,45 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     Box(Modifier.zIndex(1f).fillMaxWidth().height(DesignTokens.TopBarHeight).headerShadow().background(DesignTokens.Background))
                 } else if (feed == null) {
                     HomeTopBar(onAction)
+                    if (catalogMode) ChipStrip(state.selectedChip, state.chips, true, onAction)
                 }
-                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(pullConnection)) {
-                    if (pull > 0f) Box(Modifier.align(Alignment.TopCenter).padding(top = 12.dp)) { LoadingSpinner() }
-                    Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
-                    when (val content = state.content) {
-                        is HomeContent.Empty -> EmptyHome(content, showTools = !searchOpen, wide = width >= 528, onAction)
-                        HomeContent.Failed -> if (state.verification != null) VerificationCard(
-                            state.verification,
-                            onVerify = { onAction(HomeAction.Navigate(HomeNavigationRequest.OpenVerification(state.verification!!.challengeUrl))) },
-                            onDismiss = { onAction(HomeAction.DismissVerification) },
-                            modifier = Modifier.testTag("home-verification"),
-                        ) else ErrorHome(onAction)
-                        HomeContent.Loading -> HomeSkeleton(width)
-                        is HomeContent.Feed -> Box(Modifier.fillMaxSize()) {
-                            Column(Modifier.fillMaxSize()) {
-                            if (content.refreshing) Box(Modifier.graphicsLayer { translationY = (96f + chipExtraHeight.value - chromeTravel * chromeOffset) * density }
-                                .fillMaxWidth().height(2.dp).background(DesignTokens.Surface)) {
-                                Box(Modifier.fillMaxWidth(0.4f).fillMaxHeight().background(DesignTokens.Red))
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().nestedScroll(pullConnection)
+                    .pointerInput(pullConnection) {
+                        try {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val pressed = event.changes.any { it.pressed }
+                                    if (pressed && !pullPressed) pullCancelled = false
+                                    if (!pressed && pullPressed) {
+                                        pullCancelled = event.changes.any { it.previousPressed && it.isConsumed }
+                                        pullRelease++
+                                    }
+                                    pullPressed = pressed
+                                }
                             }
+                        } finally {
+                            pullCancelled = true
+                            pullPressed = false
+                        }
+                    }) {
+                    when (val content = state.content) {
+                        is HomeContent.Empty -> Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
+                            EmptyHome(content, showTools = !searchOpen && !catalogMode, wide = width >= 528,
+                                onAction = onAction, showMessage = !catalogMode)
+                        }
+                        HomeContent.Failed -> Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
+                            if (state.verification != null) VerificationCard(
+                                state.verification,
+                                onVerify = { onAction(HomeAction.Navigate(HomeNavigationRequest.OpenVerification(state.verification!!.challengeUrl))) },
+                                onDismiss = { onAction(HomeAction.DismissVerification) },
+                                modifier = Modifier.testTag("home-verification"),
+                            ) else ErrorHome(onAction)
+                        }
+                        HomeContent.Loading -> Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) { HomeSkeleton(width) }
+                        is HomeContent.Feed -> Box(Modifier.fillMaxSize()) {
+                            // Pull moves the feed rows only; the chrome stack keeps its place.
+                            Column(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
                             if (content.refreshFailed) Box(Modifier.graphicsLayer { translationY = (96f + chipExtraHeight.value - chromeTravel * chromeOffset) * density }) {
                                 RetryRow("Couldn't refresh. Try again.") { onAction(HomeAction.Refresh) }
                             }
@@ -134,11 +183,8 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 contentPadding = PaddingValues(start = HomeLayout.outerPadding(width).dp, end = HomeLayout.outerPadding(width).dp, top = (if (width < 528f) 98.dp else 110.dp) + chipExtraHeight, bottom = 24.dp),
                                 horizontalArrangement = Arrangement.spacedBy(DesignTokens.GridGap),
                             ) {
-                                items(content.page.items.filterNot { state.hideShorts && it is FeedItem.Shorts }, key = { it.id }, span = { if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1) }, contentType = { it.javaClass.simpleName }) { item ->
-                                    Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
-                                        FeedCard(item, compact = currentWidth < 528, windowWidth = currentWidth, state.live, onAction)
-                                    }
-                                }
+                                val visible = content.page.items.filterNot { hideShorts && (it is FeedItem.Shorts || it is FeedItem.Video && it.short) }
+                                homeCards(visible, currentWidth, state.live, onAction)
                                 item(span = { GridItemSpan(maxLineSpan) }) {
                                     when (content.append) {
                                         AppendState.Loading -> Box(Modifier.fillMaxWidth().padding(top = 80.dp, bottom = 12.dp), contentAlignment = Alignment.Center) { LoadingSpinner() }
@@ -148,10 +194,15 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 }
                             }
                             }
-                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(DesignTokens.Background)) { ChipStrip(state.selectedChip, state.chips, onAction) }
+                            Box(Modifier.graphicsLayer { translationY = (48f - chromeTravel * chromeOffset) * density }.background(DesignTokens.Background)) { ChipStrip(state.selectedChip, state.chips, content.page.catalog != null, onAction) }
                             Box(Modifier.graphicsLayer { translationY = -48f * chromeOffset * density }.background(DesignTokens.Background)) { HomeTopBar(onAction) }
                         }
                     }
+                    // The indicator anchors below the visible chrome stack; it never pulls with the content.
+                    if (pull > 0f || userRefreshing) {
+                        val anchor = if (state.content is HomeContent.Feed) 96f + chipExtraHeight.value - chromeTravel * chromeOffset else 0f
+                        Box(Modifier.align(Alignment.TopCenter).graphicsLayer { translationY = anchor * density + 12.dp.toPx() }
+                            .testTag("home-refresh-indicator")) { LoadingSpinner() }
                     }
                 }
                 HomeBottomBar(state.signedInPreview, state.content == HomeContent.Loading, onAction, state.avatar)
@@ -163,6 +214,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     onAction, overlay.kind, state.live, state.signedInPreview,
                     (state.content as? HomeContent.Feed)?.page?.items?.filterIsInstance<FeedItem.Video>()
                         ?.firstOrNull { it.id == overlay.itemId && it.feedbackGeneration == state.sessionGeneration },
+                    overlay,
                 )
                 is HomeOverlay.Save -> if (overlay.newPlaylist) NewPlaylistSheet(
                     draft = NewPlaylistDraft(overlay.title, overlay.description),
@@ -215,6 +267,16 @@ private val homeSavePlaylists: List<SavePlaylist> =
         .filter { it.id != FixturePlaylistRepository.WATCH_LATER }
         .map { SavePlaylist(it.id, it.title) }
 
+private fun LazyGridScope.homeCards(items: List<FeedItem>, width: Float, live: Boolean, onAction: (HomeAction) -> Unit) {
+    items(items, key = { it.id }, span = {
+        if (it is FeedItem.Shorts || it is FeedItem.Post) GridItemSpan(maxLineSpan) else GridItemSpan(1)
+    }, contentType = { it.javaClass.simpleName }) { item ->
+        Box(Modifier.padding(bottom = if (item is FeedItem.Post) 16.dp else 24.dp)) {
+            FeedCard(item, compact = width < 528f, windowWidth = width, live, onAction)
+        }
+    }
+}
+
 @Composable
 private fun HomeTopBar(onAction: (HomeAction) -> Unit) {
     Row(Modifier.fillMaxWidth().height(DesignTokens.TopBarHeight).testTag("home-topbar"), verticalAlignment = Alignment.CenterVertically) {
@@ -230,14 +292,16 @@ private fun HomeTopBar(onAction: (HomeAction) -> Unit) {
 
 @Composable
 private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAction) -> Unit, avatar: String? = null) {
+    val haptic = rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.TAB)
     Column(Modifier.fillMaxWidth().testTag("home-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(DesignTokens.BottomBarHeight)) {
             if (!loading) {
                 val destinations = if (signedIn) HomeDestination.entries else listOf(HomeDestination.Home, HomeDestination.Shorts, HomeDestination.You)
-                destinations.forEach { destination ->
+                destinations.filterNot { LocalHideShorts.current && it == HomeDestination.Shorts }.forEach { destination ->
                     Column(Modifier.weight(1f).fillMaxHeight()
                         .selectable(destination == HomeDestination.Home, role = Role.Tab) {
+                            haptic()
                             onAction(HomeAction.Navigate(HomeNavigationRequest.Destination(destination)))
                         }.testTag("nav-${destination.name}"),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -265,7 +329,7 @@ private fun HomeBottomBar(signedIn: Boolean, loading: Boolean, onAction: (HomeAc
 }
 
 @Composable
-private fun ChipStrip(selected: String, chips: List<String>, onAction: (HomeAction) -> Unit) {
+private fun ChipStrip(selected: String, chips: List<String>, catalog: Boolean, onAction: (HomeAction) -> Unit) {
     val extraHeight = with(LocalDensity.current) { (20.sp.toDp() - 20.dp).coerceAtLeast(0.dp) }
     LazyRow(Modifier.fillMaxWidth().height(48.dp + extraHeight).testTag("home-chips"), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
@@ -281,14 +345,23 @@ private fun ChipStrip(selected: String, chips: List<String>, onAction: (HomeActi
             Box(Modifier.widthIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).background(if (chip == selected) DesignTokens.Ink else DesignTokens.Surface)
                 .selectable(chip == selected, role = Role.Tab) { onAction(HomeAction.SelectChip(chip)) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center) {
-                AppText(chip, size = 14, line = 20, weight = FontWeight.Medium, color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
+                val label = if (!catalog) chip else when (HomeCatalog.forFilter(chip)) {
+                    HomeCatalog.Popular -> stringResource(R.string.download_filter_all)
+                    HomeCatalog.MusicCharts -> stringResource(R.string.home_music_charts)
+                    HomeCatalog.Gaming -> stringResource(R.string.home_popular_gaming)
+                    HomeCatalog.Sports -> stringResource(R.string.home_popular_sports)
+                    HomeCatalog.News -> stringResource(R.string.home_top_news)
+                    null -> chip
+                }
+                AppText(label, size = 14, line = 20, weight = FontWeight.Medium, color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
     }
 }
 
 @Composable
-private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Boolean, onAction: (HomeAction) -> Unit) {
+private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Boolean, onAction: (HomeAction) -> Unit,
+    showMessage: Boolean = true) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home-empty"), horizontalAlignment = Alignment.CenterHorizontally) {
         if (showTools) {
             Spacer(Modifier.height(if (wide) 76.dp else 60.dp))
@@ -311,12 +384,9 @@ private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Bool
             .background(DesignTokens.Background, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
             AppText(content.title.ifBlank { stringResource(R.string.home_empty_title) }, size = 24, line = 32, weight = FontWeight.Black, align = TextAlign.Center)
-            Spacer(Modifier.height(12.dp))
-            AppText(content.message.ifBlank { stringResource(R.string.home_empty_message) }, size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
-            // Quiet re-check after a real watch: honest progress, no layout flash.
-            if (content.refreshing) {
-                Spacer(Modifier.height(14.dp))
-                com.hhst.youtubelite.ui.components.AppLinearProgressIndicator(Modifier.fillMaxWidth())
+            if (showMessage) {
+                Spacer(Modifier.height(12.dp))
+                AppText(content.message.ifBlank { stringResource(R.string.home_empty_message) }, size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
             }
         }
         Spacer(Modifier.height(32.dp))

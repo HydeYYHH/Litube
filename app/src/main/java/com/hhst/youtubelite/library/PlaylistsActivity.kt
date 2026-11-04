@@ -66,7 +66,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == CollectionViewModel::class.java)
-                return CollectionViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(), if (fixtures) null else sources.librarySource) as T
+                return CollectionViewModel(if (fixtures) FixtureLibraryRepository(scenario) else sources.library, extras.createSavedStateHandle(), scenario, fixtures || com.hhst.youtubelite.data.media.MediaSession.signedIn(), ) as T
             }
         })[CollectionViewModel::class.java]
         lifecycleScope.launch {
@@ -86,7 +86,7 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         // `else`: a new request type must fail to compile here.
                         is LibraryNavigationRequest.Watch, is LibraryNavigationRequest.Channel,
                         LibraryNavigationRequest.OpenHistory, LibraryNavigationRequest.OpenPlaylists,
-                        LibraryNavigationRequest.OpenNotifications, LibraryNavigationRequest.OpenDownloads,
+                        LibraryNavigationRequest.OpenNotifications, LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads,
                         is LibraryNavigationRequest.MenuAction, is LibraryNavigationRequest.Destination,
                         LibraryNavigationRequest.Settings, LibraryNavigationRequest.About,
                         LibraryNavigationRequest.SwitchAccount, LibraryNavigationRequest.SignOut -> Unit

@@ -1,8 +1,10 @@
 package com.hhst.youtubelite.extension
 
-/** Preference keys and first-launch defaults. Strings match the existing MMKV layout. */
+/** Preference keys and first-launch defaults. Strings keep the historical key layout. */
 object PreferenceKeys {
     const val HAPTIC_STRENGTH = "haptic_strength"
+    const val THEME_MODE = "theme_mode"
+    const val APP_LANGUAGE = "app_language"
     const val ENABLE_DISPLAY_DISLIKES = "enable_display_dislikes"
     const val ENABLE_HIDE_SHORTS = "enable_hide_shorts"
     const val PRIVATE_BROWSING = "private_browsing"

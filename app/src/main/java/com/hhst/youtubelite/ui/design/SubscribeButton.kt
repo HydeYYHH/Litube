@@ -36,6 +36,7 @@ fun SubscribeButton(
     onDarkSurface: Boolean = false,
     testTag: String? = null,
 ) {
+    val haptic = rememberHapticAction()
     val colors = subscribeColors(subscribed, onDarkSurface)
     val interactive = enabled && !pending
     val tag = if (testTag != null) Modifier.testTag(testTag) else Modifier
@@ -49,7 +50,7 @@ fun SubscribeButton(
             Modifier
                 .clip(RoundedCornerShape(20.dp))
                 .background(colors.background)
-                .clickable(enabled = interactive, role = Role.Button, onClick = onClick)
+                .clickable(enabled = interactive, role = Role.Button) { haptic(); onClick() }
                 .heightIn(min = 40.dp)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center,

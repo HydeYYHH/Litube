@@ -1,7 +1,6 @@
 package com.hhst.youtubelite.ui
 
 import android.app.Activity
-import android.widget.Toast
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.ui.DownloadUi
 import com.hhst.youtubelite.player.PlayerViewModel
@@ -30,15 +29,13 @@ class ActivityMediaActionExecutor(private val activity: Activity) {
             MediaActionKind.PlayNext -> {
                 val player = getKoin().get<PlayerViewModel>()
                 player.onQueueAddNext(QueueItem(id, title = item.title, author = item.author))
-                Toast.makeText(activity, R.string.play_next_queued, Toast.LENGTH_SHORT).show()
+                activity.showMessage(activity.getString(R.string.play_next_queued))
             }
             MediaActionKind.Queue -> {
                 val player = getKoin().get<PlayerViewModel>()
                 val already = player.queueContains(id)
                 player.onQueueAdd(QueueItem(id, title = item.title, author = item.author))
-                Toast.makeText(activity,
-                    activity.getString(if (already) R.string.queue_item_already else R.string.queue_item_added),
-                    Toast.LENGTH_SHORT).show()
+                activity.showMessage(activity.getString(if (already) R.string.queue_item_already else R.string.queue_item_added))
             }
             MediaActionKind.Download -> DownloadUi.showSingleConfirm(activity, id, item.title, item.author, item.artwork)
             MediaActionKind.OpenWith -> ShareGateway(activity).openWith(item.id)

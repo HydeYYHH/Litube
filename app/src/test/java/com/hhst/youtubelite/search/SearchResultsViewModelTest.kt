@@ -522,7 +522,7 @@ class SearchResultsViewModelTest {
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
-    @Test fun liveMenuFeedbackRowsAreDropped() = runTest {
+    @Test fun liveMenuWithoutCapturedTokensNeverWritesFeedback() = runTest {
         val saves = FakeSaveRepository()
         val vm = liveViewModel(saves = saves)
         advanceUntilIdle()
@@ -533,6 +533,109 @@ class SearchResultsViewModelTest {
         assertEquals(0, saves.watchLaterCalls)
         assertNull(vm.saveSheet?.state?.value)
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    /** Live repository with deferred-menu reads; records get_panel and feedback operations. */
+    private class MenuRepository(val cards: List<SearchResult>) : SearchRepository {
+        var menuCalls = 0
+        var menuError: Exception? = null
+        val feedback = mutableListOf<Pair<SearchResult, SearchVideoMenuAction>>()
+        override suspend fun search(query: String, filters: SearchFilters) = SearchPage(query, cards)
+        override suspend fun menu(result: SearchResult): SearchResult {
+            menuCalls++
+            menuError?.let { throw it }
+            return result.copy(notInterestedToken = "token-${result.id}", dontRecommendToken = "chan-${result.id}")
+        }
+        override suspend fun feedback(result: SearchResult, action: SearchVideoMenuAction) {
+            feedback += result to action
+        }
+    }
+
+    private fun menuViewModel(repository: MenuRepository, session: Pair<Boolean, Long>? = true to 2L): SearchResultsViewModel {
+        val vm = SearchResultsViewModel(repository, SavedStateHandle(), "open movie",
+            videoActions = RecordingVideoActions(), saveRepository = FakeSaveRepository())
+        if (session != null) vm.updateSession(session.first, session.second)
+        return vm
+    }
+
+    private fun card(id: String, channelId: String = "northlight") = SearchResult(id, "Title $id", "Author", channelId,
+        "", "", "", "", menuEndpoint = com.hhst.youtubelite.home.domain.FeedMenuEndpoint("menu", "params-$id"),
+        feedbackGeneration = 2)
+
+    @Test fun liveMenuReadsTheCardsOwnEndpointAndWritesBackItsCapabilities() = runTest {
+        val repository = MenuRepository(listOf(card("harbour"), card("studio", channelId = "other")))
+        val vm = menuViewModel(repository)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        assertEquals(1, repository.menuCalls)
+        assertFalse(vm.uiState.value.menuLoading)
+        assertFalse(vm.uiState.value.menuFailed)
+        val page = (vm.uiState.value.content as SearchContent.Results).page
+        assertEquals("token-harbour", page.results.first { it.id == "harbour" }.notInterestedToken)
+        // Untouched cards stay untouched: no preload for menus never opened.
+        assertNull(page.results.first { it.id == "studio" }.notInterestedToken)
+        assertEquals(1, repository.menuCalls)
+    }
+
+    @Test fun failedMenuReadOffersRetryAndRecoveryClearsIt() = runTest {
+        val repository = MenuRepository(listOf(card("harbour"))).apply { menuError = java.io.IOException("offline") }
+        val vm = menuViewModel(repository)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.menuFailed)
+        assertFalse(vm.uiState.value.menuLoading)
+        repository.menuError = null
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.menuFailed)
+        val page = (vm.uiState.value.content as SearchContent.Results).page
+        assertEquals("token-harbour", page.results.first { it.id == "harbour" }.notInterestedToken)
+    }
+
+    @Test fun liveFeedbackRemovesTheCardAndOnlyItsOwnChannelCards() = runTest {
+        val repository = MenuRepository(listOf(card("harbour"), card("studio"), card("meadow", channelId = "openfield")))
+        val vm = menuViewModel(repository)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.DontRecommend))
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as SearchContent.Results).page
+        assertEquals(listOf("meadow"), page.results.map { it.id })
+        assertEquals(1, repository.feedback.size)
+        assertEquals("harbour", repository.feedback.single().first.id)
+        assertEquals(SearchVideoMenuAction.DontRecommend, repository.feedback.single().second)
+        assertEquals(AppNotice.Message("Removed from recommendations"), vm.actionNotices.first())
+        assertEquals(SearchOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun liveNotInterestedRemovesOnlyTheTargetCard() = runTest {
+        val repository = MenuRepository(listOf(card("harbour"), card("studio")))
+        val vm = menuViewModel(repository)
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.NotInterested))
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as SearchContent.Results).page
+        assertEquals(listOf("studio"), page.results.map { it.id })
+        assertEquals(1, repository.feedback.size)
+    }
+
+    @Test fun aMenuCapturedByAnotherSessionIsNeverReadOrWritten() = runTest {
+        val repository = MenuRepository(listOf(card("harbour", channelId = "northlight").copy(feedbackGeneration = 9)))
+        val vm = menuViewModel(repository) // session generation 2, card captured for 9
+        advanceUntilIdle()
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        advanceUntilIdle()
+        assertEquals(0, repository.menuCalls)
+        assertFalse(vm.uiState.value.menuLoading)
+        vm.onAction(SearchAction.OpenItemMenu("harbour"))
+        vm.onAction(SearchAction.MenuAction(SearchVideoMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertTrue(repository.feedback.isEmpty())
     }
 
 }

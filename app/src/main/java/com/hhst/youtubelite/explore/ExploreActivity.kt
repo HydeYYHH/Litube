@@ -60,8 +60,6 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
     private var loadJob: kotlinx.coroutines.Job? = null
     private var generation = 0
     private var sessionGeneration = com.hhst.youtubelite.data.media.MediaSession.snapshot().generation
-    /** Consecutive page appends that added nothing; bounded so empty cursors cannot loop. */
-    private var emptyAppends = 0
 
     /** Loaded category content survives tab switches; identity changes drop it. */
     private val pages = java.util.EnumMap<ExploreCategory, com.hhst.youtubelite.explore.domain.ExploreContent>(ExploreCategory::class.java)
@@ -111,6 +109,7 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
             is ExploreAction.LoadShelf -> loadShelf(action.index)
             is ExploreAction.OpenVideo -> navigation.trySend(ExploreNavigationRequest.Watch(action.videoId))
             is ExploreAction.OpenChannel -> navigation.trySend(ExploreNavigationRequest.Channel(action.channelId))
+            is ExploreAction.OpenPlaylist -> navigation.trySend(ExploreNavigationRequest.Playlist(action.playlistId))
             ExploreAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
             is ExploreAction.OpenVerification -> navigation.trySend(ExploreNavigationRequest.OpenVerification(action.challengeUrl))
         }
@@ -127,7 +126,6 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         loadJob?.cancel()
         cancelAppends()
         val request = ++generation
-        emptyAppends = 0
         consumedPages.remove(category)
         consumedShelves.keys.removeAll { it.first == category }
         _uiState.update { it.copy(content = ExploreContent.Loading) }
@@ -184,28 +182,29 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         key: String): ExploreContent.Ready {
         val looped = page.nextKey == key || page.nextKey in consumedPages[_uiState.value.category].orEmpty()
         val sections = current.page.sections.toMutableList()
-        for (section in page.sections) {
+        val incomingSections = if (sections.isNotEmpty() && page.sections.isEmpty() && (page.videos.isNotEmpty() || page.playlists.isNotEmpty()))
+            listOf(com.hhst.youtubelite.explore.domain.ExploreSection(null, page.videos, playlists = page.playlists)) else page.sections
+        for (section in incomingSections) {
             val index = sections.indexOfFirst {
-                it.title == section.title && it.videos.firstOrNull()?.id == section.videos.firstOrNull()?.id
+                it.title == section.title && (it.videos.firstOrNull()?.id?.let { first ->
+                    first == section.videos.firstOrNull()?.id
+                } ?: it.playlists.firstOrNull()?.id?.let { first -> first == section.playlists.firstOrNull()?.id }
+                    ?: (it.nextKey != null && it.nextKey == section.nextKey))
             }
             if (index < 0) sections += section
             else {
                 val previous = sections[index]
                 sections[index] = previous.copy(
                     videos = (previous.videos + section.videos).distinctBy { it.id },
+                    playlists = (previous.playlists + section.playlists).distinctBy { it.id },
                     nextKey = section.nextKey ?: previous.nextKey,
                 )
             }
         }
         val videos = (current.page.videos + page.videos).distinctBy { it.id }
-        // A cursor that keeps advancing without producing items is bounded: after
-        // two consecutive empty pages the list ends instead of scrolling forever.
-        val added = videos.size != current.page.videos.size || sections.size != current.page.sections.size ||
-            sections.zip(current.page.sections).any { (a, b) -> a.videos.size != b.videos.size }
-        emptyAppends = if (added) 0 else emptyAppends + 1
-        val stopOnEmpty = emptyAppends >= MAX_EMPTY_APPENDS
         return current.copy(page = current.page.copy(videos = videos, sections = sections,
-            nextKey = if (looped || stopOnEmpty) null else page.nextKey), append = AppendState.Idle)
+            playlists = (current.page.playlists + page.playlists).distinctBy { it.id },
+            nextKey = if (looped) null else page.nextKey), append = AppendState.Idle)
     }
 
     /** Shelf appends are scoped to the shelf's position plus the cursor that launched them. */
@@ -225,7 +224,9 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
                     visited.add(key)
                     updateShelf(index, key) {
                         val looped = result.nextKey == key || result.nextKey in visited
-                        it.copy(videos = (it.videos + result.videos).distinctBy { video -> video.id },
+                        val videos = (it.videos + result.videos).distinctBy { video -> video.id }
+                        it.copy(videos = videos,
+                            playlists = (it.playlists + result.playlists).distinctBy { playlist -> playlist.id },
                             nextKey = if (looped) null else result.nextKey,
                             append = AppendState.Idle)
                     }
@@ -280,9 +281,6 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
         }
     }
 
-    private companion object {
-        const val MAX_EMPTY_APPENDS = 2
-    }
 }
 
 /** The explore entry: four fixed category containers sharing one template. */
@@ -337,6 +335,7 @@ class ExploreActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     when (request) {
                         is ExploreNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@ExploreActivity, request.videoId))
                         is ExploreNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@ExploreActivity, request.channelId))
+                        is ExploreNavigationRequest.Playlist -> launchNavigation(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@ExploreActivity, request.playlistId))
                         is ExploreNavigationRequest.OpenVerification -> verificationLauncher.launch(
                             android.content.Intent(this@ExploreActivity, com.hhst.youtubelite.core.TrafficVerificationActivity::class.java)
                                 .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))

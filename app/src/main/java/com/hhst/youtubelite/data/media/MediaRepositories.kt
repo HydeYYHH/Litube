@@ -12,21 +12,60 @@ import com.hhst.youtubelite.playlist.domain.PlaylistPage as AppPlaylistPage
 import com.hhst.youtubelite.playlist.domain.PlaylistAppendPage as AppAppendPage
 import com.hhst.youtubelite.channel.domain.ChannelPage as AppChannelPage
 
-class MediaWatchRepository(private val client: MediaClient) : WatchRepository {
-    override suspend fun watch(videoId: String): AppWatchPage {
+class MediaWatchRepository(private val client: MediaClient,
+    private val shared: SharedWatchReads? = null) : WatchRepository {
+    private val menus = DeferredMenuCache()
+    override suspend fun watch(videoId: String): AppWatchPage = readWatch(videoId, fresh = false)
+    override suspend fun watchFresh(videoId: String): AppWatchPage = readWatch(videoId, fresh = true)
+
+    private suspend fun readWatch(videoId: String, fresh: Boolean): AppWatchPage {
         val (page, details) = client.readTogether(
-            { context, http -> loadWatch(videoId, context, http = http).requireValue() to context.generation },
+            { context, http ->
+                val core: CoreWatchPage = if (shared != null)
+                    shared.read(videoId, context, http, fresh) { id, ctx, httpClient ->
+                        loadWatch(id, ctx, http = httpClient)
+                    }.requireValue()
+                else loadWatch(videoId, context, http = http).requireValue()
+                Triple(core, context.generation, context.signedIn)
+            },
             { context, http -> loadPlayerDetails(videoId, context, http).value },
         )
-        return page.first.toAppWatchPage(videoId, details, page.second)
+        return page.first.toAppWatchPage(videoId, details, page.second, page.third)
+    }
+    override suspend fun menu(video: WatchRelated): WatchRelated {
+        val endpoint = video.menuEndpoint ?: return video
+        return client.readIdempotent { context, http ->
+            if (!context.signedIn || video.feedbackGeneration != context.generation)
+                throw kotlinx.coroutines.CancellationException("Session changed")
+            val key = DeferredMenuCache.Key(context.accountId, context.onBehalfOfUser, context.generation, video.id, endpoint)
+            val capabilities = menus.get(key) ?: loadMenu(MenuEndpoint(endpoint.panelId, endpoint.params), context, http)
+                .requireValue().let { actions ->
+                    DeferredMenuCache.Capabilities(System.currentTimeMillis(),
+                        actions.firstOrNull { it.kind == MenuActionKind.NotInterested }?.kindToken,
+                        actions.firstOrNull { it.kind == MenuActionKind.DontRecommendChannel }?.kindToken)
+                }.also { menus.put(key, it) }
+            video.copy(notInterestedToken = capabilities.notInterested, dontRecommendToken = capabilities.dontRecommend,
+                feedbackGeneration = context.generation)
+        }
     }
     override suspend fun next(videoId: String, cursor: String): RelatedPage = client.read { context, http ->
         val page = loadWatch(videoId, context, continuation = cursor, http = http).requireValue()
-        RelatedPage(page.related.filter { it.kind == "video" }.map(MediaItem::watchRelated), page.nextKey)
+        RelatedPage(page.related.filter { it.kind == "video" }.map { it.watchRelated(context.generation.takeIf { context.signedIn }) }, page.nextKey)
+    }
+    override suspend fun feedback(video: WatchRelated, action: WatchVideoMenuAction) = client.read { context, http ->
+        if (!context.signedIn) throw SignInRequiredException()
+        val token = when (action) {
+            WatchVideoMenuAction.NotInterested -> video.notInterestedToken
+            WatchVideoMenuAction.DontRecommend -> video.dontRecommendToken
+            else -> null
+        }
+        if (token.isNullOrBlank() || video.feedbackGeneration != context.generation) throw UnconfirmedActionException()
+        sendFeedback(token, context, http).requireValue()
+        Unit
     }
 }
 
-internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?, generation: Long? = null): AppWatchPage {
+internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?, generation: Long? = null, feedbackAllowed: Boolean = false): AppWatchPage {
     fun String?.present() = this?.takeIf { it.isNotBlank() }
     val title = title.present() ?: details?.title.present()
         ?: throw MediaException(RequestError(RequestFailure.PARSE, "missing_video_details"))
@@ -39,20 +78,24 @@ internal fun CoreWatchPage.toAppWatchPage(id: String, details: PlayerDetails?, g
         rating = when (rating) { "LIKE" -> VideoRating.Like; "DISLIKE" -> VideoRating.Dislike; else -> VideoRating.None },
         subscribed = subscribed == true, avatar = authorThumbnail.orEmpty(), commentsStatus = WatchCommentsStatus.Loading,
         tracking = details?.tracking, chatKey = chatKey, sessionGeneration = generation),
-        related.filter { it.kind == "video" }.map(MediaItem::watchRelated), nextKey)
+        related.filter { it.kind == "video" }.map { it.watchRelated(generation.takeIf { feedbackAllowed }) }, nextKey)
 
 }
 
-private fun MediaItem.watchRelated() = WatchRelated(id, title.orEmpty(), author.orEmpty(),
+private fun MediaItem.watchRelated(generation: Long? = null) = WatchRelated(id, title.orEmpty(), author.orEmpty(),
     channelId.orEmpty(), viewCount.orEmpty(), published.orEmpty(), duration.orEmpty(), thumbnail.orEmpty(),
-    if (live) "LIVE" else null, progressPercent?.div(100f), authorThumbnail.orEmpty())
+    if (live) "LIVE" else null, progressPercent?.div(100f), authorThumbnail.orEmpty(),
+    notInterestedToken = notInterestedToken().takeIf { generation != null },
+    dontRecommendToken = dontRecommendToken().takeIf { generation != null }, feedbackGeneration = generation,
+    menuEndpoint = menuEndpoint?.takeIf { generation != null }?.let {
+        com.hhst.youtubelite.home.domain.FeedMenuEndpoint(it.panelId, it.params)
+    })
 
-class MediaPlaylistRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
-    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : PlaylistRepository {
+class MediaPlaylistRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : PlaylistRepository {
     // First page only: painting requires just the head, so the page paints immediately and
     // appends from [playlistNext] instead of draining every continuation before first paint.
     override suspend fun playlist(id: String): AppPlaylistPage? {
-        if (id.startsWith("local:") || id == "WL" && useDeviceLibrary(local, source)) return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (id.startsWith("local:") || id == "WL" && useDeviceLibrary(local)) return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             local?.playlist(if (id == "WL") LocalLibraryStore.WATCH_LATER else id)
         }
         return client.read { context, http ->
@@ -83,7 +126,7 @@ class MediaPlaylistRepository(private val client: MediaClient, private val local
 }
 
 class MediaChannelRepository(private val client: MediaClient, private val posts: com.hhst.youtubelite.post.domain.PostRepository) : ChannelRepository {
-    override suspend fun channel(channelId: String): AppChannelPage = client.read { context, http ->
+    override suspend fun channel(channelId: String): AppChannelPage = client.readIdempotent { context, http ->
         val resolved = resolveChannel(channelId, context, http)
         val page = loadChannel(resolved, context, http = http).requireValue()
         // Optional tabs stay out of the first paint: the playlists tab and an unselected
@@ -107,7 +150,7 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
             playlistsDeferred = page.page.tabs.any { it.title.equals("Playlists", true) })
     }
 
-    override suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.read { context, http ->
+    override suspend fun playlists(channelId: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.readIdempotent { context, http ->
         val resolved = resolveChannel(channelId, context, http)
         val first = loadChannel(resolved, context, http = http).requireValue()
         val tab = first.page.tabs.firstOrNull { it.title.equals("Playlists", true) }
@@ -117,7 +160,7 @@ class MediaChannelRepository(private val client: MediaClient, private val posts:
             page.page.items.filter { it.kind == "playlist" }.map(MediaItem::playlistSummary), page.page.nextKey)
     }
 
-    override suspend fun playlistsNext(channelId: String, cursor: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.read { context, http ->
+    override suspend fun playlistsNext(channelId: String, cursor: String): com.hhst.youtubelite.library.domain.PlaylistCollectionPage = client.readIdempotent { context, http ->
         val resolved = resolveChannel(channelId, context, http)
         val page = loadChannel(resolved, context, continuation = cursor, http = http).requireValue()
         com.hhst.youtubelite.library.domain.PlaylistCollectionPage(

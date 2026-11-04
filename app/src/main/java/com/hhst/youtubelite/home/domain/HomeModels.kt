@@ -5,10 +5,22 @@ data class HomePage(
     val items: List<FeedItem>,
     val messages: List<String> = emptyList(),
     val nextKey: String? = null,
+    val catalog: HomeCatalog? = null,
+    val partialFailure: Boolean = false,
 )
+
+enum class HomeCatalog(val filter: String) {
+    Popular("All"), MusicCharts("Music charts"), Gaming("Gaming"), Sports("Sports"), News("News");
+
+    companion object {
+        val filters = entries.map { it.filter }
+        fun forFilter(filter: String) = entries.firstOrNull { it.filter == filter }
+    }
+}
 
 sealed interface FeedItem {
     val id: String
+    @kotlinx.serialization.Serializable
     data class Video(
         override val id: String,
         val title: String,
@@ -23,11 +35,16 @@ sealed interface FeedItem {
         val isNew: Boolean = false,
         val avatar: String? = null,
         /** The item's own not-interested feedback token, when the feed rendered one. */
-        val notInterestedToken: String? = null,
-        val dontRecommendToken: String? = null,
-        val feedbackGeneration: Long? = null,
+        @kotlinx.serialization.Transient val notInterestedToken: String? = null,
+        @kotlinx.serialization.Transient val dontRecommendToken: String? = null,
+        @kotlinx.serialization.Transient val feedbackGeneration: Long? = null,
+        @kotlinx.serialization.Transient val menuEndpoint: FeedMenuEndpoint? = null,
+        val short: Boolean = false,
     ) : FeedItem
     data class Mix(override val id: String, val title: String, val authors: String, val artwork: String, val palette: ThumbnailPalette) : FeedItem
+    data class Playlist(val summary: com.hhst.youtubelite.playlist.domain.PlaylistSummary) : FeedItem {
+        override val id: String get() = "playlist-${summary.id}"
+    }
     data class Shorts(override val id: String, val videos: List<Video>) : FeedItem
     data class Post(
         override val id: String, val author: String, val age: String, val text: String,
@@ -38,9 +55,15 @@ sealed interface FeedItem {
 
 data class ThumbnailPalette(val stackColor: Int, val badgeColor: Int)
 
+data class FeedMenuEndpoint(val panelId: String, val params: String) {
+    override fun toString() = "FeedMenuEndpoint"
+}
+
 interface HomeRepository {
     val filters: List<String> get() = HomeLayout.chips
     suspend fun loadHome(filter: String, continuation: String? = null): HomePage
+
+    suspend fun menu(video: FeedItem.Video): FeedItem.Video = video
 
     suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) = Unit
 }
@@ -48,20 +71,25 @@ interface HomeRepository {
 enum class AppendState { Idle, Loading, Failed }
 sealed interface HomeContent {
     data object Loading : HomeContent
-    data class Feed(val page: HomePage, val refreshing: Boolean = false, val append: AppendState = AppendState.Idle, val refreshFailed: Boolean = false) : HomeContent
+    data class Feed(val page: HomePage, val refreshing: Boolean = false, val append: AppendState = AppendState.Idle,
+        val refreshFailed: Boolean = false,
+        /** A user-visible refresh (pull, chip or identity change) may show the anchored indicator. */
+        val userRefresh: Boolean = false) : HomeContent
     /**
      * A real watch landed and recommendations may exist now: the empty card
      * stays painted while the quiet re-check runs (no Loading flash).
      */
     /** Blank [title]/[message] fall back to localized strings in the UI layer. */
-    data class Empty(val title: String = "", val message: String = "", val refreshing: Boolean = false) : HomeContent
+    data class Empty(val title: String = "", val message: String = "", val refreshing: Boolean = false,
+        val userRefresh: Boolean = false) : HomeContent
     data object Failed : HomeContent
 }
 
 sealed interface HomeOverlay {
     data object None : HomeOverlay
     data object Search : HomeOverlay
-    data class Menu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video) : HomeOverlay
+    data class Menu(val itemId: String, val kind: FeedMenuKind = FeedMenuKind.Video,
+        val loading: Boolean = false, val failed: Boolean = false) : HomeOverlay
     data class Save(
         val videoId: String,
         val newPlaylist: Boolean = false,
@@ -115,13 +143,14 @@ data class HomeUiState(
 
 enum class HomeDestination(val label: String) { Home("Home"), Shorts("Shorts"), Subscriptions("Subscriptions"), You("You") }
 enum class FeedMenuAction(val label: String) {
+    Queue("Add to queue"), Download("Download"),
     WatchLater("Save to Watch later"), SaveToPlaylist("Save to playlist"), Share("Share"),
     NotInterested("Not interested"), DontRecommend("Don't recommend channel"),
     SendFeedback("Send feedback"), ShowFewerShorts("Show fewer Shorts"), Report("Report"), SaveToLibrary("Save to Library"),
 }
 
 enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
-    Video(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share, FeedMenuAction.NotInterested, FeedMenuAction.DontRecommend)),
+    Video(listOf(FeedMenuAction.Queue, FeedMenuAction.Download, FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share, FeedMenuAction.NotInterested, FeedMenuAction.DontRecommend)),
     Short(listOf(FeedMenuAction.NotInterested, FeedMenuAction.SendFeedback)),
     Shorts(listOf(FeedMenuAction.ShowFewerShorts)),
     Post(listOf(FeedMenuAction.Report)),
@@ -130,7 +159,7 @@ enum class FeedMenuKind(val actions: List<FeedMenuAction>) {
 
 fun FeedMenuKind.productionActions(signedIn: Boolean = false, video: FeedItem.Video? = null): List<FeedMenuAction> = when (this) {
     FeedMenuKind.Video -> buildList {
-        addAll(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share))
+        addAll(listOf(FeedMenuAction.Queue, FeedMenuAction.Download, FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share))
         if (signedIn && !video?.notInterestedToken.isNullOrBlank()) add(FeedMenuAction.NotInterested)
         if (signedIn && !video?.dontRecommendToken.isNullOrBlank()) add(FeedMenuAction.DontRecommend)
     }
@@ -147,6 +176,7 @@ sealed interface HomeNavigationRequest {
     data class Watch(val videoId: String) : HomeNavigationRequest
     data class Shorts(val itemId: String) : HomeNavigationRequest
     data class Channel(val channelId: String) : HomeNavigationRequest
+    data class Playlist(val playlistId: String) : HomeNavigationRequest
     data class Destination(val destination: HomeDestination) : HomeNavigationRequest
     data class MenuAction(val itemId: String, val action: FeedMenuAction) : HomeNavigationRequest
     data class SaveToWatchLater(val videoId: String) : HomeNavigationRequest

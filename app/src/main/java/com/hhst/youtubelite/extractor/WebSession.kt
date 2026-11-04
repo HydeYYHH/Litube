@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 
 /** Account state captured with the page configuration. */
 enum class WebAccount { ANONYMOUS, AUTHENTICATED, PREMIUM }
@@ -29,7 +29,9 @@ class YoutubeWebSession(
     configuration: JsonObject,
     private val credentials: SessionCredentials,
 ) {
-    private val configuration: JsonObject = configuration.deepCopy()
+    // kotlinx JsonElement values are effectively immutable, so the handed-out
+    // snapshot stays unaffected by later captures without a defensive copy.
+    private val configuration: JsonObject = configuration
     /** The page's WEB client version, when the captured configuration is a WEB one. */
     val webClientVersion: String?
 
@@ -40,14 +42,14 @@ class YoutubeWebSession(
         this.webClientVersion = this.configuration.obj("INNERTUBE_CONTEXT")
             .obj("client")
             .takeIf { it.text("clientName") == "WEB" }?.text("clientVersion")
-        this.videoBoundGvs = this.configuration.obj("WEB_PLAYER_CONTEXT_CONFIGS").entrySet()
+        this.videoBoundGvs = this.configuration.obj("WEB_PLAYER_CONTEXT_CONFIGS").entries
             .mapNotNull { it.value as? JsonObject }.any { value ->
                 queryFlags(value.text("serializedExperimentFlags", ""))
                     .get("html5_generate_content_po_token") == "true"
             }
     }
 
-    fun configuration(): JsonObject = configuration.deepCopy()
+    fun configuration(): JsonObject = configuration
 
     fun cookies(origin: String): String = credentials.cookies(origin)
 

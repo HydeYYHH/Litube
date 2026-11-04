@@ -166,6 +166,7 @@
     <string name="copy">Копія</string>
     <string name="copied">Скапіравана</string>
     <string name="copy_all">Капіяваць усё</string>
+    <string name="cast_searching">Пошук…</string>
     <string name="queue_now_playing">Зараз іграе</string>
     <string name="clear_queue_confirm">Ачысціць усю чаргу?</string>
     <string name="ok">Добра</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Закрыць</string>
     <string name="verification_completed">Праверка скончаная. Паўтор…</string>
     <string name="verification_still_blocked">Пасля праверкі ўсё яшчэ заблакавана. Паспрабуйце пазней.</string>
+    <string name="comments_title">Каментары</string>
+    <string name="comments_sort_top">Найлепшыя каментары</string>
+    <string name="comments_sort_newest">Спачатку новыя</string>
+    <string name="comments_sort_chip_top">Найлепшыя</string>
+    <string name="comments_sort_chip_newest">Новыя</string>
+    <string name="comments_composer_add">Дадаць каментар</string>
+    <string name="comments_composer_reply">Адказаць</string>
+    <string name="comments_composer_edit">Змяніць каментар</string>
+    <string name="comments_composer_text_hint">Тэкст каментара</string>
+    <string name="comments_composer_text_edit_hint">Змяніць тэкст каментара</string>
+    <string name="comments_composer_submit">Адправіць</string>
+    <string name="comments_composer_sending">Адпраўка…</string>
+    <string name="comments_composer_save">Захаваць</string>
+    <string name="comments_delete_title">Выдаліць</string>
+    <string name="comments_show_more_replies">Паказаць больш адказаў</string>
+    <string name="comments_load_more_failed">Не ўдалося загрузіць больш каментароў</string>
+    <string name="comments_hide_replies">Схаваць адказы</string>
+    <string name="home_music_charts">Музычныя чарты</string>
+    <string name="home_popular_gaming">Папулярнае ў гульнях</string>
+    <string name="home_popular_sports">Папулярнае ў спорце</string>
+    <string name="home_top_news">Галоўныя навіны</string>
 </resources>

@@ -166,6 +166,7 @@
     <string name="copy">Copiar</string>
     <string name="copied">Copiado</string>
     <string name="copy_all">Copiar tudo</string>
+    <string name="cast_searching">A pesquisar…</string>
     <string name="queue_now_playing">Reproduzindo</string>
     <string name="clear_queue_confirm">Limpar toda a fila?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Fechar</string>
     <string name="verification_completed">Verificação concluída. A tentar novamente…</string>
     <string name="verification_still_blocked">Continua bloqueado após a verificação. Tente novamente mais tarde.</string>
+    <string name="comments_title">Comentários</string>
+    <string name="comments_sort_top">Comentários principais</string>
+    <string name="comments_sort_newest">Mais recentes primeiro</string>
+    <string name="comments_sort_chip_top">Principais</string>
+    <string name="comments_sort_chip_newest">Recentes</string>
+    <string name="comments_composer_add">Adiciona um comentário</string>
+    <string name="comments_composer_reply">Responder</string>
+    <string name="comments_composer_edit">Editar o comentário</string>
+    <string name="comments_composer_text_hint">Texto do comentário</string>
+    <string name="comments_composer_text_edit_hint">Edita o texto do comentário</string>
+    <string name="comments_composer_submit">Comentar</string>
+    <string name="comments_composer_sending">A enviar…</string>
+    <string name="comments_composer_save">Guardar</string>
+    <string name="comments_delete_title">Eliminar</string>
+    <string name="comments_show_more_replies">Mostrar mais respostas</string>
+    <string name="comments_load_more_failed">Não foi possível carregar mais comentários</string>
+    <string name="comments_hide_replies">Ocultar respostas</string>
+    <string name="home_music_charts">Tops de música</string>
+    <string name="home_popular_gaming">Tendências nos videojogos</string>
+    <string name="home_popular_sports">Tendências no desporto</string>
+    <string name="home_top_news">Principais notícias</string>
 </resources>

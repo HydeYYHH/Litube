@@ -42,14 +42,132 @@ class PlaybackWatchReportingTest {
 
     private fun video(id: String) = ReportingVideo(id, "Video $id", "Author", "channel-$id", "image", tracking)
 
-    private fun reporting(): PlaybackWatchReporting {
+    private fun reporting(clock: () -> Long = { System.nanoTime() / 1_000_000L },
+        reloadVideo: suspend (String) -> ReportingVideo? = { null }): PlaybackWatchReporting {
         val client = MediaClient(okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
             requests.add(HttpRequest(chain.request().method, chain.request().url.toString()))
             okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
                 .code(200).message("OK").body("".toResponseBody()).build()
         }.build(), { MediaSession.snapshot() })
         return PlaybackWatchReporting(client, { library }, CoroutineScope(Dispatchers.Default),
-            WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), { WatchHistory(http) }).also { activeReporter = it })
+            WatchTimeReporter(client, CoroutineScope(Dispatchers.Default), { WatchHistory(http) }).also { activeReporter = it },
+            reloadVideo, clock)
+    }
+
+    @Test fun identitySwitchDuringPlaybackReadsFreshEndpointsBeforeReportingAgain() = kotlinx.coroutines.runBlocking {
+        val previousFixtures = ContentSource.fixtures
+        ContentSource.fixtures = false
+        anonymousVisitor()
+        var reads = 0
+        val reporting = reporting { id ->
+            reads++
+            video(id).copy(tracking = PlayerTracking(
+                "https://www.youtube.com/api/stats/playback?ei=new",
+                "https://www.youtube.com/api/stats/watchtime?ei=new"),
+                sessionGeneration = MediaSession.snapshot().generation)
+        }
+        try {
+            reporting.armTracking("v1", tracking)
+            reporting.tick(PlaybackSample("v1", 0, 100_000, true))
+            awaitRequests(1)
+            MediaSession.signOut()
+            MediaSession.rememberVisitor("next-visitor", MediaSession.snapshot().generation)
+            reporting.tick(PlaybackSample("v1", 5_000, 100_000, true))
+            reporting.awaitContextRefresh()
+            reporting.tick(PlaybackSample("v1", 6_000, 100_000, true))
+            awaitRequests(2)
+            assertTrue(requests.last().url.contains("ei=new"))
+            assertTrue(requests.last().url.contains("cmt=6.0"))
+            reporting.tick(PlaybackSample("v1", 16_000, 100_000, true))
+            awaitRequests(3)
+            assertTrue(requests.last().url.contains("st=6.0"))
+            assertEquals(1, reads)
+        } finally { reporting.detach(); ContentSource.fixtures = previousFixtures }
+    }
+
+    @Test fun aLateIdentityRefreshCannotReplaceTheNextVideo() = kotlinx.coroutines.runBlocking {
+        val previousFixtures = ContentSource.fixtures
+        ContentSource.fixtures = false
+        anonymousVisitor()
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val reporting = reporting { id ->
+            started.complete(Unit)
+            release.await()
+            video(id).copy(sessionGeneration = MediaSession.snapshot().generation)
+        }
+        try {
+            reporting.armTracking("v1", tracking)
+            MediaSession.signOut()
+            MediaSession.rememberVisitor("next-visitor", MediaSession.snapshot().generation)
+            reporting.tick(PlaybackSample("v1", 5_000, 100_000, true))
+            started.await()
+            reporting.armTracking("v2", tracking.copy(playbackUrl = tracking.playbackUrl + "&source=current"))
+            reporting.tick(PlaybackSample("v2", 0, 100_000, true))
+            release.complete(Unit)
+            reporting.awaitContextRefresh()
+            awaitRequests(1)
+            reporting.tick(PlaybackSample("v2", 10_000, 100_000, true))
+            awaitRequests(2)
+            assertTrue(requests.first().url.contains("source=current"))
+            assertTrue(requests.all { it.url.contains("docid=v2") })
+        } finally { release.complete(Unit); reporting.detach(); ContentSource.fixtures = previousFixtures }
+    }
+
+    @Test fun aFailedIdentityRefreshRetriesAfterTheBackoff() = kotlinx.coroutines.runBlocking {
+        val previousFixtures = ContentSource.fixtures
+        ContentSource.fixtures = false
+        anonymousVisitor()
+        var now = 0L
+        var reads = 0
+        val reporting = reporting(clock = { now }) { id ->
+            reads++
+            if (reads == 1) throw java.io.IOException("offline")
+            video(id).copy(sessionGeneration = MediaSession.snapshot().generation)
+        }
+        try {
+            reporting.armTracking("v1", tracking)
+            MediaSession.signOut()
+            MediaSession.rememberVisitor("next-visitor", MediaSession.snapshot().generation)
+            reporting.tick(PlaybackSample("v1", 0, 100_000, true))
+            reporting.awaitContextRefresh()
+            assertEquals(1, reads)
+            now = 29_999
+            reporting.tick(PlaybackSample("v1", 5_000, 100_000, true))
+            reporting.awaitContextRefresh()
+            assertEquals(1, reads)
+            now = 30_000
+            reporting.tick(PlaybackSample("v1", 10_000, 100_000, true))
+            reporting.awaitContextRefresh()
+            reporting.tick(PlaybackSample("v1", 11_000, 100_000, true))
+            awaitRequests(1)
+            assertEquals(2, reads)
+            assertTrue(requests.single().url.contains("cmt=11.0"))
+        } finally { reporting.detach(); ContentSource.fixtures = previousFixtures }
+    }
+
+    @Test fun detachAllowsAnIdentityRefreshWhenPlaybackReattaches() = kotlinx.coroutines.runBlocking {
+        val previousFixtures = ContentSource.fixtures
+        ContentSource.fixtures = false
+        anonymousVisitor()
+        var reads = 0
+        val reporting = reporting { id ->
+            reads++
+            if (reads == 1) null else video(id).copy(sessionGeneration = MediaSession.snapshot().generation)
+        }
+        try {
+            reporting.armTracking("v1", tracking)
+            MediaSession.signOut()
+            MediaSession.rememberVisitor("next-visitor", MediaSession.snapshot().generation)
+            reporting.tick(PlaybackSample("v1", 0, 100_000, true))
+            reporting.awaitContextRefresh()
+            reporting.detach()
+            reporting.tick(PlaybackSample("v1", 10_000, 100_000, true))
+            reporting.awaitContextRefresh()
+            reporting.tick(PlaybackSample("v1", 11_000, 100_000, true))
+            awaitRequests(1)
+            assertEquals(2, reads)
+        } finally { reporting.detach(); ContentSource.fixtures = previousFixtures }
     }
 
     private fun awaitRequests(count: Int) {

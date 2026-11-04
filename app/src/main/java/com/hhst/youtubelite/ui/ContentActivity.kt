@@ -37,7 +37,8 @@ abstract class ContentActivity : NativeActivity() {
                         com.hhst.youtubelite.ui.theme.AppTheme {
                             BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                                 MiniPlayerWindow(maxWidth.value.toInt(), 56, store, state.controlsVisible,
-                                    vm::onToggleControls, onDismiss = vm::onMiniClose) {
+                                    vm::onToggleControls, onDismiss = vm::onMiniClose,
+                                    initialBounds = com.hhst.youtubelite.navigation.WatchTransition.miniBounds) {
                                     WatchPlayer(Modifier.fillMaxSize(), vm::onMiniRestore)
                                 }
                             }

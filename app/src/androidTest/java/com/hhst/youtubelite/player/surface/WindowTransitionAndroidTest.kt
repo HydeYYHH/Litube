@@ -20,7 +20,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.hhst.youtubelite.ui.theme.AppTheme
-import com.tencent.mmkv.MMKV
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -28,8 +27,50 @@ import org.junit.Test
 class WindowTransitionAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun miniSwipeFollowsBothAxesAndFinishesOnlyAfterSettling() {
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(compose.activity, "mini-swipe").apply { clearAll() })
+        var mini by mutableStateOf(false)
+        var handle: FullscreenSwipeHandle? = null
+        var revealed = false
+        var finished = 0
+        var surfaces = 0
+        var density = 1f
+        compose.setContent { AppTheme {
+            density = LocalDensity.current.density
+            MiniPlayerWindow(LocalConfiguration.current.screenWidthDp, 0, store, false, {},
+                mini = mini, embeddedTopDp = 24, embeddedHeightDp = 200,
+                onMiniSwipe = { mini = true }, onMiniDragChanged = { revealed = it },
+                onMiniSwipeFinished = { finished++ }, modifier = Modifier.size(390.dp, 600.dp)) {
+                if (!mini) handle = LocalFullscreenSwipeHandle.current
+                Box(Modifier.fillMaxSize().testTag("window")) {
+                    AndroidView(factory = { context -> surfaces++; SurfaceView(context) }, modifier = Modifier.fillMaxSize())
+                }
+            }
+        } }
+        compose.waitForIdle()
+        val initial = compose.onNodeWithTag("window").fetchSemanticsNode().boundsInRoot
+        compose.runOnIdle { handle!!.horizontal = 20 * density; handle!!.drag(100 * density) }
+        compose.waitForIdle()
+        val held = compose.onNodeWithTag("window").fetchSemanticsNode().boundsInRoot
+        assertEquals(initial.left + 20*density, held.left, 2f)
+        assertEquals(initial.top + 100*density, held.top, 2f)
+        assertTrue(revealed)
+        assertEquals(0, finished)
+        compose.runOnIdle { handle!!.end(false) }
+        compose.waitForIdle()
+        assertFalse(revealed)
+        assertFalse(mini)
+        compose.runOnIdle { handle!!.horizontal = 0f; handle!!.drag(200*density) }
+        compose.waitForIdle()
+        compose.runOnIdle { handle!!.release(200*density, 0f) }
+        compose.waitForIdle()
+        assertTrue(mini)
+        assertEquals(1, finished)
+        assertEquals(1, surfaces)
+    }
+
     @Test fun inactivePipBoundsDoNotOverwriteMiniPlacement() {
-        val store = MiniPlayerStore(MMKV.mmkvWithID("transition-placement")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "transition-placement").apply { clearAll() })
         store.save(220, -180f, -150f)
         var mini by mutableStateOf(true)
         var pip by mutableStateOf(false)
@@ -59,7 +100,7 @@ class WindowTransitionAndroidTest {
     }
 
     @Test fun fullscreenFollowsFingerAndCancelsWithoutReplacingSurface() {
-        val store = MiniPlayerStore(MMKV.mmkvWithID("transition-fullscreen")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "transition-fullscreen").apply { clearAll() })
         var fullscreen by mutableStateOf(false)
         var enabled by mutableStateOf(true)
         var density = 1f
@@ -68,7 +109,7 @@ class WindowTransitionAndroidTest {
         compose.setContent { AppTheme {
             density = LocalDensity.current.density
             MiniPlayerWindow(LocalConfiguration.current.screenWidthDp, 0, store, false, {}, mini = false,
-                fillsWindow = fullscreen, embeddedTopDp = 24, embeddedHeightDp = 200,
+                fillsWindow = fullscreen, embeddedTopDp = 100, embeddedHeightDp = 200,
                 modifier = Modifier.size(LocalConfiguration.current.screenWidthDp.dp, 600.dp).testTag("root")) {
                 handle = LocalFullscreenSwipeHandle.current
                 val swipe = handle
@@ -92,8 +133,9 @@ class WindowTransitionAndroidTest {
         root.performTouchInput { down(embedded.center); moveBy(Offset(0f, -50*density)) }
         compose.waitForIdle()
         val preview = bounds()
-        assertTrue("Player must grow before release", preview.height > embedded.height + 10*density)
-        assertTrue(preview.height < 600*density)
+        assertEquals("Drag keeps the player size", embedded.height, preview.height, 2f)
+        assertEquals(embedded.top, preview.top, 2f)
+        assertTrue(requireNotNull(handle).pictureScale > 1f)
         assertFalse(fullscreen)
         root.performTouchInput { up() }
         compose.waitForIdle()
@@ -102,11 +144,12 @@ class WindowTransitionAndroidTest {
         val full = bounds()
         root.performTouchInput { down(full.center); moveBy(Offset(0f, 80*density)) }
         compose.waitForIdle()
-        assertTrue(bounds().height < full.height)
+        assertEquals(full.top + 80*density, bounds().top, 2f)
         root.performTouchInput { up() }
         compose.waitForIdle()
         assertFalse(fullscreen)
         assertEquals(embedded.height, bounds().height, 2f)
+        assertEquals(1f, requireNotNull(handle).pictureScale, 0.001f)
         root.performTouchInput { down(bounds().center); moveBy(Offset(0f, -50*density)) }
         compose.waitForIdle()
         compose.runOnIdle { enabled = false }

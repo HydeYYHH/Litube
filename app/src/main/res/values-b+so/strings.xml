@@ -166,6 +166,7 @@
     <string name="copy">Nuqul</string>
     <string name="copied">La koobiyeeyay</string>
     <string name="copy_all">Dhammaan koobiyi</string>
+    <string name="cast_searching">Raadinaya…</string>
     <string name="queue_now_playing">Hadda ciyaaraya</string>
     <string name="clear_queue_confirm">Nadiifi safka oo dhan?</string>
     <string name="ok">Waayahay</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Xir</string>
     <string name="verification_completed">Xaqiijintii waa la dhameeyay. Dib ayaa loo isku dayayaa…</string>
     <string name="verification_still_blocked">Weli waa la xannibay xaqiijintii kadib. Mar kale isku day wakhti dambe.</string>
+    <string name="comments_title">Faallooyinka</string>
+    <string name="comments_sort_top">Faallooyinka ugu sarreeya</string>
+    <string name="comments_sort_newest">Ugu cusub marka hore</string>
+    <string name="comments_sort_chip_top">Ugu sarreeya</string>
+    <string name="comments_sort_chip_newest">Cusub</string>
+    <string name="comments_composer_add">Faallo ku dar</string>
+    <string name="comments_composer_reply">Jawaab</string>
+    <string name="comments_composer_edit">Tafatir faallada</string>
+    <string name="comments_composer_text_hint">Qoraalka faallada</string>
+    <string name="comments_composer_text_edit_hint">Tafatir qoraalka faallada</string>
+    <string name="comments_composer_submit">Faallo samee</string>
+    <string name="comments_composer_sending">La diraayaa…</string>
+    <string name="comments_composer_save">Kaydi</string>
+    <string name="comments_delete_title">Tirtir</string>
+    <string name="comments_show_more_replies">Muuji jawaabo dheeraad ah</string>
+    <string name="comments_load_more_failed">Lama soo dejisan faallooyin dheeraad ah</string>
+    <string name="comments_hide_replies">Qari jawaabaha</string>
+    <string name="home_music_charts">Jaantusyada muusiga</string>
+    <string name="home_popular_gaming">Ciyaaraha caanka ah</string>
+    <string name="home_popular_sports">Isboortiga caanka ah</string>
+    <string name="home_top_news">Wararka ugu waaweyn</string>
 </resources>

@@ -166,6 +166,7 @@
     <string name="copy">Copi</string>
     <string name="copied">Copi</string>
     <string name="copy_all">Copïwch y cyfan</string>
+    <string name="cast_searching">Yn chwilio…</string>
     <string name="queue_now_playing">Yn awr yn chwarae</string>
     <string name="clear_queue_confirm">Clirio\'r ciw cyfan?</string>
     <string name="ok">Iawn</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Cau</string>
     <string name="verification_completed">Mae\'r gwiriad wedi gorffen. Yn ceisio eto…</string>
     <string name="verification_still_blocked">O hyd wedi ei rwystro ar ôl gwirio. Rhowch gynnig arall arni yn nes ymlaen.</string>
+    <string name="comments_title">Sylwadau</string>
+    <string name="comments_sort_top">Sylwadau gorau</string>
+    <string name="comments_sort_newest">Diweddaraf yn gyntaf</string>
+    <string name="comments_sort_chip_top">Gorau</string>
+    <string name="comments_sort_chip_newest">Diweddaraf</string>
+    <string name="comments_composer_add">Ychwanegu sylw</string>
+    <string name="comments_composer_reply">Ateb</string>
+    <string name="comments_composer_edit">Golygu\'r sylw</string>
+    <string name="comments_composer_text_hint">Testun y sylw</string>
+    <string name="comments_composer_text_edit_hint">Golygu testun y sylw</string>
+    <string name="comments_composer_submit">Sylweidiwch</string>
+    <string name="comments_composer_sending">Wrthi\'n anfon…</string>
+    <string name="comments_composer_save">Cadw</string>
+    <string name="comments_delete_title">Dileu</string>
+    <string name="comments_show_more_replies">Dangos mwy o atebion</string>
+    <string name="comments_load_more_failed">Methu llwytho mwy o sylwadau</string>
+    <string name="comments_hide_replies">Cuddio atebion</string>
+    <string name="home_music_charts">Siartiau cerddoriaeth</string>
+    <string name="home_popular_gaming">Yn boblogaidd mewn gemau</string>
+    <string name="home_popular_sports">Yn boblogaidd mewn chwaraeon</string>
+    <string name="home_top_news">Prif newyddion</string>
 </resources>

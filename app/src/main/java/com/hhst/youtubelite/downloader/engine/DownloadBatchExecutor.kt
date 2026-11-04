@@ -11,6 +11,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 /**
@@ -25,15 +27,33 @@ class DownloadBatchExecutor(
     maxConcurrent: Int = DownloadSettings.MAX_CONCURRENT_ITEMS,
 ) {
     private val gate = Semaphore(maxConcurrent.coerceAtLeast(1))
+    private val runs = mutableMapOf<Pair<String, DownloadWorkKind>, BatchRun>()
 
-    suspend fun executeTransfer(batchId: String) {
+    suspend fun executeTransfer(batchId: String) = runExclusive(batchId, DownloadWorkKind.TRANSFER) {
         runOwned(batchId) { transferOne(it, batchId) }
         drain(batchId, drainable = ::drainableTransfer) { transferOne(it, batchId) }
     }
 
-    suspend fun executeFinalize(batchId: String) {
+    suspend fun executeFinalize(batchId: String) = runExclusive(batchId, DownloadWorkKind.FINALIZE) {
         runOwned(batchId) { finalizeOne(it) }
         drain(batchId, drainable = ::drainableFinalize) { finalizeOne(it) }
+    }
+
+    private suspend fun runExclusive(batchId: String, kind: DownloadWorkKind, block: suspend () -> Unit) {
+        val key = batchId to kind
+        val run = synchronized(runs) { runs.getOrPut(key, ::BatchRun).also { it.users++ } }
+        try {
+            run.mutex.withLock { block() }
+        } finally {
+            synchronized(runs) {
+                if (--run.users == 0) runs.remove(key)
+            }
+        }
+    }
+
+    private class BatchRun {
+        val mutex = Mutex()
+        var users = 0
     }
 
     private suspend fun runOwned(batchId: String, block: suspend (String) -> Unit) {

@@ -37,7 +37,7 @@ internal fun SearchOverlay(state: HomeUiState, onAction: (HomeAction) -> Unit,
 
 @Composable
 internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = FeedMenuKind.Video, live: Boolean = false,
-    signedIn: Boolean = false, video: FeedItem.Video? = null) {
+    signedIn: Boolean = false, video: FeedItem.Video? = null, state: HomeOverlay.Menu? = null) {
     val rows = kind.visibleActions(live, signedIn, video)
     MenuBottomSheet(
         items = rows.map { MenuSheetItem(it.icon(), it.label) },
@@ -45,10 +45,21 @@ internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = Feed
         onSelect = { index -> onAction(HomeAction.MenuSelected(rows[index])) },
         tag = "video-menu",
         paneTitle = "Video actions",
+        header = if (state?.loading == true || state?.failed == true) ({
+            Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+                if (state.loading) Box(Modifier.testTag("home-menu-loading")) { LoadingSpinner() }
+                else AppText(androidx.compose.ui.res.stringResource(R.string.retry), size = 14, line = 20,
+                    modifier = Modifier.testTag("home-menu-retry").clickable(role = Role.Button) {
+                        onAction(HomeAction.OpenMenu(state.itemId, state.kind))
+                    }.padding(horizontal = 16.dp, vertical = 12.dp))
+            }
+        }) else null,
     )
 }
 
 private fun FeedMenuAction.icon(): AppIcon = when (this) {
+    FeedMenuAction.Queue -> AppIcon.QueueAdd
+    FeedMenuAction.Download -> AppIcon.Download
     FeedMenuAction.WatchLater -> AppIcon.Clock
     FeedMenuAction.SaveToPlaylist -> AppIcon.Bookmark
     FeedMenuAction.Share -> AppIcon.Share

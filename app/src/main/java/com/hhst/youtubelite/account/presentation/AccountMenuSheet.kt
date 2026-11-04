@@ -69,13 +69,17 @@ fun AccountMenuHeader(account: AccountProfile, onOpenChannel: () -> Unit) {
     }
 }
 
-/** Native account switcher: the session's cached accounts plus the add-account entry. */
+/** Native account switcher: the "On this device" identity, the session's cached
+ *  accounts plus the add-account entry. Selecting the device row switches the
+ *  whole app to anonymous; the signed-in account stays available above. */
 @Composable
 fun AccountSwitchSheet(
     accounts: List<AccountItem>,
     onSelect: (String) -> Unit,
     onAddAccount: () -> Unit,
     onDismiss: () -> Unit,
+    deviceSelected: Boolean = false,
+    onUseDevice: () -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(DesignTokens.MenuScrim).clickable { onDismiss() }
         .appDescription(R.string.a11y_close_menu))
@@ -92,6 +96,28 @@ fun AccountSwitchSheet(
         ) {
             AppText("Switch account", size = 16, line = 22, weight = FontWeight.Medium,
                 modifier = Modifier.padding(start = MenuSheetLayout.RowStart.dp, top = 16.dp, bottom = 8.dp))
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
+                    .clickable(enabled = !deviceSelected, role = Role.Button, onClick = onUseDevice)
+                    .testTag("account-switch-device")
+                    .padding(start = MenuSheetLayout.RowStart.dp, end = MenuSheetLayout.RowStart.dp,
+                        top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(32.dp).clip(CircleShape).background(DesignTokens.StateLayer),
+                    contentAlignment = Alignment.Center) {
+                    AppIcon(AppIcon.Device, color = DesignTokens.Ink, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    AppText("On this device", size = 14, line = 20, weight = FontWeight.Medium, maxLines = 1)
+                    AppText("Browse anonymously; the account stays signed in", size = 12, line = 16,
+                        color = DesignTokens.Secondary, maxLines = 1)
+                }
+                if (deviceSelected) {
+                    AppIcon(AppIcon.Check, color = DesignTokens.Secondary, modifier = Modifier.size(20.dp))
+                }
+            }
             accounts.forEach { account ->
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)

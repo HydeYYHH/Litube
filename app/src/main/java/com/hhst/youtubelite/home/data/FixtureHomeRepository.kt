@@ -23,6 +23,7 @@ class FixtureHomeRepository(private val scenario: HomeScenario = HomeScenario.Em
     private fun duplicate(item: FeedItem): FeedItem = when (item) {
         is FeedItem.Video -> item.copy(id = "${item.id}-page2")
         is FeedItem.Mix -> item.copy(id = "${item.id}-page2")
+        is FeedItem.Playlist -> item.copy(summary = item.summary.copy(id = "${item.summary.id}-page2"))
         is FeedItem.Shorts -> item.copy(id = "${item.id}-page2")
         is FeedItem.Post -> item.copy(id = "${item.id}-page2")
     }

@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
@@ -29,7 +29,7 @@ class ExtractionFailureTest {
             contextCalls.incrementAndGet()
             if (failContext) throw failure
             val session = YoutubeWebSession("test", WebAccount.ANONYMOUS, 0, null, null, null, null,
-                "agent", 0, null, "test", JsonObject()) { "" }
+                "agent", 0, null, "test", JsonObject(emptyMap())) { "" }
             val transport = object : ExtractionTransport {
                 override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse = throw failure
                 override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray): PageResponse = throw failure

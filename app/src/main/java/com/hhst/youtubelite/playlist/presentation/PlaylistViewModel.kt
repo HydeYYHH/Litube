@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.playlist.data.PlaylistScenario
 import com.hhst.youtubelite.playlist.domain.*
+import com.hhst.youtubelite.watch.domain.toProvisional
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -128,7 +129,10 @@ class PlaylistViewModel(
                         savedState["descriptionExpanded"] = expanded
                         state.update { it.copy(descriptionExpanded = expanded) }
                     }
-                    is PlaylistAction.OpenVideo -> page.entries.find { it.id == action.entryId }?.let { send(PlaylistNavigationRequest.Watch(it.videoId)) }
+                    is PlaylistAction.OpenVideo -> page.entries.find { it.id == action.entryId }?.let {
+                        com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(it.toProvisional())
+                        send(PlaylistNavigationRequest.Watch(it.videoId))
+                    }
                     is PlaylistAction.OpenVideoMenu -> if (page.entries.any { it.id == action.entryId }) overlay(PlaylistOverlay.VideoMenu(action.entryId))
                     is PlaylistAction.VideoMenuAction -> {
                         val entryId = (state.value.overlay as? PlaylistOverlay.VideoMenu)?.entryId ?: return

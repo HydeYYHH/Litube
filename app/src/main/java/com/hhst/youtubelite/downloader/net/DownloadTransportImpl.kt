@@ -77,7 +77,7 @@ class DownloadTransportImpl(
     private val calls = ConcurrentHashMap<String, Call>()
 
     override fun cancelInFlight(taskId: String) {
-        calls.remove(taskId)?.cancel()
+        calls[taskId]?.cancel()
     }
 
     override suspend fun downloadComponent(
@@ -472,7 +472,7 @@ class DownloadTransportImpl(
                 throw cancelled
             } catch (io: IOException) {
                 if (io.message == "MEDIA_SESSION_CHANGED") return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
-                if (isCancelled(taskId, io) || !coroutineContext.isActive) return WriteOutcome.Cancelled
+                if (call.isCanceled() || !coroutineContext.isActive) return WriteOutcome.Cancelled
                 return WriteOutcome.Failed(
                     if (FileIntegrity.isNoSpace(io)) "ENOSPC" else (io.message ?: "io"),
                 )

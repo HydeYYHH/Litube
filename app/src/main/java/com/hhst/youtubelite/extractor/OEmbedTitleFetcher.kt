@@ -1,11 +1,11 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.Gson
 import java.net.URLEncoder
-import com.google.gson.JsonObject
 import com.hhst.youtubelite.core.Constants
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -15,7 +15,6 @@ import okhttp3.Request
  */
 class OEmbedTitleFetcher(
     client: OkHttpClient,
-    private val gson: Gson = Gson(),
 ) {
     private val http = client.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -58,8 +57,8 @@ class OEmbedTitleFetcher(
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@runCatching null
                     val body = response.body?.string() ?: return@runCatching null
-                    val json = runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
-                    json?.get("title")?.takeIf { !it.isJsonNull }?.asString
+                    val json = runCatching { parseJson(body) as? JsonObject }.getOrNull()
+                    json?.get("title")?.asText
                         ?.takeIf { it.isNotBlank() }
                 }
             }.getOrNull()

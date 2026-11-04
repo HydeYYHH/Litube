@@ -14,7 +14,6 @@ import com.hhst.youtubelite.downloader.engine.DownloadNotificationWatcher
 import com.hhst.youtubelite.extractor.EjsRuntimeProcess
 import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
-import com.tencent.mmkv.MMKV
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
@@ -35,8 +34,7 @@ class App : Application(), Configuration.Provider {
         super.onCreate()
         AppLog.initialize(this)
         if (EjsRuntimeProcess.initialize(this)) return
-        MMKV.initialize(this)
-        com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.MmkvAuthStore(this)) {
+        com.hhst.youtubelite.data.media.MediaSession.initialize(com.hhst.youtubelite.data.media.PreferencesAuthStore(this)) {
             get<com.hhst.youtubelite.extension.ExtensionManager>()
                 .isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.PRIVATE_BROWSING)
         }
@@ -46,6 +44,10 @@ class App : Application(), Configuration.Provider {
             modules(appModule)
         }
         registerActivityLifecycleCallbacks(com.hhst.youtubelite.player.PlaybackLifecycle())
+        // Publish the persisted appearance before the first activity composes.
+        get<com.hhst.youtubelite.extension.ExtensionManager>().let { prefs ->
+            com.hhst.youtubelite.ui.theme.AppAppearance.update(prefs.themeMode())
+        }
     }
 
     /** Initializes playback and download services when their entry points are opened. */
@@ -53,11 +55,11 @@ class App : Application(), Configuration.Provider {
         if (mediaRuntimeStarted) return
         Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
-        MMKV.defaultMMKV().let { kv ->
-            if (!kv.decodeBool("youtube-engine-v1-migrated", false)) {
-                kv.allKeys()?.filter { it.startsWith("extractor:stream:") || it == "extractor:client_order" }
-                    ?.forEach(kv::removeValueForKey)
-                kv.encode("youtube-engine-v1-migrated", true)
+        com.hhst.youtubelite.core.PreferenceStore.app(this).let { kv ->
+            if (!kv.getBool("youtube-engine-v1-migrated", false)) {
+                kv.keys().filter { it.startsWith("extractor:stream:") || it == "extractor:client_order" }
+                    .forEach(kv::remove)
+                kv.putBool("youtube-engine-v1-migrated", true)
             }
         }
         WorkManager.getInstance(this)

@@ -9,7 +9,6 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.MuxResult
 import com.hhst.youtubelite.downloader.data.DownloadRepository
@@ -89,8 +88,8 @@ class DownloadMemoryAndroidTest {
         } finally {
             monitor.shutdownNow()
             record["peakHeapBytes"] = peak.get()
-            File(app.filesDir, "download-memory-acceptance.json").writeText(Gson().toJson(record))
-            instrumentation.sendStatus(2, Bundle().apply { putString("downloadMemory", Gson().toJson(record)) })
+            File(app.filesDir, "download-memory-acceptance.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
+            instrumentation.sendStatus(2, Bundle().apply { putString("downloadMemory", com.hhst.youtubelite.core.TestJson.any(record)) })
             output.delete()
         }
     }

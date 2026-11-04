@@ -16,6 +16,9 @@ data class SubscribedChannel(
     val hasNewContent: Boolean = false,
 )
 
+/** One directory page; [nextKey] is null when the server has no further page. */
+data class ChannelDirectoryPage(val channels: List<SubscribedChannel>, val nextKey: String? = null)
+
 sealed interface SubscriptionsContent {
     data object Loading : SubscriptionsContent
     data class SignedOut(val prompt: com.hhst.youtubelite.library.domain.SignInPrompt) : SubscriptionsContent
@@ -35,7 +38,12 @@ sealed interface SubscriptionsContent {
 /** The subscribed-channel list is its own read: it loads and fails independently of the feed. */
 sealed interface SubscriptionsChannels {
     data object Loading : SubscriptionsChannels
-    data class Ready(val channels: List<SubscribedChannel>) : SubscriptionsChannels
+    data class Ready(
+        val channels: List<SubscribedChannel>,
+        /** Continuation for the directory; null when every subscribed channel is present. */
+        val nextKey: String? = null,
+        val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
+    ) : SubscriptionsChannels
     data object Failed : SubscriptionsChannels
 }
 
@@ -58,6 +66,10 @@ data class SubscriptionsUiState(
     val chips: List<SubscriptionsChip> = SubscriptionsChip.entries,
     /** Production mode: the item menu writes through the save sheet and feedback rows hide. */
     val live: Boolean = false,
+    /** Set while the open menu's deferred get_panel read is in flight. */
+    val menuLoading: Boolean = false,
+    /** Set when that read failed; the sheet offers one retry row. */
+    val menuFailed: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 )
@@ -90,6 +102,7 @@ sealed interface SubscriptionsAction {
     data object ShowChannels : SubscriptionsAction
     data object CloseChannels : SubscriptionsAction
     data object RetryChannels : SubscriptionsAction
+    data object LoadMoreChannels : SubscriptionsAction
     data class OpenVideo(val videoId: String) : SubscriptionsAction
     data class OpenChannel(val channelId: String) : SubscriptionsAction
     data class OpenMenu(val videoId: String) : SubscriptionsAction

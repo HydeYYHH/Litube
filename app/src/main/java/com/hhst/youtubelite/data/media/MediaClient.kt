@@ -21,6 +21,11 @@ class MediaException(val failure: RequestError) : IOException(failure.code)
 fun <T> ReadResult<T>.requireValue(): T = value?.takeIf { ok }
     ?: throw MediaException(error ?: RequestError(RequestFailure.PARSE, "missing_response"))
 
+internal fun ActionReply.requireConfirmation() {
+    if (!confirmed) throw com.hhst.youtubelite.watch.domain.UnconfirmedActionException(httpStatus,
+        mapOf("response_shape" to responseShape.orEmpty()))
+}
+
 /** Runs synchronous core operations off the main thread and cancels their HTTP calls together. */
 class MediaClient(
     http: OkHttpClient,
@@ -30,6 +35,23 @@ class MediaClient(
 
     suspend fun <T> read(block: (RequestContext, HttpClient) -> T): T = pendingReads.withPermit {
         execute(null, block)
+    }
+
+    /**
+     * One bounded retry for idempotent GET-shaped reads whose first attempt failed
+     * with a network-shaped transport error (DNS, connect, TLS, timeout, reset).
+     * Cancellation, auth, HTTP status and parse failures are never retried, and a
+     * session change between attempts still aborts through the generation check.
+     */
+    suspend fun <T> readIdempotent(block: (RequestContext, HttpClient) -> T): T {
+        val session = read { context, _ -> context }
+        return try {
+            pendingReads.withPermit { execute(session, block) }
+        } catch (error: MediaException) {
+            if (error.failure.kind != RequestFailure.TRANSPORT || error.failure.code !in RETRYABLE_TRANSPORT_CODES) throw error
+            kotlinx.coroutines.delay(RETRY_DELAY_MS)
+            pendingReads.withPermit { execute(session, block) }
+        }
     }
 
     suspend fun <A, B> readTogether(
@@ -78,13 +100,27 @@ class MediaClient(
                             call.execute().use { response ->
                                 val source = response.body?.source()
                                 if (source != null && source.request(MAX_RESPONSE_BYTES + 1) && source.buffer.size > MAX_RESPONSE_BYTES)
-                                    throw IOException("response_too_large")
-                                HttpReply(response.code, source?.readUtf8().orEmpty(), response.headers.toMap())
+                                    // Deliberate policy error: survives block() normalization untouched.
+                                    throw MediaException(RequestError(RequestFailure.PARSE, "response_too_large"))
+                                val headers = response.headers.toMap().toMutableMap()
+                                response.headers.values("Set-Cookie").takeIf { it.isNotEmpty() }?.let {
+                                    headers.keys.removeAll { name -> name.equals("Set-Cookie", true) }
+                                    headers["Set-Cookie"] = it.joinToString("\n")
+                                }
+                                HttpReply(response.code, source?.readUtf8().orEmpty(), headers)
                             }
                         } finally { calls.remove(call) }
                     }
                 }
-                val value = block(session, transport)
+                val value = try {
+                    block(session, transport)
+                } catch (error: IOException) {
+                    // A raw IO failure inside the read logic (not the transport lambda's
+                    // own deliberate protocol errors) normalizes into the shared
+                    // classified MediaException so callers never see bare sockets.
+                    if (error is MediaException) throw error
+                    throw MediaException(transportError(error))
+                }
                 if (session.generation != context().generation) throw MediaException(RequestError(RequestFailure.AUTH, "session_changed"))
                 if (continuation.isActive) continuation.resume(value)
             } catch (error: Exception) {
@@ -101,6 +137,13 @@ class MediaClient(
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
+        const val RETRY_DELAY_MS = 250L
+
+        // Network-shaped transport codes from the core classifier; "transport_protocol",
+        // "transport_failed" and cancellation keep their single-attempt semantics.
+        val RETRYABLE_TRANSPORT_CODES = setOf(
+            "transport_dns", "transport_connect", "transport_tls", "transport_timeout",
+            "transport_unreachable", "transport_socket", "transport_io")
 
         // Admission suspends callers before submission; no blocking work falls back to them.
         val pendingReads = Semaphore(20)

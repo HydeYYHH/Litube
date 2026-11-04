@@ -4,6 +4,7 @@ import com.hhst.youtubelite.library.domain.*
 
 interface LibraryRepository {
     val supportsLocal: Boolean get() = false
+    val hasSavedAccounts: Boolean get() = false
     suspend fun you(): YouPage
     suspend fun history(): HistoryPage
     suspend fun playlists(): PlaylistCollectionPage

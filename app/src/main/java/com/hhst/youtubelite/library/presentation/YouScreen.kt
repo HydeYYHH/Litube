@@ -51,7 +51,7 @@ fun YouScreen(state: LibraryUiState, onAction: (LibraryAction) -> Unit, modifier
                     is LibraryContent.SignedOut -> LibraryMessageCard(
                         content.prompt.title, content.prompt.message, "you-signed-out",
                     ) { PillButton(content.prompt.action) { onAction(LibraryAction.SignIn) } }
-                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, state.source, state.sourceSelectable, onAction)
+                    is LibraryContent.Ready -> LibraryList(listState, content, width, state.signedIn, onAction)
                 }
             }
             MainNavigationBar("main", state.signedIn, accountAvatar(state)) { tab ->
@@ -91,13 +91,16 @@ private fun YouTopBar(signedIn: Boolean, onAction: (LibraryAction) -> Unit) {
 
 @Composable
 private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready, width: Float, signedIn: Boolean,
-    source: LibrarySource, sourceSelectable: Boolean, onAction: (LibraryAction) -> Unit) {
+    onAction: (LibraryAction) -> Unit) {
     val page = content.page
     LazyColumn(Modifier.fillMaxSize().testTag("you-library"), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
         item(key = "account") {
             Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { onAction(LibraryAction.OpenAccountMenu) }
                 .testTag("you-account").padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(CircleShape)) { LibraryArtwork(page.account.avatar, Modifier.fillMaxSize()) }
+                Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                    if (page.account.avatar.isBlank()) AppIcon(AppIcon.You, Modifier.size(36.dp))
+                    else LibraryArtwork(page.account.avatar, Modifier.fillMaxSize())
+                }
                 Spacer(Modifier.width(12.dp))
                 Column {
                     AppText(page.account.name, size = 16, line = 22, weight = FontWeight.Medium)
@@ -105,15 +108,13 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
                 }
             }
         }
-        if (sourceSelectable) item(key = "source") {
-            LibrarySourceRow(source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "you")
-        }
         item(key = "rows") {
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 LibraryRowItem(LibraryRow.History, AppIcon.Clock) { onAction(LibraryAction.OpenHistory) }
                 LibraryRowItem(LibraryRow.Playlists, AppIcon.Playlist) { onAction(LibraryAction.OpenPlaylists) }
                 LibraryRowItem(LibraryRow.WatchLater, AppIcon.Bookmark) { onAction(LibraryAction.OpenWatchLater) }
-                if (signedIn && source == LibrarySource.Account) LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
+                if (signedIn) LibraryRowItem(LibraryRow.LikedVideos, AppIcon.Like) { onAction(LibraryAction.OpenLiked) }
+                LibraryRowItem(LibraryRow.Queue, AppIcon.Queue) { onAction(LibraryAction.OpenQueue) }
                 LibraryRowItem(LibraryRow.Downloads, AppIcon.Download) { onAction(LibraryAction.OpenDownloads) }
             }
         }
@@ -168,24 +169,6 @@ fun HistoryUndoBanner(removed: RemovedHistoryEntry, modifier: Modifier = Modifie
     }
 }
 
-/** The signed-in device/account storage switch; rendered only when there is a choice to make. */
-@Composable
-private fun LibrarySourceRow(selected: LibrarySource, onAction: (LibraryAction) -> Unit, modifier: Modifier = Modifier, tagPrefix: String = "library") {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(DesignTokens.Surface).testTag("$tagPrefix-source")) {
-        LibrarySource.entries.forEach { option ->
-            val active = option == selected
-            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
-                .background(if (active) DesignTokens.Ink else DesignTokens.Surface)
-                .clickable(role = Role.Button) { onAction(LibraryAction.SourceSelected(option)) }
-                .testTag("$tagPrefix-source-${option.name.lowercase()}")
-                .padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                AppText(option.label, size = 13, line = 18, weight = FontWeight.Medium,
-                    color = if (active) DesignTokens.Background else DesignTokens.Ink)
-            }
-        }
-    }
-}
-
 @Composable
 private fun ShelfHeader(label: String, onSeeAll: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -207,7 +190,6 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
             AppIconButton(AppIcon.More, stringResource(R.string.a11y_history_settings), diameter = 48.dp,
                 modifier = Modifier.testTag("history-manage")) { onAction(LibraryAction.OpenManageHistory) }
         }))
-        if (state.sourceSelectable) LibrarySourceRow(state.source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "history")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 HistoryContent.Loading -> LibrarySkeleton("history-skeleton")
@@ -274,7 +256,6 @@ fun CollectionScreen(state: CollectionUiState,
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen")) {
         LibrarySubPageBar("Playlists", onBack, onAction)
-        if (state.sourceSelectable) LibrarySourceRow(state.source, onAction, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), "playlists")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val content = state.content) {
                 CollectionContent.Loading -> LibrarySkeleton("playlists-skeleton")

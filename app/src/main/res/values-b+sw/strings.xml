@@ -166,6 +166,7 @@
     <string name="copy">Nakala</string>
     <string name="copied">Imenakiliwa</string>
     <string name="copy_all">Nakili zote</string>
+    <string name="cast_searching">Inatafutwa…</string>
     <string name="queue_now_playing">Sasa inacheza</string>
     <string name="clear_queue_confirm">Futa foleni nzima?</string>
     <string name="ok">Sawa</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Funga</string>
     <string name="verification_completed">Uthibitisho umekamilika. Inajaribu tena…</string>
     <string name="verification_still_blocked">Bado imezuiwa baada ya uthibitisho. Jaribu tena baadaye.</string>
+    <string name="comments_title">Maoni</string>
+    <string name="comments_sort_top">Maoni ya juu</string>
+    <string name="comments_sort_newest">Mpya kwanza</string>
+    <string name="comments_sort_chip_top">Bora</string>
+    <string name="comments_sort_chip_newest">Mpya</string>
+    <string name="comments_composer_add">Ongeza maoni</string>
+    <string name="comments_composer_reply">Jibu</string>
+    <string name="comments_composer_edit">Hariri maoni</string>
+    <string name="comments_composer_text_hint">Maandishi ya maoni</string>
+    <string name="comments_composer_text_edit_hint">Hariri maandishi ya maoni</string>
+    <string name="comments_composer_submit">Toa maoni</string>
+    <string name="comments_composer_sending">Inatuma…</string>
+    <string name="comments_composer_save">Hifadhi</string>
+    <string name="comments_delete_title">Futa</string>
+    <string name="comments_show_more_replies">Onyesha majibu zaidi</string>
+    <string name="comments_load_more_failed">Imeshindikana kupakia maoni zaidi</string>
+    <string name="comments_hide_replies">Ficha majibu</string>
+    <string name="home_music_charts">Chati za muziki</string>
+    <string name="home_popular_gaming">Maarufu katika michezo ya video</string>
+    <string name="home_popular_sports">Maarufu katika michezo</string>
+    <string name="home_top_news">Habari kuu</string>
 </resources>

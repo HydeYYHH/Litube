@@ -4,9 +4,10 @@ package com.hhst.youtubelite.extension
 class MemoryPrefStore : PrefStore {
     private val bools = mutableMapOf<String, Boolean>()
     private val longs = mutableMapOf<String, Long>()
+    private val strings = mutableMapOf<String, String>()
 
     override fun contains(key: String): Boolean =
-        bools.containsKey(key) || longs.containsKey(key)
+        bools.containsKey(key) || longs.containsKey(key) || strings.containsKey(key)
 
     override fun getBool(key: String, default: Boolean): Boolean =
         bools[key] ?: default
@@ -22,5 +23,12 @@ class MemoryPrefStore : PrefStore {
     override fun putLong(key: String, value: Long) {
         longs[key] = value
         bools.remove(key)
+    }
+
+    override fun getString(key: String, default: String): String =
+        strings[key] ?: default
+
+    override fun putString(key: String, value: String) {
+        strings[key] = value
     }
 }

@@ -13,6 +13,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MediaClientTest {
+    @Test fun preservesEveryCookieHeaderRegardlessOfHeaderCasing() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().addHeader("set-cookie", "VISITOR_INFO1_LIVE=visitor; Path=/")
+                .addHeader("set-cookie", "YSC=session; Path=/"))
+            val reply = MediaClient(OkHttpClient()).read { _, http ->
+                http.execute(HttpRequest("GET", server.url("/").toString()))
+            }
+            assertEquals("VISITOR_INFO1_LIVE=visitor; Path=/\nYSC=session; Path=/", reply.header("Set-Cookie"))
+        }
+    }
+
     @Test fun saturationSuspendsAdmissionWithoutRunningOnTheCaller() = runBlocking<Unit> {
         val entered = CountDownLatch(4)
         val release = CountDownLatch(1)
@@ -112,8 +123,9 @@ class MediaClientTest {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("x".repeat(8 * 1024 * 1024 + 1)))
             server.start()
-            val result = runCatching { MediaClient(OkHttpClient()).read { _, http -> http.execute(HttpRequest("GET", server.url("/").toString())) } }
-            assertEquals("response_too_large", result.exceptionOrNull()?.message)
+            val error = runCatching { MediaClient(OkHttpClient()).read { _, http -> http.execute(HttpRequest("GET", server.url("/").toString())) } }
+                .exceptionOrNull() as MediaException
+            assertEquals("response_too_large", error.failure.code)
         }
     }
 
@@ -134,4 +146,75 @@ class MediaClientTest {
             assertEquals(1, server.requestCount)
         }
     }
+
+    @Test fun aNetworkShapedTransportFailureRetriesOnceAndThenSucceeds() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+            server.enqueue(MockResponse().setBody("{}"))
+            server.start()
+            var attempts = 0
+            val result = client().readIdempotent { _, http ->
+                attempts++
+                http.execute(HttpRequest("GET", server.url("/").toString())).body
+            }
+            assertEquals("{}", result)
+            assertEquals(2, attempts)
+        }
+    }
+
+    @Test fun aSecondTransportFailureSurfacesWithItsCauseAndStopsRetrying() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+            server.start()
+            var attempts = 0
+            val error = runCatching {
+                client().readIdempotent { _, http ->
+                    attempts++
+                    http.execute(HttpRequest("GET", server.url("/").toString())).body
+                }
+            }.exceptionOrNull() as MediaException
+            assertEquals(2, attempts)
+            assertEquals(RequestFailure.TRANSPORT, error.failure.kind)
+            assertNotNull(error.failure.cause)
+        }
+    }
+
+    @Test fun authHttpParseAndCancellationFailuresAreNeverRetried() = runBlocking {
+        val cases = listOf(
+            RequestError(RequestFailure.AUTH, "http_401", 401),
+            RequestError(RequestFailure.HTTP, "http_429", 429, 1000L),
+            RequestError(RequestFailure.PARSE, "invalid_json"),
+            RequestError(RequestFailure.CANCELLED, "cancelled"),
+            RequestError(RequestFailure.TRANSPORT, "transport_protocol"),
+            RequestError(RequestFailure.TRANSPORT, "transport_failed"))
+        for (failure in cases) {
+            var attempts = 0
+            val error = runCatching {
+                client().readIdempotent { _, _ ->
+                    attempts++
+                    throw MediaException(failure)
+                }
+            }.exceptionOrNull() as MediaException
+            assertEquals("kind=${failure.kind} code=${failure.code}", 1, attempts)
+            assertEquals(failure, error.failure)
+        }
+    }
+
+    @Test fun aSessionChangeDuringARetryWindowStillAborts() = runBlocking {
+        val generation = AtomicLong(1)
+        val client = MediaClient(OkHttpClient()) { RequestContext(generation = generation.get()) }
+        var attempts = 0
+        val error = runCatching {
+            client.readIdempotent { _, _ ->
+                attempts++
+                generation.incrementAndGet()
+                throw MediaException(RequestError(RequestFailure.TRANSPORT, "transport_connect"))
+            }
+        }.exceptionOrNull() as MediaException
+        assertEquals(1, attempts)
+        assertEquals("session_changed", error.failure.code)
+    }
+
+    private fun client() = MediaClient(OkHttpClient())
 }

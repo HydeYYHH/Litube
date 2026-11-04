@@ -20,11 +20,11 @@ import android.os.RemoteException
 import android.webkit.WebView
 import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticJson
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import java.io.File
@@ -138,7 +138,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         pending[id] = future
         data.putLong("id", id)
         data.putLong("timeout", minOf(timeoutMs, context.remainingMillis()))
-        ExtractionDiagnostics.diagnosticContext(context)?.let { data.putString("diagnostic_context", Gson().toJson(it)) }
+        ExtractionDiagnostics.diagnosticContext(context)?.let { data.putString("diagnostic_context", DiagnosticJson.encodeContext(it)) }
         try {
             remote.send(Message.obtain().apply { what = kind; replyTo = replies; this.data = data })
             return await(future, timeoutMs, context) { if (closeOnFailure) close() }
@@ -215,7 +215,7 @@ class EjsRuntimeService : Service() {
                 val started = System.nanoTime()
                 val response = Bundle().apply { putLong("id", data.getLong("id")) }
                 val origin = runCatching { data.getString("diagnostic_context")?.takeIf { it.length <= 2_048 }
-                    ?.let { Gson().fromJson(it, DiagnosticContext::class.java) } }.getOrNull() ?: DiagnosticContext()
+                    ?.let { DiagnosticJson.decodeContext(it) } }.getOrNull() ?: DiagnosticContext()
                 val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "ejs_process", origin.child(data.getLong("id").toString()),
                     mapOf("kind" to kind))
                 AppLog.snapshot(AppLog.Category.EXTRACTOR, operation.context, mapOf("phase" to
@@ -243,7 +243,7 @@ class EjsRuntimeService : Service() {
                         }
                         val timeout = data.getLong("timeout").coerceAtLeast(1)
                         val context = ExtractionContext(YoutubeWebSession("ejs-only", WebAccount.ANONYMOUS,
-                            0, null, null, null, null, "", 0, null, "isolated-ejs", JsonObject(), { "" }),
+                            0, null, null, null, null, "", 0, null, "isolated-ejs", JsonObject(emptyMap()), { "" }),
                             object : ExtractionTransport {
                                 override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse = throw IOException("JS_NO_NETWORK")
                                 override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray): PageResponse = throw IOException("JS_NO_NETWORK")

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -31,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import com.hhst.youtubelite.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import com.hhst.youtubelite.ui.components.AppRadioButton as RadioButton
 import androidx.compose.material3.Scaffold
 import com.hhst.youtubelite.ui.components.AppSlider as Slider
 import androidx.compose.material3.SnackbarHost
@@ -48,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,6 +88,7 @@ sealed class DownloadDest {
 fun DownloadManagerScreen(
     viewModel: DownloadViewModel,
     initialBatchId: String?,
+    newBatchRequests: kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow(),
     onClose: () -> Unit,
 ) {
     var dest by rememberSaveable(stateSaver = Saver(
@@ -115,6 +117,11 @@ fun DownloadManagerScreen(
     val context = LocalContext.current
     val haptics: HapticsController = koinInject()
     var pendingDelete by remember { mutableStateOf<DownloadItemUiState?>(null) }
+    // Hoisted so returning from a batch detail restores the list scroll position.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(newBatchRequests) {
+        newBatchRequests.collect { dest = DownloadDest.Batch(it) }
+    }
 
     fun handle(item: DownloadItemUiState, action: DownloadRowAction) {
         // Rows reference tasks through items: address them by itemId so the
@@ -199,6 +206,7 @@ fun DownloadManagerScreen(
         ConstrainedPage {
             when (val current = dest) {
                 DownloadDest.List -> DownloadListPane(
+                    listState = listState,
                     viewModel = viewModel,
                     padding = padding,
                     onOpenBatch = { dest = DownloadDest.Batch(it) },
@@ -243,6 +251,7 @@ fun DownloadManagerScreen(
 
 @Composable
 private fun DownloadListPane(
+    listState: androidx.compose.foundation.lazy.LazyListState,
     viewModel: DownloadViewModel,
     padding: PaddingValues,
     onOpenBatch: (String) -> Unit,
@@ -276,7 +285,7 @@ private fun DownloadListPane(
         if (items.isEmpty()) {
             EmptyDownloads()
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                 items(items, key = { it.itemId ?: it.taskId }) { item ->
                     DownloadItemRow(
                         item = item,
@@ -473,11 +482,11 @@ private fun DownloadSettingsPane(
                     },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = quality == option, onClick = {
-                    quality = option
-                    viewModel.setDefaultQuality(option)
-                })
-                Text(option, color = MaterialTheme.colorScheme.onSurface)
+                Text(option, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface)
+                if (quality == option) Icon(painterResource(R.drawable.ic_check), null,
+                    Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+                else Spacer(Modifier.size(24.dp))
             }
         }
         DownloadHairline()

@@ -166,6 +166,7 @@
     <string name="copy">Nusxalash</string>
     <string name="copied">Koʻchirildi</string>
     <string name="copy_all">Hammasini nusxalash</string>
+    <string name="cast_searching">Qidirilmoqda…</string>
     <string name="queue_now_playing">Hozir oʻynalmoqda</string>
     <string name="clear_queue_confirm">Butun navbat tozalansinmi?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Yopish</string>
     <string name="verification_completed">Tasdiqlash tugallandi. Qayta urinilmoqda…</string>
     <string name="verification_still_blocked">Tasdiqlangandan keyin ham bloklangan. Keyinroq qayta urinib koʻring.</string>
+    <string name="comments_title">Izohlar</string>
+    <string name="comments_sort_top">Eng yaxshi izohlar</string>
+    <string name="comments_sort_newest">Avval yangilari</string>
+    <string name="comments_sort_chip_top">Eng yaxshi</string>
+    <string name="comments_sort_chip_newest">Yangi</string>
+    <string name="comments_composer_add">Izoh qo‘shish</string>
+    <string name="comments_composer_reply">Javob berish</string>
+    <string name="comments_composer_edit">Izohni tahrirlash</string>
+    <string name="comments_composer_text_hint">Izoh matni</string>
+    <string name="comments_composer_text_edit_hint">Izoh matnini tahrirlash</string>
+    <string name="comments_composer_submit">Izoh qoldirish</string>
+    <string name="comments_composer_sending">Yuborilmoqda…</string>
+    <string name="comments_composer_save">Saqlash</string>
+    <string name="comments_delete_title">O‘chirish</string>
+    <string name="comments_show_more_replies">Boshqa javoblarni ko‘rsatish</string>
+    <string name="comments_load_more_failed">Boshqa izohlarni yuklab bo‘lmadi</string>
+    <string name="comments_hide_replies">Javoblarni yashirish</string>
+    <string name="home_music_charts">Musiqa chartlari</string>
+    <string name="home_popular_gaming">Oʻyinlarda trendda</string>
+    <string name="home_popular_sports">Sportda trendda</string>
+    <string name="home_top_news">Asosiy yangiliklar</string>
 </resources>

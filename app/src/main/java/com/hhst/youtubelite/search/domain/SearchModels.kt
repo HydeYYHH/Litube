@@ -22,6 +22,13 @@ data class SearchResult(
     /** Fixture-only age used by the upload-date filter; production data would carry this separately. */
     val uploadedDays: Int? = null,
     val avatar: String? = null,
+    /** The card's own feedback tokens; blank until a signed-in session maps them for this generation. */
+    val notInterestedToken: String? = null,
+    val dontRecommendToken: String? = null,
+    /** A deferred get_panel endpoint carried by this card only; read on menu open, never preloaded. */
+    val menuEndpoint: com.hhst.youtubelite.home.domain.FeedMenuEndpoint? = null,
+    /** The identity generation the feedback tokens were captured for; guards writes against switches. */
+    val feedbackGeneration: Long? = null,
 )
 
 /** The two groups the mobile results page exposes behind its filter button. */
@@ -42,6 +49,7 @@ data class SearchFilters(
 
 /** Menu rows measured on the ordinary-video action sheet. Non-share rows stay typed requests. */
 enum class SearchVideoMenuAction(val label: String) {
+    Queue("Add to queue"), Download("Download"),
     WatchLater("Save to Watch later"),
     SaveToPlaylist("Save to playlist"),
     Share("Share"),
@@ -59,6 +67,15 @@ sealed interface SearchOverlay {
 interface SearchRepository {
     suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage = SearchPage(query, emptyList())
     suspend fun search(query: String, filters: SearchFilters = SearchFilters()): SearchPage
+
+    /**
+     * Resolves the menu's feedback capabilities for one card, reading its own get_panel endpoint
+     * when it carries one; results without an endpoint return unchanged (inline tokens already set).
+     */
+    suspend fun menu(result: SearchResult): SearchResult = result
+
+    /** Sends the card's feedback token for a menu operation the server classified semantically. */
+    suspend fun feedback(result: SearchResult, action: SearchVideoMenuAction) {}
 }
 
 sealed interface SearchContent {
@@ -78,6 +95,10 @@ data class SearchUiState(
     val filtersOpen: Boolean = false,
     /** Production mode: account writes run in the ViewModel and the feedback-only menu rows hide. */
     val live: Boolean = false,
+    /** Set while the open result menu's deferred get_panel read is in flight. */
+    val menuLoading: Boolean = false,
+    /** Set when that read failed; the sheet offers one retry row. */
+    val menuFailed: Boolean = false,
     /** Confirmed subscription state per channel, applied only after the server confirms. */
     val subscriptions: Map<String, Boolean> = emptyMap(),
     /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */

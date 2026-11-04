@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.Gson
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -31,7 +32,7 @@ class YoutubeExtractionHost(
     private val watchdog = Executors.newSingleThreadScheduledExecutor { Thread(it, "youtube-cancellation").apply { isDaemon = true } }
     private data class CachedStream(val stream: Stream, val expires: Long, val bytes: Int)
     private val streams = LinkedHashMap<String, CachedStream>(16, .75f, true)
-    private val gson = Gson()
+    private val json = Json
     private data class Refresh(val session: SettableFuture<YoutubeWebSession>, var at: Long)
     private val refreshes = LinkedHashMap<String, Refresh>()
 
@@ -262,7 +263,8 @@ class YoutubeExtractionHost(
                 val now = System.currentTimeMillis()
                 val expiration = (stream.formats.mapNotNull { it.expiresAtMillis }
                     + stream.manifests.map { it.expiresAtMillis }).minOrNull() ?: now + 120_000
-                val bytes = gson.toJson(stream).toByteArray().size + stream.manifests.sumOf { it.url.toByteArray().size }
+                val bytes = json.encodeToString(stream).toByteArray().size +
+                    json.encodeToString(stream.manifests).toByteArray().size
                 streams[key] = CachedStream(stream, minOf(now + 120_000, expiration - 30_000), bytes)
                 streams.entries.removeAll { it.value.expires <= now }
                 var totalBytes = streams.values.sumOf { it.bytes }

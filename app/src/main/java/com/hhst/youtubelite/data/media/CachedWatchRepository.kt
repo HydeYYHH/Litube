@@ -31,6 +31,11 @@ class CachedWatchRepository(
 
     override suspend fun watch(videoId: String): WatchPage = read(videoId, fresh = false)
     override suspend fun watchFresh(videoId: String): WatchPage = read(videoId, fresh = true)
+    override suspend fun menu(video: com.hhst.youtubelite.watch.domain.WatchRelated) = delegate.menu(video)
+    override suspend fun feedback(video: com.hhst.youtubelite.watch.domain.WatchRelated, action: com.hhst.youtubelite.watch.domain.WatchVideoMenuAction) {
+        delegate.feedback(video, action)
+        clearMemory()
+    }
 
     fun clearMemory() = synchronized(lock) {
         cache.clear()
@@ -60,7 +65,7 @@ class CachedWatchRepository(
                 }
             }
             try {
-                val page = delegate.watch(videoId)
+                val page = if (fresh) delegate.watchFresh(videoId) else delegate.watch(videoId)
                 currentCoroutineContext().ensureActive()
                 checkIdentity(key)
                 synchronized(lock) {

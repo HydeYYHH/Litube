@@ -91,11 +91,19 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is HomeNavigationRequest.Shorts -> launchNavigation(
                             com.hhst.youtubelite.shorts.ShortsActivity.intent(this@HomeActivity, request.itemId))
                         is HomeNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@HomeActivity, request.channelId))
+                        is HomeNavigationRequest.Playlist -> launchNavigation(
+                            com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@HomeActivity, request.playlistId))
                         is HomeNavigationRequest.OpenPost -> launchNavigation(
                             PostDetailActivity.intent(this@HomeActivity, request.channelId, request.postId)
                         )
                         is HomeNavigationRequest.MenuAction -> if (request.action == FeedMenuAction.Share) {
                             shareGateway.share(request.itemId)
+                        } else if (!fixtures && request.action in setOf(FeedMenuAction.Queue, FeedMenuAction.Download)) {
+                            val feed = (homeViewModel.uiState.value.content as? com.hhst.youtubelite.home.domain.HomeContent.Feed)?.page
+                            val video = feed?.items?.filterIsInstance<com.hhst.youtubelite.home.domain.FeedItem.Video>()?.firstOrNull { it.id == request.itemId }
+                            com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@HomeActivity).execute(
+                                com.hhst.youtubelite.ui.MediaActionItem(request.itemId, video?.title.orEmpty(), video?.author.orEmpty(), video?.artwork.orEmpty()),
+                                if (request.action == FeedMenuAction.Queue) com.hhst.youtubelite.ui.MediaActionKind.Queue else com.hhst.youtubelite.ui.MediaActionKind.Download)
                         }
                         is HomeNavigationRequest.PostFeedback -> if (!fixtures) {
                             com.hhst.youtubelite.post.openPostVoteRoute(this@HomeActivity)

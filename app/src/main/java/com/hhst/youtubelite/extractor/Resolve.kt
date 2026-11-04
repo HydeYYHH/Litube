@@ -23,7 +23,9 @@ internal fun mapStream(load: PlaybackLoad, context: ExtractionContext): Stream {
     val expiresAt = answer.expiresAtMs ?: Long.MAX_VALUE
     fun wholeObjectPlan(protocol: MediaProtocol, resourceLength: Long = -1) =
         MediaRequestPlan(context.session, client, protocol, MediaRange.NONE,
-            allowPostFallback = false, resourceLength = resourceLength, expiresAtMillis = expiresAt)
+            allowPostFallback = false, resourceLength = resourceLength, expiresAtMillis = expiresAt,
+            availableAfterMillis = if (protocol == MediaProtocol.HLS)
+                (answer.mediaAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0) else 0)
 
     // Muxed formats may arrive as the ANDROID reel floor; their URLs answer to that identity.
     val floorClient = load.floorClient?.let(MscPlayback::mapClient) ?: client

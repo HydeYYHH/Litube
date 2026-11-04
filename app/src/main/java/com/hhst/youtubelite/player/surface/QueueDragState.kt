@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.QueueOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -32,6 +33,8 @@ internal class QueueDragState(
     private var settlingFraction by mutableFloatStateOf(0f)
     private var settleJob: Job? = null
     private var lastDragEndAt = 0L
+    /** Queue owner captured at drag start; an identity switch cancels the commit. */
+    private var dragOwner: QueueOwner? = null
 
     fun canTap() = draggingKey == null && SystemClock.uptimeMillis() - lastDragEndAt >= GestureMath.TAP_SUPPRESS_MS
 
@@ -39,7 +42,7 @@ internal class QueueDragState(
         if (draggingKey == null) items = source
     }
 
-    fun start(y: Float): Boolean {
+    fun start(y: Float, owner: QueueOwner?): Boolean {
         val row = list.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
             ?: return false
         val key = row.key as? String ?: return false
@@ -50,6 +53,7 @@ internal class QueueDragState(
         draggedHeight = row.size
         pointerY = y
         draggingKey = key
+        dragOwner = owner
         return true
     }
 
@@ -84,11 +88,16 @@ internal class QueueDragState(
         list.requestScrollToItem(first, scroll)
     }
 
-    fun finish(source: List<QueueItem>, cancelled: Boolean, onMove: (Int, Int) -> Unit) {
+    /**
+     * [owner] is the queue owner at release time: when it differs from the one
+     * captured at drag start the identity switched mid-drag and the commit is
+     * cancelled — the dragged index never lands in another owner's list.
+     */
+    fun finish(source: List<QueueItem>, owner: QueueOwner?, cancelled: Boolean, onMove: (Int, Int, QueueOwner?) -> Unit) {
         val key = draggingKey ?: return
         val releaseTop = pointerY - grabOffset
         val changed = items.map { it.videoId } != originalOrder
-        val move = if (!cancelled && changed) queueMoveAgainst(source, items, key) else null
+        val move = if (!cancelled && changed && dragOwner == owner) queueMoveAgainst(source, items, key) else null
         val first = list.firstVisibleItemIndex
         val scroll = list.firstVisibleItemScrollOffset
         if (move != null) {
@@ -101,7 +110,7 @@ internal class QueueDragState(
         lastDragEndAt = SystemClock.uptimeMillis()
         draggingKey = null
         pointerY = Float.NaN
-        if (move != null) onMove(move.first, move.second)
+        if (move != null) onMove(move.first, move.second, dragOwner)
         settleJob = scope.launch {
             animate(0f, 1f, animationSpec = spring(stiffness = 650f, dampingRatio = 1f)) { value, _ ->
                 settlingFraction = value

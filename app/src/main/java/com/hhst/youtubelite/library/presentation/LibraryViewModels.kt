@@ -7,6 +7,7 @@ import com.hhst.youtubelite.library.data.LibraryRepository
 import com.hhst.youtubelite.library.data.LibraryScenario
 import com.hhst.youtubelite.library.data.SignedOutPrompts
 import com.hhst.youtubelite.library.domain.*
+import com.hhst.youtubelite.watch.domain.toProvisional
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,10 +30,8 @@ class YouViewModel(
     private val scenario: LibraryScenario,
     private var signedIn: Boolean,
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
-    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
-        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
+    private val _uiState = MutableStateFlow(LibraryUiState(signedIn = signedIn, query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -53,24 +52,9 @@ class YouViewModel(
             scenario == LibraryScenario.Loading -> _uiState.update { it.copy(content = LibraryContent.Loading) }
             else -> refresh()
         }
-        sourceStore?.let { store ->
-            viewModelScope.launch { store.source.collect(::onSourceChanged) }
-        }
     }
 
-    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
-    private fun onSourceChanged(value: LibrarySource) {
-        if (_uiState.value.source == value) return
-        ++generation
-        loadJob?.cancel()
-        actionJob?.cancel()
-        saveSheet?.close()
-        showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(source = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
-        if (signedIn || repository.supportsLocal) refresh()
-    }
-
-    private fun deviceActive() = repository.supportsLocal && (!signedIn || _uiState.value.source == LibrarySource.Device)
+    private fun deviceActive() = repository.supportsLocal && !signedIn
 
 
     private var sessionKey: Long? = null
@@ -85,8 +69,7 @@ class YouViewModel(
         actionJob?.cancel()
         saveSheet?.close()
         showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(signedIn = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you")),
-            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
+        _uiState.update { it.copy(signedIn = value, undo = null, content = LibraryContent.SignedOut(SignedOutPrompts.forContent("you"))) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -106,7 +89,6 @@ class YouViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
-            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
             LibraryAction.OpenAccountMenu -> showOverlay(LibraryOverlay.Account)
             is LibraryAction.AccountSelected -> {
                 val account = (_uiState.value.content as? LibraryContent.Ready)?.page?.account
@@ -115,8 +97,7 @@ class YouViewModel(
                     com.hhst.youtubelite.account.domain.AccountMenuAction.ViewChannel ->
                         account?.let { navigation.trySend(LibraryNavigationRequest.Channel(it.channelId)) }
                     com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount ->
-                        // The signed-out menu relabels this row "Sign in"; the intent differs.
-                        navigation.trySend(if (signedIn) LibraryNavigationRequest.SwitchAccount else LibraryNavigationRequest.SignIn)
+                        navigation.trySend(if (signedIn || repository.hasSavedAccounts) LibraryNavigationRequest.SwitchAccount else LibraryNavigationRequest.SignIn)
                     com.hhst.youtubelite.account.domain.AccountMenuAction.SignOut ->
                         navigation.trySend(LibraryNavigationRequest.SignOut)
                     com.hhst.youtubelite.account.domain.AccountMenuAction.Settings ->
@@ -132,8 +113,14 @@ class YouViewModel(
                 if (deviceActive()) com.hhst.youtubelite.data.media.LocalLibraryStore.WATCH_LATER else "WL"))
             // Liked has no device lane: it stays an account-only exit.
             LibraryAction.OpenLiked -> if (!deviceActive()) navigation.trySend(LibraryNavigationRequest.Playlist("LL"))
+            LibraryAction.OpenQueue -> navigation.trySend(LibraryNavigationRequest.OpenQueue)
             LibraryAction.OpenDownloads -> navigation.trySend(LibraryNavigationRequest.OpenDownloads)
-            is LibraryAction.OpenVideo -> navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
+            is LibraryAction.OpenVideo -> {
+                (_uiState.value.content as? LibraryContent.Ready)?.page?.history
+                    ?.firstOrNull { it.videoId == action.videoId }
+                    ?.let { com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(it.toProvisional()) }
+                navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
+            }
             is LibraryAction.OpenChannel -> navigation.trySend(LibraryNavigationRequest.Channel(action.channelId))
             is LibraryAction.OpenPlaylist -> navigation.trySend(LibraryNavigationRequest.Playlist(action.playlistId))
             is LibraryAction.OpenMenu -> showOverlay(LibraryOverlay.Menu(action.videoId))
@@ -255,11 +242,9 @@ class HistoryViewModel(
     private val scenario: LibraryScenario,
     private var signedIn: Boolean = true,
     saveRepository: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
-    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HistoryUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
-        live = saveRepository != null, confirmClear = savedState.get<Boolean>("confirmClear") == true,
-        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
+        live = saveRepository != null, confirmClear = savedState.get<Boolean>("confirmClear") == true))
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -280,25 +265,6 @@ class HistoryViewModel(
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = HistoryContent.Loading) }
         } else refresh()
-        sourceStore?.let { store ->
-            viewModelScope.launch { store.source.collect(::onSourceChanged) }
-        }
-    }
-
-    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
-    private fun onSourceChanged(value: LibrarySource) {
-        if (_uiState.value.source == value) return
-        ++generation
-        loadJob?.cancel()
-        appendJob?.cancel()
-        actionJob?.cancel()
-        saveSheet?.close()
-        savedState["confirmClear"] = false
-        showOverlay(LibraryOverlay.None)
-        _uiState.update { it.copy(source = value, confirmClear = false, undo = null,
-            content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
-        if (signedIn || repository.supportsLocal) refresh()
     }
 
 
@@ -318,8 +284,7 @@ class HistoryViewModel(
         showOverlay(LibraryOverlay.None)
         _uiState.update { it.copy(confirmClear = false, undo = null) }
         _uiState.update { it.copy(content = HistoryContent.SignedOut(SignedOutPrompts.forContent("history")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle,
-            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -354,8 +319,13 @@ class HistoryViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
-            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
-            is LibraryAction.OpenVideo -> navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
+            is LibraryAction.OpenVideo -> {
+                (_uiState.value.content as? HistoryContent.Ready)?.page?.entries
+                    .orEmpty()
+                    .firstOrNull { it.videoId == action.videoId }
+                    ?.let { com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(it.toProvisional()) }
+                navigation.trySend(LibraryNavigationRequest.Watch(action.videoId))
+            }
             is LibraryAction.OpenChannel -> navigation.trySend(LibraryNavigationRequest.Channel(action.channelId))
             is LibraryAction.OpenMenu -> showOverlay(LibraryOverlay.Menu(action.videoId))
             is LibraryAction.MenuSelected -> {
@@ -379,7 +349,7 @@ class HistoryViewModel(
             // rows. No `else`: a new action must fail to compile here.
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
             LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
-            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads,
+            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads, LibraryAction.OpenQueue,
             is LibraryAction.OpenPlaylist, is LibraryAction.Destination,
             LibraryAction.LoadCollectionNext -> Unit
         }
@@ -549,10 +519,8 @@ class CollectionViewModel(
     private val savedState: SavedStateHandle,
     private val scenario: LibraryScenario,
     private var signedIn: Boolean = true,
-    private val sourceStore: com.hhst.youtubelite.data.media.LibrarySourceStore? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(CollectionUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay(),
-        source = sourceStore?.current() ?: LibrarySource.Account, sourceSelectable = signedIn && repository.supportsLocal && sourceStore != null))
+    private val _uiState = MutableStateFlow(CollectionUiState(query = savedState[QUERY_KEY] ?: "", overlay = savedState.libraryOverlay()))
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
     private val navigation = kotlinx.coroutines.channels.Channel<LibraryNavigationRequest>(Channel.BUFFERED)
     val navigationRequests: kotlinx.coroutines.flow.Flow<LibraryNavigationRequest> = navigation.receiveAsFlow()
@@ -566,20 +534,6 @@ class CollectionViewModel(
         else if (scenario == LibraryScenario.Loading) {
             _uiState.update { it.copy(content = CollectionContent.Loading) }
         } else refresh()
-        sourceStore?.let { store ->
-            viewModelScope.launch { store.source.collect(::onSourceChanged) }
-        }
-    }
-
-    /** A source switch is a scope change: in-flight work dies, cursors leave with the old content. */
-    private fun onSourceChanged(value: LibrarySource) {
-        if (_uiState.value.source == value) return
-        ++generation
-        loadJob?.cancel()
-        appendJob?.cancel()
-        _uiState.update { it.copy(source = value, content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
-        if (signedIn || repository.supportsLocal) refresh()
     }
 
 
@@ -594,8 +548,7 @@ class CollectionViewModel(
         loadJob?.cancel()
         appendJob?.cancel()
         _uiState.update { it.copy(content = CollectionContent.SignedOut(SignedOutPrompts.forContent("playlists")),
-            append = com.hhst.youtubelite.home.domain.AppendState.Idle,
-            sourceSelectable = value && repository.supportsLocal && sourceStore != null) }
+            append = com.hhst.youtubelite.home.domain.AppendState.Idle) }
         if (value || repository.supportsLocal) refresh()
     }
 
@@ -618,14 +571,13 @@ class CollectionViewModel(
                 navigation.trySend(LibraryNavigationRequest.Search(action.query))
             }
             LibraryAction.SignIn -> navigation.trySend(LibraryNavigationRequest.SignIn)
-            is LibraryAction.SourceSelected -> sourceStore?.select(action.source)
             is LibraryAction.OpenPlaylist -> navigation.trySend(LibraryNavigationRequest.Playlist(action.playlistId))
             LibraryAction.VoiceSearch -> navigation.trySend(LibraryNavigationRequest.VoiceSearch)
             // Unreachable from the collection screen: it has no account menu, tab row, video
             // rows or history management. No `else`: a new action must fail to compile here.
             LibraryAction.OpenAccountMenu, is LibraryAction.AccountSelected,
             LibraryAction.OpenNotifications, LibraryAction.OpenHistory, LibraryAction.OpenPlaylists,
-            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads,
+            LibraryAction.OpenWatchLater, LibraryAction.OpenLiked, LibraryAction.OpenDownloads, LibraryAction.OpenQueue,
             is LibraryAction.OpenVideo, is LibraryAction.OpenChannel, is LibraryAction.OpenMenu,
             is LibraryAction.MenuSelected, LibraryAction.OpenManageHistory, LibraryAction.PauseHistory,
             LibraryAction.ResumeHistory, LibraryAction.RequestClearHistory, LibraryAction.ConfirmClearHistory,

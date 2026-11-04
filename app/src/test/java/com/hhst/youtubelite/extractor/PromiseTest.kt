@@ -20,14 +20,16 @@ class PromiseTest {
         owner.cancel()
         val work = AtomicInteger()
         val listeners = AtomicInteger()
+        val notified = CountDownLatch(1)
         val promise = Promise(Unit, owner, autostart = false) { work.incrementAndGet() }
-        promise.whenDone { listeners.incrementAndGet() }
+        promise.whenDone { listeners.incrementAndGet(); notified.countDown() }
         val result = runCatching { withTimeout(1_000) { promise.await() } }
         assertTrue(result.exceptionOrNull() is CancellationException)
         assertFalse(result.exceptionOrNull() is kotlinx.coroutines.TimeoutCancellationException)
         assertTrue(promise.done)
         assertFalse(promise.success)
         assertEquals(0, work.get())
+        assertTrue(notified.await(1, TimeUnit.SECONDS))
         assertEquals(1, listeners.get())
     }
 

@@ -6,7 +6,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** The comments affordance routes to live chat, chat replay, or comments. */
 class LiveChatRoutingTest {
 
     private fun video(chatKey: String?) = WatchVideo(
@@ -23,6 +22,7 @@ class LiveChatRoutingTest {
     @Test fun normalVideosStayOnComments() {
         assertNull(route(video(null), live = false))
         assertNull(route(video(""), live = false))
+        assertNull(route(video("archived-chat"), live = false))
         assertNull(route(null, live = true))
     }
 
@@ -30,9 +30,13 @@ class LiveChatRoutingTest {
         assertEquals(LiveChatTarget("chat", replay = false), route(video("chat"), live = true))
     }
 
-    @Test fun anEndedStreamOpensTheReplayInsteadOfComments() {
-        // isLiveContent stays true after a stream ends; only the player knows it ended.
-        assertEquals(LiveChatTarget("chat", replay = true), route(video("chat"), live = false))
+    @Test fun aLiveStreamWithoutAChatKeyNeverFallsBackToComments() {
+        assertNull(route(video(null).copy(live = true), live = true))
+        assertNull(route(video("").copy(live = true), live = true))
+    }
+
+    @Test fun aKnownLivePageCanOpenChatBeforeThePlayerIsReady() {
+        assertEquals(LiveChatTarget("chat", replay = false), route(video("chat").copy(live = true), live = false))
     }
 
     @Test fun hiddenPanelsRouteNowhere() {

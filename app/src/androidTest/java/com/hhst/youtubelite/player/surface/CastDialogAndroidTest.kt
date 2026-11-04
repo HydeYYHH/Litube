@@ -16,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** The cast chooser covers every sampled state without rebuilding the v3 player surface. */
+/** Device discovery remains active for the lifetime of the chooser. */
 class CastDialogAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -43,8 +43,8 @@ class CastDialogAndroidTest {
             }
         }
         compose.mainClock.advanceTimeBy(50)
-        // Cast unavailable: the empty state still explains the network requirement.
-        compose.onNodeWithText("Cast unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Searching…").assertIsDisplayed()
+        compose.onNodeWithText("Cast unavailable").assertDoesNotExist()
         compose.onNodeWithText("Available devices").assertIsDisplayed()
         compose.onNodeWithText("Open on any device").assertIsDisplayed()
         assertEquals(listOf(true), discovery)
@@ -53,7 +53,7 @@ class CastDialogAndroidTest {
         // Discovery is running but has not found anything yet.
         compose.runOnIdle { state = PlayerUiState(castAvailable = true) }
         compose.mainClock.advanceTimeBy(50)
-        compose.onNodeWithText("No Cast devices found").assertIsDisplayed()
+        compose.onNodeWithText("Searching…").assertIsDisplayed()
 
         // Found devices render as rows; a tap forwards the typed id.
         compose.runOnIdle {

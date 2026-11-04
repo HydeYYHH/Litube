@@ -128,8 +128,7 @@ class YoutubeHttpDataSource private constructor(
             if (responseCode == 403) {
                 Log.w(
                     TAG,
-                    "HTTP 403 host=${resp.request.url.host} path=${resp.request.url.encodedPath} " +
-                        "c=${resp.request.url.queryParameter("c")} " +
+                    "HTTP 403 resource=${com.hhst.youtubelite.diagnostics.DiagnosticRedaction.resource(resp.request.url.toString())} " +
                         "rangeParam=$rangeParameterEnabled rnParam=$rnParameterEnabled " +
                         "pos=${dataSpec.position} len=${dataSpec.length}",
                 )
@@ -137,9 +136,14 @@ class YoutubeHttpDataSource private constructor(
             val cause = if (responseCode == 416) {
                 DataSourceException(PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE)
             } else null
-            throw HttpDataSource.InvalidResponseCodeException(
+            val failure = HttpDataSource.InvalidResponseCodeException(
                 responseCode, responseMessage, cause, headers, dataSpec, ByteArray(0),
             )
+            val readyAt = activePlan?.availableAtNanos ?: 0
+            if (responseCode == 403 && readyAt > System.nanoTime()) {
+                throw MediaNotReadyException(readyAt, failure)
+            }
+            throw failure
         }
 
         activePlan?.let { plan ->

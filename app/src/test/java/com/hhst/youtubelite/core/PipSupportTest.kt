@@ -3,7 +3,7 @@ package com.hhst.youtubelite.core
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.MemoryPrefStore
 import com.hhst.youtubelite.extension.PreferenceKeys
-import com.hhst.youtubelite.ui.extension.ExtensionViewModel
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,17 +20,17 @@ class PipSupportTest {
         }
     }
 
-    @Test fun unsupportedCatalogHidesPipAndCannotEnableItButKeepsOtherPlaybackSettings() {
+    /** The preference stores freely; runtime call sites gate on PipSupport. */
+    @Test fun playbackPreferencesRoundTripIndependentlyOfPipSupport() {
         val prefs = ExtensionManager(MemoryPrefStore())
         prefs.setEnabled(PreferenceKeys.ENABLE_PIP, false)
-        val model = ExtensionViewModel(prefs, pipSupported = false)
-        val keys = model.uiState.value.sections.flatMap { it.children }.mapNotNull { it.key }
-        assertFalse(PreferenceKeys.ENABLE_PIP in keys)
-        assertTrue(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER in keys)
-        assertTrue(PreferenceKeys.ENABLE_BACKGROUND_PLAY in keys)
-        model.setEnabled(PreferenceKeys.ENABLE_PIP, true)
+        prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
+        prefs.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, false)
         assertFalse(prefs.isEnabled(PreferenceKeys.ENABLE_PIP))
-        model.resetToDefault()
-        assertFalse(model.uiState.value.toggles.containsKey(PreferenceKeys.ENABLE_PIP))
+        assertTrue(prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY))
+        assertFalse(prefs.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER))
+        prefs.resetToDefault()
+        assertEquals(PreferenceKeys.DEFAULTS[PreferenceKeys.ENABLE_PIP], prefs.isEnabled(PreferenceKeys.ENABLE_PIP))
+        assertEquals(PreferenceKeys.DEFAULTS[PreferenceKeys.ENABLE_BACKGROUND_PLAY], prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY))
     }
 }

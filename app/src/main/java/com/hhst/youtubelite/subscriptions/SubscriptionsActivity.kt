@@ -16,8 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -88,6 +93,11 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     when (request) {
                         is SubscriptionsNavigationRequest.MenuAction -> if (request.action == com.hhst.youtubelite.home.domain.FeedMenuAction.Share) {
                             shareGateway.share(request.videoId)
+                        } else if (!fixtures && request.action in setOf(com.hhst.youtubelite.home.domain.FeedMenuAction.Queue, com.hhst.youtubelite.home.domain.FeedMenuAction.Download)) {
+                            val video = (subscriptionsViewModel.uiState.value.content as? com.hhst.youtubelite.subscriptions.domain.SubscriptionsContent.Feed)?.page?.items?.firstOrNull { it.id == request.videoId }
+                            com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@SubscriptionsActivity).execute(
+                                com.hhst.youtubelite.ui.MediaActionItem(request.videoId, video?.title.orEmpty(), video?.author.orEmpty(), video?.artwork.orEmpty()),
+                                if (request.action == com.hhst.youtubelite.home.domain.FeedMenuAction.Queue) com.hhst.youtubelite.ui.MediaActionKind.Queue else com.hhst.youtubelite.ui.MediaActionKind.Download)
                         }
 
                         is SubscriptionsNavigationRequest.Watch -> launchNavigation(WatchActivity.intent(this@SubscriptionsActivity, request.videoId))
@@ -168,13 +178,18 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                     )
                 }
             }
-            if (state.overlay is SubscriptionsOverlay.Menu) {
-                // Feedback rows need a signed-in feedbackToken the anonymous menus never carry.
-                val menuActions = if (state.live) com.hhst.youtubelite.home.domain.FeedMenuKind.Video.actions.filter {
-                    it == com.hhst.youtubelite.home.domain.FeedMenuAction.WatchLater ||
-                        it == com.hhst.youtubelite.home.domain.FeedMenuAction.SaveToPlaylist ||
-                        it == com.hhst.youtubelite.home.domain.FeedMenuAction.Share
-                } else com.hhst.youtubelite.home.domain.FeedMenuKind.Video.actions
+            (state.overlay as? SubscriptionsOverlay.Menu)?.let { menu ->
+                // Production rows mirror the card's real capabilities: feedback rows appear
+                // only once its own (inline or get_panel) tokens were resolved; fixture
+                // menus keep the full typed row set.
+                val target = (state.content as? com.hhst.youtubelite.subscriptions.domain.SubscriptionsContent.Feed)
+                    ?.page?.items?.firstOrNull { it.id == menu.videoId }
+                val menuActions = if (state.live) buildList {
+                    addAll(listOf(FeedMenuAction.Queue, FeedMenuAction.Download, FeedMenuAction.WatchLater,
+                        FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share))
+                    if (!target?.notInterestedToken.isNullOrBlank()) add(FeedMenuAction.NotInterested)
+                    if (!target?.dontRecommendToken.isNullOrBlank()) add(FeedMenuAction.DontRecommend)
+                } else FeedMenuKind.Video.actions
                 MenuBottomSheet(
                     items = menuActions.map { action ->
                         MenuSheetItem(action.icon(), action.label)
@@ -184,12 +199,28 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         subscriptionsViewModel.onAction(SubscriptionsAction.MenuSelected(menuActions[index]))
                     },
                     paneTitle = "Video actions",
+                    header = if (state.menuLoading || state.menuFailed) ({
+                        Box(Modifier.fillMaxSize().height(48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                            if (state.menuLoading) Box(Modifier.testTag("subscriptions-menu-loading")) {
+                                com.hhst.youtubelite.home.presentation.LoadingSpinner()
+                            } else com.hhst.youtubelite.ui.design.AppText(
+                                androidx.compose.ui.res.stringResource(com.hhst.youtubelite.R.string.retry),
+                                size = 14, line = 20,
+                                modifier = Modifier.testTag("subscriptions-menu-retry")
+                                    .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                                        subscriptionsViewModel.onAction(SubscriptionsAction.OpenMenu(menu.videoId))
+                                    }.padding(horizontal = 16.dp, vertical = 12.dp),
+                            )
+                        }
+                    }) else null,
                 )
             }
         }
     }
 
     private fun FeedMenuAction.icon() = when (this) {
+        FeedMenuAction.Queue -> AppIcon.QueueAdd
+        FeedMenuAction.Download -> AppIcon.Download
         FeedMenuAction.WatchLater -> AppIcon.Clock
         FeedMenuAction.SaveToPlaylist -> AppIcon.Bookmark
         FeedMenuAction.Share -> AppIcon.Share
@@ -207,6 +238,7 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
         super.onResume()
         if (!com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)) {
             com.hhst.youtubelite.data.media.MediaSession.snapshot().let { subscriptionsViewModel.updateSession(it.signedIn, it.generation) }
+            subscriptionsViewModel.onForeground()
         }
     }
 

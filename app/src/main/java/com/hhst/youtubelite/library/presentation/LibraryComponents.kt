@@ -101,7 +101,7 @@ internal fun LibraryRowItem(row: LibraryRow, icon: AppIcon, onOpen: () -> Unit) 
         verticalAlignment = Alignment.CenterVertically) {
         AppIcon(icon)
         Spacer(Modifier.width(24.dp))
-        AppText(row.label, size = 14, line = 22)
+        AppText(if (row == LibraryRow.Queue) androidx.compose.ui.res.stringResource(com.hhst.youtubelite.R.string.queue) else row.label, size = 14, line = 22)
     }
 }
 

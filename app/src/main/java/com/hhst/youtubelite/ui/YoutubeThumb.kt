@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import com.hhst.youtubelite.core.YoutubeThumbnail
+import com.hhst.youtubelite.core.artworkSources
 import com.hhst.youtubelite.ui.design.LocalMotionScale
 import com.hhst.youtubelite.ui.design.motionDuration
 
@@ -42,20 +43,28 @@ fun YoutubeThumb(
         val maxDim = with(LocalDensity.current) {
             maxOf(maxWidth, maxHeight).toPx().toInt().coerceIn(128, 1600)
         }
+        val sources = remember(url, fallbackUrl, maxDim) {
+            (artworkSources(url, maxDim) + artworkSources(fallbackUrl, maxDim)).distinct()
+        }
+        fun acceptable(source: String, image: android.graphics.Bitmap): Boolean =
+            source == url || source == fallbackUrl || maxOf(image.width, image.height) > 120
         var bitmap by remember(url, fallbackUrl, maxDim, cacheVersion) {
-            mutableStateOf(YoutubeThumbnail.cached(url, maxDim) ?: YoutubeThumbnail.cached(fallbackUrl, maxDim))
+            mutableStateOf(sources.firstNotNullOfOrNull { source ->
+                YoutubeThumbnail.cached(source, maxDim)?.takeIf { acceptable(source, it) }
+            })
         }
         LaunchedEffect(url, fallbackUrl, maxDim, cacheVersion) {
             if (url.isNullOrBlank()) {
                 bitmap = null
                 return@LaunchedEffect
             }
-            YoutubeThumbnail.cached(url, maxDim)?.let {
-                bitmap = it
-                return@LaunchedEffect
+            for (source in sources) {
+                val image = YoutubeThumbnail.await(source, maxDim)
+                if (image != null && acceptable(source, image)) {
+                    bitmap = image
+                    break
+                }
             }
-            bitmap = YoutubeThumbnail.await(url, maxDim)
-                ?: fallbackUrl?.takeUnless { it == url }?.let { YoutubeThumbnail.await(it, maxDim) }
         }
         Crossfade(bitmap, modifier = Modifier.fillMaxSize(),
             animationSpec = tween(motionDuration(140, LocalMotionScale.current)), label = "Artwork") { bmp ->

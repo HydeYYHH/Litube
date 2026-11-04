@@ -8,7 +8,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.activity.ComponentActivity
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -109,7 +108,7 @@ class OriginalAudioAndroidTest {
             awaitSelected("audioOne001", "Spanish dubbed")
             instrumentation.runOnMainSync { engine.play("audioTwo002") }
             awaitSelected("audioTwo002", "English original")
-            DeviceEvidence.writeJson("youtube-original-audio.json", Gson().toJson(observations))
+            DeviceEvidence.writeJson("youtube-original-audio.json", com.hhst.youtubelite.core.TestJson.any(observations))
         } finally {
             instrumentation.runOnMainSync { if (initialized) { engine.stop(); player.release() } }
             scope.cancel()

@@ -82,6 +82,15 @@ class ChapterEntryAndroidTest {
         return (bar.top + bar.bottom) / 2f
     }
 
+    @Test fun subtitlesKeepASmallGapAboveTheVisibleTrack() {
+        surface(PlayerUiState(visible = true, prepared = true, firstFrameRendered = true,
+            controlsVisible = true, durationMs = 8_544_000L), cues = listOf("Readable subtitle"))
+        val density = compose.activity.resources.displayMetrics.density
+        val subtitle = compose.onNodeWithText("Readable subtitle").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val gap = (trackLineY() - subtitle.bottom) / density
+        assertTrue("Caption clearance must remain small: $gap dp", gap in 4f..9f)
+    }
+
     @Test fun chapterChipSitsInTheInfoBandAndSkipCardAnchorsAboveTheTrack() {
         surface(
             PlayerUiState(
@@ -131,17 +140,38 @@ class ChapterEntryAndroidTest {
     }
 
     @Test fun segmentsAreListedSeparatelyFromChapters() {
+        var sought = -1L
         surface(
             PlayerUiState(
                 visible = true, durationMs = 8_544_000L, chapters = chapters,
                 sponsorSegments = listOf(SponsorBlockManager.Segment(5_000L, 9_000L, "sponsor")),
             ),
+            onSeek = { sought = it },
         )
         compose.waitForIdle()
         compose.onNodeWithTag("player-chapter-entry").performTouchInput { click() }
         compose.waitForIdle()
         compose.onNodeWithText(compose.activity.getString(R.string.skippable_segments)).assertIsDisplayed()
         compose.onNodeWithTag("segment-row-5000").assertIsDisplayed()
+        compose.onNodeWithText("0:05 – 0:09").assertIsDisplayed()
+        compose.onNodeWithTag("segment-row-5000").performClick()
+        assertEquals(9_000L, sought)
+    }
+
+    @Test fun chaptersShowArtworkAndTheirFullRangeAndSeekToTheStart() {
+        var sought = -1L
+        compose.setContent { AppTheme {
+            Column {
+                ChaptersSheet(listOf(Chapter("Intro", 0, "asset://sample_bunny.jpg"), Chapter("Main", 10)),
+                    emptyList(), remember { mutableStateOf(0L) }, null,
+                    onSeek = { time, _ -> sought = time }, onDismiss = {}, durationMs = 30_000)
+            }
+        } }
+        compose.onNodeWithTag("chapter-artwork-0", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("0:00 – 0:10").assertIsDisplayed()
+        compose.onNodeWithText("0:10 – 0:30").assertIsDisplayed()
+        compose.onNodeWithTag("chapter-row-10").performClick()
+        assertEquals(10_000L, sought)
     }
 
     @Test fun entryHiddenWithoutDataWhenLockedOrControlsHidden() {

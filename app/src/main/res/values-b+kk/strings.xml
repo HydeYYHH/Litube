@@ -166,6 +166,7 @@
     <string name="copy">Көшіру</string>
     <string name="copied">Көшірілген</string>
     <string name="copy_all">Барлығын көшіріңіз</string>
+    <string name="cast_searching">Іздеу…</string>
     <string name="queue_now_playing">Қазір ойнатуда</string>
     <string name="clear_queue_confirm">Бүкіл кезекті тазалау керек пе?</string>
     <string name="ok">Жарайды</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Жабу</string>
     <string name="verification_completed">Растау аяқталды. Қайта талаптанып жатыр…</string>
     <string name="verification_still_blocked">Растаудан кейін де блокталған. Кейінірек қайта байқап көріңіз.</string>
+    <string name="comments_title">Пікірлер</string>
+    <string name="comments_sort_top">Үздік пікірлер</string>
+    <string name="comments_sort_newest">Алдымен жаңалары</string>
+    <string name="comments_sort_chip_top">Үздік</string>
+    <string name="comments_sort_chip_newest">Жаңа</string>
+    <string name="comments_composer_add">Пікір қосу</string>
+    <string name="comments_composer_reply">Жауап беру</string>
+    <string name="comments_composer_edit">Пікірді өңдеу</string>
+    <string name="comments_composer_text_hint">Пікір мәтіні</string>
+    <string name="comments_composer_text_edit_hint">Пікір мәтінін өңдеу</string>
+    <string name="comments_composer_submit">Пікір қалдыру</string>
+    <string name="comments_composer_sending">Жіберілуде…</string>
+    <string name="comments_composer_save">Сақтау</string>
+    <string name="comments_delete_title">Жою</string>
+    <string name="comments_show_more_replies">Көбірек жауапты көрсету</string>
+    <string name="comments_load_more_failed">Қосымша пікірлерді жүктей алмады</string>
+    <string name="comments_hide_replies">Жауаптарды жасыру</string>
+    <string name="home_music_charts">Музыка чарттары</string>
+    <string name="home_popular_gaming">Ойындардағы трендтер</string>
+    <string name="home_popular_sports">Спорттағы трендтер</string>
+    <string name="home_top_news">Басты жаңалықтар</string>
 </resources>

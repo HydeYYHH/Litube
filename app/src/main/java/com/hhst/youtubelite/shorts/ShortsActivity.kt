@@ -44,29 +44,47 @@ import com.hhst.youtubelite.comments.data.FixtureCommentsRepository
 import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.comments.openCommentLink
 import com.hhst.youtubelite.comments.presentation.CommentsPanel
 import com.hhst.youtubelite.comments.presentation.CommentsViewModel
 import com.hhst.youtubelite.data.media.toReportingVideo
 import com.hhst.youtubelite.home.domain.FeedMenuAction
 import com.hhst.youtubelite.home.domain.FeedMenuKind
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.PlayerViewModel
+import com.hhst.youtubelite.player.surface.PlayerDialog
+import com.hhst.youtubelite.player.surface.PlayerDialogHost
+import com.hhst.youtubelite.player.surface.PlayerPlaybackActions
+import com.hhst.youtubelite.player.surface.PlayerSurfaceCallbacks
+import com.hhst.youtubelite.player.surface.PlayerUi
+import com.hhst.youtubelite.saves.domain.NewPlaylistDraft
+import com.hhst.youtubelite.saves.presentation.NewPlaylistSheet
+import com.hhst.youtubelite.saves.presentation.SaveSheetLive
+import com.hhst.youtubelite.saves.presentation.SaveToPlaylistSheet
 import com.hhst.youtubelite.share.ShareGateway
 import com.hhst.youtubelite.shorts.data.FixtureShortsRepository
 import com.hhst.youtubelite.shorts.data.ShortsScenario
 import com.hhst.youtubelite.shorts.domain.ShortsAction
+import com.hhst.youtubelite.shorts.domain.ShortsMenuAction
 import com.hhst.youtubelite.shorts.domain.ShortsNavigationRequest
 import com.hhst.youtubelite.shorts.domain.ShortsOverlay
+import com.hhst.youtubelite.shorts.presentation.ShortsDescriptionSheet
 import com.hhst.youtubelite.shorts.presentation.ShortsScreen
 import com.hhst.youtubelite.shorts.presentation.ShortsViewModel
 import com.hhst.youtubelite.shorts.presentation.RecentCommentsViewModel
+import com.hhst.youtubelite.ui.components.audioTrackLabel
 import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.MenuBottomSheet
 import com.hhst.youtubelite.ui.design.MenuSheetItem
+import com.hhst.youtubelite.ui.design.MenuSheetLayout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 import com.hhst.youtubelite.ui.renderNotice
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 
 class ShortsActivity : ComponentActivity() {
     lateinit var shortsViewModel: ShortsViewModel
@@ -127,7 +145,8 @@ class ShortsActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == ShortsViewModel::class.java)
                 return ShortsViewModel(if (fixtures) FixtureShortsRepository(scenario, intent.getStringExtra(EXTRA_CHANNEL_ID)) else sources.shorts(startItemId, intent.getStringExtra(EXTRA_CHANNEL_ID)), extras.createSavedStateHandle(), scenario, startItemId, if (fixtures) null else sources.videoActions,
-                    if (fixtures) null else org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.shorts.data.ShortsMediaPreloader>()) as T
+                    if (fixtures) null else org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.shorts.data.ShortsMediaPreloader>(),
+                    if (fixtures) null else sources.saves) as T
             }
         })[ShortsViewModel::class.java]
         lifecycleScope.launch {
@@ -144,11 +163,20 @@ class ShortsActivity : ComponentActivity() {
                     when (request) {
                         is ShortsNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@ShortsActivity, request.channelId))
                         is ShortsNavigationRequest.Share -> shareGateway.share(request.itemId)
-                        // Fixture-only typed exits: the feedback-only menu hides in production
-                        // (state.live) and rate/subscribe writes run in-VM there. No `else`: a new
-                        // request type must fail to compile here.
-                        is ShortsNavigationRequest.Rate, is ShortsNavigationRequest.Subscribe,
-                        is ShortsNavigationRequest.MenuAction -> Unit
+                        is ShortsNavigationRequest.MenuAction -> if (!fixtures) {
+                            when (request.action) {
+                                FeedMenuAction.Share -> shareGateway.share(request.itemId)
+                                FeedMenuAction.Download -> {
+                                    val item = (shortsViewModel.uiState.value.content as? com.hhst.youtubelite.shorts.domain.ShortsContent.Ready)
+                                        ?.page?.items?.firstOrNull { it.id == request.itemId }
+                                    com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@ShortsActivity).execute(
+                                        com.hhst.youtubelite.ui.MediaActionItem(request.itemId, item?.title.orEmpty(), item?.author.orEmpty(), item?.artwork.orEmpty()),
+                                        com.hhst.youtubelite.ui.MediaActionKind.Download)
+                                }
+                                else -> Unit
+                            }
+                        }
+                        is ShortsNavigationRequest.Rate, is ShortsNavigationRequest.Subscribe -> Unit
                     }
                 }
             }
@@ -158,13 +186,13 @@ class ShortsActivity : ComponentActivity() {
             DisposableEffect(playerViewModel, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
-                        Lifecycle.Event.ON_START -> playerViewModel.onShortsOpened()
-                        Lifecycle.Event.ON_STOP -> if (fixtures) playerViewModel.onShortsClosed() else playerViewModel.onShortsStopped()
+                        Lifecycle.Event.ON_RESUME -> playerViewModel.onShortsOpened()
+                        Lifecycle.Event.ON_PAUSE -> playerViewModel.onShortsStopped()
                         else -> Unit
                     }
                 }
                 lifecycle.addObserver(observer)
-                if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) playerViewModel.onShortsOpened()
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) playerViewModel.onShortsOpened()
                 onDispose {
                     lifecycle.removeObserver(observer)
                     if (!isChangingConfigurations) playerViewModel.onShortsClosed()
@@ -173,6 +201,34 @@ class ShortsActivity : ComponentActivity() {
             val state by shortsViewModel.uiState.collectAsStateWithLifecycle()
             // Authoritative engine identity: gates the per-page video slot below.
             val playerState by playerViewModel.uiState.collectAsStateWithLifecycle()
+            // Shorts menu rows open the shared player dialogs; the window half of
+            // the bridge stays inert because Shorts own their chrome.
+            var shortsPlayerDialog by remember { mutableStateOf<PlayerDialog?>(null) }
+            var descriptionItem by remember { mutableStateOf<String?>(null) }
+            val shortsCallbacks = remember(playerViewModel) {
+                object : PlayerSurfaceCallbacks, PlayerPlaybackActions by playerViewModel {
+                    override fun onGestureEnd() = playerViewModel.onGestureEnd()
+                    override fun onBack() {}
+                    override fun onBrightness(delta: Float) {}
+                    override fun onVolume(delta: Float) {}
+                    override fun onPip() {}
+                    override fun onShare() {}
+                    override fun shareCastLink() {}
+                }
+            }
+            val onShortsMenuSelected: (ShortsMenuAction, String) -> Unit = { action, itemId ->
+                shortsViewModel.onAction(ShortsAction.CloseMenu)
+                when (action) {
+                    ShortsMenuAction.Description -> descriptionItem = itemId
+                    ShortsMenuAction.SaveToPlaylist -> shortsViewModel.onAction(ShortsAction.OpenSaveToPlaylist(itemId))
+                    ShortsMenuAction.Captions -> shortsPlayerDialog = PlayerDialog.Captions
+                    ShortsMenuAction.AudioTrack -> shortsPlayerDialog = PlayerDialog.Audio
+                    ShortsMenuAction.PlaybackSpeed -> shortsPlayerDialog = PlayerDialog.Speed
+                    ShortsMenuAction.Quality -> shortsPlayerDialog = PlayerDialog.Quality
+                    ShortsMenuAction.Download -> downloadShort(itemId)
+                    ShortsMenuAction.Share -> shareGateway.share(itemId)
+                }
+            }
             // Comments exist only while their panel is open: no per-item model,
             // and no comment request, is created for a page the user only swipes past.
             val commentItem = (state.overlay as? ShortsOverlay.Comments)?.itemId
@@ -197,6 +253,8 @@ class ShortsActivity : ComponentActivity() {
                         if (request is CommentNavigationRequest.OpenAuthor) {
                             launchNavigation(ChannelActivity.intent(this@ShortsActivity, request.channelId))
                         }
+                        if (request is CommentNavigationRequest.OpenLink) openCommentLink(request.link,
+                            org.koin.java.KoinJavaComponent.getKoin().get<PlayerViewModel>())
                     }
                 }
             }
@@ -212,8 +270,13 @@ class ShortsActivity : ComponentActivity() {
                 }
             }
             if (!fixtures) {
+                LaunchedEffect(playerState.videoId, playerState.firstFrameRendered, state.currentItemId) {
+                    if (playerState.firstFrameRendered && playerState.videoId == state.currentItemId) {
+                        playerState.videoId?.let(shortsViewModel::onPlaybackReady)
+                    }
+                }
                 LaunchedEffect(state.currentItemId, lifecycle) {
-                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                         state.currentItemId?.let(playerViewModel::openShort)
                         kotlinx.coroutines.awaitCancellation()
                     }
@@ -305,11 +368,14 @@ class ShortsActivity : ComponentActivity() {
                         com.hhst.youtubelite.watch.presentation.WatchPlayer(Modifier.fillMaxSize(), { finish() }, pip = true)
                     }
                 },
-                playbackControls = if (fixtures) null else { itemId ->
+                playbackControls = if (fixtures) null else { itemId, active ->
                     if (playerState.videoId == itemId) {
                         com.hhst.youtubelite.shorts.presentation.ShortPlaybackControls(
                             playing = playerState.isPlaying,
+                            active = active,
+                            paused = playerState.shortPausedByUser,
                             loading = !playerState.prepared || playerState.loading,
+                            ready = playerState.firstFrameRendered,
                             error = playerState.error,
                             onRetry = playerViewModel::onRetry,
                             onDetails = if (playerState.failureReport == null) null else playerViewModel::onErrorDetails,
@@ -333,12 +399,64 @@ class ShortsActivity : ComponentActivity() {
                 }
             }
             if (state.overlay is ShortsOverlay.Menu) {
-                MenuBottomSheet(
-                    items = FeedMenuKind.Short.actions.map { action -> MenuSheetItem(action.icon(), action.label) },
-                    onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
-                    onSelect = { index -> shortsViewModel.onAction(ShortsAction.MenuSelected(FeedMenuKind.Short.actions[index])) },
-                    paneTitle = "Shorts actions",
-                )
+                val menuItemId = (state.overlay as? ShortsOverlay.Menu)?.itemId
+                if (fixtures) {
+                    val actions = FeedMenuKind.Short.actions
+                    MenuBottomSheet(
+                        items = actions.map { action -> MenuSheetItem(action.icon(), action.label) },
+                        onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
+                        onSelect = { index -> shortsViewModel.onAction(ShortsAction.MenuSelected(actions[index])) },
+                        paneTitle = "Shorts actions",
+                    )
+                } else if (menuItemId != null) {
+                    // Rows carry the live player value; nothing here fakes state.
+                    val rows = shortsMenuRows(state.details[menuItemId]?.description)
+                    MenuBottomSheet(
+                        items = rows.map { action ->
+                            MenuSheetItem(action.iconOrNull(), shortsMenuLabel(action, playerState),
+                                iconResource = action.iconResource())
+                        },
+                        onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
+                        onSelect = { index -> onShortsMenuSelected(rows[index], menuItemId) },
+                        paneTitle = "Shorts actions",
+                    )
+                }
+            }
+            shortsPlayerDialog?.let { dialog ->
+                PlayerDialogHost(dialog, playerState, shortsCallbacks, onDismiss = { shortsPlayerDialog = null })
+            }
+            descriptionItem?.let { itemId ->
+                state.details[itemId]?.let { detail ->
+                    ShortsDescriptionSheet(
+                        title = detail.item.title,
+                        author = detail.item.author,
+                        description = detail.description.orEmpty(),
+                        onDismiss = { descriptionItem = null },
+                    )
+                }
+            }
+            shortsViewModel.saveSheet?.let { sheet ->
+                val sheetState by sheet.state.collectAsStateWithLifecycle()
+                sheetState?.let { current ->
+                    if (current.newPlaylist) NewPlaylistSheet(
+                        draft = NewPlaylistDraft(current.title, current.description),
+                        onDismiss = sheet::close,
+                        onDraftChange = { sheet.draftChanged(it.title, it.description) },
+                        onSubmit = sheet::submitNewPlaylist,
+                    ) else SaveToPlaylistSheet(
+                        playlists = emptyList(),
+                        onDismiss = sheet::close,
+                        onSelect = {},
+                        onNewPlaylist = sheet::openNewPlaylist,
+                        live = SaveSheetLive(
+                            choices = current.choices,
+                            failed = current.choicesFailed,
+                            pending = current.pending,
+                            onToggle = sheet::toggle,
+                            onRetry = sheet::retry,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -370,7 +488,70 @@ class ShortsActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** Production download row: same executor the page menus use. */
+    private fun downloadShort(itemId: String) {
+        val item = (shortsViewModel.uiState.value.content as? com.hhst.youtubelite.shorts.domain.ShortsContent.Ready)
+            ?.page?.items?.firstOrNull { it.id == itemId }
+        com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this).execute(
+            com.hhst.youtubelite.ui.MediaActionItem(itemId, item?.title.orEmpty(), item?.author.orEmpty(), item?.artwork.orEmpty()),
+            com.hhst.youtubelite.ui.MediaActionKind.Download,
+        )
+    }
+
+    private fun shortsMenuRows(description: String?): List<ShortsMenuAction> = buildList {
+        if (!description.isNullOrBlank()) add(ShortsMenuAction.Description)
+        if (shortsViewModel.saveSheet != null) add(ShortsMenuAction.SaveToPlaylist)
+        add(ShortsMenuAction.Captions)
+        add(ShortsMenuAction.AudioTrack)
+        add(ShortsMenuAction.PlaybackSpeed)
+        add(ShortsMenuAction.Quality)
+        add(ShortsMenuAction.Download)
+        add(ShortsMenuAction.Share)
+    }
+
+    private fun ShortsMenuAction.iconOrNull(): AppIcon? = when (this) {
+        ShortsMenuAction.Description -> AppIcon.Info
+        ShortsMenuAction.SaveToPlaylist -> AppIcon.Bookmark
+        ShortsMenuAction.Download -> AppIcon.Download
+        ShortsMenuAction.Share -> AppIcon.Share
+        else -> null
+    }
+
+    private fun ShortsMenuAction.iconResource(): Int? = when (this) {
+        ShortsMenuAction.Captions -> R.drawable.ic_subtitles_on
+        ShortsMenuAction.AudioTrack -> R.drawable.ic_track
+        ShortsMenuAction.PlaybackSpeed -> R.drawable.ic_playback_speed
+        ShortsMenuAction.Quality -> R.drawable.ic_quality
+        else -> null
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun shortsMenuLabel(action: ShortsMenuAction, state: PlayerUiState): String = when (action) {
+        ShortsMenuAction.Description -> stringResource(R.string.video_description)
+        ShortsMenuAction.SaveToPlaylist -> stringResource(R.string.save_to_playlist)
+        ShortsMenuAction.Captions -> stringResource(R.string.subtitles) + when {
+            !state.subtitleEnabled && state.subtitleTracks.isNotEmpty() -> " · " + stringResource(R.string.subtitles_off)
+            else -> state.subtitleTracks
+                .firstOrNull { it.key == state.subtitleKey }?.takeIf { state.subtitleEnabled }
+                ?.let { " · " + PlayerUi.languageLabel(it.language) }.orEmpty()
+        }
+        ShortsMenuAction.AudioTrack -> stringResource(R.string.audio_track) + state.audioTracks
+            .firstOrNull { it.key == state.audioTrackKey }?.let { " · " + audioTrackLabel(it) }.orEmpty()
+        ShortsMenuAction.PlaybackSpeed -> stringResource(R.string.info_playback_speed) + " · " + PlayerUi.speedLabel(state.speed)
+        ShortsMenuAction.Quality -> {
+            // Same real-value chain as the info dialog: pinned label, else what is on
+            // screen, else the auto mode itself.
+            val current = state.qualityLabel ?: PlayerUi.playingQuality(state.activeQuality, state.videoHeight)
+                ?: stringResource(R.string.player_quality_auto)
+            stringResource(R.string.player_info_quality) + " · " + current
+        }
+        ShortsMenuAction.Download -> stringResource(R.string.download)
+        ShortsMenuAction.Share -> stringResource(R.string.share)
+    }
+
     private fun FeedMenuAction.icon() = when (this) {
+        FeedMenuAction.Download -> AppIcon.Download
+        FeedMenuAction.Share -> AppIcon.Share
         FeedMenuAction.NotInterested -> AppIcon.Block
         FeedMenuAction.SendFeedback -> AppIcon.Feedback
         else -> AppIcon.More

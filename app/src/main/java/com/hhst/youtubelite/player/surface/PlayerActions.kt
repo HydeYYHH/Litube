@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.QueueOwner
 
 /**
  * Playback intents handled by [player.PlayerViewModel].
@@ -18,7 +19,7 @@ interface PlayerPlaybackActions {
     fun onSpeed(speed: Float)
     fun onQuality(label: String?)
     fun onSubtitle(trackKey: String?)
-    fun onLoop()
+    fun onLoopMode(mode: com.hhst.youtubelite.player.engine.LoopMode)
     fun onNext()
     fun onPrevious()
     fun onDoubleTapSeek(offsetMs: Long)
@@ -30,6 +31,8 @@ interface PlayerPlaybackActions {
     fun onTimeBarCommit()
     fun onLockToggle()
     fun onAudioTrack(trackKey: String?)
+    /** The audio menu opened; may trigger a bounded audio-catalog supplement. No-op by default. */
+    fun onAudioMenuOpened() {}
     /** Subtitle appearance changed (applies live and persists). */
     fun onSubtitleStyle(style: SubtitleStyle)
     fun onQueueItem(url: String)
@@ -37,8 +40,12 @@ interface PlayerPlaybackActions {
     fun onQueueEnabled(enabled: Boolean)
     fun onQueueClear()
     fun onQueueRemove(videoId: String)
-    /** Queue sheet drag-reorder commit. */
-    fun onQueueMove(fromIndex: Int, toIndex: Int)
+    /**
+     * Queue sheet drag-reorder commit. [owner] is the queue owner captured at
+     * drag start; a commit from a switched identity is dropped, never applied
+     * to the newly active queue.
+     */
+    fun onQueueMove(fromIndex: Int, toIndex: Int, owner: QueueOwner? = null)
     /** Page media-menu "Add to queue". */
     fun onQueueAdd(item: QueueItem)
     /** Video action panel "Play next": after the playing entry, moving an existing entry. */
@@ -47,7 +54,8 @@ interface PlayerPlaybackActions {
     fun onErrorDetails() {}
     fun onCastStop()
     fun onCastDevice(id: String)
-    fun onShareCastLink()
+    fun onCastFailureDismiss() {}
+    fun onShareCastLink(onReady: () -> Unit = {})
     fun onCloseCastLink()
     fun onMiniClose()
     fun onMiniRestore()
@@ -97,10 +105,10 @@ class PlayerCallbackBridge(
         window.onGestureEnd()
     }
 
-    override fun onShareCastLink() {
-        // One user action, two surfaces: ensure the proxy serves the current
-        // source, then hand the URL to the system share sheet.
-        playback.onShareCastLink()
-        window.shareCastLink()
+    override fun onShareCastLink(onReady: () -> Unit) {
+        playback.onShareCastLink {
+            window.shareCastLink()
+            onReady()
+        }
     }
 }

@@ -39,6 +39,7 @@ import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.comments.domain.CommentTarget
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.comments.openCommentLink
 import com.hhst.youtubelite.comments.presentation.CommentsViewModel
 import com.hhst.youtubelite.post.presentation.PostDetailScreen
 import com.hhst.youtubelite.post.presentation.PostDetailViewModel
@@ -106,6 +107,7 @@ class PostDetailActivity : com.hhst.youtubelite.ui.ContentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 postCommentsViewModel.navigationRequests.collect { request ->
                     lastCommentRequest = request
+                    if (request is CommentNavigationRequest.OpenLink) openCommentLink(request.link)
                     if (request is CommentNavigationRequest.OpenAuthor) launchNavigation(
                         ChannelActivity.intent(this@PostDetailActivity, request.channelId),
                     )

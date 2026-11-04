@@ -18,6 +18,78 @@ class HomeViewModelTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
 
+    private fun menuVideo(id: String = "video") = FeedItem.Video(id, "Title", "Author", "", "", "", "channel",
+        feedbackGeneration = 7, menuEndpoint = FeedMenuEndpoint("menu", id))
+
+    private fun menuViewModel(resolve: suspend (FeedItem.Video) -> FeedItem.Video): HomeViewModel {
+        val repo = object : HomeRepository {
+            override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(menuVideo(), menuVideo("other")))
+            override suspend fun menu(video: FeedItem.Video) = resolve(video)
+        }
+        return HomeViewModel(repo, SavedStateHandle(), saveRepository = FakeSaveRepository()).also {
+            it.updateSession(true, 7)
+            it.onAction(HomeAction.Refresh)
+        }
+    }
+
+    @Test fun menuLoadsOnDemandAndFailureCanRetryWithoutReloadingTheFeed() = runTest {
+        var calls = 0
+        val vm = menuViewModel { video ->
+            calls++
+            if (calls == 1) error("offline")
+            video.copy(notInterestedToken = "token", dontRecommendToken = "channel-token")
+        }
+        advanceUntilIdle()
+        assertEquals(0, calls)
+        vm.onAction(HomeAction.OpenMenu("video"))
+        assertTrue((vm.uiState.value.overlay as HomeOverlay.Menu).loading)
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value.overlay as HomeOverlay.Menu).failed)
+        vm.onAction(HomeAction.OpenMenu("video"))
+        advanceUntilIdle()
+        assertEquals(HomeOverlay.Menu("video"), vm.uiState.value.overlay)
+        val rows = (vm.uiState.value.content as HomeContent.Feed).page.items.filterIsInstance<FeedItem.Video>()
+        assertEquals("token", rows.first().notInterestedToken)
+        assertEquals("channel-token", rows.first().dontRecommendToken)
+        assertNull(rows.last().notInterestedToken)
+        assertEquals(2, calls)
+    }
+
+    @Test fun aLateMenuCannotOverwriteANewerMenuForTheSameVideo() = runTest {
+        val first = CompletableDeferred<Unit>()
+        var calls = 0
+        val vm = menuViewModel { video ->
+            if (++calls == 1) withContext(NonCancellable) { first.await(); video.copy(notInterestedToken = "old") }
+            else video.copy(notInterestedToken = "new")
+        }
+        advanceUntilIdle()
+        vm.onAction(HomeAction.OpenMenu("video"))
+        runCurrent()
+        vm.onAction(HomeAction.CloseOverlay)
+        vm.onAction(HomeAction.OpenMenu("video"))
+        runCurrent()
+        first.complete(Unit)
+        advanceUntilIdle()
+        val video = (vm.uiState.value.content as HomeContent.Feed).page.items.first() as FeedItem.Video
+        assertEquals("new", video.notInterestedToken)
+        assertEquals(HomeOverlay.Menu("video"), vm.uiState.value.overlay)
+    }
+
+    @Test fun identityChangesCloseTheMenuAndRejectLateCapabilities() = runTest {
+        val ready = CompletableDeferred<Unit>()
+        val vm = menuViewModel { video -> withContext(NonCancellable) {
+            ready.await(); video.copy(notInterestedToken = "old-account")
+        } }
+        advanceUntilIdle()
+        vm.onAction(HomeAction.OpenMenu("video"))
+        runCurrent()
+        vm.updateSession(false, 8)
+        ready.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(HomeOverlay.None, vm.uiState.value.overlay)
+        assertNull(((vm.uiState.value.content as HomeContent.Feed).page.items.first() as FeedItem.Video).notInterestedToken)
+    }
+
     @Test fun menuKindsRejectActionsThatDoNotBelongToTheContent() = runTest {
         val vm = HomeViewModel(repository { _, _ -> HomePage(emptyList()) }, SavedStateHandle())
         for (kind in FeedMenuKind.entries) {
@@ -60,9 +132,9 @@ class HomeViewModelTest {
         // Unconfined Main keeps seeding, load and paint synchronous; no scheduler pumping.
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val dir = java.nio.file.Files.createTempDirectory("content-snapshots").toFile()
-        val store = com.hhst.youtubelite.core.ContentSnapshots(dir, com.google.gson.Gson())
+        val store = com.hhst.youtubelite.core.ContentSnapshots(dir)
         store.write("home", "visitor", "All", listOf(
-            FeedItem.Video("cached-1", "Cached", "Blender", "1K views", "bunny", "9:56", "blender")))
+            FeedItem.Video("cached-1", "Cached", "Blender", "1K views", "bunny", "9:56", "blender")), FeedItem.Video::class.java)
         val vm = HomeViewModel(repository { _, _ ->
             HomePage(listOf(FeedItem.Video("live-1", "Live", "Blender", "2K views", "bunny", "9:56", "blender")))
         }, SavedStateHandle(), snapshots = store, seedDispatcher = UnconfinedTestDispatcher())
@@ -75,13 +147,12 @@ class HomeViewModelTest {
         // The persisted snapshot write hops to real IO; wait for it before reading the store.
         val writeDeadline = System.currentTimeMillis() + 5_000
         while (System.currentTimeMillis() < writeDeadline &&
-            store.read<FeedItem.Video>("home", "visitor", "All",
-                com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type
-            )?.map { (it as FeedItem.Video).id }?.singleOrNull() != "live-1") Thread.sleep(20)
+            store.read("home", "visitor", "All", FeedItem.Video::class.java
+            )?.map { it.id }?.singleOrNull() != "live-1") Thread.sleep(20)
         val live = vm.uiState.value.content as HomeContent.Feed
         assertEquals(listOf("live-1"), live.page.items.map { it.id })
-        assertEquals(listOf("live-1"), store.read<FeedItem.Video>("home", "visitor", "All",
-            com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type
+        assertEquals(listOf("live-1"), store.read("home", "visitor", "All",
+            FeedItem.Video::class.java
         )!!.map { it.id })
         dir.deleteRecursively()
     }
@@ -104,6 +175,25 @@ class HomeViewModelTest {
         // shelf survives append deduplication instead of losing its row.
         assertEquals(listOf("v1", "shorts-a", "v2", "shorts-c"), items.map { it.id })
         assertEquals(listOf("a1", "a2"), (items[1] as FeedItem.Shorts).videos.map { it.id })
+    }
+
+    @Test fun aUserRefreshNeverRestartsAnInFlightRequest() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var loads = 0
+        val vm = HomeViewModel(repository { _, _ ->
+            loads++
+            gate.await()
+            FixtureHomeRepository.samplePage()
+        }, SavedStateHandle())
+        vm.onAction(HomeAction.Refresh)
+        runCurrent()
+        assertEquals(1, loads)
+        vm.onAction(HomeAction.Refresh)
+        runCurrent()
+        assertEquals(1, loads) // a refresh in flight owns the slot; the repeat is dropped
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is HomeContent.Feed)
     }
 
     private fun repository(block: suspend (String, String?) -> HomePage) = object : HomeRepository {
@@ -229,7 +319,10 @@ class HomeViewModelTest {
         vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
         advanceUntilIdle()
         assertEquals(listOf("a"), (vm.uiState.value.content as HomeContent.Feed).page.items.map { it.id })
-        assertEquals(AppNotice.Message("Couldn't update recommendations. Try again."), withTimeoutOrNull(500) { vm.actionNotices.first() })
+        val notice = withTimeoutOrNull(500) { vm.actionNotices.first() }
+        assertTrue(notice is AppNotice.Failure)
+        assertEquals("Couldn't update recommendations. Try again.", (notice as AppNotice.Failure).text)
+        assertTrue(notice.report.text.contains("Outcome: unexpected:IOException"))
     }
 
     @Test fun guestNotInterestedStillOpensTheReasonSheetWithoutWriting() = runTest {
@@ -241,8 +334,38 @@ class HomeViewModelTest {
         assertEquals(FixtureHomeRepository.samplePage().items, (vm.uiState.value.content as HomeContent.Feed).page.items)
     }
 
+    @Test fun repeatedFeedbackClicksSendOneRequestAndStaleResultsNeverLand() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val repo = object : HomeRepository {
+            override suspend fun loadHome(filter: String, continuation: String?) = HomePage(listOf(
+                FeedItem.Video("a", "A", "Blender", "1 view", "a", "1:00", "blender", notInterestedToken = "token-a", feedbackGeneration = 1),
+            ))
+            override suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) {
+                calls++
+                gate.await()
+            }
+        }
+        val vm = HomeViewModel(repo, SavedStateHandle(), saveRepository = FakeSaveRepository())
+        vm.updateSession(true, 1)
+        vm.onAction(HomeAction.Refresh)
+        advanceUntilIdle()
+        vm.onAction(HomeAction.OpenMenu("a"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
+        vm.onAction(HomeAction.OpenMenu("a"))
+        vm.onAction(HomeAction.MenuSelected(FeedMenuAction.NotInterested))
+        runCurrent()
+        assertEquals(1, calls) // the in-flight write owns the slot; the repeat is dropped
+        // The identity moved on while the write was in flight: its success must not land.
+        vm.updateSession(true, 2)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(listOf("a"), (vm.uiState.value.content as HomeContent.Feed).page.items.map { it.id })
+    }
+
     @Test fun productionMenusOfferOnlyRowsWithARealRoute() {
-        assertEquals(listOf(FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share), FeedMenuKind.Video.productionActions())
+        assertEquals(listOf(FeedMenuAction.Queue, FeedMenuAction.Download, FeedMenuAction.WatchLater, FeedMenuAction.SaveToPlaylist, FeedMenuAction.Share), FeedMenuKind.Video.productionActions())
         assertEquals(listOf(FeedMenuAction.Share), FeedMenuKind.Mix.productionActions())
         assertTrue(FeedMenuKind.Short.productionActions().isEmpty())
         assertTrue(FeedMenuKind.Shorts.productionActions().isEmpty())
@@ -487,7 +610,7 @@ class HomeViewModelTest {
         val directory = java.nio.file.Files.createTempDirectory("home-seed").toFile()
         val store = com.hhst.youtubelite.core.ContentSnapshots(directory)
         val row = FeedItem.Video("cached", "Cached", "Author", "1K views", "bunny", "1:00", "blender")
-        store.write("home", "visitor", "All", listOf(row))
+        store.write("home", "visitor", "All", listOf(row), FeedItem.Video::class.java)
         val response = kotlinx.coroutines.CompletableDeferred<HomePage>()
         try {
             val vm = HomeViewModel(repository { _, _ -> response.await() }, SavedStateHandle(), loadOnStart = true,

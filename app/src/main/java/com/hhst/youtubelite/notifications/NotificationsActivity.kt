@@ -36,6 +36,7 @@ import com.hhst.youtubelite.notifications.domain.NotificationsUiState
 import com.hhst.youtubelite.notifications.domain.NotificationsNavigationRequest
 import com.hhst.youtubelite.notifications.presentation.NotificationsScreen
 import com.hhst.youtubelite.watch.WatchActivity
+import com.hhst.youtubelite.watch.domain.toProvisional
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -158,7 +159,14 @@ class NotificationsViewModel(
             NotificationsAction.Retry -> refresh()
             NotificationsAction.DismissVerification -> _uiState.update { it.copy(verification = null) }
             is NotificationsAction.OpenVerification -> navigation.trySend(NotificationsNavigationRequest.OpenVerification(action.challengeUrl))
-            is NotificationsAction.OpenVideo -> navigation.trySend(NotificationsNavigationRequest.Watch(action.videoId))
+            is NotificationsAction.OpenVideo -> {
+                _uiState.value.content.let { content ->
+                    (content as? com.hhst.youtubelite.notifications.domain.NotificationsContent.Ready)
+                        ?.page?.items?.firstOrNull { it.videoId == action.videoId }
+                        ?.let { com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(it.toProvisional()) }
+                }
+                navigation.trySend(NotificationsNavigationRequest.Watch(action.videoId))
+            }
             is NotificationsAction.OpenChannel -> navigation.trySend(NotificationsNavigationRequest.Channel(action.channelId))
             NotificationsAction.SignIn -> navigation.trySend(NotificationsNavigationRequest.SignIn)
         }

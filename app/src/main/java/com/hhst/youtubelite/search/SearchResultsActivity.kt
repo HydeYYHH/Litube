@@ -94,6 +94,17 @@ class SearchResultsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                             .putExtra(com.hhst.youtubelite.core.TrafficVerificationActivity.EXTRA_CHALLENGE, request.challengeUrl))
                     if (request is SearchNavigationRequest.VoiceSearch && !fixtures) openVoiceSearch()
                     if (request is SearchNavigationRequest.Share) shareGateway.share(request.videoId)
+                    if (request is SearchNavigationRequest.MenuAction && !fixtures) {
+                        val kind = when (request.action) {
+                            com.hhst.youtubelite.search.domain.SearchVideoMenuAction.Queue -> com.hhst.youtubelite.ui.MediaActionKind.Queue
+                            com.hhst.youtubelite.search.domain.SearchVideoMenuAction.Download -> com.hhst.youtubelite.ui.MediaActionKind.Download
+                            else -> null
+                        }
+                        val video = (searchViewModel.uiState.value.content as? com.hhst.youtubelite.search.domain.SearchContent.Results)?.page?.results
+                            ?.firstOrNull { it.id == request.videoId }
+                        if (kind != null) com.hhst.youtubelite.ui.ActivityMediaActionExecutor(this@SearchResultsActivity).execute(
+                            com.hhst.youtubelite.ui.MediaActionItem(request.videoId, video?.title.orEmpty(), video?.channel.orEmpty(), video?.artwork.orEmpty()), kind)
+                    }
                     if (request is SearchNavigationRequest.Playlist) launchNavigation(com.hhst.youtubelite.playlist.PlaylistActivity.intent(this@SearchResultsActivity, request.playlistId))
                     if (request is SearchNavigationRequest.SharePlaylist) shareGateway.sharePlaylist(request.playlistId)
                 }

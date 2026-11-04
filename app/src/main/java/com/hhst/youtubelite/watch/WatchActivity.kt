@@ -6,7 +6,10 @@ import android.content.Context
 import com.hhst.youtubelite.data.media.MediaSession
 import com.hhst.youtubelite.data.media.toReportingVideo
 import android.content.Intent
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import android.graphics.Color
+import com.hhst.youtubelite.ui.showMessage
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -25,6 +28,8 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -64,6 +69,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.hhst.youtubelite.comments.domain.CommentAction
 import com.hhst.youtubelite.comments.domain.CommentNavigationRequest
+import com.hhst.youtubelite.comments.openCommentLink
 import com.hhst.youtubelite.comments.domain.CommentsContent
 import com.hhst.youtubelite.comments.domain.CommentsOverlay
 import com.hhst.youtubelite.downloader.ui.DownloadEntries
@@ -123,11 +129,16 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         enableEdgeToEdge(SystemBarStyle.light(Color.WHITE, Color.WHITE), SystemBarStyle.light(Color.WHITE, Color.WHITE))
         val videoId = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId.orEmpty()
         val scenario = if (BuildConfig.DEBUG) WatchScenario.parse(intent.getStringExtra(EXTRA_SCENARIO)) else WatchScenario.Content
+        // Debug seam: attach a chat continuation to the fixture page so instrumentation can
+        // drive the live-chat routing without a real stream.
+        val fixtureChatKey = if (BuildConfig.DEBUG && fixtures) intent.getStringExtra(EXTRA_CHAT_KEY) else null
+        // A tapped card's summary paints the header until the page read lands.
+        val provisional = com.hhst.youtubelite.watch.domain.WatchProvisionalStore.consume(videoId)
         watchViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 require(modelClass == WatchViewModel::class.java)
-                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves) as T
+                return WatchViewModel(if (fixtures) FixtureWatchRepository(scenario, fixtureChatKey) else sources.watch, extras.createSavedStateHandle(), videoId, scenario, if (fixtures) null else sources.votes, if (fixtures) null else sources.videoActions, if (fixtures) null else sources.saves, provisional) as T
             }
         })[WatchViewModel::class.java]
         lifecycleScope.launch {
@@ -196,6 +207,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     lastCommentRequest = request
                     when (request) {
                         is CommentNavigationRequest.OpenAuthor -> launchNavigation(ChannelActivity.intent(this@WatchActivity, request.channelId))
+                        is CommentNavigationRequest.OpenLink -> openCommentLink(request.link, playerViewModel)
                         // Comment writes and menus are handled in the CommentsViewModel (with server
                         // confirmation in production); the host only hands author opens off to the
                         // channel page. No `else`: a new request type must fail to compile here.
@@ -216,7 +228,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                         is WatchNavigationRequest.Channel -> launchNavigation(ChannelActivity.intent(this@WatchActivity, request.channelId))
                         is WatchNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@WatchActivity, request.query))
                         is WatchNavigationRequest.Watch -> launchNavigation(intent(this@WatchActivity, request.videoId)
-                            .putExtra(EXTRA_START_SECONDS, request.startSeconds ?: 0L))
+                            .apply { request.startSeconds?.let { putExtra(EXTRA_START_SECONDS, it) } })
                         is WatchNavigationRequest.SeekTo -> playerViewModel.onSeek(request.seconds * 1000)
                         is WatchNavigationRequest.OpenLink -> openDescriptionLink(request.url)
                         is WatchNavigationRequest.OpenVerification -> verificationLauncher.launch(
@@ -225,31 +237,32 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                         WatchNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         is WatchNavigationRequest.Share -> shareGateway.share(request.videoId)
                         is WatchNavigationRequest.Download -> {
-                            val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
-                            // Fixture ids map onto their public stand-ins, the same way sharing resolves them.
+                            val page = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page
+                            val video = page?.video?.takeIf { it.id == request.videoId }
+                            val related = page?.related?.firstOrNull { it.id == request.videoId }
                             val source = VideoShare.urlFor(request.videoId) ?: return@collect
                             val spec = DownloadEntries.single(
                                 source,
-                                video?.title.orEmpty(),
-                                video?.channel,
+                                video?.title ?: related?.title.orEmpty(),
+                                video?.channel ?: related?.channel,
                                 null,
                             )
                             lastDownloadSpec = spec
                             if (spec != null && launchDownload) DownloadEntries.show(this@WatchActivity, spec)
                         }
                         is WatchNavigationRequest.Queue -> {
-                            val video = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page?.video
+                            val page = (watchViewModel.uiState.value.content as? WatchContent.Ready)?.page
+                            val video = page?.video?.takeIf { it.id == request.videoId }
+                            val related = page?.related?.firstOrNull { it.id == request.videoId }
                             val canonicalId = VideoShare.urlFor(request.videoId)?.substringAfterLast('/') ?: return@collect
                             val item = QueueItem(
                                 videoId = canonicalId,
-                                title = video?.title.orEmpty().ifBlank { request.videoId },
-                                author = video?.channel,
+                                title = (video?.title ?: related?.title).orEmpty().ifBlank { request.videoId },
+                                author = video?.channel ?: related?.channel,
                             )
                             lastQueuedItem = item
                             playerViewModel.onQueueAdd(item)
-                            android.widget.Toast.makeText(
-                                this@WatchActivity, getString(R.string.queue_item_added), android.widget.Toast.LENGTH_SHORT,
-                            ).show()
+                            showMessage(getString(R.string.queue_item_added))
                         }
                         is WatchNavigationRequest.OpenWith -> shareGateway.openWith(request.videoId)
                         // Typed exits for fixture instrumentation and writes the WatchViewModel runs
@@ -268,7 +281,7 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         if (!fixtures) {
             (application as com.hhst.youtubelite.App).startMediaRuntime()
             playerViewModel.openVideo(watchViewModel.uiState.value.videoId,
-                intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { savedInstanceState == null && it > 0 })
+                if (savedInstanceState == null) intent.startSecondsExtra() else null)
             // Progress reporting is session-owned (PlaybackWatchReporting): this activity only
             // publishes the loaded page's metadata, so reporting keeps running after the
             // activity stops while playback continues in PiP or the mini player.
@@ -368,7 +381,18 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 }
             }
             BackHandler(onBack = back)
+            var revealingSource by remember { mutableStateOf(false) }
+            var miniDragProgress by remember { mutableFloatStateOf(0f) }
+            val entryBounds = remember { com.hhst.youtubelite.navigation.WatchTransition.origin(intent) }
+            val sourceImage = remember { com.hhst.youtubelite.navigation.WatchTransition.backdrop?.asImageBitmap() }
             Box(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)) {
+                if (revealingSource && sourceImage != null) androidx.compose.foundation.Image(
+                    sourceImage, contentDescription = null, modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.FillBounds)
+                if (revealingSource) Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - miniDragProgress }
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(
+                        androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
+                        androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)))))
                 // The page reports its player slot geometry; the real player
                 // lives in one stable overlay host that interpolates between
                 // that slot and fullscreen, so a mode switch keeps the
@@ -377,7 +401,9 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                 val panelsCover = state.searchOpen || state.commentsOpen ||
                     state.overlay is WatchOverlay.ItemMenu || state.overlay is WatchOverlay.Save ||
                     state.overlay is WatchOverlay.Feedback
-                BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
+                BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { alpha = if (revealingSource) 0f else 1f }
+                    .then(if (revealingSource) Modifier.clearAndSetSemantics {} else Modifier)
+                    .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                     val hideWatchControls = state.searchOpen || state.overlay is WatchOverlay.ItemMenu ||
                         state.overlay is WatchOverlay.Save || state.overlay is WatchOverlay.Feedback ||
                         (state.commentsOpen && !fullscreen && !WatchLayout.sidebar(maxWidth.value, maxHeight.value))
@@ -404,8 +430,8 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     bottomInsetDp = 0,
                     store = miniStore,
                     showStroke = false,
-                    onBackgroundTap = {},
-                    mini = false,
+                    onBackgroundTap = playerViewModel::onToggleControls,
+                    mini = playerState.mini && !pip,
                     fillsWindow = fullscreen,
                     fullscreenSwipeEnabled = !pip,
                     embeddedLeftDp = slot?.let { with(hostDensity) { it.left.toDp().value.toInt() } } ?: 0,
@@ -413,6 +439,16 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
                     embeddedWidthDp = slot?.let { with(hostDensity) { it.width.toDp().value.toInt() } } ?: 0,
                     embeddedHeightDp = slot?.let { with(hostDensity) { it.height.toDp().value.toInt() } } ?: 0,
                     onFullscreenSwipe = { target -> playerViewModel.setFullscreenManual(target) },
+                    onMiniSwipe = playerViewModel::onMiniSwipeRequested,
+                    onMiniDragChanged = { revealingSource = it },
+                    onMiniDragProgress = { miniDragProgress = it },
+                    onMiniSwipeFinished = {
+                        finish()
+                        @Suppress("DEPRECATION")
+                        overridePendingTransition(0, 0)
+                    },
+                    initialBounds = entryBounds,
+                    onDismiss = playerViewModel::onMiniClose,
                     modifier = Modifier.then(if (panelsCover) Modifier.clearAndSetSemantics {} else Modifier),
                 ) {
                     WatchPlayer(Modifier.fillMaxSize(), back, pip)
@@ -477,14 +513,17 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val id = intent.getStringExtra(EXTRA_VIDEO_ID) ?: playerViewModel.uiState.value.videoId ?: return
-        watchViewModel.selectVideo(id)
+        val provisional = com.hhst.youtubelite.watch.domain.WatchProvisionalStore.consume(id)
+        watchViewModel.selectVideo(id, provisional)
         commentsViewModel.selectVideo(id)
-        if (!fixtures) playerViewModel.openVideo(id, intent.getLongExtra(EXTRA_START_SECONDS, 0).takeIf { it > 0 })
+        if (!fixtures) playerViewModel.openVideo(id, intent.startSecondsExtra())
     }
 
     override fun onResume() {
         super.onResume()
-        if (!fixtures) playerViewModel.openVideo(watchViewModel.uiState.value.videoId)
+        val playback = playerViewModel.uiState.value
+        if (!fixtures || playback.visible && playback.mini && playback.videoId == watchViewModel.uiState.value.videoId)
+            playerViewModel.openVideo(watchViewModel.uiState.value.videoId)
         playerViewModel.refreshPipAvailability()
         val prefs = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
         watchViewModel.refreshVoteCounts(prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.ENABLE_SHOW_LIKES),
@@ -525,11 +564,17 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity() {
         const val EXTRA_SCENARIO = "watch_scenario"
         const val EXTRA_COMMENTS_SCENARIO = "watch_comments_scenario"
         const val EXTRA_OPEN_COMMENTS = "watch_open_comments"
+        const val EXTRA_CHAT_KEY = "watch_chat_key"
 
         fun intent(context: Context, videoId: String, scenario: WatchScenario? = null) =
             Intent(context, WatchActivity::class.java)
                 .putExtra(EXTRA_VIDEO_ID, videoId)
                 .apply { if (scenario != null) putExtra(EXTRA_SCENARIO, scenario.argument) }
+
+        /** Explicit start seconds from the launch intent: `hasExtra` separates "begin
+            at 0" from "unspecified" (progress resume). Negative values are ignored. */
+        fun Intent.startSecondsExtra(): Long? =
+            if (hasExtra(EXTRA_START_SECONDS)) getLongExtra(EXTRA_START_SECONDS, 0).takeIf { it >= 0 } else null
 
         /** Debug-only entry used by instrumentation tests to pin panel states. */
         fun commentsIntent(context: Context, videoId: String, comments: CommentsScenario, open: Boolean = true) =

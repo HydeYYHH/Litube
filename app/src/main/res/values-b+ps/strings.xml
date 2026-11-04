@@ -166,6 +166,7 @@
     <string name="copy">کاپي</string>
     <string name="copied">نقل</string>
     <string name="copy_all">ټول کاپي</string>
+    <string name="cast_searching">پلټنه روانه ده…</string>
     <string name="queue_now_playing">اوس لوبه کوي</string>
     <string name="clear_queue_confirm">ټول کتار پاک کړئ؟</string>
     <string name="ok">ښه</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">بندول</string>
     <string name="verification_completed">تصدیق بشپړ شو. بیا هڅه کیږي…</string>
     <string name="verification_still_blocked">د تصدیق وروسته بیا هم بند دی. وروسته بیا هڅه وکړئ.</string>
+    <string name="comments_title">نظرونه</string>
+    <string name="comments_sort_top">غوره نظرونه</string>
+    <string name="comments_sort_newest">نوي لومړي</string>
+    <string name="comments_sort_chip_top">غوره</string>
+    <string name="comments_sort_chip_newest">نوی</string>
+    <string name="comments_composer_add">نظر زیاتول</string>
+    <string name="comments_composer_reply">ځواب</string>
+    <string name="comments_composer_edit">نظر سمول</string>
+    <string name="comments_composer_text_hint">د نظر متن</string>
+    <string name="comments_composer_text_edit_hint">د نظر متن سمول</string>
+    <string name="comments_composer_submit">نظر لیکل</string>
+    <string name="comments_composer_sending">لېږل کېږي…</string>
+    <string name="comments_composer_save">خوندي کول</string>
+    <string name="comments_delete_title">ړنګول</string>
+    <string name="comments_show_more_replies">نور ځوابونه وښایاست</string>
+    <string name="comments_load_more_failed">نور نظرونه بار نه شول</string>
+    <string name="comments_hide_replies">ځوابونه پټول</string>
+    <string name="home_music_charts">د موسیقۍ چارټونه</string>
+    <string name="home_popular_gaming">په لوبو کې مشهور</string>
+    <string name="home_popular_sports">په سپورت کې مشهور</string>
+    <string name="home_top_news">مهم خبرونه</string>
 </resources>

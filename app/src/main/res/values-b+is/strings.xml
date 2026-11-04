@@ -166,6 +166,7 @@
     <string name="copy">Afrit</string>
     <string name="copied">Afritað</string>
     <string name="copy_all">Afritaðu allt</string>
+    <string name="cast_searching">Leita að…</string>
     <string name="queue_now_playing">Nú spilar</string>
     <string name="clear_queue_confirm">Hreinsa alla röðina?</string>
     <string name="ok">Allt í lagi</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Loka</string>
     <string name="verification_completed">Sannprófun lokið. Reynir aftur…</string>
     <string name="verification_still_blocked">Enn lokað eftir sannprófun. Reyndu aftur seinna.</string>
+    <string name="comments_title">Athugasemdir</string>
+    <string name="comments_sort_top">Vinsælastu athugasemdir</string>
+    <string name="comments_sort_newest">Nýjast fyrst</string>
+    <string name="comments_sort_chip_top">Vinsælt</string>
+    <string name="comments_sort_chip_newest">Nýjast</string>
+    <string name="comments_composer_add">Bæta við athugasemd</string>
+    <string name="comments_composer_reply">Svara</string>
+    <string name="comments_composer_edit">Breyta athugasemd</string>
+    <string name="comments_composer_text_hint">Texti athugasemdar</string>
+    <string name="comments_composer_text_edit_hint">Breyta texta athugasemdar</string>
+    <string name="comments_composer_submit">Senda athugasemd</string>
+    <string name="comments_composer_sending">Sendi…</string>
+    <string name="comments_composer_save">Vista</string>
+    <string name="comments_delete_title">Eyða</string>
+    <string name="comments_show_more_replies">Sýna fleiri svör</string>
+    <string name="comments_load_more_failed">Ekki tókst að hlaða inn fleiri athugasemdum</string>
+    <string name="comments_hide_replies">Fela svör</string>
+    <string name="home_music_charts">Vinsældalistar tónlistar</string>
+    <string name="home_popular_gaming">Vinsælt í leikjum</string>
+    <string name="home_popular_sports">Vinsælt í íþróttum</string>
+    <string name="home_top_news">Helstu fréttir</string>
 </resources>

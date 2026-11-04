@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.subscriptions.data
 
+import com.hhst.youtubelite.home.domain.FeedItem
+import com.hhst.youtubelite.home.domain.FeedMenuAction
 import com.hhst.youtubelite.subscriptions.domain.*
 
 interface SubscriptionsRepository {
@@ -9,4 +11,20 @@ interface SubscriptionsRepository {
 
     /** Independent channel read so a guide failure cannot erase the feed. */
     suspend fun subscribedChannels(): List<SubscribedChannel> = emptyList()
+
+    /**
+     * Paged subscribed-channel directory: the guide read first, then [cursor]
+     * continuations while the server keeps returning keys. [null] starts the read.
+     */
+    suspend fun subscribedChannelsPage(cursor: String? = null): ChannelDirectoryPage =
+        ChannelDirectoryPage(subscribedChannels(), null)
+
+    /**
+     * Resolves one card's deferred get_panel capabilities when it carries an endpoint;
+     * cards with inline tokens return unchanged.
+     */
+    suspend fun menu(video: FeedItem.Video): FeedItem.Video = video
+
+    /** Sends the card's own feedback token for a server-classified menu operation. */
+    suspend fun feedback(video: FeedItem.Video, action: FeedMenuAction) {}
 }

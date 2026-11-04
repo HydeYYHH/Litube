@@ -27,6 +27,8 @@ import com.hhst.youtubelite.search.domain.SearchNavigationRequest
 import com.hhst.youtubelite.watch.data.WatchScenario
 import com.hhst.youtubelite.watch.domain.WatchFeedbackKind
 import com.hhst.youtubelite.watch.domain.WatchNavigationRequest
+import com.hhst.youtubelite.watch.domain.WatchProvisional
+import com.hhst.youtubelite.watch.domain.WatchProvisionalStore
 import com.hhst.youtubelite.watch.domain.WatchVideoMenuAction
 import org.junit.After
 import org.junit.Assert.*
@@ -463,5 +465,32 @@ class WatchScreenAndroidTest {
         launchWatch()
         awaitReady()
         DeviceEvidence.captureScene("watch-device-final")
+    }
+    @Test fun aCardSummaryPaintsTheLoadingPageUntilRealContentLands() {
+        WatchProvisionalStore.put(WatchProvisional(
+            videoId = "bunny", title = "Tapped card title", channel = "Known channel",
+            channelId = "studio", artwork = "bunny", views = "1.2M views", age = "3 days ago",
+            duration = "9:56",
+        ))
+        // The Loading scenario keeps the page read in flight; the card summary is
+        // consumed from the store and painted instead of the bare skeleton.
+        launchWatch("bunny", WatchScenario.Loading)
+        compose.waitUntil(4_000) { nodeCount("watch-provisional") > 0 || nodeCount("watch-skeleton") > 0 }
+        val provisionalCount = nodeCount("watch-provisional")
+        if (provisionalCount == 0)
+            throw AssertionError("provisional=" + provisionalCount +
+                " skeleton=" + nodeCount("watch-skeleton") +
+                " metadata=" + nodeCount("watch-metadata") +
+                " scroll=" + nodeCount("watch-scroll"))
+        compose.onNodeWithTag("watch-provisional").assertIsDisplayed()
+        compose.onNodeWithTag("watch-title", useUnmergedTree = true)
+            .assertTextEquals("Tapped card title")
+        compose.onNodeWithTag("watch-channel-name", useUnmergedTree = true)
+            .assertTextEquals("Known channel")
+        // The handoff is consumed: relaunching without a card shows the skeleton.
+        watch?.close()
+        launchWatch("bunny", WatchScenario.Loading)
+        awaitNode("watch-skeleton")
+        compose.onNodeWithTag("watch-provisional").assertDoesNotExist()
     }
 }

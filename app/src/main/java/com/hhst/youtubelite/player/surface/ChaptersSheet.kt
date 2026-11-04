@@ -8,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -121,6 +122,7 @@ fun ChaptersSheet(
     onSeek: (Long, String) -> Unit,
     onPreviewSeek: (Long, String) -> Unit = onSeek,
     onDismiss: () -> Unit,
+    durationMs: Long = 0,
 ) {
     var preview by remember { mutableStateOf<Chapter?>(null) }
     val currentIndex by remember(chapters, positionState) {
@@ -132,7 +134,7 @@ fun ChaptersSheet(
         val title = previewChapter.title.ifBlank { stringResource(R.string.chapters) }
         SegmentPreviewDialog(
             title = title,
-            timeLabel = PlayerUi.formatTime(startMs),
+            timeLabel = chapterRange(chapters, chapters.indexOf(previewChapter), durationMs),
             thumbnailUrl = previewChapter.previewUrl ?: fallbackThumb,
             onJump = {
                 onPreviewSeek(startMs, title)
@@ -189,6 +191,7 @@ fun ChaptersSheet(
         itemsIndexed(chapters, key = { index, chapter -> "chapter-$index-${chapter.startSeconds}" }) { index, chapter ->
             ChapterRow(
                 chapter = chapter,
+                timeLabel = chapterRange(chapters, index, durationMs),
                 current = index == currentIndex,
                 onSeek = onSeek,
                 onPreview = { preview = chapter },
@@ -211,14 +214,17 @@ fun ChaptersSheet(
     }
 }
 
-/**
- * One compact chapter line: timestamp and title only. Per-row preview thumbnails
- * made the list long enough to hide half the chapters; the thumbnail now loads
- * only when the long-press preview is actually opened.
- */
+private fun chapterRange(chapters: List<Chapter>, index: Int, durationMs: Long): String {
+    val start = chapters[index].startSeconds * 1000L
+    val end = chapters.getOrNull(index + 1)?.startSeconds?.times(1000L)
+        ?.takeIf { it > start } ?: durationMs.takeIf { it > start }
+    return "${PlayerUi.formatTime(start)} – ${end?.let(PlayerUi::formatTime) ?: "…"}"
+}
+
 @Composable
 private fun ChapterRow(
     chapter: Chapter,
+    timeLabel: String,
     current: Boolean,
     onSeek: (Long, String) -> Unit,
     onPreview: () -> Unit,
@@ -248,22 +254,27 @@ private fun ChapterRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (!chapter.previewUrl.isNullOrBlank()) {
+            com.hhst.youtubelite.ui.design.Artwork(chapter.previewUrl,
+                Modifier.size(96.dp, 54.dp).clip(RoundedCornerShape(8.dp)).testTag("chapter-artwork-${chapter.startSeconds}"))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            text = PlayerUi.formatTime(startMs),
+            text = title,
+            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            fontSize = SettingsTokens.BodySize.sp,
+            fontWeight = if (current) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = timeLabel,
             color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = SettingsTokens.DetailSize.sp,
             maxLines = 1,
             modifier = Modifier.widthIn(min = 44.dp),
         )
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            fontSize = SettingsTokens.BodySize.sp,
-            fontWeight = if (current) FontWeight.Medium else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        }
     }
 }
 
@@ -276,7 +287,7 @@ private fun SegmentRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onSeek(segment.startMs, label) }
+            .clickable { onSeek(segment.endMs, label) }
             .heightIn(min = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("segment-row-${segment.startMs}"),
@@ -300,7 +311,7 @@ private fun SegmentRow(
             overflow = TextOverflow.Clip,
         )
         Text(
-            text = PlayerUi.formatTime(segment.startMs),
+            text = "${PlayerUi.formatTime(segment.startMs)} – ${PlayerUi.formatTime(segment.endMs)}",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = SettingsTokens.DetailSize.sp,
             maxLines = 1,

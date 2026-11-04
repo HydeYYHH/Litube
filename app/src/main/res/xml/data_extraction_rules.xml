@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Cloud backup and device transfer exclude the download database, temp dir,
-  and playback/PoToken cache. See DownloadBackupExcludes.
+  the playback/PoToken cache and the sealed credential store (media-auth).
+  See DownloadBackupExcludes.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -11,6 +12,8 @@
         <exclude domain="file" path="download" />
         <exclude domain="root" path="no_backup" />
         <exclude domain="root" path="no_backup/player" />
+        <exclude domain="sharedpref" path="media-auth.xml" />
+        <exclude domain="sharedpref" path="media-cache.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="downloader.db" />
@@ -19,5 +22,7 @@
         <exclude domain="file" path="download" />
         <exclude domain="root" path="no_backup" />
         <exclude domain="root" path="no_backup/player" />
+        <exclude domain="sharedpref" path="media-auth.xml" />
+        <exclude domain="sharedpref" path="media-cache.xml" />
     </device-transfer>
 </data-extraction-rules>

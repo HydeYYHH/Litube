@@ -51,7 +51,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.App"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic">
+        <!-- Device discovery and transport control require HTTP to local renderer addresses. -->
+
 
         <service android:name=".extractor.EjsRuntimeService"
             android:exported="false" android:process=":youtube_ejs" />
@@ -95,14 +98,14 @@
         <activity android:name=".library.HistoryActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".library.PlaylistsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
-        <activity android:name=".settings.PlaybackSettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".settings.AdvancedActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".account.SignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".core.TrafficVerificationActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
         <activity android:name=".notifications.NotificationsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
 
         <!-- Standalone shorts browse host; playback reuses the shared player ViewModel hooks. -->
-        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
 
         <!-- Explore entry with the four fixed category containers. -->
         <activity android:name=".explore.ExploreActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
@@ -115,6 +118,7 @@
         <!-- Video playback and native details. -->
         <activity
             android:name=".watch.WatchActivity"
+            android:windowSoftInputMode="adjustResize"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:exported="false"
@@ -130,6 +134,7 @@
         <!-- Shared post detail host used by both the Home post card and channel Posts. -->
         <activity
             android:name=".post.PostDetailActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="false"
             android:theme="@style/Theme.App.Home" />
 

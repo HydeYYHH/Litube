@@ -166,6 +166,7 @@
     <string name="copy">কপি কৰা</string>
     <string name="copied">কপি কৰা হৈছে</string>
     <string name="copy_all">সকলো কপি কৰক</string>
+    <string name="cast_searching">সন্ধান কৰি থকা হৈছে…</string>
     <string name="queue_now_playing">এতিয়া খেলি আছে</string>
     <string name="clear_queue_confirm">গোটেই শাৰীটো পৰিষ্কাৰ কৰিবনে?</string>
     <string name="ok">ঠিক আছে</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">বন্ধ কৰক</string>
     <string name="verification_completed">সত্যাপন সম্পূৰ্ণ হৈছে। পুনঃ চেষ্টা কৰি আছে…</string>
     <string name="verification_still_blocked">সত্যাপনৰ পিছতো অৱৰুদ্ধ। অনুগ্ৰহ কৰি পিছত পুনঃ চেষ্টা কৰক।</string>
+    <string name="comments_title">মন্তব্যসমূহ</string>
+    <string name="comments_sort_top">শীৰ্ষ মন্তব্য</string>
+    <string name="comments_sort_newest">নতুন প্ৰথমে</string>
+    <string name="comments_sort_chip_top">শীৰ্ষ</string>
+    <string name="comments_sort_chip_newest">নতুন</string>
+    <string name="comments_composer_add">মন্তব্য যোগ কৰক</string>
+    <string name="comments_composer_reply">উত্তৰ দিয়ক</string>
+    <string name="comments_composer_edit">মন্তব্য সম্পাদনা কৰক</string>
+    <string name="comments_composer_text_hint">মন্তব্যৰ পাঠ</string>
+    <string name="comments_composer_text_edit_hint">মন্তব্যৰ পাঠ সম্পাদনা কৰক</string>
+    <string name="comments_composer_submit">মন্তব্য দাখিল কৰক</string>
+    <string name="comments_composer_sending">পঠিয়াই থকা হৈছে…</string>
+    <string name="comments_composer_save">ছেভ কৰক</string>
+    <string name="comments_delete_title">মচক</string>
+    <string name="comments_show_more_replies">অধিক উত্তৰ দেখুৱাওক</string>
+    <string name="comments_load_more_failed">অধিক মন্তব্য লোড কৰিব নোৱাৰিলে</string>
+    <string name="comments_hide_replies">উত্তৰ লুকাওক</string>
+    <string name="home_music_charts">সংগীতৰ তালিকা</string>
+    <string name="home_popular_gaming">গেমিংত জনপ্ৰিয়</string>
+    <string name="home_popular_sports">ক্ৰীড়াত জনপ্ৰিয়</string>
+    <string name="home_top_news">মুখ্য বাতৰি</string>
 </resources>

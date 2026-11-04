@@ -18,9 +18,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import android.webkit.CookieManager
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import com.google.gson.JsonPrimitive
 import com.hhst.youtubelite.core.Constants
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,10 +26,15 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Captures credentials once; consumers never merge a newer Cookie into an older response. */
 class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                              private val diagnostics: ExtractionDiagnostics? = null) {
+    private val app = context.applicationContext
     private val networkGeneration = AtomicLong()
     private val lock = Any()
     private val capturePermit = Semaphore(1, true)
@@ -41,7 +43,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
     private var identity = ""
     @Volatile private var generation = 0L
-    private var config = JsonObject()
+    private var config = JsonObject(emptyMap())
     private var configAt = 0L
     private var pageIdentity = ""
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -115,6 +117,10 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                 pageIdentity = identity; configSource = "browser-document"
             }
             if (fresh) { generation++; configAt = 0 }
+            // A cold process starts with no configuration at all; the persisted
+            // snapshot of this identity spares the watch-page bootstrap inside
+            // the same TTL window the in-memory config already lives in.
+            if (!fresh && configAt == 0L) restorePersisted(identity)
             capturedGeneration = generation
             // Innertube account/visitor/player configuration belongs to the session.
             // A different video needs a different /player request, not another page
@@ -129,7 +135,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                 current() && generation == capturedGeneration && networkGeneration.get() == capturedRoute && scopeHint() == nextIdentity
             }
             val parseStarted = System.nanoTime()
-            val parsed = parseConfig(html)
+            var parsed = parseConfig(html)
             diagnostics?.event("page-parse", "WEB", "configuration", (System.nanoTime() - parseStarted) / 1_000_000, 200)
             if (requested?.flag("LOGGED_IN", false) == true && (!parsed.flag("LOGGED_IN", false)
                     || accountIndex(parsed) != index
@@ -138,7 +144,8 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             }
             val js = parsed.text("PLAYER_JS_URL") ?: Regex("\"jsUrl\"\\s*:\\s*\"([^\"]+)\"")
                 .find(html)?.groupValues?.get(1)?.replace("\\/", "/")
-            if (js != null) parsed.addProperty("PLAYER_JS_URL", if (js.startsWith('/')) ORIGIN + js else js)
+            if (js != null) parsed = JsonObject(parsed.toMap() +
+                ("PLAYER_JS_URL" to JsonPrimitive(if (js.startsWith('/')) ORIGIN + js else js)))
             synchronized(lock) {
                 if (generation != capturedGeneration || scopeHint() != nextIdentity) throw IOException("SESSION_CHANGED_OR_CANCELLED")
                 if (configAt != 0L && configurationIdentity(config) != configurationIdentity(parsed)) {
@@ -148,6 +155,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
                 config = parsed; configAt = System.currentTimeMillis()
                 pageIdentity = identity; configSource = "same-session-watch"
             }
+            persistConfig(identity, parsed)
         }
         synchronized(lock) {
         if (pageIdentity != identity || generation != capturedGeneration || scopeHint() != nextIdentity) throw IOException("SESSION_PAGE_MISMATCH")
@@ -168,6 +176,46 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             SessionCredentials { origin -> domainCookies[origin].orEmpty() })
         }
     }
+
+    /**
+     * Adopts the persisted configuration snapshot for this identity so a cold
+     * process skips the watch-page fetch and parse. The snapshot never crosses
+     * identities: it is stored under the identity digest and dropped when the
+     * identity moves on, and it expires on the same TTL as the in-memory config.
+     */
+    private fun restorePersisted(identity: String) {
+        val entry = runCatching {
+            appPreferenceStore().readString(PERSIST_KEY_PREFIX + identity)?.let { text ->
+                org.json.JSONObject(text).let { stored ->
+                    if (stored.optLong("until") <= System.currentTimeMillis()) null
+                    else stored.getString("config")
+                }
+            }
+        }.getOrNull() ?: return
+        val restored = runCatching { parseJson(entry) as? JsonObject }.getOrNull()
+            ?.takeIf { it.isNotEmpty() } ?: return
+        config = restored
+        configAt = System.currentTimeMillis()
+        pageIdentity = identity
+        configSource = "disk-cache"
+    }
+
+    /** Writes the just-parsed configuration; older identities are dropped, keeping one snapshot. */
+    private fun persistConfig(identity: String, parsed: JsonObject) {
+        runCatching {
+            val store = appPreferenceStore()
+            store.keys().filter { it.startsWith(PERSIST_KEY_PREFIX) && it != PERSIST_KEY_PREFIX + identity }
+                .forEach(store::remove)
+            val encoded = parsed.toString()
+            if (encoded.isNotEmpty() && encoded.length <= PERSIST_MAX_BYTES) {
+                store.putString(PERSIST_KEY_PREFIX + identity, org.json.JSONObject()
+                    .put("until", System.currentTimeMillis() + CONFIG_TTL_MS)
+                    .put("config", encoded).toString())
+            }
+        }
+    }
+
+    private fun appPreferenceStore() = com.hhst.youtubelite.core.PreferenceStore.app(app)
 
     private fun readPage(initialUrl: String, ua: String, cookies: Map<String, String>, deadline: Long, current: () -> Boolean): String {
         var url = initialUrl
@@ -270,14 +318,19 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
 
     private fun storeBrowserConfig(value: JsonObject, documentGeneration: Long, document: () -> Long): Boolean = synchronized(lock) {
-        val filtered = JsonObject()
-        CONFIG_FIELDS.forEach { name -> value.get(name)?.let { filtered.add(name, it) } }
-        if (filtered.obj("INNERTUBE_CONTEXT").obj("client").size() == 0) return@synchronized false
-        filtered.text("PLAYER_JS_URL")?.let { filtered.addProperty("PLAYER_JS_URL", when {
-            it.startsWith("//") -> "https:$it"
-            it.startsWith('/') -> ORIGIN + it
-            else -> it
-        }) }
+        val picked = LinkedHashMap<String, JsonElement>()
+        CONFIG_FIELDS.forEach { name -> value.get(name)?.let { picked[name] = it } }
+        if (JsonObject(picked).obj("INNERTUBE_CONTEXT").obj("client").isEmpty()) return@synchronized false
+        picked["PLAYER_JS_URL"]?.let { current ->
+            (current as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { js ->
+                picked["PLAYER_JS_URL"] = JsonPrimitive(when {
+                    js.startsWith("//") -> "https:$js"
+                    js.startsWith('/') -> ORIGIN + js
+                    else -> js
+                })
+            }
+        }
+        val filtered = JsonObject(picked)
         val hint = scopeHint()
         val old = browserConfig
         val previous = old?.takeIf { it.scope == hint }?.value ?: config
@@ -286,7 +339,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             generation++
             configAt = 0
         }
-        val copied = filtered.deepCopy()
+        val copied = filtered
         val stored = BrowserConfig(copied, hint, documentGeneration, document, System.currentTimeMillis())
         browserConfig = if (old?.generation != documentGeneration) {
             stored.copy(capturedAt = System.currentTimeMillis())
@@ -320,7 +373,7 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             value.text("PLAYER_JS_URL", ""), value.obj("INNERTUBE_CONTEXT").obj("client").text("clientVersion", ""),
             value.text("DATASYNC_ID", ""), value.text("VISITOR_DATA") ?: value.obj("INNERTUBE_CONTEXT").obj("client").text("visitorData"), value.flag("LOGGED_IN", false), value.flag("IS_PREMIUM", false),
             value.obj("EXPERIMENT_FLAGS"), value.obj("EXPERIMENTS_FORCED_FLAGS"),
-            value.obj("WEB_PLAYER_CONTEXT_CONFIGS").entrySet().map { (it.value as? JsonObject)?.text("serializedExperimentFlags", "") }.sortedBy { it.orEmpty() }).toString()
+            value.obj("WEB_PLAYER_CONTEXT_CONFIGS").entries.map { (it.value as? JsonObject)?.text("serializedExperimentFlags", "") }.sortedBy { it.orEmpty() }).toString()
         const val ORIGIN = "https://www.youtube.com"
 
         /**
@@ -329,6 +382,10 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
          * recovery already refresh it earlier, so this is only the upper bound for an unchanged session.
          */
         private const val CONFIG_TTL_MS = 15 * 60_000L
+
+        /** Persisted-configuration key namespace and single-snapshot size cap. */
+        private const val PERSIST_KEY_PREFIX = "youtube-session:config:"
+        private const val PERSIST_MAX_BYTES = 1_500_000
 
         /** Account-bearing cookies only; visitor and consent cookies churn without changing the audience. */
         private val AUTH_COOKIE_NAMES = setOf("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO")
@@ -343,39 +400,37 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
             .digest(text.toByteArray()).hexString()
 
         internal fun accountIndex(config: JsonObject): Int = config.get("SESSION_INDEX")
-            ?.takeUnless { it.isJsonNull }?.let {
-                (it as? JsonPrimitive)?.asString?.toIntOrNull()?.takeIf { index -> index >= 0 }
+            ?.takeUnless { it is JsonNull }?.let {
+                (it as? JsonPrimitive)?.content?.toIntOrNull()?.takeIf { index -> index >= 0 }
                     ?: throw IOException("SESSION_ACCOUNT_INDEX_INVALID")
             } ?: 0
 
         internal fun parseConfig(html: String): JsonObject {
-            val result = JsonObject()
+            val merged = LinkedHashMap<String, JsonElement>()
             jsonObjects(html, Regex("ytcfg\\.set\\(\\s*\\{")).forEach { source ->
-                source.entrySet().forEach { result.add(it.key, it.value) }
+                source.entries.forEach { merged[it.key] = it.value }
             }
             val player = jsonObjects(html, Regex("ytInitialPlayerResponse\\s*=\\s*\\{")).firstOrNull()
             if (player != null) {
-                result.addProperty("_IS_LIVE", player.obj("videoDetails").flag("isLiveContent", false))
-                player.obj("videoDetails").text("videoId")?.let { result.addProperty("_VIDEO_ID", it) }
+                merged["_IS_LIVE"] = JsonPrimitive(player.obj("videoDetails").flag("isLiveContent", false))
+                player.obj("videoDetails").text("videoId")?.let { merged["_VIDEO_ID"] = JsonPrimitive(it) }
             }
             val initial = jsonObjects(html, Regex("ytInitialData\\s*=\\s*\\{")).firstOrNull()
             val logo = initial?.obj("topbar")?.obj("desktopTopbarRenderer")?.obj("logo")?.obj("topbarLogoRenderer")
             if (logo != null && (logo.obj("iconImage").text("iconType") == "YOUTUBE_PREMIUM_LOGO"
-                    || logo.text("tooltip", "").contains("Premium", true))) result.addProperty("IS_PREMIUM", true)
+                    || logo.text("tooltip", "").contains("Premium", true))) merged["IS_PREMIUM"] = JsonPrimitive(true)
             val rawChallenge = objectPayloads(html, Regex("window\\.ytAtN\\(\\s*\\{")).firstOrNull()
             if (rawChallenge != null && rawChallenge.length <= 256 * 1024) {
-                val challenge = runCatching { JsonParser.parseString(rawChallenge).asJsonObject }.getOrNull()
+                val challenge = runCatching { parseJson(rawChallenge) as JsonObject }.getOrNull()
                     ?.obj("R")?.obj("bgChallenge")
-                if (challenge != null && challenge.size() > 0) result.add("_BG_CHALLENGE", challenge)
-                else result.addProperty("_BG_CHALLENGE_RAW", rawChallenge)
+                if (challenge != null && challenge.isNotEmpty()) merged["_BG_CHALLENGE"] = challenge
+                else merged["_BG_CHALLENGE_RAW"] = JsonPrimitive(rawChallenge)
             }
-            val filtered = JsonObject()
-            result.entrySet().filter { it.key in CONFIG_FIELDS }.forEach { filtered.add(it.key, it.value) }
-            return filtered
+            return JsonObject(merged.filterKeys { it in CONFIG_FIELDS })
         }
 
         private fun jsonObjects(html: String, marker: Regex): Sequence<JsonObject> = objectPayloads(html, marker)
-            .mapNotNull { runCatching { JsonParser.parseString(it).asJsonObject }.getOrNull() }
+            .mapNotNull { runCatching { parseJson(it) as JsonObject }.getOrNull() }
 
         // Only capture the argument, without evaluating page code. BgUtils parses
         // the loose JSON challenge in its isolated, network-disabled runtime.

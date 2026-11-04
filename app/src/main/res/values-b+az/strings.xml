@@ -166,6 +166,7 @@
     <string name="copy">Kopyalayın</string>
     <string name="copied">Kopyalandı</string>
     <string name="copy_all">Hamısını kopyalayın</string>
+    <string name="cast_searching">Axtarılır…</string>
     <string name="queue_now_playing">İndi oynayır</string>
     <string name="clear_queue_confirm">Bütün növbə silinsin?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Bağla</string>
     <string name="verification_completed">Yoxlama tamamlandı. Yenidən cəhd olunur…</string>
     <string name="verification_still_blocked">Yoxlamadan sonra da bloklanıb. Zəhmət olmasa sonra yenidən cəhd edin.</string>
+    <string name="comments_title">Şərhlər</string>
+    <string name="comments_sort_top">Ən yaxşı şərhlər</string>
+    <string name="comments_sort_newest">Ən yenilər əvvəl</string>
+    <string name="comments_sort_chip_top">Ən yaxşı</string>
+    <string name="comments_sort_chip_newest">Ən yeni</string>
+    <string name="comments_composer_add">Şərh əlavə edin</string>
+    <string name="comments_composer_reply">Cavab verin</string>
+    <string name="comments_composer_edit">Şərhi redaktə edin</string>
+    <string name="comments_composer_text_hint">Şərh mətni</string>
+    <string name="comments_composer_text_edit_hint">Şərh mətnini redaktə edin</string>
+    <string name="comments_composer_submit">Şərh göndərin</string>
+    <string name="comments_composer_sending">Göndərilir…</string>
+    <string name="comments_composer_save">Yadda saxlayın</string>
+    <string name="comments_delete_title">Sil</string>
+    <string name="comments_show_more_replies">Daha çox cavab göstərin</string>
+    <string name="comments_load_more_failed">Daha çox şərh yüklənmədi</string>
+    <string name="comments_hide_replies">Cavabları gizlədin</string>
+    <string name="home_music_charts">Musiqi hit-paradları</string>
+    <string name="home_popular_gaming">Oyunlarda trenddə</string>
+    <string name="home_popular_sports">İdmanda trenddə</string>
+    <string name="home_top_news">Əsas xəbərlər</string>
 </resources>

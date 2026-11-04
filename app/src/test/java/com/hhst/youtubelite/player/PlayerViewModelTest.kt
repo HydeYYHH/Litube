@@ -73,6 +73,40 @@ class PlayerViewModelTest {
         assertFalse(viewModel.uiState.value.mini)
     }
 
+    @Test fun swipePausesNeverBecomeAnExplicitShortPause() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        viewModel.holdShortsForSwipe()
+        assertFalse(viewModel.uiState.value.shortPausedByUser)
+        viewModel.resumeShortsAfterSwipe(watchId)
+        assertFalse(viewModel.uiState.value.shortPausedByUser)
+        viewModel.onPlayPause()
+        assertTrue(viewModel.uiState.value.shortPausedByUser)
+        viewModel.holdShortsForSwipe()
+        viewModel.resumeShortsAfterSwipe(watchId)
+        assertTrue(viewModel.uiState.value.shortPausedByUser)
+        viewModel.onPlayPause()
+        assertFalse(viewModel.uiState.value.shortPausedByUser)
+    }
+
+    @Test fun settlingOnANewShortDoesNotResumeThePreviousSwipe() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        viewModel.holdShortsForSwipe()
+        viewModel.openShort(shortsId)
+        viewModel.resumeShortsAfterSwipe(shortsId)
+        assertEquals(0, engine.resumeCalls)
+        assertEquals(shortsId, engine.snapshot.value.videoId)
+        assertFalse(engine.snapshot.value.prepared)
+        viewModel.holdShortsForSwipe()
+        viewModel.resumeShortsAfterSwipe(shortsId)
+        assertEquals(1, engine.resumeCalls)
+    }
+
     @Test fun dismissedFailureStaysClosedUntilAnotherFailureAndCanBeReopened() {
         bindViewModel()
         viewModel.openVideo(watchId)
@@ -219,20 +253,33 @@ class PlayerViewModelTest {
     private val watchUrl = "https://www.youtube.com/watch?v=$watchId"
     private val shortsUrl = "https://m.youtube.com/shorts/$shortsId"
 
-    private fun bindViewModel(nextVideo: (suspend (String) -> String?)? = null) {
+    @Test fun attachingToAnAlreadyPreparedEngineInitializesNavigationBeforeCollecting() {
+        bindViewModel(prepared = true)
+        assertEquals(watchId, viewModel.uiState.value.videoId)
+        assertTrue(viewModel.uiState.value.prepared)
+        assertEquals(MediaKind.NONE, viewModel.currentMediaKind)
+        assertFalse(viewModel.uiState.value.hasPrevious)
+        viewModel.openVideo(watchId)
+        assertTrue(engine.playCalls.isEmpty())
+    }
+
+    private fun bindViewModel(
+        prepared: Boolean = false,
+        identity: MutableStateFlow<Long>? = null,
+        ownerProvider: (() -> QueueOwner)? = null,
+        nextVideo: (suspend (String) -> String?)? = null,
+    ) {
         engine = FakeEngine()
+        if (prepared) engine.settle(watchId)
         val cache = MemJsonCache()
         cast = CastController(ContextWrapper(null), OkHttpClient())
-        queue = QueueRepository(cache)
+        queue = if (ownerProvider != null) QueueRepository(cache, ownerProvider) else QueueRepository(cache)
         preferences = ExtensionManager(MemoryPrefStore())
-        viewModel = PlayerViewModel(
-            engine,
-            queue,
-            preferences,
-            cache,
-            cast,
-            nextVideo = nextVideo,
-        )
+        viewModel = if (identity == null) {
+            PlayerViewModel(engine, queue, preferences, cache, cast, nextVideo = nextVideo)
+        } else {
+            PlayerViewModel(engine, queue, preferences, cache, cast, nextVideo = nextVideo, identityChanges = identity)
+        }
     }
 
     @Test fun leavingForShortsPausesAndReopeningTheVideoPreservesPosition() {
@@ -264,6 +311,65 @@ class PlayerViewModelTest {
         engine.finish()
         assertEquals(VideoId.watchUrl("bbbbbbbbbbb"), engine.playCalls.last())
         assertEquals(0, requests)
+    }
+
+    @Test fun identitySwitchActivatesTheNewQueueAndDropsTheOldNavigationContext() {
+        val identity = MutableStateFlow(0L)
+        var owner = QueueOwner.DEVICE
+        bindViewModel(ownerProvider = { owner }, identity = identity)
+        queue.setEnabled(true)
+        queue.add(QueueItem(watchId, watchUrl, "Device entry"))
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        viewModel.startPlaylist(listOf(QueueItem("ccccccccccc", VideoId.watchUrl("ccccccccccc"), "Playlist entry")))
+        engine.settle("ccccccccccc")
+        assertTrue(viewModel.uiState.value.hasPrevious)
+
+        owner = QueueOwner.account("A")
+        identity.value += 1
+
+        assertEquals(QueueOwner.account("A"), viewModel.uiState.value.queueOwner)
+        assertTrue(viewModel.uiState.value.queueItems.isEmpty())
+        // The previous identity's playlist and trail no longer navigate.
+        viewModel.skipToNext()
+        viewModel.skipToPrevious()
+        assertEquals(VideoId.watchUrl("ccccccccccc"), engine.playCalls.last())
+        assertFalse(viewModel.uiState.value.hasPrevious)
+    }
+
+    @Test fun identitySwitchKeepsTheCurrentVideoAndSurfaceRunning() {
+        val identity = MutableStateFlow(0L)
+        var owner = QueueOwner.DEVICE
+        bindViewModel(ownerProvider = { owner }, identity = identity)
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        owner = QueueOwner.account("A")
+        identity.value += 1
+        assertTrue(viewModel.uiState.value.visible)
+        assertEquals(watchId, viewModel.uiState.value.videoId)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+    }
+
+    @Test fun aDragCommitFromThePreviousOwnerNeverReachesTheNewQueue() {
+        val identity = MutableStateFlow(0L)
+        var owner = QueueOwner.DEVICE
+        bindViewModel(ownerProvider = { owner }, identity = identity)
+        queue.setEnabled(true)
+        queue.add(QueueItem(watchId, watchUrl, "First"))
+        queue.add(QueueItem("bbbbbbbbbbb", VideoId.watchUrl("bbbbbbbbbbb"), "Second"))
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        val stale = viewModel.uiState.value.queueOwner
+
+        owner = QueueOwner.account("A")
+        identity.value += 1
+        queue.add(QueueItem("ccccccccccc", VideoId.watchUrl("ccccccccccc"), "A entry"))
+        queue.add(QueueItem("ddddddddddd", VideoId.watchUrl("ddddddddddd"), "A second"))
+
+        viewModel.onQueueMove(0, 1, stale)
+        assertEquals(listOf("ccccccccccc", "ddddddddddd"), viewModel.uiState.value.queueItems.map { it.videoId })
+        viewModel.onQueueMove(0, 1, QueueOwner.account("A"))
+        assertEquals(listOf("ddddddddddd", "ccccccccccc"), viewModel.uiState.value.queueItems.map { it.videoId })
     }
 
     @Test
@@ -315,17 +421,44 @@ class PlayerViewModelTest {
         assertFalse(engine.snapshot.value.isPlaying)
     }
 
-    @Test fun shortsBackgroundPlaybackHonorsThePreference() {
+    @Test fun shortsAlwaysPauseOutsideTheirHost() {
         bindViewModel()
         viewModel.onShortsOpened()
         viewModel.openShort(watchId)
         engine.settle(watchId)
         preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, true)
         viewModel.onShortsStopped()
-        assertTrue(engine.snapshot.value.isPlaying)
+        assertFalse(engine.snapshot.value.isPlaying)
         preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
         viewModel.onShortsStopped()
         assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun resumedShortContinuesWithoutReloadingItsMedia() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId, 9_000)
+        viewModel.onShortsStopped()
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        assertEquals(listOf(watchUrl), engine.playCalls)
+        assertEquals(9_000L, engine.snapshot.value.positionMs)
+        assertTrue(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun aDepartingShortsHostCannotPauseTheNewWatchSession() {
+        bindViewModel()
+        viewModel.onShortsOpened()
+        viewModel.openShort(shortsId)
+        engine.settle(shortsId)
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        viewModel.onShortsStopped()
+        viewModel.onShortsClosed()
+        assertTrue(engine.snapshot.value.isPlaying)
+        assertEquals(watchId, engine.snapshot.value.videoId)
+        assertTrue(viewModel.uiState.value.visible)
     }
 
     @Test fun leavingShortsNeverCollapsesIntoTheMiniPlayer() {
@@ -340,7 +473,7 @@ class PlayerViewModelTest {
         viewModel.onBrowseOpened()
         assertFalse(viewModel.uiState.value.visible)
         assertFalse(viewModel.uiState.value.mini)
-        assertTrue(engine.snapshot.value.isPlaying)
+        assertFalse(engine.snapshot.value.isPlaying)
     }
 
     @Test fun shortsStopClearsFloatingStateAndBrowseKeepsItClosed() {
@@ -352,7 +485,7 @@ class PlayerViewModelTest {
         viewModel.onShortsStopped()
         assertFalse(viewModel.uiState.value.visible)
         assertFalse(viewModel.uiState.value.mini)
-        assertTrue(engine.snapshot.value.isPlaying)
+        assertFalse(engine.snapshot.value.isPlaying)
         viewModel.onBrowseOpened()
         assertFalse(viewModel.uiState.value.mini)
         preferences.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
@@ -362,6 +495,38 @@ class PlayerViewModelTest {
         viewModel.onShortsStopped()
         assertFalse(viewModel.uiState.value.mini)
         assertFalse(engine.snapshot.value.isPlaying)
+    }
+
+    @Test fun centerDownwardSwipeEntersTheMiniPlayerWhenEnabled() {
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        // The switch defaults to on; with it off an uncommitted drag must not dock the player.
+        preferences.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, false)
+        viewModel.onMiniSwipeRequested()
+        assertFalse(viewModel.uiState.value.mini)
+        preferences.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
+        viewModel.onMiniSwipeRequested()
+        assertTrue(viewModel.uiState.value.mini)
+        assertTrue(viewModel.uiState.value.visible)
+        assertFalse(viewModel.uiState.value.fullscreen)
+    }
+
+    @Test fun centerDownwardSwipeIgnoresShortsAndFullscreenSurfaces() {
+        bindViewModel()
+        preferences.setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, true)
+        viewModel.onShortsOpened()
+        viewModel.openShort(watchId)
+        engine.settle(watchId)
+        viewModel.onMiniSwipeRequested()
+        assertFalse(viewModel.uiState.value.mini)
+        bindViewModel()
+        viewModel.openVideo(watchId)
+        engine.settle(watchId)
+        viewModel.setFullscreenManual(true)
+        viewModel.onMiniSwipeRequested()
+        assertFalse(viewModel.uiState.value.mini)
+        assertTrue(viewModel.uiState.value.fullscreen)
     }
 
     @Test fun endingAShortNeverRequestsWatchAutoplay() {
@@ -438,6 +603,16 @@ class PlayerViewModelTest {
         assertEquals(watchUrl, engine.playCalls.last())
         engine.settle(watchId)
         assertFalse(viewModel.uiState.value.hasPrevious)
+    }
+
+    @Test fun playbackModeSelectionUsesTheRequestedValue() {
+        bindViewModel()
+        viewModel.onLoopMode(LoopMode.PAUSE_AT_END)
+        assertEquals(LoopMode.PAUSE_AT_END, engine.snapshot.value.loopMode)
+        viewModel.onLoopMode(LoopMode.PAUSE_AT_END)
+        assertEquals(LoopMode.PAUSE_AT_END, engine.snapshot.value.loopMode)
+        viewModel.onLoopMode(LoopMode.QUEUE_NEXT)
+        assertEquals(LoopMode.QUEUE_NEXT, engine.snapshot.value.loopMode)
     }
 
     @Test fun loopOneDoesNotBlockManualQueueNext() {
@@ -518,6 +693,7 @@ class PlayerViewModelTest {
         override val snapshot: StateFlow<PlaybackSnapshot> = _snapshot.asStateFlow()
 
         val playCalls = mutableListOf<String>()
+        var resumeCalls = 0
         var stopCalls = 0
 
         fun fail(report: com.hhst.youtubelite.diagnostics.PlaybackFailureReport) {
@@ -556,13 +732,14 @@ class PlayerViewModelTest {
                 url = urlOrId,
                 prepared = false,
                 isPlaying = false,
+                userWantsPlay = true,
             )
         }
         override fun retry() = Unit
         override fun stop() { stopCalls++; _snapshot.value = PlaybackSnapshot() }
         override fun setVideoSurface(surface: SurfaceView?) = Unit
-        override fun playOrPause() = Unit
-        override fun play() { _snapshot.value = _snapshot.value.copy(isPlaying = true, userWantsPlay = true) }
+        override fun playOrPause() { if (_snapshot.value.userWantsPlay) pause() else play() }
+        override fun play() { resumeCalls++; _snapshot.value = _snapshot.value.copy(isPlaying = true, userWantsPlay = true) }
         override fun pause() { _snapshot.value = _snapshot.value.copy(isPlaying = false, userWantsPlay = false) }
         override fun cancelPending(pausePlayback: Boolean) {
             if (pausePlayback) _snapshot.value = _snapshot.value.copy(isPlaying = false)
@@ -582,6 +759,7 @@ class PlayerViewModelTest {
         override fun setSubtitle(trackKey: String?): Boolean = true
         override fun setAudioTrack(trackKey: String?) = Unit
         override fun currentCastSource(): CastSource? = null
+        override fun currentMuxedCastSource(): CastSource? = null
         override fun refreshCastUrl(token: String, videoId: String?, itag: Int?): String? = null
         override fun attachCastPlayer(delegate: Player?): Boolean = false
         override fun setQueueNavigation(hasNext: Boolean, hasPrevious: Boolean) = Unit

@@ -37,9 +37,11 @@ class HomeViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState(
         content = scenario.initialContent(), query = savedState["query"] ?: "",
-        selectedChip = savedState.get<String>("chip")?.takeIf { it in repository.filters } ?: "All",
+        selectedChip = savedState.get<String>("chip")?.takeIf {
+            it in if (savedState.get<Boolean>("catalog") == true) HomeCatalog.filters else repository.filters
+        } ?: "All",
         signedInPreview = savedState.get<Boolean>("signedInPreview") ?: (scenario != HomeScenario.Empty),
-        overlay = restoreOverlay(), chips = repository.filters, live = saveRepository != null,
+        overlay = restoreOverlay(), chips = if (savedState.get<Boolean>("catalog") == true) HomeCatalog.filters else repository.filters, live = saveRepository != null,
     ))
     val uiState = _state.asStateFlow()
     private val navigation = Channel<HomeNavigationRequest>(Channel.BUFFERED)
@@ -49,7 +51,10 @@ class HomeViewModel(
     private var loadJob: Job? = null
     private var saveJob: Job? = null
     private var feedbackJob: Job? = null
+    private var menuJob: Job? = null
+    private var menuRevision = 0L
     private var generation = 0
+    private val consumedContinuations = mutableSetOf<String>()
     private var liveResultReceived = false
 
     init {
@@ -61,6 +66,7 @@ class HomeViewModel(
     /** Cold start paints the last captured rows and the live load replaces them. */
     private fun seedSnapshot() {
         val store = snapshots ?: return
+        if (savedState.get<Boolean>("catalog") == true) return
         val seedGeneration = generation
         val account = accountKey()
         val chip = _state.value.selectedChip
@@ -68,8 +74,7 @@ class HomeViewModel(
         // ahead of the network load, and never over a live result.
         viewModelScope.launch {
             val rows = withContext(seedDispatcher) {
-                store.read<FeedItem.Video>("home", account, chip,
-                    com.google.gson.reflect.TypeToken.getParameterized(List::class.java, FeedItem.Video::class.java).type)
+                store.read("home", account, chip, FeedItem.Video::class.java)
             } ?: return@launch
             if (rows.isEmpty()) return@launch
             _state.update { state ->
@@ -100,12 +105,22 @@ class HomeViewModel(
         setSignedInPreview(signedIn)
         _state.update { it.copy(avatar = avatar, sessionGeneration = key) }
         if (changed) {
+            savedState["catalog"] = false
+            _state.update { it.copy(chips = repository.filters,
+                selectedChip = it.selectedChip.takeIf(repository.filters::contains) ?: "All") }
+            savedState["chip"] = _state.value.selectedChip
             feedbackJob?.cancel()
+            // The old account's save write must not close the new session's
+            // overlay or apply its choices into it.
+            saveJob?.cancel()
             overlay(HomeOverlay.None)
             lastSeenReportSignal = reportSignal?.invoke() ?: -1L
-            load(append = false)
+            load(append = false, userInitiated = true)
         }
     }
+
+    /** A request already owns the slot; a user refresh must not restart it. */
+    private fun refreshInFlight() = loadJob?.isActive == true
 
     /**
      * Foreground entry refreshes quietly at most once per report signal or staleness
@@ -159,9 +174,12 @@ class HomeViewModel(
                 if (action.chip == uiState.value.selectedChip || action.chip !in uiState.value.chips) return
                 savedState["chip"] = action.chip
                 _state.update { it.copy(selectedChip = action.chip) }
-                load(append = false)
+                load(append = false, userInitiated = true)
             }
-            is HomeAction.OpenMenu -> overlay(HomeOverlay.Menu(action.itemId, action.kind))
+            is HomeAction.OpenMenu -> {
+                overlay(HomeOverlay.Menu(action.itemId, action.kind))
+                loadMenu()
+            }
             is HomeAction.MenuSelected -> {
                 val menu = uiState.value.overlay as? HomeOverlay.Menu ?: return
                 if (action.action !in menu.kind.actions) return
@@ -226,17 +244,19 @@ class HomeViewModel(
                 }
                 val repository = saveRepository ?: return
                 editSave(save.copy(pending = true))
+                val requestSession = sessionKey
                 saveJob = viewModelScope.launch {
                     try {
                         val created = repository.create(title, save.description.trim(), save.videoId)
+                        if (sessionKey != requestSession) return@launch
                         editSaveOverlay(save.videoId) { current ->
                             current.copy(pending = false, newPlaylist = false, title = "", description = "",
                                 choices = (current.choices ?: emptyList()) + created)
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
-                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
-                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't create this playlist. Try again.") }
+                    catch (_: SignInRequiredException) { if (sessionKey == requestSession) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) } }
+                    catch (_: UnconfirmedActionException) { if (sessionKey == requestSession) saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { if (sessionKey == requestSession) saveFailed(save.videoId, "Couldn't create this playlist. Try again.") }
                 }
             }
             is HomeAction.SaveChoiceToggled -> {
@@ -245,18 +265,20 @@ class HomeViewModel(
                 if (!save.live || save.pending) return
                 val target = !action.choice.contains
                 editSave(save.copy(pending = true))
+                val requestSession = sessionKey
                 saveJob = viewModelScope.launch {
                     try {
                         repository.setContaining(action.choice.id, save.videoId, target)
+                        if (sessionKey != requestSession) return@launch
                         editSaveOverlay(save.videoId) { current ->
                             current.copy(pending = false, choices = current.choices?.map {
                                 if (it.id == action.choice.id) it.copy(contains = target) else it
                             })
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
-                    catch (_: UnconfirmedActionException) { saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
-                    catch (_: Exception) { saveFailed(save.videoId, "Couldn't update this playlist. Try again.") }
+                    catch (_: SignInRequiredException) { if (sessionKey == requestSession) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) } }
+                    catch (_: UnconfirmedActionException) { if (sessionKey == requestSession) saveFailed(save.videoId, "The server did not confirm this change. Please refresh before trying again.") }
+                    catch (_: Exception) { if (sessionKey == requestSession) saveFailed(save.videoId, "Couldn't update this playlist. Try again.") }
                 }
             }
             HomeAction.SaveChoicesRetry -> {
@@ -272,7 +294,7 @@ class HomeViewModel(
                 navigation.trySend(HomeNavigationRequest.Feedback(feedback.itemId, feedback.kind, action.reason))
             }
             is HomeAction.Navigate -> navigation.trySend(action.request)
-            HomeAction.Refresh -> load(append = false)
+            HomeAction.Refresh -> if (!refreshInFlight()) load(append = false, keepEmpty = true, userInitiated = true)
             HomeAction.LoadNext -> load(append = true)
             HomeAction.DismissVerification -> _state.update { it.copy(verification = null) }
         }
@@ -287,7 +309,7 @@ class HomeViewModel(
         if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
         _state.update { it.copy(verification = null) }
         notices.trySend(AppNotice.Message("Verification finished. Retrying…"))
-        load(append = false)
+        load(append = false, userInitiated = true)
     }
 
     private fun restoreOverlay(): HomeOverlay = when (savedState.get<String>("homeOverlay")) {
@@ -306,6 +328,8 @@ class HomeViewModel(
     }
 
     private fun overlay(overlay: HomeOverlay) {
+        menuRevision++
+        menuJob?.cancel()
         savedState["searchOpen"] = overlay == HomeOverlay.Search
         savedState["homeOverlay"] = when (overlay) {
             HomeOverlay.None -> "none"
@@ -331,31 +355,70 @@ class HomeViewModel(
         _state.update { it.copy(overlay = overlay) }
     }
 
+    private fun loadMenu() {
+        val state = _state.value
+        val menu = state.overlay as? HomeOverlay.Menu ?: return
+        if (menu.kind != FeedMenuKind.Video || !state.live || !state.signedInPreview) return
+        val video = (state.content as? HomeContent.Feed)?.page?.items?.filterIsInstance<FeedItem.Video>()
+            ?.firstOrNull { it.id == menu.itemId } ?: return
+        if (video.menuEndpoint == null || video.feedbackGeneration != state.sessionGeneration) return
+        val revision = menuRevision
+        val feedGeneration = generation
+        _state.update { it.copy(overlay = menu.copy(loading = true)) }
+        menuJob = viewModelScope.launch {
+            try {
+                val resolved = repository.menu(video)
+                _state.update { current ->
+                    if (revision != menuRevision || feedGeneration != generation ||
+                        current.sessionGeneration != video.feedbackGeneration) return@update current
+                    val active = current.overlay as? HomeOverlay.Menu ?: return@update current
+                    val feed = current.content as? HomeContent.Feed ?: return@update current
+                    current.copy(overlay = active.copy(loading = false), content = feed.copy(page = feed.page.copy(
+                        items = feed.page.items.map { item ->
+                            if (item is FeedItem.Video && item.id == video.id) item.copy(
+                                notInterestedToken = resolved.notInterestedToken,
+                                dontRecommendToken = resolved.dontRecommendToken) else item
+                        })))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                _state.update { current ->
+                    val active = current.overlay as? HomeOverlay.Menu
+                    if (revision != menuRevision || active == null) current
+                    else current.copy(overlay = active.copy(loading = false, failed = true))
+                }
+            }
+        }
+    }
+
     private fun loadSaveChoices() {
         val save = uiState.value.overlay as? HomeOverlay.Save ?: return
         val repository = saveRepository ?: return
         saveJob?.cancel()
+        val requestSession = sessionKey
         saveJob = viewModelScope.launch {
             try {
                 val choices = repository.choices(save.videoId)
+                if (sessionKey != requestSession) return@launch
                 editSaveOverlay(save.videoId) { it.copy(choices = choices, choicesFailed = false, pending = false) }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: SignInRequiredException) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) }
-            catch (_: Exception) { editSaveOverlay(save.videoId) { it.copy(choices = null, choicesFailed = true, pending = false) } }
+            catch (_: SignInRequiredException) { if (sessionKey == requestSession) { overlay(HomeOverlay.None); notices.trySend(AppNotice.SignIn) } }
+            catch (_: Exception) { if (sessionKey == requestSession) editSaveOverlay(save.videoId) { it.copy(choices = null, choicesFailed = true, pending = false) } }
         }
     }
 
     private fun saveWatchLater(videoId: String) {
         val repository = saveRepository ?: return
         if (saveJob?.isActive == true) return
+        val requestSession = sessionKey
         saveJob = viewModelScope.launch {
             try {
                 repository.saveWatchLater(videoId)
-                notices.trySend(AppNotice.Message("Saved to Watch later"))
+                if (sessionKey == requestSession) notices.trySend(AppNotice.Message("Saved to Watch later"))
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
-            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't save this video. Try again.")) }
+            catch (_: SignInRequiredException) { if (sessionKey == requestSession) notices.trySend(AppNotice.SignIn) }
+            catch (_: UnconfirmedActionException) { if (sessionKey == requestSession) notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
+            catch (_: Exception) { if (sessionKey == requestSession) notices.trySend(AppNotice.Message("Couldn't save this video. Try again.")) }
         }
     }
 
@@ -382,7 +445,10 @@ class HomeViewModel(
                 notices.trySend(AppNotice.Message("Removed from recommendations"))
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update recommendations. Try again.")) }
+            catch (error: Exception) { notices.trySend(com.hhst.youtubelite.diagnostics.writeFailureNotice(
+                "home_feedback_${action.name.lowercase()}", error,
+                mapOf("video_id" to itemId, "channel_id" to video.channelId),
+                message = "Couldn't update recommendations. Try again.")) }
         }
     }
 
@@ -443,20 +509,27 @@ class HomeViewModel(
         }
     }
 
-    private fun load(append: Boolean, keepEmpty: Boolean = false) {
+    private fun load(append: Boolean, keepEmpty: Boolean = false, userInitiated: Boolean = false) {
         val feed = uiState.value.content as? HomeContent.Feed
         val empty = uiState.value.content as? HomeContent.Empty
         val next = if (append) feed?.page?.nextKey ?: return else null
         if (append && (feed?.append == AppendState.Loading || feed?.refreshing == true)) return
         loadJob?.cancel()
+        menuJob?.cancel()
+        menuRevision++
+        _state.update { current ->
+            val active = current.overlay as? HomeOverlay.Menu
+            if (active == null) current else current.copy(overlay = active.copy(loading = false))
+        }
         val requestGeneration = ++generation
         val requestAccount = accountKey()
         val filter = uiState.value.selectedChip
         _state.update { state -> state.copy(verification = null, content = when {
             append && feed != null -> feed.copy(append = AppendState.Loading)
-            feed != null -> feed.copy(refreshing = true, append = AppendState.Idle, refreshFailed = false)
+            feed != null -> feed.copy(refreshing = true, append = AppendState.Idle, refreshFailed = false,
+                userRefresh = userInitiated)
             // A quiet re-check keeps the empty card painted (no Loading flash).
-            keepEmpty && empty != null -> empty.copy(refreshing = true)
+            keepEmpty && empty != null -> empty.copy(refreshing = true, userRefresh = userInitiated)
             else -> HomeContent.Loading
         }) }
         loadJob = viewModelScope.launch {
@@ -465,16 +538,26 @@ class HomeViewModel(
                 if (requestGeneration != generation) return@launch
                 liveResultReceived = true
                 if (!append) lastFeedLoadedAtMs = now()
-                val combined = if (append && feed != null) page.copy(items = mergeFeed(feed.page.items, page.items)) else page
-                _state.update { it.copy(content = if (combined.items.isEmpty()) HomeContent.Empty(
+                var combined = if (append && feed != null) page.copy(
+                    items = mergeFeed(feed.page.items, page.items),
+                ) else page
+                if (!append) consumedContinuations.clear()
+                else if (!page.partialFailure && next != null) consumedContinuations += next
+                if (!page.partialFailure && combined.nextKey in consumedContinuations) combined = combined.copy(nextKey = null)
+                savedState["catalog"] = combined.catalog != null
+                _state.update { it.copy(chips = if (combined.catalog != null) HomeCatalog.filters else repository.filters,
+                    content = if (combined.items.isEmpty()) HomeContent.Empty(
                     title = combined.messages.firstOrNull() ?: HomeContent.Empty().title,
-                ) else HomeContent.Feed(combined)) }
+                ) else HomeContent.Feed(combined, append = if (combined.partialFailure) AppendState.Failed else AppendState.Idle)) }
                 val store = snapshots
                 if (store != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    store.write("home", requestAccount, filter, combined.items.filterIsInstance<FeedItem.Video>())
+                    store.write("home", requestAccount, filter,
+                        if (combined.catalog == null) combined.items.filterIsInstance<FeedItem.Video>() else emptyList(),
+                        FeedItem.Video::class.java)
                 }
                 if (requestGeneration != generation) return@launch
                 fillMissingAvatars(combined.items)
+                loadMenu()
                 consumePendingRevisionAfterLoad()
             } catch (cancelled: CancellationException) {
                 throw cancelled

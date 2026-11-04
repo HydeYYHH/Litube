@@ -1,7 +1,6 @@
 package com.hhst.youtubelite.data.media
 
 import com.hhst.youtubelite.library.domain.HistoryEntry
-import com.hhst.youtubelite.library.domain.LibrarySource
 import com.liskovsoft.youtubeapi.videoinfo.V2.AccessToken
 import com.liskovsoft.youtubeapi.videoinfo.V2.Account
 import com.liskovsoft.youtubeapi.videoinfo.V2.SignInClient
@@ -19,13 +18,14 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * The device/account isolation matrix: which backend answers each library and save call for
- * {signed out, signed in + Device, signed in + Account}, and what identity transitions keep.
+ * The device/account isolation matrix: which backend answers each library and save call
+ * for {anonymous, signed in}, and what identity transitions keep. The library source
+ * follows the session identity — the whole-app anonymous switch reads the device store
+ * while the signed-in account reads the server; there is no third, manual selection.
  */
 class LibrarySourceIsolationTest {
 
     private lateinit var sessionStore: MemoryAuthStore
-    private lateinit var source: LibrarySourceStore
     private lateinit var calls: MutableList<String>
     private lateinit var local: LocalLibraryStore
 
@@ -53,7 +53,6 @@ class LibrarySourceIsolationTest {
     @Before fun setUp() {
         sessionStore = MemoryAuthStore()
         MediaSession.initialize(sessionStore)
-        source = LibrarySourceStore(MemoryAuthStore())
         calls = mutableListOf()
         local = LocalLibraryStore(MemoryAuthStore())
     }
@@ -69,18 +68,16 @@ class LibrarySourceIsolationTest {
 
     private fun repositories(): Triple<MediaLibraryRepository, MediaSaveRepository, MediaPlaylistRepository> {
         val client = MediaClient(OkHttpClient.Builder().addInterceptor(Recording(calls)).build()) { MediaSession.freshContext() }
-        val sourceOf: () -> LibrarySource = { source.current() }
-        return Triple(MediaLibraryRepository(client, local, sourceOf),
-            MediaSaveRepository(client, local, sourceOf), MediaPlaylistRepository(client, local, sourceOf))
+        return Triple(MediaLibraryRepository(client, local),
+            MediaSaveRepository(client, local), MediaPlaylistRepository(client, local))
     }
 
     private fun entry(id: String) = HistoryEntry(id, id, "Title $id", "Author", "channel", "art", "1:00", section = "Today")
 
-    @Test fun signedOutReadsAndWritesStayOnTheDevice() = runBlocking {
+    @Test fun anonymousReadsAndWritesStayOnTheDevice() = runBlocking {
         val (library, saves, _) = repositories()
         local.record(entry("seed"))
         val accountCalls = calls.size
-        assertEquals("On this device", library.you().account.name)
         assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
         library.playlists()
         saves.choices("seed")
@@ -91,20 +88,19 @@ class LibrarySourceIsolationTest {
         library.setHistoryPaused(true)
         library.setHistoryPaused(false)
         library.clearHistory()
-        assertEquals("no server call may fire for a signed-out library", accountCalls, calls.size)
+        assertEquals("no server call may fire for an anonymous library", accountCalls, calls.size)
     }
 
-    @Test fun signedInAccountSourceHitsTheServerAndLeavesTheDeviceAlone() = runBlocking {
+    @Test fun signedInReadsAndWritesHitTheServerAndLeaveTheDeviceAlone() = runBlocking {
         signIn()
         local.record(entry("seed"))
         val (library, saves, playlist) = repositories()
         val before = calls.size
-        assertEquals("Owner", library.you().account.name)
         library.history()
         library.playlists()
         saves.choices("seed")
         saves.saveWatchLater("srv-video")
-        assertTrue("account source must reach the server", calls.size > before)
+        assertTrue("signed-in writes must reach the server", calls.size > before)
         assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") && it.contains("srv-video") })
         // The device store neither answered nor changed.
         assertEquals(listOf("seed"), local.history().entries.map { it.videoId })
@@ -114,13 +110,12 @@ class LibrarySourceIsolationTest {
         assertTrue(calls.last().contains("WL"))
     }
 
-    @Test fun signedInDeviceSourceKeepsEveryCallLocal() = runBlocking {
+    @Test fun theWholeAppAnonymousSwitchKeepsEveryLibraryCallLocalWhileCredentialsStay() = runBlocking {
         signIn()
-        source.select(LibrarySource.Device)
+        MediaSession.setAnonymousMode(true)
         local.record(entry("seed"))
         val (library, saves, playlist) = repositories()
         val before = calls.size
-        assertEquals("On this device", library.you().account.name)
         assertEquals(listOf("seed"), library.history().entries.map { it.videoId })
         library.playlists()
         saves.choices("seed")
@@ -128,10 +123,14 @@ class LibrarySourceIsolationTest {
         saves.create("Mine", "", "seed")
         library.setHistoryPaused(true)
         library.setHistoryPaused(false)
-        // The device Watch Later answers while signed in.
-        assertEquals("Watch later", playlist.playlist("WL")?.summary?.title)
-        assertEquals("no server call may fire under the device source", before, calls.size)
+        assertEquals("no server call may fire while the app is anonymous", before, calls.size)
         assertEquals(listOf("seed"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
+        // The account credential is still stored for switching back.
+        assertEquals("refresh", sessionStore.read(MediaSession.KEY_REFRESH_TOKEN))
+        // Switching back to the account moves the same repositories onto the server.
+        MediaSession.setAnonymousMode(false)
+        saves.saveWatchLater("srv-video")
+        assertTrue(calls.size > before)
     }
 
     @Test fun identityTransitionsKeepDeviceDataAndNeverWriteTheServer() = runBlocking {
@@ -152,14 +151,14 @@ class LibrarySourceIsolationTest {
         assertEquals(callsBefore, calls.size)
     }
 
-    @Test fun watchLaterIsADistinctListPerSource() = runBlocking {
+    @Test fun watchLaterIsADistinctListPerIdentity() = runBlocking {
         signIn()
         local.record(entry("local-one"))
         val (_, saves, playlist) = repositories()
         saves.saveWatchLater("srv-video")
         assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") })
         assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
-        source.select(LibrarySource.Device)
+        MediaSession.setAnonymousMode(true)
         saves.saveWatchLater("local-one")
         val callsAfterDeviceSave = calls.size
         assertEquals(listOf("local-one"), local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.map { it.videoId })
@@ -167,6 +166,7 @@ class LibrarySourceIsolationTest {
         assertEquals("Watch later", playlist.playlist("WL")?.summary?.title)
         assertEquals(callsAfterDeviceSave, calls.size)
     }
+
     @Test fun devicePlaylistIdsCannotBeSentToTheAccount() = runBlocking {
         signIn()
         val (_, saves, _) = repositories()
@@ -178,14 +178,14 @@ class LibrarySourceIsolationTest {
 
     @Test fun accountPlaylistChoicesCannotMutateTheDevice() = runBlocking {
         signIn()
+        MediaSession.setAnonymousMode(true)
         val (_, saves, _) = repositories()
-        source.select(LibrarySource.Device)
         val result = runCatching { saves.setContaining("server-playlist", "seed", true) }
         assertTrue(result.exceptionOrNull() is kotlinx.coroutines.CancellationException)
         assertTrue(calls.isEmpty())
     }
 
-    @Test fun queuedAccountWritesAreCancelledAfterSelectingDevice() = runBlocking {
+    @Test fun queuedAccountWritesAreCancelledAfterTheIdentitySwitches() = runBlocking {
         signIn()
         val entered = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
@@ -194,13 +194,13 @@ class LibrarySourceIsolationTest {
             check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
             MediaSession.snapshot()
         }
-        val saves = MediaSaveRepository(client, local) { source.current() }
+        val saves = MediaSaveRepository(client, local)
         val pending = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).let { scope ->
             scope.async { runCatching { saves.saveWatchLater("server-video") } }
         }
         try {
             assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
-            source.select(LibrarySource.Device)
+            MediaSession.setAnonymousMode(true)
         } finally { release.countDown() }
         assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
         assertTrue(calls.isEmpty())

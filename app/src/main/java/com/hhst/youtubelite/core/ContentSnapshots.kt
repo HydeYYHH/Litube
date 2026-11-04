@@ -1,13 +1,16 @@
 package com.hhst.youtubelite.core
 
-import com.google.gson.Gson
-import com.google.gson.JsonElement
-import com.google.gson.annotations.SerializedName
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.File
-import java.lang.reflect.Type
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.serializer
 
 /**
  * Bounded on-disk snapshots of account content for instant paint, one file per
@@ -21,71 +24,80 @@ import java.util.concurrent.TimeUnit
  */
 class ContentSnapshots(
     private val directory: File,
-    private val gson: Gson = Gson(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    @Serializable
     private class Envelope(
-        @SerializedName("version") val version: Int,
-        @SerializedName("capturedAt") val capturedAt: Long,
-        @SerializedName("query") val query: String,
-        @SerializedName("rows") val rows: JsonElement?,
+        val version: Int,
+        val capturedAt: Long,
+        val query: String,
+        val rows: JsonElement?,
     )
 
-    /** Null when nothing usable is stored; an unusable file is removed rather than retried. */
-    fun <T> read(kind: String, account: String, query: String, rowsType: Type): List<T>? = synchronized(lock) {
-        val file = file(kind, account, query)
-        val atomic = SnapshotFile(file)
-        val envelope = runCatching {
-            atomic.openRead().use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    require(output.size() + count <= MAX_BYTES)
-                    output.write(buffer, 0, count)
-                }
-                gson.fromJson(output.toString(Charsets.UTF_8.name()), Envelope::class.java)
-            }
-        }.getOrNull()
-        val now = clock()
-        val usable = envelope != null && envelope.version == VERSION && envelope.query == query &&
-            envelope.rows != null && envelope.capturedAt <= now && envelope.capturedAt >= now - MAX_AGE_MS
-        if (!usable) {
-            atomic.delete()
-            return@synchronized null
-        }
-        val rows = runCatching {
-            @Suppress("UNCHECKED_CAST")
-            gson.fromJson<List<T>>(envelope.rows, rowsType) as? List<T>
-        }.getOrNull()?.takeIf { it.size <= MAX_ROWS }
-        if (rows == null) atomic.delete()
-        rows
-    }
+    private val json = Json { ignoreUnknownKeys = true }
 
-    fun write(kind: String, account: String, query: String, rows: List<Any>) = synchronized(lock) {
-        val dir = File(directory, kind)
-        if (!dir.mkdirs() && !dir.isDirectory) return@synchronized
-        val file = file(kind, account, query)
-        val atomic = SnapshotFile(file)
-        if (rows.isEmpty()) {
-            atomic.delete()
-            return@synchronized
+    /** Null when nothing usable is stored; an unusable file is removed rather than retried. */
+    fun <T : Any> read(kind: String, account: String, query: String, rowsClass: Class<T>): List<T>? =
+        synchronized(lock) {
+            val file = file(kind, account, query)
+            val atomic = SnapshotFile(file)
+            val envelope = runCatching {
+                atomic.openRead().use { input ->
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        require(output.size() + count <= MAX_BYTES)
+                        output.write(buffer, 0, count)
+                    }
+                    json.decodeFromString(Envelope.serializer(), output.toString(Charsets.UTF_8.name()))
+                }
+            }.getOrNull()
+            val now = clock()
+            val usable = envelope != null && envelope.version == VERSION && envelope.query == query &&
+                envelope.rows != null && envelope.capturedAt <= now && envelope.capturedAt >= now - MAX_AGE_MS
+            if (!usable) {
+                atomic.delete()
+                return@synchronized null
+            }
+            @Suppress("UNCHECKED_CAST")
+            val rows = runCatching {
+                json.decodeFromJsonElement(rowSerializer(rowsClass), envelope.rows) as List<T>
+            }.getOrNull()?.takeIf { it.size <= MAX_ROWS }
+            if (rows == null) atomic.delete()
+            rows
         }
-        runCatching {
-            val bytes = gson.toJson(Envelope(VERSION, clock(), query, gson.toJsonTree(rows.take(MAX_ROWS))))
-                .toByteArray(Charsets.UTF_8)
-            if (bytes.size > MAX_BYTES) {
+
+    fun <T : Any> write(kind: String, account: String, query: String, rows: List<T>, rowsClass: Class<T>) =
+        synchronized(lock) {
+            val dir = File(directory, kind)
+            if (!dir.mkdirs() && !dir.isDirectory) return@synchronized
+            val file = file(kind, account, query)
+            val atomic = SnapshotFile(file)
+            if (rows.isEmpty()) {
                 atomic.delete()
                 return@synchronized
             }
-            atomic.write(bytes)
-            dir.listFiles()?.filter { it.extension == "json" && it != file }
-                ?.sortedByDescending(File::lastModified)?.drop(FILE_CAP_PER_KIND - 1)
-                ?.forEach { SnapshotFile(it).delete() }
+            runCatching {
+                val bytes = json.encodeToString(Envelope.serializer(),
+                    Envelope(VERSION, clock(), query, json.encodeToJsonElement(rowSerializer(rowsClass), rows.take(MAX_ROWS))))
+                    .toByteArray(Charsets.UTF_8)
+                if (bytes.size > MAX_BYTES) {
+                    atomic.delete()
+                    return@synchronized
+                }
+                atomic.write(bytes)
+                dir.listFiles()?.filter { it.extension == "json" && it != file }
+                    ?.sortedByDescending(File::lastModified)?.drop(FILE_CAP_PER_KIND - 1)
+                    ?.forEach { SnapshotFile(it).delete() }
+            }
+            Unit
         }
-        Unit
-    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : Any> rowSerializer(rowsClass: Class<T>): KSerializer<List<T>> =
+        ListSerializer(serializer(rowsClass)) as KSerializer<List<T>>
 
     fun clear(kind: String? = null, account: String? = null) = synchronized(lock) {
         val roots = if (kind == null) directory.listFiles()?.filter { it.isDirectory }.orEmpty()

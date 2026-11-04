@@ -19,6 +19,7 @@ internal class DiagnosticDataSource(private val inner: DataSource, private val p
     private var lastSample = 0L
     private var ended = true
     private var eof = false
+    override fun getResponseHeaders(): Map<String, List<String>> = inner.responseHeaders
     override fun open(dataSpec: DataSpec): Long {
         context = parent.child(UUID.randomUUID().toString())
         expected = C.LENGTH_UNSET.toLong()

@@ -17,6 +17,7 @@ data class ExplorePage(
     val sections: List<ExploreSection> = emptyList(),
     /** The page-level continuation; null ends the category. */
     val nextKey: String? = null,
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
 )
 
 /** One server shelf rendered as a carousel row; [nextKey] continues the shelf itself. */
@@ -25,6 +26,7 @@ data class ExploreSection(
     val videos: List<FeedItem.Video>,
     val nextKey: String? = null,
     val append: AppendState = AppendState.Idle,
+    val playlists: List<com.hhst.youtubelite.playlist.domain.PlaylistSummary> = emptyList(),
 )
 
 sealed interface ExploreContent {
@@ -44,6 +46,7 @@ data class ExploreUiState(
 sealed interface ExploreNavigationRequest {
     data class Watch(val videoId: String) : ExploreNavigationRequest
     data class Channel(val channelId: String) : ExploreNavigationRequest
+    data class Playlist(val playlistId: String) : ExploreNavigationRequest
     data class OpenVerification(val challengeUrl: String) : ExploreNavigationRequest
 }
 
@@ -54,6 +57,7 @@ sealed interface ExploreAction {
     data class SelectCategory(val category: ExploreCategory) : ExploreAction
     data class OpenVideo(val videoId: String) : ExploreAction
     data class OpenChannel(val channelId: String) : ExploreAction
+    data class OpenPlaylist(val playlistId: String) : ExploreAction
     /** Appends the next page of the current category; also retries a failed tail. */
     data object LoadMore : ExploreAction
     /** Appends the next items of the shelf at [index]; also retries a failed shelf append. */

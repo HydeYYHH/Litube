@@ -26,7 +26,7 @@ class SessionCaptureAndroidTest {
     @Test fun metadataCacheCannotCrossCapturedIdentities() {
         val sessions = org.koin.core.context.GlobalContext.get().get<YoutubeSessionProvider>()
         fun session(key: String) = YoutubeWebSession(key, WebAccount.ANONYMOUS, 0, null, null, null, null,
-            "fixture", 0, null, "fixture", com.google.gson.JsonObject()) { "" }
+            "fixture", 0, null, "fixture", kotlinx.serialization.json.JsonObject(emptyMap())) { "" }
         assertNotEquals(sessions.accountScope(session("first")), sessions.accountScope(session("second")))
     }
 

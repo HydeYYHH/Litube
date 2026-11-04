@@ -44,7 +44,7 @@ import com.hhst.youtubelite.account.domain.SignInAction
 import com.hhst.youtubelite.account.domain.SignInUiState
 import com.hhst.youtubelite.account.presentation.SignInViewModel
 import com.hhst.youtubelite.data.media.ContentRepositories
-import com.hhst.youtubelite.data.media.MmkvAuthStore
+import com.hhst.youtubelite.data.media.PreferencesAuthStore
 import com.hhst.youtubelite.ui.components.AppTextButton
 import com.hhst.youtubelite.ui.components.AppTopAppBar
 import com.hhst.youtubelite.ui.design.AppText
@@ -78,7 +78,7 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
                         override suspend fun complete(token: com.liskovsoft.youtubeapi.videoinfo.V2.AccessToken) =
                             emptyList<com.liskovsoft.youtubeapi.videoinfo.V2.Account>()
                     } else MediaSignInService(
-                        org.koin.java.KoinJavaComponent.getKoin().get<okhttp3.OkHttpClient>(), MmkvAuthStore(this@SignInActivity))
+                        org.koin.java.KoinJavaComponent.getKoin().get<okhttp3.OkHttpClient>(), PreferencesAuthStore(this@SignInActivity))
                     return SignInViewModel(service) as T
                 }
             })[SignInViewModel::class.java]

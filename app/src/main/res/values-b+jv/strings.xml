@@ -166,6 +166,7 @@
     <string name="copy">Salinan</string>
     <string name="copied">Disalin</string>
     <string name="copy_all">Salin kabeh</string>
+    <string name="cast_searching">Nggolèki…</string>
     <string name="queue_now_playing">Saiki dolanan</string>
     <string name="clear_queue_confirm">Mbusak kabeh antrian?</string>
     <string name="ok">Oke</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Tutup</string>
     <string name="verification_completed">Verifikasi rampung. Nyoba maneh…</string>
     <string name="verification_still_blocked">Isih diblokir sawise verifikasi. Coba maneh mengko.</string>
+    <string name="comments_title">Komentar</string>
+    <string name="comments_sort_top">Komentar paling dhuwur</string>
+    <string name="comments_sort_newest">Anyar sepisan</string>
+    <string name="comments_sort_chip_top">Top</string>
+    <string name="comments_sort_chip_newest">Anyar</string>
+    <string name="comments_composer_add">Tambah komentar</string>
+    <string name="comments_composer_reply">Wangsulan</string>
+    <string name="comments_composer_edit">Edit komentar</string>
+    <string name="comments_composer_text_hint">Teks komentar</string>
+    <string name="comments_composer_text_edit_hint">Edit teks komentar</string>
+    <string name="comments_composer_submit">Komentari</string>
+    <string name="comments_composer_sending">Ngirim…</string>
+    <string name="comments_composer_save">Simpen</string>
+    <string name="comments_delete_title">Busak</string>
+    <string name="comments_show_more_replies">Tampilake wangsulan liyane</string>
+    <string name="comments_load_more_failed">Ora bisa mbukak komentar liyane</string>
+    <string name="comments_hide_replies">Dhelikake wangsulan</string>
+    <string name="home_music_charts">Tangga musik</string>
+    <string name="home_popular_gaming">Populer ing game</string>
+    <string name="home_popular_sports">Populer ing olahraga</string>
+    <string name="home_top_news">Warta utama</string>
 </resources>

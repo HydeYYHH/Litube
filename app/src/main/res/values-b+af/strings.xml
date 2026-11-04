@@ -166,6 +166,7 @@
     <string name="copy">Afskrif</string>
     <string name="copied">Gekopieer</string>
     <string name="copy_all">Kopieer alles</string>
+    <string name="cast_searching">Soek tans…</string>
     <string name="queue_now_playing">Speel nou</string>
     <string name="clear_queue_confirm">Maak die hele tou skoon?</string>
     <string name="ok">Goed</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Maak toe</string>
     <string name="verification_completed">Verifikasie voltooi. Probeer weer…</string>
     <string name="verification_still_blocked">Nog geblokkeer na verifikasie. Probeer later weer.</string>
+    <string name="comments_title">Kommentaar</string>
+    <string name="comments_sort_top">Top-kommentaar</string>
+    <string name="comments_sort_newest">Nuutste eerste</string>
+    <string name="comments_sort_chip_top">Top</string>
+    <string name="comments_sort_chip_newest">Nuutste</string>
+    <string name="comments_composer_add">Voeg \'n kommentaar by</string>
+    <string name="comments_composer_reply">Antwoord</string>
+    <string name="comments_composer_edit">Wysig kommentaar</string>
+    <string name="comments_composer_text_hint">Kommentaarteks</string>
+    <string name="comments_composer_text_edit_hint">Wysig kommentaarteks</string>
+    <string name="comments_composer_submit">Plaas kommentaar</string>
+    <string name="comments_composer_sending">Stuur tans…</string>
+    <string name="comments_composer_save">Stoor</string>
+    <string name="comments_delete_title">Vee uit</string>
+    <string name="comments_show_more_replies">Wys meer antwoorde</string>
+    <string name="comments_load_more_failed">Kon nie meer kommentare laai nie</string>
+    <string name="comments_hide_replies">Versteek antwoorde</string>
+    <string name="home_music_charts">Musiektrefferlyste</string>
+    <string name="home_popular_gaming">Gewild in speletjies</string>
+    <string name="home_popular_sports">Gewild in sport</string>
+    <string name="home_top_news">Hoofnuus</string>
 </resources>

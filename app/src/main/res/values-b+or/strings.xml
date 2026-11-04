@@ -166,6 +166,7 @@
     <string name="copy">କପି କରନ୍ତୁ</string>
     <string name="copied">କପି କରାଯାଇଛି</string>
     <string name="copy_all">ସମସ୍ତ କପି କରନ୍ତୁ</string>
+    <string name="cast_searching">ଖୋଜୁଛି…</string>
     <string name="queue_now_playing">ବର୍ତ୍ତମାନ ଚାଲୁଛି</string>
     <string name="clear_queue_confirm">ପୁରା ଧାଡି ସଫା କର?</string>
     <string name="ok">ଠିକ ଅଛି</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">ବନ୍ଦ କରନ୍ତୁ</string>
     <string name="verification_completed">ଯାଞ୍ଚ ସମ୍ପୂର୍ଣ୍ଣ ହେଲା। ପୁଣି ଚେଷ୍ଟା କରୁଅଛି…</string>
     <string name="verification_still_blocked">ଯାଞ୍ଚ ପରେ ମଧ୍ୟ ଅବରୋଧିତ। ପରେ ପୁଣି ଚେଷ୍ଟା କରନ୍ତୁ।</string>
+    <string name="comments_title">ମନ୍ତବ୍ୟଗୁଡ଼ିକ</string>
+    <string name="comments_sort_top">ଶୀର୍ଷ ମନ୍ତବ୍ୟ</string>
+    <string name="comments_sort_newest">ନୂଆ ପ୍ରଥମେ</string>
+    <string name="comments_sort_chip_top">ଶୀର୍ଷ</string>
+    <string name="comments_sort_chip_newest">ନୂଆ</string>
+    <string name="comments_composer_add">ମନ୍ତବ୍ୟ ଯୋଗ କରନ୍ତୁ</string>
+    <string name="comments_composer_reply">ଉତ୍ତର ଦିଅନ୍ତୁ</string>
+    <string name="comments_composer_edit">ମନ୍ତବ୍ୟ ସମ୍ପାଦନ କରନ୍ତୁ</string>
+    <string name="comments_composer_text_hint">ମନ୍ତବ୍ୟ ପାଠ</string>
+    <string name="comments_composer_text_edit_hint">ମନ୍ତବ୍ୟ ପାଠ ସମ୍ପାଦନ କରନ୍ତୁ</string>
+    <string name="comments_composer_submit">ମନ୍ତବ୍ୟ କରନ୍ତୁ</string>
+    <string name="comments_composer_sending">ପଠାଯାଉଛି…</string>
+    <string name="comments_composer_save">ସେଭ୍ କରନ୍ତୁ</string>
+    <string name="comments_delete_title">ଡିଲିଟ୍ କରନ୍ତୁ</string>
+    <string name="comments_show_more_replies">ଅଧିକ ଉତ୍ତର ଦେଖାନ୍ତୁ</string>
+    <string name="comments_load_more_failed">ଅଧିକ ମନ୍ତବ୍ୟ ଲୋଡ୍ ହୋଇପାରିଲା ନାହିଁ</string>
+    <string name="comments_hide_replies">ଉତ୍ତର ଲୁଚାନ୍ତୁ</string>
+    <string name="home_music_charts">ସଙ୍ଗୀତ ତାଲିକା</string>
+    <string name="home_popular_gaming">ଗେମିଂରେ ଲୋକପ୍ରିୟ</string>
+    <string name="home_popular_sports">କ୍ରୀଡ଼ାରେ ଲୋକପ୍ରିୟ</string>
+    <string name="home_top_news">ମୁଖ୍ୟ ଖବର</string>
 </resources>

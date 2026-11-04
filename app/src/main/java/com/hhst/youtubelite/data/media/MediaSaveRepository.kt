@@ -14,14 +14,15 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.editPlaylist
 import com.liskovsoft.youtubeapi.videoinfo.V2.loadPlaylistChoices
 import com.liskovsoft.youtubeapi.videoinfo.V2.savePlaylist
 
-class MediaSaveRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null,
-    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : SaveRepository {
-    private fun operation() = LibraryOperation(local, source)
+class MediaSaveRepository(private val client: MediaClient, private val local: LocalLibraryStore? = null) : SaveRepository {
+    // The device store backs local collections exactly when the session is not signed in
+    // (the whole-app anonymous switch makes signedIn() false while credentials stay).
+    private fun operation() = LibraryOperation(local)
     override suspend fun choices(videoId: String): List<SaveChoice> {
         val operation = operation()
         if (operation.device) return device(operation) { it.choices(videoId) }
         return try {
-            client.read { context, http ->
+            client.readIdempotent { context, http ->
                 operation.check()
                 if (!context.signedIn) throw SignInRequiredException()
                 loadPlaylistChoices(videoId, context, operation.transport(http)).requireValue()
@@ -102,7 +103,7 @@ class MediaSaveRepository(private val client: MediaClient, private val local: Lo
             client.read { context, http ->
                 operation.check()
                 if (!context.signedIn) throw SignInRequiredException()
-                if (!block(context, operation.transport(http)).confirmed) throw UnconfirmedActionException()
+                block(context, operation.transport(http)).requireConfirmation()
             }
         } catch (error: MediaException) {
             if (error.failure.kind == RequestFailure.AUTH) throw SignInRequiredException()

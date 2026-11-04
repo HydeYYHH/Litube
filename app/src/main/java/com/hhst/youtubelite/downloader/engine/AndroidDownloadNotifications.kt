@@ -136,14 +136,17 @@ class DownloadNotificationWatcher(
     fun start() {
         if (job != null) return
         job = Promise.DEFAULT_SCOPE.launch {
+            var restoring = true
             coordinator.observeDownloads(DownloadFilter()).distinctUntilChanged().collect { snaps ->
                 val batchIds = snaps.mapNotNull { snap ->
                     coordinator.batchIdForTask(snap.task.id)
                 }.distinct()
                 batchIds.forEach { batchId ->
                     val view = repository.transact { batchView(batchId) } ?: return@forEach
+                    if (restoring) controller.restore(view)
                     controller.publish(view)
                 }
+                restoring = false
             }
         }
     }

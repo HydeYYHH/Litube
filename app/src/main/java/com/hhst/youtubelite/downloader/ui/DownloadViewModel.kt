@@ -130,7 +130,8 @@ class DownloadViewModel(
      */
     suspend fun confirmSingle(request: DownloadRequest, persistPrefs: Boolean = true): EnqueueResult {
         if (persistPrefs) prefs.setLastConfig(request.config)
-        return coordinator.enqueue(request, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
+        haptics?.perform(HapticsController.Event.CONFIRM)
+        return coordinator.enqueue(request, UUID.randomUUID().toString())
     }
 
     suspend fun confirmBatch(
@@ -140,7 +141,8 @@ class DownloadViewModel(
     ): EnqueueResult {
         DownloadSnapshotGuard.validate(snapshot)?.let { throw IllegalArgumentException(it.message) }
         if (persistPrefs) prefs.setLastConfig(snapshot.config)
-        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
+        haptics?.perform(HapticsController.Event.CONFIRM)
+        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString())
     }
 
     fun pause(target: DownloadTarget) = viewModelScope.launch { coordinator.pause(target) }

@@ -166,6 +166,7 @@
     <string name="copy">ສຳເນົາ</string>
     <string name="copied">ຄັດລອກ</string>
     <string name="copy_all">ສຳເນົາທັງໝົດ</string>
+    <string name="cast_searching">ກຳລັງຄົ້ນຫາ…</string>
     <string name="queue_now_playing">ຕອນນີ້ກຳລັງຫຼິ້ນ</string>
     <string name="clear_queue_confirm">ລຶບລ້າງແຖວທັງໝົດບໍ?</string>
     <string name="ok">ຕົກລົງ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">ປິດ</string>
     <string name="verification_completed">ຢືນຢັນສຳເລັດແລ້ວ. ກຳລັງລອງໃໝ່…</string>
     <string name="verification_still_blocked">ຍັງຖືກບລັອກຫຼັງຈາກຢືນຢັນ. ກະລຸນາລອງໃໝ່ພາຍຫຼັງ.</string>
+    <string name="comments_title">ຄວາມຄິດເຫັນ</string>
+    <string name="comments_sort_top">ຄວາມຄິດເຫັນຍອດນິຍົມ</string>
+    <string name="comments_sort_newest">ໃໝ່ກ່ອນ</string>
+    <string name="comments_sort_chip_top">ຍອດນິຍົມ</string>
+    <string name="comments_sort_chip_newest">ໃໝ່</string>
+    <string name="comments_composer_add">ເພີ່ມຄວາມຄິດເຫັນ</string>
+    <string name="comments_composer_reply">ຕອບ</string>
+    <string name="comments_composer_edit">ແກ້ໄຂຄວາມຄິດເຫັນ</string>
+    <string name="comments_composer_text_hint">ຂໍ້ຄວາມຄິດເຫັນ</string>
+    <string name="comments_composer_text_edit_hint">ແກ້ໄຂຂໍ້ຄວາມຄິດເຫັນ</string>
+    <string name="comments_composer_submit">ຄອມເມັນ</string>
+    <string name="comments_composer_sending">ກຳລັງສົ່ງ…</string>
+    <string name="comments_composer_save">ບັນທຶກ</string>
+    <string name="comments_delete_title">ລຶບ</string>
+    <string name="comments_show_more_replies">ສະແດງການຕອບເພີ່ມເຕີມ</string>
+    <string name="comments_load_more_failed">ບໍ່ສາມາດໂຫຼດຄວາມຄິດເຫັນເພີ່ມເຕີມໄດ້</string>
+    <string name="comments_hide_replies">ເຊື່ອງການຕອບ</string>
+    <string name="home_music_charts">ອັນດັບເພງ</string>
+    <string name="home_popular_gaming">ເກມທີ່ກຳລັງນິຍົມ</string>
+    <string name="home_popular_sports">ກິລາທີ່ກຳລັງນິຍົມ</string>
+    <string name="home_top_news">ຂ່າວເດັ່ນ</string>
 </resources>

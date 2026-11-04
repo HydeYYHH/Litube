@@ -29,6 +29,59 @@ class SubscriptionsViewModelTest {
         override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) = block(filter, continuation)
     }
 
+    @Test fun directoryRefreshKeepsContentAndReordersUpdatedChannels() = runTest {
+        var now = 0L
+        var reads = 0
+        val first = SubscribedChannel("one", "One", "", "", true)
+        val second = SubscribedChannel("two", "Two", "", "")
+        val repository = object : SubscriptionsRepository {
+            override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) =
+                SubscriptionsPage(emptyList(), emptyList())
+            override suspend fun subscribedChannelsPage(cursor: String?): ChannelDirectoryPage {
+                reads++
+                return ChannelDirectoryPage(if (reads == 1) listOf(first, second)
+                    else listOf(first.copy(hasNewContent = false), second.copy(hasNewContent = true)))
+            }
+        }
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content,
+            signedIn = true, clock = { now })
+        advanceUntilIdle()
+        vm.onForeground()
+        advanceUntilIdle()
+        assertEquals(1, reads)
+        now = 60_000
+        vm.onForeground()
+        assertTrue(vm.uiState.value.channels is SubscriptionsChannels.Ready)
+        advanceUntilIdle()
+        val channels = (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels
+        assertEquals(listOf("two", "one"), channels.map { it.channelId })
+        assertFalse(channels.last().hasNewContent)
+        assertEquals(2, reads)
+    }
+
+    @Test fun directoryRefreshFailureKeepsThePreviousDirectory() = runTest {
+        var now = 0L
+        var fail = false
+        val expected = FixtureSubscriptionsRepository.channels()
+        val repository = object : SubscriptionsRepository {
+            override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) =
+                SubscriptionsPage(emptyList(), emptyList())
+            override suspend fun subscribedChannelsPage(cursor: String?): ChannelDirectoryPage {
+                if (fail) error("offline")
+                return ChannelDirectoryPage(expected)
+            }
+        }
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content,
+            signedIn = true, clock = { now })
+        advanceUntilIdle()
+        val previous = vm.uiState.value.channels
+        fail = true
+        now = 60_000
+        vm.onForeground()
+        advanceUntilIdle()
+        assertEquals(previous, vm.uiState.value.channels)
+    }
+
     @Test fun signedOutFeedShowsThePromptWithoutLoading() = runTest {
         val vm = SubscriptionsViewModel(repository { _, _ -> error("unused") }, SavedStateHandle(), SubscriptionsScenario.Content, signedIn = false)
         advanceUntilIdle()
@@ -285,6 +338,42 @@ class SubscriptionsViewModelTest {
         override suspend fun subscribedChannels() = channels()
     }
 
+    @Test fun unreadChannelsComeFirstWithoutReorderingEitherGroup() = runTest {
+        val channels = listOf(
+            SubscribedChannel("seen-a", "Seen A", "", ""),
+            SubscribedChannel("new-a", "New A", "", "", true),
+            SubscribedChannel("seen-b", "Seen B", "", ""),
+            SubscribedChannel("new-b", "New B", "", "", true),
+        )
+        val vm = SubscriptionsViewModel(dualRepository({ _, _ -> SubscriptionsPage(emptyList(), emptyList()) }, {
+            channels + channels.first()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        assertEquals(listOf("new-a", "new-b", "seen-a", "seen-b"),
+            (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels.map { it.channelId })
+        vm.onAction(SubscriptionsAction.ShowChannels)
+        vm.onAction(SubscriptionsAction.CloseChannels)
+        assertEquals(listOf(true, true, false, false),
+            (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels.map { it.hasNewContent })
+    }
+
+    @Test fun openingTheChannelDirectoryReusesTheIndependentGuide() = runTest {
+        var reads = 0
+        val vm = SubscriptionsViewModel(dualRepository({ _, _ -> error("Feed unavailable") }, {
+            reads++
+            FixtureSubscriptionsRepository.channels()
+        }), SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        repeat(3) {
+            vm.onAction(SubscriptionsAction.ShowChannels)
+            vm.onAction(SubscriptionsAction.CloseChannels)
+        }
+        advanceUntilIdle()
+        assertEquals(1, reads)
+        assertTrue(vm.uiState.value.channels is SubscriptionsChannels.Ready)
+        assertEquals(SubscriptionsContent.Failed, vm.uiState.value.content)
+    }
+
     @Test fun failedFeedKeepsTheLoadedChannelGuide() = runTest {
         val vm = SubscriptionsViewModel(dualRepository({ _, _ -> error("offline") }, {
             FixtureSubscriptionsRepository.channels()
@@ -382,6 +471,162 @@ class SubscriptionsViewModelTest {
         advanceUntilIdle()
         assertNull(vm.saveSheet?.state?.value)
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
+    }
+
+    /** Live repository with deferred-menu reads; records get_panel and feedback operations. */
+    private class MenuRepository(val cards: List<com.hhst.youtubelite.home.domain.FeedItem.Video>) : SubscriptionsRepository {
+        var menuCalls = 0
+        var menuError: Exception? = null
+        val feedback = mutableListOf<Pair<com.hhst.youtubelite.home.domain.FeedItem.Video, FeedMenuAction>>()
+        override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) =
+            SubscriptionsPage(cards, emptyList())
+        override suspend fun menu(video: com.hhst.youtubelite.home.domain.FeedItem.Video): com.hhst.youtubelite.home.domain.FeedItem.Video {
+            menuCalls++
+            menuError?.let { throw it }
+            return video.copy(notInterestedToken = "token-${video.id}", dontRecommendToken = "chan-${video.id}")
+        }
+        override suspend fun feedback(video: com.hhst.youtubelite.home.domain.FeedItem.Video, action: FeedMenuAction) {
+            feedback += video to action
+        }
+    }
+
+    private fun menuCard(id: String, channelId: String = "northlight") = com.hhst.youtubelite.home.domain.FeedItem.Video(
+        id, "Title $id", "Author", "", "", "", channelId,
+        menuEndpoint = com.hhst.youtubelite.home.domain.FeedMenuEndpoint("menu", "params-$id"), feedbackGeneration = 2)
+
+    @Test fun liveMenuReadsTheCardsOwnEndpointAndWritesBackItsCapabilities() = runTest {
+        val repository = MenuRepository(listOf(menuCard("harbour"), menuCard("studio", channelId = "other")))
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content, true, saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        advanceUntilIdle()
+        assertEquals(1, repository.menuCalls)
+        assertFalse(vm.uiState.value.menuLoading)
+        assertFalse(vm.uiState.value.menuFailed)
+        val page = (vm.uiState.value.content as SubscriptionsContent.Feed).page
+        assertEquals("token-harbour", page.items.first { it.id == "harbour" }.notInterestedToken)
+        // Untouched cards stay untouched: no preload for menus never opened.
+        assertNull(page.items.first { it.id == "studio" }.notInterestedToken)
+        assertEquals(1, repository.menuCalls)
+    }
+
+    @Test fun failedMenuReadOffersRetryAndRecoveryClearsIt() = runTest {
+        val repository = MenuRepository(listOf(menuCard("harbour"))).apply { menuError = java.io.IOException("offline") }
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content, true, saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.menuFailed)
+        repository.menuError = null
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.menuFailed)
+        val page = (vm.uiState.value.content as SubscriptionsContent.Feed).page
+        assertEquals("token-harbour", page.items.first { it.id == "harbour" }.notInterestedToken)
+    }
+
+    @Test fun liveFeedbackRemovesTheCardAndOnlyItsOwnChannelCards() = runTest {
+        val repository = MenuRepository(listOf(menuCard("harbour"), menuCard("studio"), menuCard("meadow", channelId = "openfield")))
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content, true, saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.updateSession(true, 2L)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.MenuSelected(FeedMenuAction.DontRecommend))
+        advanceUntilIdle()
+        val page = (vm.uiState.value.content as SubscriptionsContent.Feed).page
+        assertEquals(listOf("meadow"), page.items.map { it.id })
+        assertEquals(1, repository.feedback.size)
+        assertEquals("harbour", repository.feedback.single().first.id)
+        assertEquals(FeedMenuAction.DontRecommend, repository.feedback.single().second)
+        assertEquals(com.hhst.youtubelite.core.AppNotice.Message("Removed from recommendations"), vm.actionNotices.first())
+        assertEquals(SubscriptionsOverlay.None, vm.uiState.value.overlay)
+    }
+
+    @Test fun aMenuCapturedByAnotherSessionIsNeverReadOrWritten() = runTest {
+        val repository = MenuRepository(listOf(menuCard("harbour").copy(feedbackGeneration = 9)))
+        val vm = SubscriptionsViewModel(repository, SavedStateHandle(), SubscriptionsScenario.Content, true, saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.updateSession(true, 2L) // Session generation 2, card captured for 9.
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        advanceUntilIdle()
+        assertEquals(0, repository.menuCalls)
+        assertFalse(vm.uiState.value.menuLoading)
+        vm.onAction(SubscriptionsAction.OpenMenu("harbour"))
+        vm.onAction(SubscriptionsAction.MenuSelected(FeedMenuAction.NotInterested))
+        advanceUntilIdle()
+        assertTrue(repository.feedback.isEmpty())
+    }
+
+    private fun directoryRepository(pages: Map<String, ChannelDirectoryPage>, first: ChannelDirectoryPage,
+                                    vararg failures: String) = object : SubscriptionsRepository {
+        var failed = 0
+        override suspend fun subscriptions(filter: SubscriptionsFilter, continuation: String?) =
+            SubscriptionsPage(emptyList(), emptyList())
+        override suspend fun subscribedChannelsPage(cursor: String?): ChannelDirectoryPage {
+            if (cursor == null) return first
+            if (cursor in failures && failed < failures.size) {
+                failed++
+                throw java.io.IOException("directory page failed")
+            }
+            return pages.getValue(cursor)
+        }
+    }
+
+    @Test fun directoryAppendsPagesMergesUnreadFlagsAndStopsAtTheHonestEnd() = runTest {
+        val repo = directoryRepository(
+            first = ChannelDirectoryPage(listOf(
+                SubscribedChannel("a", "A", "", ""), SubscribedChannel("b", "B", "", "", true)), "p2"),
+            pages = mapOf(
+                "p2" to ChannelDirectoryPage(listOf(
+                    SubscribedChannel("b", "B", "", "", false), SubscribedChannel("c", "C", "", "")), "p3"),
+                "p3" to ChannelDirectoryPage(listOf(SubscribedChannel("d", "D", "", "")), null),
+            ),
+        )
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.LoadMoreChannels)
+        advanceUntilIdle()
+        var ready = vm.uiState.value.channels as SubscriptionsChannels.Ready
+        assertEquals(listOf("b", "a", "c"), ready.channels.map { it.channelId })
+        assertEquals("p3", ready.nextKey)
+        vm.onAction(SubscriptionsAction.LoadMoreChannels)
+        advanceUntilIdle()
+        ready = vm.uiState.value.channels as SubscriptionsChannels.Ready
+        assertEquals(listOf("b", "a", "c", "d"), ready.channels.map { it.channelId })
+        assertNull(ready.nextKey)
+        assertEquals(AppendState.Idle, ready.append)
+        // The honest end: a further request must not re-fetch anything.
+        vm.onAction(SubscriptionsAction.LoadMoreChannels)
+        advanceUntilIdle()
+        assertEquals(listOf("b", "a", "c", "d"),
+            (vm.uiState.value.channels as SubscriptionsChannels.Ready).channels.map { it.channelId })
+    }
+
+    @Test fun failedDirectoryPageKeepsLoadedChannelsAndCanRetry() = runTest {
+        val repo = directoryRepository(
+            first = ChannelDirectoryPage(listOf(SubscribedChannel("a", "A", "", "")), "p2"),
+            pages = mapOf("p2" to ChannelDirectoryPage(listOf(SubscribedChannel("c", "C", "", "")), null)),
+            failures = arrayOf("p2"),
+        )
+        val vm = SubscriptionsViewModel(repo, SavedStateHandle(), SubscriptionsScenario.Content, true)
+        advanceUntilIdle()
+        vm.onAction(SubscriptionsAction.LoadMoreChannels)
+        advanceUntilIdle()
+        val failed = vm.uiState.value.channels as SubscriptionsChannels.Ready
+        assertEquals(listOf("a"), failed.channels.map { it.channelId })
+        assertEquals(AppendState.Failed, failed.append)
+        vm.onAction(SubscriptionsAction.LoadMoreChannels)
+        advanceUntilIdle()
+        val retried = vm.uiState.value.channels as SubscriptionsChannels.Ready
+        assertEquals(listOf("a", "c"), retried.channels.map { it.channelId })
+        assertNull(retried.nextKey)
     }
 
 }

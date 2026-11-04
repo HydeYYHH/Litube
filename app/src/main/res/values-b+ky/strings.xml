@@ -166,6 +166,7 @@
     <string name="copy">Көчүрмө</string>
     <string name="copied">Көчүрүлгөн</string>
     <string name="copy_all">Баарын көчүрүү</string>
+    <string name="cast_searching">Издөө…</string>
     <string name="queue_now_playing">Азыр ойноп жатат</string>
     <string name="clear_queue_confirm">Кезек бүтүндөй тазалансынбы?</string>
     <string name="ok">Макул</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Жабуу</string>
     <string name="verification_completed">Тастыктоо аяктады. Кайра аракет кылынууда…</string>
     <string name="verification_still_blocked">Тастыктоодон кийин да бөгөлгөн бойдон. Кийинчерээк кайра аракет кылыңыз.</string>
+    <string name="comments_title">Пикирлер</string>
+    <string name="comments_sort_top">Мыкты пикирлер</string>
+    <string name="comments_sort_newest">Адегенде жаңылары</string>
+    <string name="comments_sort_chip_top">Мыкты</string>
+    <string name="comments_sort_chip_newest">Жаңы</string>
+    <string name="comments_composer_add">Пикир кошуу</string>
+    <string name="comments_composer_reply">Жооп берүү</string>
+    <string name="comments_composer_edit">Пикирди түзөтүү</string>
+    <string name="comments_composer_text_hint">Пикирдин тексти</string>
+    <string name="comments_composer_text_edit_hint">Пикирдин текстин түзөтүү</string>
+    <string name="comments_composer_submit">Пикир жазуу</string>
+    <string name="comments_composer_sending">Жөнөтүлүүдө…</string>
+    <string name="comments_composer_save">Сактоо</string>
+    <string name="comments_delete_title">Өчүрүү</string>
+    <string name="comments_show_more_replies">Дагы жоопторду көрсөтүү</string>
+    <string name="comments_load_more_failed">Дагы пикирлерди жүктөө мүмкүн болбоду</string>
+    <string name="comments_hide_replies">Жоопторду жашыруу</string>
+    <string name="home_music_charts">Музыка чарттары</string>
+    <string name="home_popular_gaming">Оюндардагы тренддер</string>
+    <string name="home_popular_sports">Спорттогу тренддер</string>
+    <string name="home_top_news">Башкы жаңылыктар</string>
 </resources>

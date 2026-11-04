@@ -1,9 +1,9 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.mockwebserver.MockResponse
@@ -13,7 +13,7 @@ import org.junit.Test
 
 class YoutubeMediaRequestsTest {
     private fun session() = YoutubeWebSession("scope", WebAccount.AUTHENTICATED, 0, null, "user",
-        "user||", "visitor", "actual-browser-UA", 1, null, "test", JsonObject(), { "SECRET_COOKIE" })
+        "user||", "visitor", "actual-browser-UA", 1, null, "test", JsonObject(emptyMap()), { "SECRET_COOKIE" })
 
     @Test fun get403RetriesPostOnceAndRetainsProfileUa() {
         val server = MockWebServer()
@@ -228,7 +228,8 @@ class YoutubeMediaRequestsTest {
     @Test fun serializedStreamCannotContainSessionCredentialsOrTokenHandles() {
         val plan = MediaRequestPlan(session(), StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.HEADER, false)
         val stream = Stream().apply { formats = listOf(Format(url = "media", requestPlan = plan)); hlsRequestPlan = plan }
-        val json = Gson().toJson(stream)
+        val json = kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(
+            kotlinx.serialization.serializer(Stream::class.java), stream)
         assertFalse(json.contains("SECRET_COOKIE"))
         assertFalse(json.contains("requestPlan"))
         assertFalse(json.contains("session"))
@@ -249,13 +250,13 @@ class YoutubeMediaRequestsTest {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"EVENT_ID\":\"paired-event\"});window.ytAtN($payload);throw Error('never execute');")
         assertEquals("paired-event", config.text("EVENT_ID"))
         assertEquals(payload, config.text("_BG_CHALLENGE_RAW"))
-        assertFalse(config.has("_BG_CHALLENGE"))
+        assertFalse(config.containsKey("_BG_CHALLENGE"))
     }
 
     @Test fun oversizedPageChallengeIsNotCaptured() {
         val payload = "{R:'" + "x".repeat(256 * 1024) + "'}"
         val config = YoutubeSessionProvider.parseConfig("window.ytAtN($payload)")
-        assertFalse(config.has("_BG_CHALLENGE_RAW"))
+        assertFalse(config.containsKey("_BG_CHALLENGE_RAW"))
     }
 
     @Test fun existingManifestBackupPreservesItsOwnSessionAndProfile() {
@@ -302,7 +303,7 @@ class YoutubeMediaRequestsTest {
     @Test fun accountIndexAcceptsThePageStringRepresentation() {
         val config = YoutubeSessionProvider.parseConfig("ytcfg.set({\"SESSION_INDEX\":\"2\"});")
         assertEquals(2, YoutubeSessionProvider.accountIndex(config))
-        config.addProperty("SESSION_INDEX", "invalid")
-        assertThrows(IOException::class.java) { YoutubeSessionProvider.accountIndex(config) }
+        val invalid = JsonObject(LinkedHashMap(config).apply { put("SESSION_INDEX", JsonPrimitive("invalid")) })
+        assertThrows(IOException::class.java) { YoutubeSessionProvider.accountIndex(invalid) }
     }
 }

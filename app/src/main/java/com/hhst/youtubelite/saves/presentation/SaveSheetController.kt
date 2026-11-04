@@ -72,8 +72,8 @@ class SaveSheetController(
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { close(); onNotice(AppNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { fail(sheet.videoId, UNCONFIRMED) }
-            catch (_: Exception) { fail(sheet.videoId, "Couldn't update this playlist. Try again.") }
+            catch (error: UnconfirmedActionException) { fail(sheet.videoId, UNCONFIRMED, "save_playlist_toggle", error) }
+            catch (error: Exception) { fail(sheet.videoId, "Couldn't update this playlist. Try again.", "save_playlist_toggle", error) }
         }
     }
 
@@ -95,8 +95,8 @@ class SaveSheetController(
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { close(); onNotice(AppNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { fail(sheet.videoId, UNCONFIRMED) }
-            catch (_: Exception) { fail(sheet.videoId, "Couldn't create this playlist. Try again.") }
+            catch (error: UnconfirmedActionException) { fail(sheet.videoId, UNCONFIRMED, "save_playlist_create", error) }
+            catch (error: Exception) { fail(sheet.videoId, "Couldn't create this playlist. Try again.", "save_playlist_create", error) }
         }
     }
 
@@ -108,8 +108,8 @@ class SaveSheetController(
                 onNotice(AppNotice.Message("Saved to Watch later"))
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { onNotice(AppNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { onNotice(AppNotice.Message(UNCONFIRMED)) }
-            catch (_: Exception) { onNotice(AppNotice.Message("Couldn't save this video. Try again.")) }
+            catch (error: UnconfirmedActionException) { onNotice(failure("save_watch_later", UNCONFIRMED, error)) }
+            catch (error: Exception) { onNotice(failure("save_watch_later", "Couldn't save this video. Try again.", error)) }
         }
     }
 
@@ -121,8 +121,8 @@ class SaveSheetController(
                 onNotice(AppNotice.Message("Saved to your library"))
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: SignInRequiredException) { onNotice(AppNotice.SignIn) }
-            catch (_: UnconfirmedActionException) { onNotice(AppNotice.Message(UNCONFIRMED)) }
-            catch (_: Exception) { onNotice(AppNotice.Message("Couldn't save this playlist. Try again.")) }
+            catch (error: UnconfirmedActionException) { onNotice(failure("save_playlist_library", UNCONFIRMED, error)) }
+            catch (error: Exception) { onNotice(failure("save_playlist_library", "Couldn't save this playlist. Try again.", error)) }
         }
     }
 
@@ -139,10 +139,14 @@ class SaveSheetController(
         }
     }
 
-    private fun fail(videoId: String, message: String) {
+    private fun fail(videoId: String, message: String, operation: String, error: Exception) {
         edit(videoId) { it.copy(pending = false) }
-        onNotice(AppNotice.Message(message))
+        onNotice(failure(operation, message, error))
     }
+
+    private fun failure(operation: String, message: String, error: Exception): AppNotice =
+        com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error,
+            mapOf("video_id" to _state.value?.videoId), message)
 
     private fun edit(videoId: String, edit: (SaveSheetState) -> SaveSheetState) {
         _state.update { if (it?.videoId == videoId) edit(it) else it }

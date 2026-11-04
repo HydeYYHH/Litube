@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.URI
@@ -22,7 +21,6 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
     }
     private data class Segment(val file: File, val handle: RandomAccessFile, val lock: FileLock, val at: Long)
     private val segments = mutableMapOf<String, Segment>()
-    private val gson = Gson()
     private var nextSegment = 0L
     @Volatile var snapshotTruncatedBytes = 0L; private set
     fun files(): List<File> = if (directory.exists()) directory.walkTopDown().filter { it.isFile && it.extension == "jsonl" }.toList() else emptyList()
@@ -106,7 +104,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
         var ordinaryBytes = initial.filterNot(::critical).sumOf { it.length() }
         records.forEach { record ->
             if (deadline()) { dropped++; return@forEach }
-            val line = (gson.toJson(record) + "\n").toByteArray(Charsets.UTF_8)
+            val line = (DiagnosticJson.encode(record) + "\n").toByteArray(Charsets.UTF_8)
             val key = "${record.pid}-${record.session}-${if (priority) "incidents" else "events"}"
             var segment = segments[key]
             if (segment != null && (segment.file.length() + line.size > SEGMENT_BYTES || clock() - segment.at >= 3_600_000)) {

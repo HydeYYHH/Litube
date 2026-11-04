@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.koin.java.KoinJavaComponent.get
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 
 /**
  * Display-layer DeArrow decoration for video cards. Originals stay canonical:
@@ -47,7 +49,11 @@ fun rememberDeArrowArtwork(videoId: String?, original: String): String {
 
 @Composable
 fun VideoArtwork(videoId: String?, original: String, modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier) {
-    com.hhst.youtubelite.ui.design.Artwork(rememberDeArrowArtwork(videoId, original), modifier, fallback = original)
+    val view = androidx.compose.ui.platform.LocalView.current
+    com.hhst.youtubelite.ui.design.Artwork(rememberDeArrowArtwork(videoId, original),
+        modifier.then(androidx.compose.ui.Modifier.onGloballyPositioned { coordinates ->
+            if (videoId != null) com.hhst.youtubelite.navigation.WatchTransition.artwork(view, videoId, coordinates.boundsInWindow())
+        }), fallback = original)
 }
 
 /** DeArrow thumbnail service URL for a community screenshot at [thumbTime]. */

@@ -33,7 +33,7 @@ class QueueReorderAndroidTest {
                 Box(Modifier.width(390.dp).height(550.dp)) {
                     QueueSheet(source.value, currentId, LoopMode.QUEUE_NEXT,
                         onItem = { plays++ }, onClear = {}, onRemove = {},
-                        onLoop = {}, onClose = {}, onMove = { from, to ->
+                        onLoop = {}, onClose = {}, onMove = { from, to, _ ->
                             moves += from to to
                             source.value = source.value.toMutableList().apply { add(to, removeAt(from)) }
                         })

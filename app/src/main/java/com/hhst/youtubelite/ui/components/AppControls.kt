@@ -6,15 +6,24 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -33,6 +42,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.settingsAppBarHeight
 
@@ -77,6 +88,7 @@ fun AppTextButton(
 ) = TextButton(onClick = onClick, modifier = modifier, enabled = enabled,
     colors = colors, shape = CircleShape, contentPadding = contentPadding, content = content)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppAlertDialog(
     onDismissRequest: () -> Unit,
@@ -92,12 +104,33 @@ fun AppAlertDialog(
     titleContentColor: Color = MaterialTheme.colorScheme.onSurface,
     textContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     properties: DialogProperties = DialogProperties(),
-) = AlertDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton,
-    dismissButton = dismissButton, modifier = modifier, icon = icon,
-    title = title?.let { { ProvideTextStyle(MaterialTheme.typography.titleLarge, it) } },
-    text = text?.let { { ProvideTextStyle(MaterialTheme.typography.bodyMedium, it) } },
-    shape = shape, containerColor = containerColor, tonalElevation = tonalElevation,
-    titleContentColor = titleContentColor, textContentColor = textContentColor, properties = properties)
+) {
+    Dialog(onDismissRequest, properties = properties) {
+        BoxWithConstraints {
+            Surface(modifier.widthIn(min = 280.dp, max = 560.dp).fillMaxWidth().heightIn(max = maxHeight),
+                shape = shape, color = containerColor, tonalElevation = tonalElevation) {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
+                    CompositionLocalProvider(LocalContentColor provides titleContentColor) {
+                        icon?.let { Box(Modifier.padding(bottom = 8.dp).align(Alignment.CenterHorizontally)) { it() } }
+                        title?.let { ProvideTextStyle(MaterialTheme.typography.titleLarge, it) }
+                    }
+                    text?.let {
+                        Box(Modifier.weight(1f, fill = false).padding(top = if (title == null) 0.dp else 8.dp)) {
+                            CompositionLocalProvider(LocalContentColor provides textContentColor) {
+                                ProvideTextStyle(MaterialTheme.typography.bodyMedium, it)
+                            }
+                        }
+                    }
+                    FlowRow(Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                        dismissButton?.invoke()
+                        confirmButton()
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun AppRadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) =
@@ -110,7 +143,7 @@ fun AppCheckbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier, enabled: Boolean = true) =
     Checkbox(checked, onCheckedChange, modifier, enabled,
         colors = CheckboxDefaults.colors(checkedColor = AppStyle.Action,
-            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant, checkmarkColor = Color.White))
+            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant, checkmarkColor = AppStyle.OnAction))
 
 @Composable
 fun AppLinearProgressIndicator(modifier: Modifier = Modifier, color: Color = AppStyle.Action,
@@ -134,13 +167,14 @@ fun AppSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val track = (if (checked) AppStyle.Action else MaterialTheme.colorScheme.onSurfaceVariant)
         .copy(alpha = if (enabled) 1f else .38f)
+    val thumb = if (checked) AppStyle.OnAction else Color.White
     Box(modifier.size(48.dp).then(if (onCheckedChange == null) Modifier else
         Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch,
             onValueChange = onCheckedChange)), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(36.dp, 20.dp)) {
             drawRoundRect(track, cornerRadius = CornerRadius(size.height / 2))
             val radius = 8.dp.toPx()
-            drawCircle(Color.White.copy(alpha = if (enabled) 1f else .38f), radius,
+            drawCircle(thumb.copy(alpha = if (enabled) 1f else .38f), radius,
                 Offset(10.dp.toPx() + (if (rtl) 1f - fraction else fraction) * 16.dp.toPx(), size.height / 2))
         }
     }

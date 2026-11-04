@@ -166,6 +166,7 @@
     <string name="copy">Kopyaha</string>
     <string name="copied">Gikopya</string>
     <string name="copy_all">Kopyaha ang tanan</string>
+    <string name="cast_searching">Nangita…</string>
     <string name="queue_now_playing">Karon nagdula</string>
     <string name="clear_queue_confirm">Hawani ang tibuok pila?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Pagsira</string>
     <string name="verification_completed">Nahuman ang beripikasyon. Nagsulay pag-usab…</string>
     <string name="verification_still_blocked">Gihapon babagan human sa beripikasyon. Sulayi pag-usab unya.</string>
+    <string name="comments_title">Mga komento</string>
+    <string name="comments_sort_top">Mga nangungunang komento</string>
+    <string name="comments_sort_newest">Bag-o una</string>
+    <string name="comments_sort_chip_top">Top</string>
+    <string name="comments_sort_chip_newest">Bag-o</string>
+    <string name="comments_composer_add">Magdugang og komento</string>
+    <string name="comments_composer_reply">Tubaga</string>
+    <string name="comments_composer_edit">I-edit ang komento</string>
+    <string name="comments_composer_text_hint">Teksto sa komento</string>
+    <string name="comments_composer_text_edit_hint">I-edit ang teksto sa komento</string>
+    <string name="comments_composer_submit">Ikomento</string>
+    <string name="comments_composer_sending">Nagpadala…</string>
+    <string name="comments_composer_save">I-save</string>
+    <string name="comments_delete_title">Pagtangtang</string>
+    <string name="comments_show_more_replies">Ipakita ang dugang mga tubag</string>
+    <string name="comments_load_more_failed">Wala makarga ang dugang mga komento</string>
+    <string name="comments_hide_replies">Itago ang mga tubag</string>
+    <string name="home_music_charts">Mga tsart sa musika</string>
+    <string name="home_popular_gaming">Sikat sa mga dula</string>
+    <string name="home_popular_sports">Sikat sa sports</string>
+    <string name="home_top_news">Pangunang balita</string>
 </resources>

@@ -446,8 +446,8 @@ class SearchResultsScreenshotAndroidTest {
             state = state.copy(filtersOpen = false, overlay = SearchOverlay.ItemMenu("harbour"))
         }
         val sheet = compose.onNodeWithTag("search-video-menu").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
-        assertEquals(8f, sheet.left, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
+        assertEquals(0f, sheet.left, 0.5f)
         assertEquals(844f - 24f, sheet.bottom, 0.5f)
         val shareRow = compose.onNodeWithTag("search-menu-Share").fetchSemanticsNode().boundsInRoot
         assertEquals(48f, shareRow.height, 0.5f)

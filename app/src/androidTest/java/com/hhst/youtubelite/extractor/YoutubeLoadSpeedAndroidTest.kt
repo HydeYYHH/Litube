@@ -13,7 +13,6 @@ import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
@@ -91,10 +90,10 @@ class YoutubeLoadSpeedAndroidTest {
                     withTimeout(50_000) { extraction.stream.await() }
                 } catch (failure: Exception) {
                     val record = mapOf("videoId" to id, "replay" to (replay == 1),
-                        "failure" to failure.javaClass.simpleName, "events" to diagnostics.since(mark))
+                        "failure" to failure.javaClass.simpleName, "events" to diagnostics.since(mark).map(::eventFields))
                     records += record
                     instrumentation.sendStatus(2, Bundle().apply {
-                        putString("youtubeLoadFailure", Gson().toJson(record))
+                        putString("youtubeLoadFailure", com.hhst.youtubelite.core.TestJson.any(record))
                     })
                     throw failure
                 }
@@ -132,32 +131,35 @@ class YoutubeLoadSpeedAndroidTest {
                     }
                 }
                 try {
-                    assertTrue("First frame timed out", ready.await(25, TimeUnit.SECONDS))
-                    assertTrue("Media3 failed: ${failure.get()}", failure.get() == null && firstFrame.get() > 0)
+                    val completed = ready.await(25, TimeUnit.SECONDS)
+                    val frameAt = firstFrame.get().takeIf { it > 0 }
                     val events = diagnostics.since(mark)
                     val record = linkedMapOf<String, Any>("videoId" to id, "replay" to (replay == 1),
                         "startup" to startup, "quality" to (manualQuality ?: "auto"), "preload" to preload, "preloadMs" to preloadMs,
                         "streamMs" to streamAt - started, "metadataWaitMs" to metadataAt - streamAt,
-                        "sourceMs" to sourceAt - metadataAt, "mediaToFrameMs" to firstFrame.get() - sourceAt,
-                        "firstFrameMs" to firstFrame.get() - started,
+                        "sourceMs" to sourceAt - metadataAt, "mediaToFrameMs" to (frameAt?.minus(sourceAt) ?: -1),
+                        "firstFrameMs" to (frameAt?.minus(started) ?: -1),
                         "prepareLeadMs" to requestAt - started,
-                        "requestToFrameMs" to firstFrame.get() - requestAt,
+                        "requestToFrameMs" to (frameAt?.minus(requestAt) ?: -1),
+                        "playbackError" to (failure.get() ?: if (completed) "none" else "first_frame_timeout"),
                         "networkRequests" to events.count { it.stage == "request" },
-                        "playerRequests" to events.count { it.stage == "player" && it.detail != "browser-response-cache" },
+                        "playerResponses" to events.count { it.stage == "player-response" },
                         "streamCacheHit" to events.any { it.stage == "stream-cache" && it.detail == "HIT" },
                         "hasPlaybackTracking" to !stream.tracking?.playbackUrl.isNullOrBlank(),
                         "hasWatchTimeTracking" to !stream.tracking?.watchTimeUrl.isNullOrBlank(),
                         "playbackTrackingOrigin" to trackingOrigin(stream.tracking?.playbackUrl),
                         "watchTimeTrackingOrigin" to trackingOrigin(stream.tracking?.watchTimeUrl),
-                        "events" to events,
+                        "events" to events.map(::eventFields),
                         "waterfall" to synchronized(waterfall) { waterfall.toList() })
                     records += record
-                    instrumentation.sendStatus(2, Bundle().apply { putString("youtubeLoadSpeed", Gson().toJson(record.filterKeys { it != "events" && it != "waterfall" })) })
+                    instrumentation.sendStatus(2, Bundle().apply { putString("youtubeLoadSpeed", com.hhst.youtubelite.core.TestJson.any(record.filterKeys { it != "events" && it != "waterfall" })) })
+                    assertTrue("First frame timed out", completed)
+                    assertTrue("Media3 failed: ${failure.get()}", failure.get() == null && frameAt != null)
                 } finally { instrumentation.runOnMainSync { player.release() } }
                 runCatching { extraction.chapters.await() }
             }
         } finally {
-            File(instrumentation.targetContext.filesDir, "youtube-load-speed.json").writeText(Gson().toJson(records))
+            File(instrumentation.targetContext.filesDir, "youtube-load-speed.json").writeText(com.hhst.youtubelite.core.TestJson.any(records))
         }
     }
 
@@ -165,6 +167,11 @@ class YoutubeLoadSpeedAndroidTest {
         val uri = java.net.URI(url.orEmpty())
         "${uri.scheme}://${uri.host}${uri.path}"
     }.getOrDefault("invalid")
+
+    private fun eventFields(event: ExtractionDiagnostics.Event): Map<String, Any> = mapOf(
+        "sequence" to event.sequence, "stage" to event.stage, "profile" to event.profile,
+        "detail" to event.detail, "elapsedMs" to event.elapsedMillis, "httpStatus" to event.httpStatus,
+    )
 }
 
 /** Media3 load timeline relative to source creation; URLs reduce to kind, itag and segment index. */

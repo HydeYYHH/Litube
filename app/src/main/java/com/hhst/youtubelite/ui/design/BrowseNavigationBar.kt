@@ -14,12 +14,13 @@ enum class BrowseDestination(val label: String) { Home("Home"), Shorts("Shorts")
 
 @Composable
 fun BrowseNavigationBar(tag: String, onSelect: (BrowseDestination) -> Unit) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.TAB)
     Column(Modifier.fillMaxWidth().testTag("$tag-navigation")) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Row(Modifier.fillMaxWidth().height(56.dp)) {
-            BrowseDestination.entries.forEach { destination ->
+            BrowseDestination.entries.filterNot { LocalHideShorts.current && it == BrowseDestination.Shorts }.forEach { destination ->
                 Column(Modifier.weight(1f).fillMaxHeight()
-                    .clickable(role = Role.Tab) { onSelect(destination) }
+                    .clickable(role = Role.Tab) { haptic(); onSelect(destination) }
                     .testTag("$tag-nav-${destination.name}"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center) {

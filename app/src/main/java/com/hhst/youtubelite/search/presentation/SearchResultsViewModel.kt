@@ -65,6 +65,8 @@ class SearchResultsViewModel(
     private var pageJob: Job? = null
     private var sessionKey: Long? = null
     private var actionJob: Job? = null
+    private var menuJob: Job? = null
+    private var feedbackJob: Job? = null
 
     fun updateSession(signedIn: Boolean, key: Long) {
         val changed = sessionKey != null && sessionKey != key
@@ -72,9 +74,14 @@ class SearchResultsViewModel(
         this.signedIn = signedIn
         _state.update { it.copy(signedInPreview = signedIn) }
         if (changed) {
-            // The old account's save targets and in-flight writes must not survive the switch.
+            // The old account's save targets, deferred menu reads and in-flight writes
+            // must not survive the switch.
             actionJob?.cancel()
+            menuJob?.cancel()
+            feedbackJob?.cancel()
             saveSheet?.close()
+            // The old account's subscribe states belong to its session, not the results.
+            _state.update { it.copy(subscriptions = emptyMap()) }
             overlay(SearchOverlay.None)
             load()
         }
@@ -93,7 +100,10 @@ class SearchResultsViewModel(
             SearchAction.LoadMore -> loadMore()
             SearchAction.OpenSearch -> editSearch(true, uiState.value.query)
             SearchAction.CloseSearch -> editSearch(false, uiState.value.draftQuery)
-            is SearchAction.QueryChanged -> editSearch(true, action.query)
+            // Stale IME composition events can outlive the closed panel (after
+            // recreation on older APIs); a draft change never re-opens a closed
+            // search overlay — the panel only exists while the overlay is open.
+            is SearchAction.QueryChanged -> if (uiState.value.searchOpen) editSearch(true, action.query)
             is SearchAction.SubmitSearch -> {
                 val query = action.query.trim()
                 if (query.isNotEmpty()) updateQuery(query)
@@ -119,21 +129,28 @@ class SearchResultsViewModel(
                             _state.update { it.copy(subscriptions = it.subscriptions + (action.channelId to target)) }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again.")) }
-                        catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again.")) }
+                        catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(report("search_subscribe", error, action.channelId)) }
+                        catch (error: Exception) { notices.trySend(report("search_subscribe", error, action.channelId)) }
                     }
                 }
             }
             is SearchAction.OpenChannel -> navigation.trySend(SearchNavigationRequest.Channel(action.channelId))
             is SearchAction.SelectDestination -> navigation.trySend(SearchNavigationRequest.Destination(action.destination))
-            is SearchAction.OpenItemMenu -> overlay(SearchOverlay.ItemMenu(action.videoId))
+            is SearchAction.OpenItemMenu -> {
+                overlay(SearchOverlay.ItemMenu(action.videoId))
+                loadMenu(action.videoId)
+            }
             SearchAction.CloseItemMenu -> overlay(SearchOverlay.None)
             is SearchAction.MenuAction -> {
                 val menu = uiState.value.overlay as? SearchOverlay.ItemMenu ?: return
                 overlay(SearchOverlay.None)
                 when {
+                    action.action in setOf(SearchVideoMenuAction.Queue, SearchVideoMenuAction.Download) ->
+                        navigation.trySend(SearchNavigationRequest.MenuAction(menu.videoId, action.action))
                     action.action == SearchVideoMenuAction.Share ->
                         navigation.trySend(SearchNavigationRequest.Share(menu.videoId))
+                    action.action in setOf(SearchVideoMenuAction.NotInterested, SearchVideoMenuAction.DontRecommend) && videoActions != null ->
+                        sendFeedback(menu.videoId, action.action)
                     saveSheet == null ->
                         navigation.trySend(SearchNavigationRequest.MenuAction(menu.videoId, action.action))
                     action.action == SearchVideoMenuAction.WatchLater -> saveSheet.saveWatchLater(menu.videoId)
@@ -172,6 +189,92 @@ class SearchResultsViewModel(
         load()
     }
 
+    /** Copyable failure notice for an account write, carrying the sanitized report. */
+    private fun report(operation: String, error: Exception, channelId: String): AppNotice =
+        com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error, mapOf("channel_id" to channelId))
+
+    private fun menuItem(state: SearchUiState, videoId: String): SearchResult? {
+        val page = (state.content as? SearchContent.Results)?.page ?: return null
+        return page.results.firstOrNull { it.id == videoId } ?: page.shorts.firstOrNull { it.id == videoId }
+    }
+
+    /**
+     * Reads the open card's own get_panel endpoint so its feedback rows carry real tokens.
+     * Cards without an endpoint already carry inline tokens; nothing is preloaded for cards
+     * whose menu has not been opened.
+     */
+    private fun loadMenu(videoId: String) {
+        val state = _state.value
+        val result = menuItem(state, videoId) ?: return
+        if (!state.live || !state.signedInPreview) return
+        if (sessionKey != null && result.feedbackGeneration != sessionKey) return
+        menuJob?.cancel()
+        if (result.menuEndpoint == null) {
+            _state.update { it.copy(menuLoading = false, menuFailed = false) }
+            return
+        }
+        _state.update { it.copy(menuLoading = true, menuFailed = false) }
+        menuJob = viewModelScope.launch {
+            try {
+                val resolved = repository.menu(result)
+                _state.update { current ->
+                    if ((current.overlay as? SearchOverlay.ItemMenu)?.videoId != videoId) return@update current
+                    if (sessionKey != null && resolved.feedbackGeneration != sessionKey) return@update current
+                    val ready = current.content as? SearchContent.Results
+                        ?: return@update current.copy(menuLoading = false)
+                    // Only the capability fields move: the row keeps any avatar resolved meanwhile.
+                    fun SearchResult.withCapabilities() = copy(notInterestedToken = resolved.notInterestedToken,
+                        dontRecommendToken = resolved.dontRecommendToken, feedbackGeneration = resolved.feedbackGeneration)
+                    current.copy(menuLoading = false, content = ready.copy(page = ready.page.copy(
+                        results = ready.page.results.map { if (it.id == videoId) it.withCapabilities() else it },
+                        shorts = ready.page.shorts.map { if (it.id == videoId) it.withCapabilities() else it })))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                _state.update { current ->
+                    if ((current.overlay as? SearchOverlay.ItemMenu)?.videoId != videoId) current
+                    else current.copy(menuLoading = false, menuFailed = true)
+                }
+            }
+        }
+    }
+
+    /** Sends the card's classified feedback token and removes the card from the current results. */
+    private fun sendFeedback(videoId: String, action: SearchVideoMenuAction) {
+        if (feedbackJob?.isActive == true) return
+        val state = _state.value
+        val result = menuItem(state, videoId)
+            ?.takeIf { sessionKey != null && it.feedbackGeneration == sessionKey } ?: return
+        val token = when (action) {
+            SearchVideoMenuAction.NotInterested -> result.notInterestedToken
+            SearchVideoMenuAction.DontRecommend -> result.dontRecommendToken
+            else -> null
+        }
+        if (token.isNullOrBlank()) return
+        val requestGeneration = generation
+        overlay(SearchOverlay.None)
+        feedbackJob = viewModelScope.launch {
+            try {
+                repository.feedback(result, action)
+                if (generation != requestGeneration || sessionKey != result.feedbackGeneration) return@launch
+                _state.update { current ->
+                    val ready = current.content as? SearchContent.Results ?: return@update current
+                    fun keep(row: SearchResult) = !(row.id == videoId ||
+                        action == SearchVideoMenuAction.DontRecommend && result.channelId.isNotBlank() && row.channelId == result.channelId)
+                    current.copy(content = ready.copy(page = ready.page.copy(
+                        results = ready.page.results.filter(::keep),
+                        shorts = ready.page.shorts.filter(::keep))))
+                }
+                notices.trySend(AppNotice.Message("Removed from recommendations"))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
+            catch (error: Exception) { notices.trySend(com.hhst.youtubelite.diagnostics.writeFailureNotice(
+                "search_feedback_${action.name.lowercase()}", error,
+                mapOf("video_id" to videoId, "channel_id" to result.channelId),
+                message = "Couldn't update recommendations. Try again.")) }
+        }
+    }
+
     private fun selectType(type: SearchResultType) {
         if (uiState.value.filters.type == type) return
         val filters = uiState.value.filters.copy(type = type)
@@ -195,7 +298,12 @@ class SearchResultsViewModel(
     }
 
     private fun overlay(next: SearchOverlay) {
-        _state.update { it.copy(overlay = next) }
+        // The deferred-menu header state only exists while a result menu is open.
+        _state.update {
+            it.copy(overlay = next,
+                menuLoading = it.menuLoading && next is SearchOverlay.ItemMenu,
+                menuFailed = it.menuFailed && next is SearchOverlay.ItemMenu)
+        }
         persistOverlay(next)
     }
 
@@ -233,13 +341,15 @@ class SearchResultsViewModel(
         loadJob?.cancel()
         pageJob?.cancel()
         val requestGeneration = ++generation
-        _state.update { it.copy(content = SearchContent.Loading) }
+        _state.update { it.copy(content = SearchContent.Loading, menuLoading = false, menuFailed = false) }
         loadJob = viewModelScope.launch {
             try {
                 val page = repository.search(query, filters)
                 if (requestGeneration != generation) return@launch
                 _state.update { it.copy(content = if (page.results.isEmpty() && page.playlists.isEmpty() && page.channels.isEmpty() && page.shorts.isEmpty() && page.nextCursor == null) SearchContent.Empty(query) else SearchContent.Results(page)) }
                 fillMissingAvatars(page)
+                // A restored open menu can only read its endpoint once results exist.
+                (uiState.value.overlay as? SearchOverlay.ItemMenu)?.let { loadMenu(it.videoId) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {

@@ -30,6 +30,48 @@ class WatchViewModelTest {
         override suspend fun watch(videoId: String) = block(videoId)
     }
 
+    @Test fun deferredFeedbackCapabilitiesAppearForTheOpenMenu() = runTest {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        val card = page.related.first().copy(menuEndpoint = com.hhst.youtubelite.home.domain.FeedMenuEndpoint("panel", "params"))
+        val pending = kotlinx.coroutines.CompletableDeferred<WatchRelated>()
+        val repo = object : WatchRepository {
+            override suspend fun watch(videoId: String) = page.copy(related = listOf(card))
+            override suspend fun menu(video: WatchRelated) = pending.await()
+        }
+        val vm = WatchViewModel(repo, SavedStateHandle(), "bunny", saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu(card.id))
+        runCurrent()
+        assertTrue(vm.uiState.value.menuLoading)
+        pending.complete(card.copy(notInterestedToken = "ni", dontRecommendToken = "dc"))
+        advanceUntilIdle()
+        val loaded = (vm.uiState.value.content as WatchContent.Ready).page.related.single()
+        assertTrue(watchVideoMenuActions(true, loaded).containsAll(listOf(WatchVideoMenuAction.NotInterested, WatchVideoMenuAction.DontRecommend)))
+        assertFalse(vm.uiState.value.menuLoading)
+    }
+
+    @Test fun closingTheMenuCancelsItsDeferredRead() = runTest {
+        val page = FixtureWatchRepository.samplePage("bunny")
+        val card = page.related.first().copy(menuEndpoint = com.hhst.youtubelite.home.domain.FeedMenuEndpoint("panel", "params"))
+        var cancelled = false
+        val repo = object : WatchRepository {
+            override suspend fun watch(videoId: String) = page.copy(related = listOf(card))
+            override suspend fun menu(video: WatchRelated): WatchRelated {
+                try { kotlinx.coroutines.awaitCancellation() }
+                finally { cancelled = true }
+            }
+        }
+        val vm = WatchViewModel(repo, SavedStateHandle(), "bunny", saveRepository = FakeSaveRepository())
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu(card.id))
+        runCurrent()
+        vm.onAction(WatchAction.CloseOverlay)
+        advanceUntilIdle()
+        assertTrue(cancelled)
+        assertFalse(vm.uiState.value.menuLoading)
+        assertEquals(WatchOverlay.None, vm.uiState.value.overlay)
+    }
+
     @Test fun relatedPagesAppendWithoutDuplicatesAndStopRepeatedCursors() = runTest {
         var calls = 0
         val first = FixtureWatchRepository.samplePage("bunny")
@@ -165,6 +207,36 @@ class WatchViewModelTest {
         advanceUntilIdle()
         assertEquals("sintel", vm.uiState.value.videoId)
         assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
+    }
+
+    @Test fun cancelledAccountActionCannotClearTheNewAccountsPendingAction() = runTest {
+        val oldResult = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val newResult = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val actions = object : VideoActions {
+            override suspend fun rate(videoId: String, rating: VideoRating, previous: VideoRating) {
+                val result = if (++calls == 1) oldResult else newResult
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { result.await() }
+            }
+            override suspend fun subscribe(channelId: String, subscribed: Boolean) = Unit
+        }
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", videoActions = actions)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.Like)
+        runCurrent()
+        vm.refreshSession()
+        runCurrent()
+        vm.onAction(WatchAction.Dislike)
+        runCurrent()
+        assertTrue(vm.uiState.value.actionPending)
+        oldResult.complete(Unit)
+        runCurrent()
+        assertTrue(vm.uiState.value.actionPending)
+        assertEquals(VideoRating.None, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
+        newResult.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.actionPending)
+        assertEquals(VideoRating.Dislike, (vm.uiState.value.content as WatchContent.Ready).page.video.rating)
     }
 
     @Test fun ordinaryEntryLoadsTheLocalPageForTheRequestedVideo() = runTest {
@@ -526,6 +598,22 @@ class WatchViewModelTest {
     private fun liveSaveViewModel(saves: FakeSaveRepository): WatchViewModel =
         WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny", saveRepository = saves)
 
+    @Test fun relatedVideoSaveUsesItsOwnServerChoices() = runTest {
+        val saves = FakeSaveRepository()
+        val vm = liveSaveViewModel(saves)
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenItemMenu("studio"))
+        vm.onAction(WatchAction.MenuAction(WatchVideoMenuAction.SaveToPlaylist))
+        advanceUntilIdle()
+        val save = vm.uiState.value.overlay as WatchOverlay.Save
+        assertTrue(save.live)
+        assertEquals("studio", save.videoId)
+        assertEquals(saves.choicesResult, save.choices)
+        vm.onAction(WatchAction.SaveChoiceToggled(save.choices!!.first()))
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("WL", "studio", true)), saves.writes)
+    }
+
     @Test fun liveSaveSheetLoadsServerChoicesAndTogglesAfterConfirmation() = runTest {
         val saves = FakeSaveRepository()
         val vm = liveSaveViewModel(saves)
@@ -557,7 +645,10 @@ class WatchViewModelTest {
         assertTrue(after.choices!![1].contains)
         assertFalse(after.pending)
         val notice = withTimeoutOrNull(500) { vm.actionNotices.first() }
-        assertTrue(notice is AppNotice.Message)
+        assertTrue(notice is AppNotice.Failure)
+        assertEquals("The server did not confirm this change. Please refresh before trying again.",
+            (notice as AppNotice.Failure).text)
+        assertTrue(notice.report.text.contains("Outcome: unconfirmed"))
     }
 
     @Test fun guestSaveClosesTheSheetAndRequestsSignIn() = runTest {
@@ -662,5 +753,50 @@ class WatchViewModelTest {
         vm.verificationCompleted(url)
         advanceUntilIdle()
         assertEquals(2, calls)
+    }
+
+    @Test fun provisionalSummaryPaintsTheLoadingPageAndYieldsToRealContent() = runTest {
+        val result = kotlinx.coroutines.CompletableDeferred<WatchPage>()
+        val vm = WatchViewModel(repository { result.await() }, SavedStateHandle(), "bunny",
+            provisional = WatchProvisional(videoId = "bunny", title = "Cached title",
+                channel = "Known channel", channelId = "ch-1", artwork = "https://img/bunny",
+                views = "1.2M views", age = "3 days ago", duration = "4:08"))
+        runCurrent()
+        assertTrue(vm.uiState.value.content is WatchContent.Loading)
+        val known = vm.uiState.value.provisional
+        assertEquals("Cached title", known?.title)
+        assertEquals("Known channel", known?.channel)
+        assertEquals("4:08", known?.duration)
+        result.complete(FixtureWatchRepository.samplePage("bunny"))
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.content is WatchContent.Ready)
+    }
+
+    @Test fun aLiveStreamWithoutAChatKeyDoesNotOpenTheCommentsPanel() = runTest {
+        fun liveRepository() = repository { id ->
+            val page = FixtureWatchRepository.samplePage(id)
+            page.copy(video = page.video.copy(live = true, chatKey = null))
+        }
+        val vm = WatchViewModel(liveRepository(), SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        vm.onAction(WatchAction.OpenComments("bunny"))
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.commentsOpen)
+        assertTrue(withTimeoutOrNull(1) { vm.navigationRequests.first() } == null)
+        // An ordinary page keeps its comments affordance.
+        val plain = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny")
+        advanceUntilIdle()
+        plain.onAction(WatchAction.OpenComments("bunny"))
+        assertEquals(WatchNavigationRequest.Comments("bunny"), plain.navigationRequests.first())
+        assertTrue(plain.uiState.value.commentsOpen)
+    }
+
+    @Test fun switchingVideosWithoutACardClearsTheStaleProvisionalSummary() = runTest {
+        val vm = WatchViewModel(repository { FixtureWatchRepository.samplePage(it) }, SavedStateHandle(), "bunny",
+            provisional = WatchProvisional(videoId = "bunny", title = "Cached title"))
+        advanceUntilIdle()
+        vm.selectVideo("sintel")
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.provisional)
     }
 }

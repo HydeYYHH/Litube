@@ -4,12 +4,12 @@ import com.hhst.youtubelite.diagnostics.AppLog
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpClient
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpReply
 import com.liskovsoft.youtubeapi.videoinfo.V2.HttpRequest
-import com.liskovsoft.youtubeapi.videoinfo.V2.PlaybackLoad
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlaybackPreference
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlaybackSession
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerChallenge
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerChallengeRequest
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerClient
+import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerLoadAttempt
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerFormat
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerScript
 import com.liskovsoft.youtubeapi.videoinfo.V2.PlayerSolver
@@ -36,8 +36,11 @@ class MscPlayback(
     private val tokens: PoTokenMinter,
     private val identity: () -> RequestContext = { RequestContext() },
     private val onAnonymousVisitor: (String?, Long) -> Unit = { _, _ -> },
+    private val sharedWatchReads: com.hhst.youtubelite.data.media.SharedWatchReads? = null,
 ) {
-    private class Task(val context: ExtractionContext, val videoId: String)
+    private class Task(val context: ExtractionContext, val videoId: String) {
+        val attempts = mutableListOf<PlayerLoadAttempt>()
+    }
 
     private val active = ThreadLocal<Task?>()
     private val transport = HttpClientBridge()
@@ -47,6 +50,14 @@ class MscPlayback(
         solver = SolverAdapter(),
         tokens = TokenAdapter(),
         scripts = ScriptProvider(),
+        onAttempt = { attempt ->
+            active.get()?.let { task ->
+                task.attempts += attempt
+                task.context.diagnostics.event("player-response", mapClient(attempt.client).name,
+                    "${attempt.status ?: "UNKNOWN"}:${attempt.error?.code ?: "PLAYABLE"}",
+                    attempt.elapsedMs, attempt.error?.status ?: 0)
+            }
+        },
     )
 
     /** One mapped result of a core playback load. */
@@ -54,7 +65,8 @@ class MscPlayback(
 
     fun resolve(videoId: String, context: ExtractionContext, demand: PlaybackDemand?, fresh: Boolean,
                 deferred: Set<StreamClient>): Resolved {
-        withTask(Task(context, videoId)) {
+        val task = Task(context, videoId)
+        withTask(task) {
             // The demand gates acceptance, never caps selection: local track
             // selection pins quality from the whole returned pool.
             val preference = PlaybackPreference(
@@ -62,20 +74,25 @@ class MscPlayback(
                 audioId = demand?.audioTrack?.takeIf { it.isNotBlank() },
                 audioOnly = demand?.audioOnly == true,
                 videoCodecs = demand?.videoCodecPrefixes ?: emptySet(),
+                allowSabr = false,
             )
             val request = requestContext(context)
-            val loaded = load(videoId, request, preference, fresh, deferred)
-            if (!loaded.ok) throw PlaybackResolutionException(
+            fun failure(error: RequestError) = PlaybackResolutionException(error, PlaybackResolutionDiagnostics(
+                if (request.signedIn) "AUTHENTICATED" else "ANONYMOUS",
+                context.session.configurationSource, context.session.networkGeneration, task.attempts.takeLast(12)))
+            val loaded = session.load(videoId, request, preference, fresh = fresh,
+                includeMuxedFloor = context.catalog || fresh, deferred = deferred.map(::toPlayerClient).toSet())
+            if (!loaded.ok) throw failure(
                 loaded.error ?: RequestError(RequestFailure.UNSUPPORTED, "no_playable_source"))
             val value = loaded.value!!
-            val answer = value.answer ?: throw PlaybackResolutionException(
+            val answer = value.answer ?: throw failure(
                 loaded.error ?: RequestError(RequestFailure.UNSUPPORTED, "no_playable_source"))
             if (answer.muxedFormats.none { !it.url.isNullOrBlank() } &&
                 answer.adaptiveFormats.none { !it.url.isNullOrBlank() } &&
                 answer.hlsUrl.isNullOrBlank() && answer.dashUrl.isNullOrBlank()
             ) {
                 // Only a SABR stream remained; the local engine cannot consume it yet.
-                throw PlaybackResolutionException(
+                throw failure(
                     RequestError(RequestFailure.UNSUPPORTED, "sabr_only", detail = answer.status))
             }
             return Resolved(mapMetadata(videoId, answer), mapStream(value, context))
@@ -84,7 +101,9 @@ class MscPlayback(
 
     fun chapters(videoId: String, context: ExtractionContext): List<Chapter> {
         withTask(Task(context, videoId)) {
-            val watched = loadWatch(videoId, requestContext(context), http = transport)
+            val requestContext = requestContext(context)
+            val watched = sharedWatchReads?.read(videoId, requestContext, transport, fresh = false, load = { id, ctx, http -> loadWatch(id, ctx, http = http) })
+                ?: loadWatch(videoId, requestContext, http = transport)
             if (!watched.ok) return emptyList()
             return watched.value!!.chapters.map {
                 Chapter(it.title.orEmpty(), (it.startMs / 1000).toInt(), it.thumbnail)
@@ -100,17 +119,6 @@ class MscPlayback(
         } finally {
             active.set(previous)
         }
-    }
-
-    private fun load(videoId: String, context: RequestContext, preference: PlaybackPreference,
-                     fresh: Boolean, deferred: Set<StreamClient>): com.liskovsoft.youtubeapi.videoinfo.V2.ReadResult<PlaybackLoad> {
-        val excluded = deferred.mapNotNull(::toPlayerClient).toSet()
-        var loaded = session.load(videoId, context, preference, fresh = fresh, excluded = excluded)
-        if (!loaded.ok && excluded.isNotEmpty()) {
-            // Deferred clients stay eligible as the terminal pool, never dropped outright.
-            loaded = session.load(videoId, context, preference, fresh = fresh, excluded = emptySet())
-        }
-        return loaded
     }
 
     fun requestContext(context: ExtractionContext): RequestContext {
@@ -193,6 +201,9 @@ class MscPlayback(
     }
 
     internal inner class ScriptProvider : PlayerScriptProvider {
+        override fun cacheKey(videoId: String, context: RequestContext): String? =
+            active.get()?.context?.session?.playerUrl
+
         override fun script(videoId: String, context: RequestContext, fresh: Boolean): ReadResult<PlayerScript> {
             val task = active.get()
                 ?: return ReadResult(error = RequestError(RequestFailure.TRANSPORT, "playback_bridge_idle"))
@@ -251,5 +262,8 @@ class MscPlayback(
 }
 
 /** Core resolution failure with its protocol-level error, for recovery classification. */
-class PlaybackResolutionException(val error: RequestError) :
+class PlaybackResolutionException(val error: RequestError, val diagnostics: PlaybackResolutionDiagnostics? = null) :
     IOException("${error.kind.name}:${error.code}")
+
+data class PlaybackResolutionDiagnostics(val accountState: String, val configurationSource: String,
+    val networkGeneration: Long, val attempts: List<PlayerLoadAttempt>)

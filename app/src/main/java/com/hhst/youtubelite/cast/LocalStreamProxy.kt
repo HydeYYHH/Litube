@@ -86,9 +86,9 @@ class LocalStreamProxy(
     private val configGen = AtomicLong()
 
     @Volatile var urlRefresher: UrlRefresher? = null
-    @Volatile private var manifestXml: String? = null
+    private data class PublishedManifest(val xml: String, val videoId: String?, val marker: String)
+    @Volatile private var manifest: PublishedManifest? = null
     @Volatile private var videoTitle: String? = null
-    @Volatile private var currentVideoId: String? = null
     @Volatile private var lastLinkPeerSeenMs = 0L
     /** Unlisted path prefix. LAN clients must have the shared URL; the port alone is not sufficient. */
     private val accessKey = UUID.randomUUID().toString().replace("-", "")
@@ -150,7 +150,6 @@ class LocalStreamProxy(
             )
         }
         this.videoTitle = videoTitle
-        this.currentVideoId = videoId
         // Publish the token table before the manifest: a concurrent serveManifest
         // then never exposes a manifest whose /stream tokens are not registered
         // yet. The swap itself must take [streamInfoLock]: serveStream's 403
@@ -163,8 +162,10 @@ class LocalStreamProxy(
             // not mute this config's first 403 refresh.
             lastRefreshMs.clear()
             this.streamInfo = tokens
+            val marker = manifest?.takeIf { it.videoId == videoId }?.marker
+                ?: UUID.randomUUID().toString()
+            this.manifest = manifestXml?.let { PublishedManifest(it, videoId, marker) }
         }
-        this.manifestXml = manifestXml
     }
 
     data class StreamRanges(
@@ -219,6 +220,11 @@ class LocalStreamProxy(
     }
 
     override fun serve(session: IHTTPSession): Response {
+        val expectedHost = if (listeningPort == 80) advertisedHost else "$advertisedHost:$listeningPort"
+        val host = header(session, "host")?.trim()
+        if (!expectedHost.equals(host, ignoreCase = true) &&
+            !(listeningPort == 80 && "$advertisedHost:80".equals(host, ignoreCase = true))
+        ) return text(Response.Status.FORBIDDEN, "Forbidden")
         AppLog.detail(AppLog.Category.CAST, "proxy_request", mapOf("method" to session.method.name), diagnosticContext)
         val raw = session.uri ?: return text(Response.Status.NOT_FOUND, "Not found")
         val prefix = "/$accessKey"
@@ -263,16 +269,10 @@ class LocalStreamProxy(
         // page's probe re-fetches it every 15 s); curl/scanner probes must
         // not light the "link connected" banner up.
         if (!isReceiverUa(ua) && isLinkPeerUa(ua)) lastLinkPeerSeenMs = SystemClock.elapsedRealtime()
-        var xml = manifestXml ?: return text(Response.Status.NOT_FOUND, "No manifest")
-        val vid = currentVideoId
-        if (!vid.isNullOrBlank()) {
-            // Hex-encode: XML comments must not contain "--", and video ids
-            // legitimately can. The receiver only compares the marker for
-            // equality (player.html probeManifest), so the encoding is
-            // transparent there.
-            val encoded = vid.toByteArray(Charsets.US_ASCII)
-                .joinToString("") { "%02x".format(it) }
-            val marker = "<!-- vid:$encoded -->"
+        val published = manifest ?: return text(Response.Status.NOT_FOUND, "No manifest")
+        var xml = published.xml
+        if (!published.videoId.isNullOrBlank()) {
+            val marker = "<!-- vid:${published.marker} -->"
             if (!xml.contains(marker)) {
                 val decl = xml.indexOf("?>")
                 xml = if (decl >= 0) {
@@ -523,6 +523,11 @@ class LocalStreamProxy(
                 .setRangeParameterEnabled(true)
         } ?: dataSourceFactory).createDataSource(), info.diagnostic, category = AppLog.Category.CAST)
         val resolved = source.open(specBuilder.build())
+        val rangeTotal = source.responseHeaders.entries.firstOrNull { it.key.equals("Content-Range", true) }
+            ?.value?.firstOrNull()?.substringAfterLast('/')?.toLongOrNull()?.takeIf { it > chunkStart }
+        if (info.contentLength <= 0 && rangeTotal != null) {
+            maybeBackfillContentLength(token, info, 0, rangeTotal)
+        }
         if (upstreamUnbounded) {
             if (resolved == 0L) {
                 runCatching { source.close() }
@@ -541,6 +546,7 @@ class LocalStreamProxy(
         }
         val total = when {
             totalSize > 0 -> totalSize
+            rangeTotal != null -> rangeTotal
             upstreamUnbounded && resolved > 0 -> chunkStart + resolved
             else -> LENGTH_UNSET
         }

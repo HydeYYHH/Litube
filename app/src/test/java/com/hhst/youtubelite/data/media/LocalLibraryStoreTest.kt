@@ -46,18 +46,17 @@ class LocalLibraryStoreTest {
         val entered = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
         val first = java.util.concurrent.atomic.AtomicBoolean(true)
-        val gson = com.google.gson.GsonBuilder().registerTypeAdapter(HistoryEntry::class.java,
-            com.google.gson.JsonSerializer<HistoryEntry> { entry, _, _ ->
+        val storage = MemoryAuthStore()
+        val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val library = LocalLibraryStore(storage, writer)
+            library.writeInterceptor = { text ->
                 if (first.compareAndSet(true, false)) {
                     entered.countDown()
                     check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
                 }
-                com.google.gson.Gson().toJsonTree(entry)
-            }).create()
-        val storage = MemoryAuthStore()
-        val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
-        try {
-            val library = LocalLibraryStore(storage, gson, writer)
+                text
+            }
             library.record(video("one"))
             assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
             val collection = library.create("Films", "", video("two"))

@@ -29,7 +29,7 @@ import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.muxedFormat
 import com.hhst.youtubelite.downloader.resolve.subtitle
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -182,7 +182,7 @@ class DownloadEngineE2ETest {
     fun attachmentFailure_isPartialAndRetryFailedOnly() = runBlocking {
         val media = load("downloader/media/avc_aac.mp4")
         val session = YoutubeWebSession("subtitle-test", WebAccount.ANONYMOUS,
-            0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(), { "" })
+            0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(emptyMap()), { "" })
         val subtitlePlan = MediaRequestPlan(session, StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.NONE, false)
         server.dispatcher = mediaDispatcher(media) { request ->
             if ("timedtext" in request.path.orEmpty()) MockResponse().setResponseCode(404) else null

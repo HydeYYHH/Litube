@@ -166,6 +166,7 @@
     <string name="copy">Хуулбарлах</string>
     <string name="copied">Хуулбарласан</string>
     <string name="copy_all">Бүгдийг хуулах</string>
+    <string name="cast_searching">Хайж байна…</string>
     <string name="queue_now_playing">Одоо тоглож байна</string>
     <string name="clear_queue_confirm">Дарааллыг бүхэлд нь арилгах уу?</string>
     <string name="ok">За</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Хаах</string>
     <string name="verification_completed">Баталгаажуулалт дууслаа. Дахин оролдож байна…</string>
     <string name="verification_still_blocked">Баталгаажуулсны дараа ч хаалттай хэвээр. Дараа дахин оролдоно уу.</string>
+    <string name="comments_title">Сэтгэгдэл</string>
+    <string name="comments_sort_top">Онцлох сэтгэгдэл</string>
+    <string name="comments_sort_newest">Шинэ нь эхэлж</string>
+    <string name="comments_sort_chip_top">Онцлох</string>
+    <string name="comments_sort_chip_newest">Шинэ</string>
+    <string name="comments_composer_add">Сэтгэгдэл нэмэх</string>
+    <string name="comments_composer_reply">Хариулах</string>
+    <string name="comments_composer_edit">Сэтгэгдлийг засах</string>
+    <string name="comments_composer_text_hint">Сэтгэгдлийн текст</string>
+    <string name="comments_composer_text_edit_hint">Сэтгэгдлийн текстийг засах</string>
+    <string name="comments_composer_submit">Сэтгэгдэл бичих</string>
+    <string name="comments_composer_sending">Илгээж байна…</string>
+    <string name="comments_composer_save">Хадгалах</string>
+    <string name="comments_delete_title">Устгах</string>
+    <string name="comments_show_more_replies">Дэлгэрэнгүй хариултыг харах</string>
+    <string name="comments_load_more_failed">Нэмэлт сэтгэгдэл ачаалж чадсангүй</string>
+    <string name="comments_hide_replies">Хариултыг нуух</string>
+    <string name="home_music_charts">Хөгжмийн жагсаалт</string>
+    <string name="home_popular_gaming">Тоглоомын чиг хандлага</string>
+    <string name="home_popular_sports">Спортын чиг хандлага</string>
+    <string name="home_top_news">Онцлох мэдээ</string>
 </resources>

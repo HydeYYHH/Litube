@@ -166,6 +166,7 @@
     <string name="copy">ቅጂ</string>
     <string name="copied">ተገልብጧል</string>
     <string name="copy_all">ሁሉንም ይቅዱ</string>
+    <string name="cast_searching">በመፈለግ ላይ…</string>
     <string name="queue_now_playing">አሁን በመጫወት ላይ</string>
     <string name="clear_queue_confirm">ሙሉውን ወረፋ ይጽዱ?</string>
     <string name="ok">እሺ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">ዝጋ</string>
     <string name="verification_completed">ማረጋገጫ ተጠናቋል። እንደገና በመሞከር ላይ…</string>
     <string name="verification_still_blocked">ከማረጋገጡ በኋላ አሁንም ታግዷል። እባክዎ ቆይተው ይሞክሩ።</string>
+    <string name="comments_title">አስተያየቶች</string>
+    <string name="comments_sort_top">ቀዳሚ አስተያየቶች</string>
+    <string name="comments_sort_newest">አዲስ በቅድሚያ</string>
+    <string name="comments_sort_chip_top">ቀዳሚ</string>
+    <string name="comments_sort_chip_newest">አዲስ</string>
+    <string name="comments_composer_add">አስተያየት ይጨምሩ</string>
+    <string name="comments_composer_reply">መልስ</string>
+    <string name="comments_composer_edit">አስተያየት ያርትዑ</string>
+    <string name="comments_composer_text_hint">የአስተያየት ጽሑፍ</string>
+    <string name="comments_composer_text_edit_hint">የአስተያየት ጽሑፍ ያርትዑ</string>
+    <string name="comments_composer_submit">አስተያየት ይላኩ</string>
+    <string name="comments_composer_sending">በመላክ ላይ…</string>
+    <string name="comments_composer_save">አስቀምጥ</string>
+    <string name="comments_delete_title">ሰርዝ</string>
+    <string name="comments_show_more_replies">ተጨማሪ መልሶች አሳይ</string>
+    <string name="comments_load_more_failed">ተጨማሪ አስተያየቶችን መጫን አልተቻለም</string>
+    <string name="comments_hide_replies">መልሶችን ደብቅ</string>
+    <string name="home_music_charts">የሙዚቃ ዝርዝሮች</string>
+    <string name="home_popular_gaming">በጨዋታዎች ታዋቂ</string>
+    <string name="home_popular_sports">በስፖርት ታዋቂ</string>
+    <string name="home_top_news">ዋና ዜናዎች</string>
 </resources>

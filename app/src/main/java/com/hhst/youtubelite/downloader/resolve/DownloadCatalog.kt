@@ -9,6 +9,7 @@ import com.hhst.youtubelite.extractor.Subtitle
 import com.hhst.youtubelite.player.datasource.StreamSelection
 
 /** Extractor snapshot the download layer selects from. Playback models are unchanged. */
+@kotlinx.serialization.Serializable
 data class DownloadCatalog(
     val videoId: String,
     val title: String = "",

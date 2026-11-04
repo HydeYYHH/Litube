@@ -91,6 +91,17 @@ class CachedWatchRepositoryTest {
         assertEquals(listOf("a", "a"), delegate.calls)
     }
 
+    @Test fun explicitRefreshReachesTheUnderlyingFreshRead() = runTest {
+        val delegate = object : WatchRepository {
+            override suspend fun watch(videoId: String) = page(videoId, "-cached")
+            override suspend fun watchFresh(videoId: String) = page(videoId, "-fresh")
+        }
+        val repo = CachedWatchRepository(delegate, identity = { 0L })
+        assertEquals("Title a-cached", repo.watch("a").video.title)
+        assertEquals("Title a-fresh", repo.watchFresh("a").video.title)
+        assertEquals("Title a-fresh", repo.watch("a").video.title)
+    }
+
     @Test fun theCacheIsBounded() = runTest {
         val delegate = CountingWatch { page(it) }
         val repo = CachedWatchRepository(delegate, identity = { 0L }, maxEntries = 2)

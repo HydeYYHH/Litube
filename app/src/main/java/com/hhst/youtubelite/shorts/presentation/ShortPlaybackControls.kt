@@ -13,6 +13,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,14 +43,26 @@ internal fun ShortPlaybackControls(
     error: String? = null,
     onRetry: () -> Unit = {},
     onDetails: (() -> Unit)? = null,
+    active: Boolean = true,
+    paused: Boolean = !playing,
+    ready: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val buffering = loading || !ready
     val toggle by rememberUpdatedState(onToggle)
     val holdStart by rememberUpdatedState(onHoldStart)
     val holdEnd by rememberUpdatedState(onHoldEnd)
-    val canHold by rememberUpdatedState(!loading && error == null)
-    val canToggle by rememberUpdatedState(error == null)
+    val canHold by rememberUpdatedState(active && !buffering && error == null)
+    val canToggle by rememberUpdatedState(active && ready && error == null)
     var holding by remember { mutableStateOf(false) }
+    var pauseVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(active, paused, buffering, error) {
+        pauseVisible = false
+        if (active && paused && !buffering && error == null) {
+            kotlinx.coroutines.delay(120)
+            pauseVisible = true
+        }
+    }
     val toggleLabel = stringResource(if (playing) R.string.action_pause else R.string.action_play)
     DisposableEffect(Unit) {
         onDispose { if (holding) { holding = false; holdEnd() } }
@@ -103,20 +116,21 @@ internal fun ShortPlaybackControls(
                     }
                 }
             })
-        if (holding) {
+        if (holding && active) {
             Text(stringResource(R.string.speed_hold_2x), color = Color.White,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp)
                     .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                     .padding(horizontal = 16.dp, vertical = 8.dp).testTag("short-speed-hold"))
-        } else if (error != null) {
+        } else if (error != null && active) {
             com.hhst.youtubelite.player.surface.ErrorOverlay(
                 message = error, onRetry = onRetry, onDetails = onDetails, modifier = Modifier.align(Alignment.Center))
-        } else if (loading) {
+        } else if (buffering && active) {
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp,
                 modifier = Modifier.align(Alignment.Center).size(24.dp).testTag("short-buffering"))
-        } else if (!playing) {
+        } else if (pauseVisible && active && paused && !buffering) {
             Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = Color.White,
-                modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                modifier = Modifier.align(Alignment.Center).testTag("short-paused")
+                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
                     .padding(12.dp).size(40.dp))
         }
     }

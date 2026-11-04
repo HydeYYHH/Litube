@@ -1,13 +1,14 @@
 package com.hhst.youtubelite.player.surface
 
-import com.tencent.mmkv.MMKV
+import com.hhst.youtubelite.core.PreferenceStore
 
 /**
  * Persists mini-player width and translation.
  */
 class MiniPlayerStore(
-    private val kv: MMKV,
+    private val kv: PreferenceStore,
 ) {
+    @kotlinx.serialization.Serializable
     data class State(
         val widthDp: Int,
         val translationXDp: Float,
@@ -15,15 +16,15 @@ class MiniPlayerStore(
     )
 
     fun load(): State = State(
-        widthDp = kv.decodeInt(KEY_WIDTH_DP, 0),
-        translationXDp = kv.decodeFloat(KEY_TX_DP, 0f),
-        translationYDp = kv.decodeFloat(KEY_TY_DP, 0f),
+        widthDp = kv.getInt(KEY_WIDTH_DP, 0),
+        translationXDp = kv.getFloat(KEY_TX_DP, 0f),
+        translationYDp = kv.getFloat(KEY_TY_DP, 0f),
     )
 
     fun save(widthDp: Int, translationXDp: Float, translationYDp: Float) {
-        kv.encode(KEY_WIDTH_DP, widthDp)
-        kv.encode(KEY_TX_DP, translationXDp)
-        kv.encode(KEY_TY_DP, translationYDp)
+        kv.putInt(KEY_WIDTH_DP, widthDp)
+        kv.putFloat(KEY_TX_DP, translationXDp)
+        kv.putFloat(KEY_TY_DP, translationYDp)
     }
 
     private companion object {

@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.dearrow
 
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.doubleOrNull
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
@@ -219,32 +219,48 @@ class DeArrowService(
      */
     internal fun parse(videoId: String, body: String?): Branding {
         if (body.isNullOrBlank()) return Branding(videoId, null, null)
-        val bucket = JsonParser.parseString(body).asJsonObject
-        val entry = bucket.getAsJsonObject(videoId) ?: return Branding(videoId, null, null)
-        val duration = entry.get("videoDuration")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+        val bucket = kotlinx.serialization.json.Json.parseToJsonElement(body)
+            as kotlinx.serialization.json.JsonObject
+        val entry = bucket[videoId] as? kotlinx.serialization.json.JsonObject ?: return Branding(videoId, null, null)
+        val duration = entry.num("videoDuration") ?: 0.0
 
-        val title = entry.getAsJsonArray("titles")?.firstOrNull()
-            ?.takeIf { it.isJsonObject && trusted(it.asJsonObject) && !original(it.asJsonObject) }
-            ?.asJsonObject?.get("title")?.takeIf { !it.isJsonNull }?.asString
+        val titles = entry["titles"] as? kotlinx.serialization.json.JsonArray
+        val title = titles?.firstOrNull()?.let { candidate ->
+            (candidate as? kotlinx.serialization.json.JsonObject)
+                ?.takeIf { trusted(it) && !original(it) }
+                ?.strMember("title")
+        }
             // '>' characters are auto-formatter casing directives; without a
             // formatter the official guidance is to strip them.
             ?.replace(">", "")?.trim()?.takeIf { it.isNotEmpty() && it.length <= 512 }
 
-        val thumbTime = entry.getAsJsonArray("thumbnails")?.firstOrNull()
-            ?.takeIf { it.isJsonObject && trusted(it.asJsonObject) && !original(it.asJsonObject) }
-            ?.asJsonObject?.get("timestamp")?.takeIf { !it.isJsonNull }?.asDouble
-            ?.takeIf { it.isFinite() && it >= 0.0 && (duration <= 0.0 || it < duration) }
+        val thumbnails = entry["thumbnails"] as? kotlinx.serialization.json.JsonArray
+        val thumbTime = thumbnails?.firstOrNull()?.let { candidate ->
+            (candidate as? kotlinx.serialization.json.JsonObject)
+                ?.takeIf { trusted(it) && !original(it) }
+                ?.num("timestamp")
+        }?.takeIf { it.isFinite() && it >= 0.0 && (duration <= 0.0 || it < duration) }
 
         return Branding(videoId, title, thumbTime)
     }
 
-    /** First-entry trust rule: locked, or non-negative votes. */
-    private fun trusted(candidate: com.google.gson.JsonObject): Boolean =
-        candidate.get("locked")?.takeIf { !it.isJsonNull }?.asBoolean == true ||
-            (candidate.get("votes")?.takeIf { !it.isJsonNull }?.asInt ?: 0) >= 0
+    /** Coercing number read over unquoted and quoted literals alike. */
+    private fun kotlinx.serialization.json.JsonObject.num(key: String): Double? =
+        (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.takeUnless { it is kotlinx.serialization.json.JsonNull }
+            ?.let { it.doubleOrNull ?: it.content.toDoubleOrNull() }
 
-    private fun original(candidate: com.google.gson.JsonObject): Boolean =
-        candidate.get("original")?.takeIf { !it.isJsonNull }?.asBoolean == true
+    private fun kotlinx.serialization.json.JsonObject.strMember(key: String): String? =
+        (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.content
+
+    /** First-entry trust rule: locked, or non-negative votes. */
+    private fun trusted(candidate: kotlinx.serialization.json.JsonObject): Boolean =
+        (candidate["locked"] as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.content?.toBoolean() == true ||
+            (candidate.num("votes")?.toInt() ?: 0) >= 0
+
+    private fun original(candidate: kotlinx.serialization.json.JsonObject): Boolean =
+        (candidate["original"] as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.content?.toBoolean() == true
 
     internal companion object {
         private val CATEGORY = AppLog.Category.EXTENSION

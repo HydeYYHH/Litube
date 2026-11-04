@@ -1,16 +1,18 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.ToNumberPolicy
-import com.google.gson.JsonParser
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 
 /** Deterministic archive layout shared by tests and the Android export entry point. */
 internal object DiagnosticArchive {
-    private val gson = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private val legacyFields = setOf("video_id", "operation", "task", "stage", "duration_ms", "http_status", "sequence",
         "profile", "detail", "state", "position_ms", "error_code", "decoder", "count", "fps", "expected_fps",
         "rendered", "dropped", "ratio", "reextract", "phase", "generation", "batch", "reason", "timestamp")
@@ -34,15 +36,14 @@ internal object DiagnosticArchive {
                 }
                 runCatching {
                     require(line.toByteArray(Charsets.UTF_8).size <= 64_000)
-                    val json = JsonParser.parseString(line).asJsonObject
-                    require((json.get("time")?.asLong ?: 0) > 0)
-                    if (json.get("schema_version")?.asInt == 2) {
-                        val row = gson.fromJson(json, DiagnosticEvent::class.java)
+                    val json = DiagnosticJson.json.parseToJsonElement(line) as JsonObject
+                    require((json.get("time")?.memberLong() ?: 0) > 0)
+                    if (json.get("schema_version")?.memberLong() == 2L) {
+                        val row = DiagnosticJson.decodeEvent(json)
                         require(row.time > 0 && row.sequence >= 0)
-                        requireNotNull(row.level); requireNotNull(row.process); requireNotNull(row.session)
-                        requireNotNull(row.event); requireNotNull(row.fields)
+                        require(row.event.isNotBlank()); require(row.process.isNotBlank()); require(row.session.isNotBlank())
                         val origin = row.context?.let { c ->
-                            requireNotNull(c.operationId); requireNotNull(c.traceId)
+                            require(c.operationId.isNotBlank()); require(c.traceId.isNotBlank())
                             c.copy(operationId = identifier(c.operationId), traceId = identifier(c.traceId),
                                 parentOperationId = c.parentOperationId?.let(::identifier),
                                 videoId = c.videoId?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) },
@@ -60,27 +61,27 @@ internal object DiagnosticArchive {
                             })
                     } else {
                         legacy++
-                        val values = json.getAsJsonObject("fields")?.entrySet().orEmpty()
+                        val values = (json.get("fields") as? JsonObject)?.entries.orEmpty()
                         unknownFields += values.count { it.key !in legacyFields }
                         val fields: Map<String, Any?> = values.filter { it.key in legacyFields }.associate { it.key to
-                            if (!it.value.isJsonPrimitive) null else it.value.asJsonPrimitive.let { p ->
-                                when { p.isBoolean -> p.asBoolean; p.isNumber -> p.asNumber; else -> p.asString }
+                            (it.value as? JsonPrimitive)?.takeUnless { p -> p is JsonNull }?.let { p ->
+                                p.booleanOrNull ?: p.longOrNull ?: p.doubleOrNull ?: p.content
                             } }
-                        val pid = json.get("pid")?.asInt ?: 0
-                        val session = json.get("session")?.asString ?: "unknown"
+                        val pid = json.get("pid")?.memberLong()?.toInt() ?: 0
+                        val session = json.get("session")?.memberText() ?: "unknown"
                         val operation = fields["operation"]?.toString() ?: fields["task"]?.toString()
                         val context = operation?.let { DiagnosticContext(operationId = "legacy:$session:$it",
                             videoId = fields["video_id"]?.toString()?.takeIf { vid -> vid.matches(Regex("[A-Za-z0-9_-]{11}")) },
                             taskId = fields["task"]?.toString()) }
-                        val stack = json.get("error")?.asString
+                        val stack = json.get("error")?.memberText()
                         val frames = stack?.lineSequence()?.filter(::isFrame)?.take(64)?.map(DiagnosticRedaction::text)?.toList().orEmpty()
                         val code = stack?.lineSequence()?.mapNotNull { DiagnosticRedaction.safeMessage(it.substringAfter(": ", "")) }?.firstOrNull()
                         val sequence = ++legacySequence
-                        records += DiagnosticEvent(time = json.get("time")?.asLong ?: 0, elapsedMs = 0,
+                        records += DiagnosticEvent(time = json.get("time")?.memberLong() ?: 0, elapsedMs = 0,
                             sequence = sequence, process = "legacy:$pid", pid = pid, session = identifier(session),
-                            category = json.get("category")?.asString ?: "APP",
+                            category = json.get("category")?.memberText() ?: "APP",
                             level = if (stack != null || name.contains("critical")) DiagnosticLevel.ERROR else DiagnosticLevel.INFO,
-                            event = json.get("event")?.asString?.take(100) ?: "legacy_event", context = context,
+                            event = json.get("event")?.memberText()?.take(100) ?: "legacy_event", context = context,
                             fields = DiagnosticRedaction.fields(fields + mapOf("legacy" to true, "source_file" to name,
                                 "source_line" to index + 1, "identity_unverified" to true)),
                             error = stack?.let { DiagnosticFailure("legacy-$session-$sequence", listOf(DiagnosticCause("legacy_error", code, code, frames))) })
@@ -121,8 +122,8 @@ internal object DiagnosticArchive {
                     val start = incidents[id]?.indexOfFirst { it.recordKind == "incident_start" } ?: -1
                     appendLine("- Incident: incidents/" + id + ".jsonl:" + (start + 1).coerceAtLeast(1))
                 }
-                appendLine("- Fields: " + gson.toJson(record.fields))
-                appendLine("- Known facts: " + gson.toJson(state?.fields ?: emptyMap<String, Any?>()))
+                appendLine("- Fields: " + DiagnosticJson.encodeMap(record.fields))
+                appendLine("- Known facts: " + DiagnosticJson.encodeMap(state?.fields ?: emptyMap()))
                 appendLine("- Missing information: " + listOf("phase", "pending_requests", "last_progress_ms").filter {
                     record.fields[it] == null && state?.fields?.get(it) == null
                 }.joinToString().ifBlank { "none of the standard snapshot fields" })
@@ -148,14 +149,20 @@ internal object DiagnosticArchive {
                 zip.putNextEntry(ZipEntry(name)); zip.write(text.toByteArray(Charsets.UTF_8)); zip.closeEntry()
             }
             entry("summary.md", summary)
-            entry("timeline.jsonl", timeline.joinToString("", transform = { gson.toJson(it) + "\n" }))
-            incidents.forEach { (id, rows) -> entry("incidents/$id.jsonl", rows.joinToString("", transform = { gson.toJson(it) + "\n" })) }
-            entry("context.json", gson.toJson(environment))
-            entry("manifest.json", gson.toJson(manifest))
+            entry("timeline.jsonl", timeline.joinToString("", transform = { DiagnosticJson.encode(it) + "\n" }))
+            incidents.forEach { (id, rows) -> entry("incidents/$id.jsonl", rows.joinToString("", transform = { DiagnosticJson.encode(it) + "\n" })) }
+            entry("context.json", DiagnosticJson.encodeMap(environment))
+            entry("manifest.json", DiagnosticJson.encodeMap(manifest))
         }
     }
+    /** Long/string member reads that never surface JsonNull as content. */
+    private fun JsonElement?.memberText(): String? =
+        (this as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content
+
+    private fun JsonElement?.memberLong(): Long? =
+        (this as? JsonPrimitive)?.takeUnless { it is JsonNull }?.let { it.longOrNull ?: it.content.toLongOrNull() }
+
     private fun identifier(value: String): String = value.take(160).replace(Regex("[^A-Za-z0-9_.:$-]"), "_")
     private fun isFrame(value: String): Boolean = value.trim().removePrefix("at ")
         .matches(Regex("[A-Za-z0-9_.$/]+\\.[A-Za-z0-9_$<>]+\\([^\\r\\n]{0,180}\\)"))
 }
-

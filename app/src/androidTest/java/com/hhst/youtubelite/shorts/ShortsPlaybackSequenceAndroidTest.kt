@@ -56,6 +56,10 @@ class ShortsPlaybackSequenceAndroidTest {
                     val current = engine.snapshot.value
                     current.videoId == id && current.error == null && current.isPlaying && current.positionMs > initialPosition
                 }
+                // Dwell before the swipe: prefetch must land inside the window the
+                // viewer actually occupies, not just at maximum speed.
+                val dwell = args.getString("dwellMs")?.toLongOrNull() ?: 0L
+                if (dwell > 0) Thread.sleep(dwell)
                 if (index < count - 1) {
                     compose.onNodeWithTag("shorts-pager").performTouchInput { swipeUp(durationMillis = 250) }
                     compose.waitUntil(15_000) { viewModel.uiState.value.currentItemId != id }

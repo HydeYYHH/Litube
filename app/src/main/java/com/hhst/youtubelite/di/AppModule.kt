@@ -5,13 +5,13 @@ package com.hhst.youtubelite.di
 import android.os.Build
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.room.Room
-import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
+import com.hhst.youtubelite.cast.DlnaController
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.core.PipSupport
 import com.hhst.youtubelite.core.JsonCache
-import com.hhst.youtubelite.core.MmkvJsonCache
+import com.hhst.youtubelite.core.PreferenceJsonCache
 import com.hhst.youtubelite.downloader.core.DownloadCoordinator
 import com.hhst.youtubelite.downloader.core.DownloadFinalizer
 import com.hhst.youtubelite.downloader.core.DownloadInteraction
@@ -19,7 +19,7 @@ import com.hhst.youtubelite.downloader.core.DownloadPrefs
 import com.hhst.youtubelite.downloader.core.DownloadPublisher
 import com.hhst.youtubelite.downloader.core.DownloadResolver
 import com.hhst.youtubelite.downloader.core.DownloadTransport
-import com.hhst.youtubelite.downloader.core.MmkvDownloadPrefs
+import com.hhst.youtubelite.downloader.core.PreferenceDownloadPrefs
 import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.DownloaderDatabase
 import com.hhst.youtubelite.downloader.data.RoomDownloadRepository
@@ -53,7 +53,6 @@ import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
 import com.hhst.youtubelite.downloader.engine.UidtJobPort
 import com.hhst.youtubelite.downloader.engine.WorkEnqueuePort
 import com.hhst.youtubelite.extension.ExtensionManager
-import com.hhst.youtubelite.extension.MmkvPrefStore
 import com.hhst.youtubelite.extension.PrefStore
 import com.hhst.youtubelite.extractor.AndroidChallengeSolver
 import com.hhst.youtubelite.extractor.BrowserPlayerResponses
@@ -84,8 +83,7 @@ import com.hhst.youtubelite.player.QueueRepository
 import com.hhst.youtubelite.player.service.ServiceNotificationController
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.player.surface.MiniPlayerStore
-import com.hhst.youtubelite.ui.extension.ExtensionViewModel
-import com.tencent.mmkv.MMKV
+import com.hhst.youtubelite.core.PreferenceStore
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
@@ -98,7 +96,7 @@ import org.koin.dsl.module
 val appModule = module {
     // freshContext runs on the MediaClient pool: it may block on a token refresh.
     single { com.hhst.youtubelite.data.media.MediaClient(get(), com.hhst.youtubelite.data.media.MediaSession::freshContext) }
-    single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots"), get()) }
+    single { com.hhst.youtubelite.core.ContentSnapshots(java.io.File(androidContext().filesDir, "content-snapshots")) }
     single { com.hhst.youtubelite.data.media.ContentRepositories(get(), get(), get()) }
     // Session-owned watch progress reporting; activities publish metadata and attach playback.
     single {
@@ -116,9 +114,8 @@ val appModule = module {
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
     }
-    single { Gson() }
-    single { MMKV.defaultMMKV() }
-    single<JsonCache> { MmkvJsonCache(kv = get(), gson = get()) }
+    single { PreferenceStore.app(androidContext()) }
+    single<JsonCache> { PreferenceJsonCache(PreferenceStore.of(androidContext(), "media-cache")) }
     single { MemCache() }
     single<Cache> {
         LayeredCache(
@@ -126,8 +123,8 @@ val appModule = module {
             disk = DiskCache(store = get()),
         )
     }
-    single<PrefStore> { MmkvPrefStore(get()) }
-    single<DownloadPrefs> { MmkvDownloadPrefs(get(), get()) }
+    single<PrefStore> { PreferenceStore.app(androidContext()) }
+    single<DownloadPrefs> { PreferenceDownloadPrefs(get()) }
     single { ExtensionManager(get()) }
     single { HapticsController(androidContext(), get()) }
 
@@ -135,6 +132,7 @@ val appModule = module {
     single { HeavyJsGate() }
     single { ExtractionDiagnostics() }
     single { YoutubeSessionProvider(androidContext(), get(), get()) }
+    single { com.hhst.youtubelite.data.media.SharedWatchReads() }
     single { BrowserPlayerResponses(get()) }
     single { YoutubeMediaRequests(get<YoutubeSessionProvider>(), get()) }
     single { AndroidChallengeSolver(androidContext(), get(), get()) } bind SignatureSolver::class
@@ -143,7 +141,8 @@ val appModule = module {
     single { YoutubeExtractionHost(get(), get(), get(), get(), get(), get(), get(), get(),
         playback = com.hhst.youtubelite.extractor.MscPlayback(get(), get(),
             com.hhst.youtubelite.data.media.MediaSession::freshContext,
-            com.hhst.youtubelite.data.media.MediaSession::rememberVisitor)) } bind PlaybackHost::class
+            com.hhst.youtubelite.data.media.MediaSession::rememberVisitor,
+            get())) } bind PlaybackHost::class
     single { OEmbedTitleFetcher(get()) }
     single {
         Extractor(
@@ -229,7 +228,12 @@ val appModule = module {
     }
     single { SponsorBlockManager(get(), get()) }
     single { com.hhst.youtubelite.dearrow.DeArrowService(get(), get()) }
-    single { QueueRepository(get()) }
+    single {
+        QueueRepository(get()) {
+            val context = com.hhst.youtubelite.data.media.MediaSession.snapshot()
+            com.hhst.youtubelite.player.QueueOwner.from(context.signedIn, context.accountId, context.onBehalfOfUser)
+        }
+    }
     single {
         com.hhst.youtubelite.shorts.data.ShortsMediaPreloader(
             androidContext(), get(), get<PlayerDataSource>(), get<com.hhst.youtubelite.extension.ExtensionManager>(),
@@ -244,12 +248,14 @@ val appModule = module {
             prefs = get(),
             sponsorBlock = get(),
             titleFetcher = get(),
+            remoteResumePosition = com.hhst.youtubelite.data.media.MediaResumePosition(get(), get())::load,
         ).also { engine ->
             engine.notificationController = get()
         }
     }
     single { MiniPlayerStore(get()) }
     single { CastController(androidContext(), get(), get()) }
+    single { DlnaController(androidContext()) }
     single<PlaybackNotificationController> {
         ServiceNotificationController(
             androidContext(),
@@ -265,6 +271,7 @@ val appModule = module {
             prefs = get(),
             cache = get(),
             cast = get(),
+            dlna = getOrNull(),
             appContext = androidContext(),
             haptics = get(),
             nextVideo = { id -> if (com.hhst.youtubelite.data.media.ContentSource.fixtures) null
@@ -273,7 +280,6 @@ val appModule = module {
             reporting = get(),
         )
     }
-    viewModel { ExtensionViewModel(manager = get(), pipSupported = PipSupport.isSupported(androidContext())) }
 
     single {
         Room.databaseBuilder(

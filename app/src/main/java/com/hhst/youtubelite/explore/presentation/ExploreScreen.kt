@@ -41,6 +41,7 @@ import com.hhst.youtubelite.explore.domain.ExploreSection
 import com.hhst.youtubelite.explore.domain.ExploreUiState
 import com.hhst.youtubelite.home.domain.AppendState
 import com.hhst.youtubelite.home.domain.FeedItem
+import com.hhst.youtubelite.watch.domain.toProvisional
 import com.hhst.youtubelite.home.presentation.PillButton
 import com.hhst.youtubelite.library.presentation.LibraryError
 import com.hhst.youtubelite.ui.design.AppIconButton
@@ -178,6 +179,15 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         content.page.sections.forEachIndexed { index, section ->
+            if (section.videos.isEmpty() && section.playlists.isEmpty()) {
+                if (section.nextKey != null || section.append != AppendState.Idle) {
+                    item(key = "pending-$index", contentType = "pending-shelf") {
+                        ShelfTail(index, section.append, section.nextKey,
+                            Modifier.fillMaxWidth().height(48.dp), onAction)
+                    }
+                }
+                return@forEachIndexed
+            }
             item(key = "section-$index", contentType = "section-header") {
                 Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, bottom = 8.dp).testTag("explore-section-${index}-title")) {
                     AppText(section.title ?: "Explore", size = 18, line = 24, weight = FontWeight.Bold)
@@ -195,23 +205,26 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
                             ExploreVideoCard(item, compact = false, onAction = onAction)
                         }
                     }
+                    listItems(section.playlists, key = { "playlist-${it.id}" }, contentType = { "playlist" }) { playlist ->
+                        ExplorePlaylistCard(playlist, Modifier.width(cardWidth), onAction)
+                    }
                     if (section.nextKey != null || section.append != AppendState.Idle) {
                         item(key = "shelf-more-$index", contentType = "shelf-tail") {
-                            ShelfTail(index, section.append, Modifier.width(96.dp).height(cardWidth * 9f / 16f), onAction)
+                            ShelfTail(index, section.append, section.nextKey, Modifier.width(96.dp).height(cardWidth * 9f / 16f), onAction)
                         }
                     }
                 }
             }
         }
         item(key = "page-tail", contentType = "page-tail") {
-            PageTail(content.append, content.page.nextKey != null, onAction)
+            PageTail(content.append, content.page.nextKey, onAction)
         }
     }
 }
 
 /** The shelf's trailing tile: idle triggers the append once visible, failed offers retry. */
 @Composable
-private fun ShelfTail(index: Int, append: AppendState, modifier: Modifier, onAction: (ExploreAction) -> Unit) {
+private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, modifier: Modifier, onAction: (ExploreAction) -> Unit) {
     Box(modifier.testTag("explore-shelf-$index-tail"), contentAlignment = Alignment.Center) {
         when (append) {
             AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
@@ -221,7 +234,7 @@ private fun ShelfTail(index: Int, append: AppendState, modifier: Modifier, onAct
                 AppText("Retry", size = 12, line = 16, weight = FontWeight.Medium)
             }
             AppendState.Idle -> {
-                LaunchedEffect(index) { onAction(ExploreAction.LoadShelf(index)) }
+                LaunchedEffect(index, nextKey) { onAction(ExploreAction.LoadShelf(index)) }
                 CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Secondary, strokeWidth = 2.dp)
             }
         }
@@ -230,8 +243,8 @@ private fun ShelfTail(index: Int, append: AppendState, modifier: Modifier, onAct
 
 /** The page tail below the content: idle triggers the append once visible, failed offers retry. */
 @Composable
-private fun PageTail(append: AppendState, hasMore: Boolean, onAction: (ExploreAction) -> Unit) {
-    if (!hasMore && append == AppendState.Idle) return
+private fun PageTail(append: AppendState, nextKey: String?, onAction: (ExploreAction) -> Unit) {
+    if (nextKey == null && append == AppendState.Idle) return
     Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
         when (append) {
             AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp).testTag("explore-tail-loading"),
@@ -239,7 +252,7 @@ private fun PageTail(append: AppendState, hasMore: Boolean, onAction: (ExploreAc
             AppendState.Failed -> Box(Modifier.testTag("explore-tail-retry")) {
                 PillButton("Retry") { onAction(ExploreAction.LoadMore) }
             }
-            AppendState.Idle -> LaunchedEffect(Unit) { onAction(ExploreAction.LoadMore) }
+            AppendState.Idle -> LaunchedEffect(nextKey) { onAction(ExploreAction.LoadMore) }
         }
     }
 }
@@ -269,9 +282,26 @@ private fun CategoryContainer(content: ExploreContent.Ready, width: Float, gridS
                 ExploreVideoCard(item, compact, onAction)
             }
         }
-        item(key = "page-tail", span = { GridItemSpan(maxLineSpan) }, contentType = "page-tail") {
-            PageTail(content.append, content.page.nextKey != null, onAction)
+        gridItems(content.page.playlists, key = { "playlist-${it.id}" }, contentType = { "playlist" }) { playlist ->
+            ExplorePlaylistCard(playlist, Modifier.padding(horizontal = if (compact) 12.dp else 0.dp, vertical = 8.dp), onAction)
         }
+        item(key = "page-tail", span = { GridItemSpan(maxLineSpan) }, contentType = "page-tail") {
+            PageTail(content.append, content.page.nextKey, onAction)
+        }
+    }
+}
+
+@Composable
+private fun ExplorePlaylistCard(playlist: com.hhst.youtubelite.playlist.domain.PlaylistSummary,
+    modifier: Modifier, onAction: (ExploreAction) -> Unit) {
+    val open = { onAction(ExploreAction.OpenPlaylist(playlist.id)) }
+    Column(modifier.testTag("explore-playlist-${playlist.id}")) {
+        com.hhst.youtubelite.playlist.presentation.PlaylistCover(playlist,
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f), open)
+        AppText(playlist.title, Modifier.fillMaxWidth().clickable(onClick = open).padding(top = 8.dp),
+            size = 16, line = 22, weight = FontWeight.Medium, maxLines = 2)
+        if (playlist.owner.isNotBlank()) AppText(playlist.owner, Modifier.padding(top = 2.dp),
+            size = 12, line = 18, color = DesignTokens.Secondary, maxLines = 1)
     }
 }
 
@@ -280,7 +310,10 @@ private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (
     val badge = if (item.live) "LIVE" else item.duration
     Column(Modifier.fillMaxWidth().testTag("explore-item-${item.id}")) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(RoundedCornerShape(if (compact) 0.dp else 12.dp))
-            .clickable(role = Role.Button) { onAction(ExploreAction.OpenVideo(item.id)) }
+            .clickable(role = Role.Button) {
+                com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(item.toProvisional())
+                onAction(ExploreAction.OpenVideo(item.id))
+            }
             .semantics { contentDescription = listOf(item.title, badge).filter(String::isNotBlank).joinToString(", ") }) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
             // No empty pills: the badge only renders with a duration or a live stream.

@@ -23,7 +23,6 @@ import com.hhst.youtubelite.player.surface.PlayerWindowHost
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.PlayerViewModel
-import com.hhst.youtubelite.ui.extension.ExtensionViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -120,8 +119,6 @@ class PlatformCompatibilityAndroidTest {
                 val model = GlobalContext.get().get<PlayerViewModel>()
                 model.refreshPipAvailability()
                 assertFalse(model.uiState.value.pipAvailable)
-                val settings = GlobalContext.get().get<ExtensionViewModel>()
-                assertFalse(settings.uiState.value.toggles.containsKey(PreferenceKeys.ENABLE_PIP))
                 activity.setPlayerPipEligible(true)
                 PipAutoEnter.apply(activity, autoEnter = true)
                 val handle = PipAutoEnter.suppress()

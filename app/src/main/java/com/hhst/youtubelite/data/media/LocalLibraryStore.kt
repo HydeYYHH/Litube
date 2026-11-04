@@ -1,29 +1,31 @@
 package com.hhst.youtubelite.data.media
 
-import com.google.gson.Gson
 import com.hhst.youtubelite.library.domain.*
 import com.hhst.youtubelite.playlist.domain.*
 import com.hhst.youtubelite.saves.domain.SaveChoice
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 /** Device-owned collections use a separate namespace from account data. */
-class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = Gson(),
+class LocalLibraryStore(private val store: AuthStore,
     private val writer: java.util.concurrent.Executor = java.util.concurrent.Executor { it.run() }) {
+    private val json = Json { ignoreUnknownKeys = true }
     private data class Collection(val id: String, val title: String, val description: String, val videos: List<HistoryEntry>)
     private data class Data(val history: List<HistoryEntry> = emptyList(), val collections: List<Collection> = emptyList(), val paused: Boolean = false)
-    // Gson skips Kotlin defaults, so fields a payload predates deserialize as null
-    // behind non-null types; parse through nullable mirrors and normalize once.
-    private data class StoredEntry(
+    // Older payloads may predate fields, so parse through nullable mirrors and
+    // normalize once into the domain types.
+    @Serializable private data class StoredEntry(
         val id: String? = null, val videoId: String? = null, val title: String? = null,
         val author: String? = null, val channelId: String? = null, val artwork: String? = null,
         val duration: String? = null, val progress: Float? = null, val section: String? = null,
         val views: String? = null, val removeToken: String? = null,
     )
-    private data class StoredCollection(
+    @Serializable private data class StoredCollection(
         val id: String? = null, val title: String? = null, val description: String? = null,
         val videos: List<StoredEntry>? = null,
     )
-    private data class StoredData(
+    @Serializable private data class StoredData(
         val history: List<StoredEntry>? = null,
         val collections: List<StoredCollection>? = null,
         val paused: Boolean = false,
@@ -31,6 +33,9 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
     private fun StoredEntry.toEntry() = HistoryEntry(
         id.orEmpty(), videoId.orEmpty(), title.orEmpty(), author.orEmpty(), channelId.orEmpty(),
         artwork.orEmpty(), duration.orEmpty(), progress, section.orEmpty(), views.orEmpty(), removeToken)
+    private fun HistoryEntry.toStored() = StoredEntry(id, videoId, title, author, channelId, artwork, duration, progress, section, views, removeToken)
+    private fun Data.toStored() = StoredData(history.map { it.toStored() },
+        collections.map { StoredCollection(it.id, it.title, it.description, it.videos.map { entry -> entry.toStored() }) }, paused)
     private var loaded: Data? = null
     private var data: Data
         get() = loaded ?: read().also { loaded = it }
@@ -42,8 +47,8 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
     private val persistedRevision = java.util.concurrent.atomic.AtomicLong()
 
     private fun read(): Data = runCatching {
-        store.read(KEY)?.let { json ->
-            val parsed = gson.fromJson(json, StoredData::class.java)
+        store.read(KEY)?.let { raw ->
+            val parsed = json.decodeFromString(StoredData.serializer(), raw)
             Data(
                 history = parsed.history.orEmpty().map { it.toEntry() },
                 collections = parsed.collections.orEmpty().map { stored ->
@@ -173,8 +178,12 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
         }
     }
 
+    /** Test seam: rewrites the encoded payload before it reaches the store. */
+    internal var writeInterceptor: ((String) -> String)? = null
+
     private fun persist(write: PendingWrite) {
-        val json = gson.toJson(write.data)
+        val encoded = this.json.encodeToString(StoredData.serializer(), write.data.toStored())
+        val json = writeInterceptor?.invoke(encoded) ?: encoded
         synchronized(writeLock) {
             if (write.revision <= persistedRevision.get()) return
             store.write(KEY, json)
@@ -185,7 +194,7 @@ class LocalLibraryStore(private val store: AuthStore, private val gson: Gson = G
         const val WATCH_LATER = "local:watch-later"
         private const val KEY = "device-library:data"
         private const val KEY_RECOVERY = "device-library:recovery"
-        /** Recovery copy cap: big enough for forensic value, small enough for MMKV. */
+        /** Recovery copy cap: big enough for forensic value, small enough for one prefs entry. */
         private const val RECOVERY_BACKUP_CHARS = 256 * 1024
 
         /** Production writer: one daemon thread, so callers never marshal the library inline. */

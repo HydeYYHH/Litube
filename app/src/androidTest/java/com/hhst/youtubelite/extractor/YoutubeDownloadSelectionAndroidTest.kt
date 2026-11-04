@@ -6,7 +6,6 @@ import android.media.MediaFormat
 import android.os.Bundle
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.*
 import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
@@ -152,9 +151,9 @@ class YoutubeDownloadSelectionAndroidTest {
                 }
             }
             record["audioTrack"] = plan.audio?.audioTrackKey.orEmpty()
-            instrumentation.sendStatus(2, Bundle().apply { putString("downloadSelection", Gson().toJson(record)) })
+            instrumentation.sendStatus(2, Bundle().apply { putString("downloadSelection", com.hhst.youtubelite.core.TestJson.any(record)) })
         } finally {
-            File(app.filesDir, "followup-download.json").writeText(Gson().toJson(record))
+            File(app.filesDir, "followup-download.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
             transport.cancelInFlight("followup")
             dir.listFiles()?.forEach { it.delete() }
             dir.delete()

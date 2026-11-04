@@ -10,7 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.hhst.youtubelite.account.presentation.SignInViewModel
-import com.hhst.youtubelite.data.media.MmkvAuthStore
+import com.hhst.youtubelite.data.media.PreferencesAuthStore
 import kotlinx.coroutines.Job
 import org.junit.Assert.*
 import org.junit.Rule
@@ -32,22 +32,35 @@ class SignInLifecycleAndroidTest {
         assertFalse(before!!.viewModelScope.coroutineContext[Job]!!.isActive)
     }
 
-    @Test fun credentialsMoveOutOfTheBackedUpPreferenceFile() {
+    @Test fun credentialsAreSealedAndExcludedFromBackups() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val legacy = com.tencent.mmkv.MMKV.defaultMMKV()
         val key = "auth:review_probe"
-        legacy.encode(key, "test-value")
-        val auth = MmkvAuthStore(context)
+        val auth = PreferencesAuthStore(context)
         try {
+            auth.write(key, "test-value")
             assertEquals("test-value", auth.read(key))
-            assertFalse(legacy.containsKey(key))
-            assertTrue(java.io.File(context.noBackupFilesDir, "auth").listFiles().orEmpty()
-                .any { it.isFile && it.length() > 0 && !it.name.endsWith(".crc") })
-        } finally { auth.write(key, null); legacy.removeValueForKey(key) }
+            // The backing file must never contain the plaintext credential.
+            val prefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/media-auth.xml")
+            assertTrue(prefsFile.exists())
+            assertFalse(prefsFile.readText().contains("test-value"))
+            // And the store is excluded from both backup rule sets.
+            fun ruleText(name: String): String {
+                val id = context.resources.getIdentifier(name, "xml", context.packageName)
+                val parser = context.resources.getXml(id)
+                val text = StringBuilder()
+                while (parser.next() != android.content.res.XmlResourceParser.END_DOCUMENT) {
+                    for (i in 0 until parser.attributeCount) text.append(parser.getAttributeValue(i)).append(' ')
+                }
+                return text.toString()
+            }
+            assertTrue(ruleText("backup_rules").contains("media-auth.xml"))
+            assertTrue(ruleText("data_extraction_rules").contains("media-auth.xml"))
+        } finally { auth.write(key, null) }
     }
 
     @Test fun submittingSearchHistoryPersistsWithoutAnOpenSearchPanel() = kotlinx.coroutines.runBlocking {
-        val kv = com.tencent.mmkv.MMKV.mmkvWithID("search-history-review")
+        val kv = com.hhst.youtubelite.core.PreferenceStore.of(
+            ApplicationProvider.getApplicationContext<Context>(), "search-history-review")
         kv.clearAll()
         try {
             val rows = com.hhst.youtubelite.data.media.MediaSearchSuggestions(

@@ -166,6 +166,7 @@
     <string name="copy">Պատճեն</string>
     <string name="copied">Պատճենվել է</string>
     <string name="copy_all">Պատճենել բոլորը</string>
+    <string name="cast_searching">Որոնում…</string>
     <string name="queue_now_playing">Այժմ խաղում է</string>
     <string name="clear_queue_confirm">Մաքրե՞լ ամբողջ հերթը:</string>
     <string name="ok">Լավ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Փակել</string>
     <string name="verification_completed">Ստուգումն ավարտվեց։ Կրկին փորձ…</string>
     <string name="verification_still_blocked">Ստուգումից հետո այդուհանդերձ արգելափակված է։ Փորձեք ավելի ուշ։</string>
+    <string name="comments_title">Մեկնաբանություններ</string>
+    <string name="comments_sort_top">Հանրաճանաչ մեկնաբանություններ</string>
+    <string name="comments_sort_newest">Նախ նորերը</string>
+    <string name="comments_sort_chip_top">Հանրաճանաչ</string>
+    <string name="comments_sort_chip_newest">Նոր</string>
+    <string name="comments_composer_add">Ավելացնել մեկնաբանություն</string>
+    <string name="comments_composer_reply">Պատասխանել</string>
+    <string name="comments_composer_edit">Խմբագրել մեկնաբանությունը</string>
+    <string name="comments_composer_text_hint">Մեկնաբանության տեքստը</string>
+    <string name="comments_composer_text_edit_hint">Խմբագրել մեկնաբանության տեքստը</string>
+    <string name="comments_composer_submit">Մեկնաբանել</string>
+    <string name="comments_composer_sending">Ուղարկվում է…</string>
+    <string name="comments_composer_save">Պահպանել</string>
+    <string name="comments_delete_title">Ջնջել</string>
+    <string name="comments_show_more_replies">Ցուցադրել ավելի շատ պատասխաններ</string>
+    <string name="comments_load_more_failed">Չհաջողվեց բեռնել ավելի շատ մեկնաբանություններ</string>
+    <string name="comments_hide_replies">Թաքցնել պատասխանները</string>
+    <string name="home_music_charts">Երաժշտական հիթ-շքերթներ</string>
+    <string name="home_popular_gaming">Հանրաճանաչ խաղերում</string>
+    <string name="home_popular_sports">Հանրաճանաչ սպորտում</string>
+    <string name="home_top_news">Գլխավոր նորություններ</string>
 </resources>

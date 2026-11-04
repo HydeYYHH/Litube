@@ -82,8 +82,8 @@ class BatchDScreenshotAndroidTest {
             }
         }
         var sheet = compose.onNodeWithTag("save-to-playlist").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
-        assertEquals(8f, sheet.left, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
+        assertEquals(0f, sheet.left, 0.5f)
         assertEquals(820f, sheet.bottom, 0.5f)
         val row = compose.onNodeWithTag("save-menu-watch-later").fetchSemanticsNode().boundsInRoot
         assertEquals(48f, row.height, 0.5f)
@@ -100,7 +100,7 @@ class BatchDScreenshotAndroidTest {
             draft = NewPlaylistDraft("Night walks", "")
         }
         val formSheet = compose.onNodeWithTag("new-playlist-sheet").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, formSheet.width, 0.5f)
+        assertEquals(390f, formSheet.width, 0.5f)
         assertEquals(820f, formSheet.bottom, 0.5f)
         assertTrue("Form sheet height ${formSheet.height}", formSheet.height >= 120f)
         compose.onNodeWithTag("new-playlist-title").assertIsDisplayed()
@@ -121,7 +121,7 @@ class BatchDScreenshotAndroidTest {
             }
         }
         val sheet = compose.onNodeWithTag("feedback-sheet").fetchSemanticsNode().boundsInRoot
-        assertEquals(374f, sheet.width, 0.5f)
+        assertEquals(390f, sheet.width, 0.5f)
         assertEquals(820f, sheet.bottom, 0.5f)
         assertEquals(3, compose.onAllNodesWithTag("feedback-reason-0").fetchSemanticsNodes().size +
             compose.onAllNodesWithTag("feedback-reason-1").fetchSemanticsNodes().size +

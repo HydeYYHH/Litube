@@ -27,6 +27,12 @@ class LibraryViewModelTest {
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
 
+    @Test fun queueIsAvailableWithoutAnAccount() = runTest {
+        val vm = YouViewModel(FixtureLibraryRepository(LibraryScenario.Content), SavedStateHandle(), LibraryScenario.Content, false)
+        vm.onAction(LibraryAction.OpenQueue)
+        assertEquals(LibraryNavigationRequest.OpenQueue, vm.navigationRequests.first())
+    }
+
     @Test fun loginRefreshesAndLogoutDiscardsPendingAccountContent() = runTest {
         val loads = mutableListOf<String>()
         val vm = YouViewModel(recordingRepository(loads), SavedStateHandle(), LibraryScenario.Content, false)
@@ -59,6 +65,16 @@ class LibraryViewModelTest {
         advanceUntilIdle()
         signedIn.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
         assertEquals(LibraryNavigationRequest.SwitchAccount, signedIn.navigationRequests.first())
+    }
+
+    @Test fun deviceIdentityCanReturnToASavedAccount() = runTest {
+        val repository = object : LibraryRepository by FixtureLibraryRepository(LibraryScenario.Content) {
+            override val hasSavedAccounts = true
+        }
+        val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, signedIn = false)
+        advanceUntilIdle()
+        vm.onAction(LibraryAction.AccountSelected(com.hhst.youtubelite.account.domain.AccountMenuAction.SwitchAccount))
+        assertEquals(LibraryNavigationRequest.SwitchAccount, vm.navigationRequests.first())
     }
 
     @Test fun youPageLoadsSectionsAndEmitsTypedExits() = runTest {
@@ -469,14 +485,14 @@ class LibraryViewModelTest {
         assertNull(withTimeoutOrNull(1) { vm.navigationRequests.first() })
     }
 
-    // --- Batch E: device/account library source selection ---
+    // --- Identity-driven library source: device storage backs anonymous, account backs signed in ---
 
-    private fun sourcedRepository(store: com.hhst.youtubelite.data.media.LibrarySourceStore) = object : LibraryRepository {
+    private fun identityRepository(signedIn: () -> Boolean) = object : LibraryRepository {
         override val supportsLocal get() = true
-        val youReads = ArrayList<LibrarySource>()
+        val youReads = ArrayList<Boolean>()
         override suspend fun you(): YouPage {
-            youReads += store.current()
-            return if (store.current() == LibrarySource.Device)
+            youReads += signedIn()
+            return if (!signedIn())
                 YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), emptyList(), emptyList())
             else YouPage(FixtureLibraryRepository.profile(), emptyList(), FixtureLibraryRepository.collections())
         }
@@ -493,40 +509,39 @@ class LibraryViewModelTest {
             return HistoryPage(listOf(HistoryEntry("h1", "h1", "One", "A", "c", "a", "1:00", section = "Today")), nextKey = "k1")
         }
         override suspend fun historyNext(cursor: String) =
-            HistoryPage(listOf(HistoryEntry("h2", "h2", "Two", "A", "c", "a", "1:00", section = "Today")))
+            HistoryPage(listOf(HistoryEntry("h2", "h2", "Two", "A", "c", "a", "1:00",section = "Today")))
         override suspend fun playlists() = PlaylistCollectionPage(emptyList())
     }
 
-    @Test fun watchLaterExitFollowsTheSelectedSource() = runTest {
-        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
-        val vm = YouViewModel(sourcedRepository(store), SavedStateHandle(), LibraryScenario.Content, true, sourceStore = store)
+    @Test fun watchLaterExitFollowsTheSessionIdentity() = runTest {
+        var signedIn = true
+        val repository = identityRepository { signedIn }
+        val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, true)
         val requests = mutableListOf<LibraryNavigationRequest>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.navigationRequests.collect { requests += it } }
         advanceUntilIdle()
         assertEquals("Litube Studio", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
-        assertTrue(vm.uiState.value.sourceSelectable)
         vm.onAction(LibraryAction.OpenWatchLater)
         vm.onAction(LibraryAction.OpenLiked)
         advanceUntilIdle()
         assertEquals(listOf(LibraryNavigationRequest.Playlist("WL"), LibraryNavigationRequest.Playlist("LL")), requests)
 
-        vm.onAction(LibraryAction.SourceSelected(LibrarySource.Device))
+        // The identity drops to anonymous: the page reloaded against the device storage.
+        signedIn = false
+        vm.updateSession(false, 7)
         advanceUntilIdle()
-        // The page reloaded against the device storage and the header says so.
         assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
-        assertEquals(LibrarySource.Device, vm.uiState.value.source)
         vm.onAction(LibraryAction.OpenWatchLater)
-        // Liked has no device lane: it emits nothing under the device source.
+        // Liked has no device lane: it emits nothing while anonymous.
         vm.onAction(LibraryAction.OpenLiked)
         advanceUntilIdle()
         assertEquals(listOf(LibraryNavigationRequest.Playlist("WL"), LibraryNavigationRequest.Playlist("LL"),
             LibraryNavigationRequest.Playlist(com.hhst.youtubelite.data.media.LocalLibraryStore.WATCH_LATER)), requests)
     }
 
-    @Test fun sourceSwitchReloadsHistoryAndDropsTheAccountCursor() = runTest {
-        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
+    @Test fun anIdentityChangeReloadsHistoryAndDropsTheStaleCursor() = runTest {
         val repository = PagedHistoryRepository()
-        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content, signedIn = true, saveRepository = null, sourceStore = store)
+        val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content, signedIn = true, saveRepository = null)
         advanceUntilIdle()
         vm.onAction(LibraryAction.LoadHistoryNext)
         advanceUntilIdle()
@@ -534,7 +549,7 @@ class LibraryViewModelTest {
         assertEquals(listOf("h1", "h2"), page.entries.map { it.id })
         assertNull(page.nextKey)
 
-        vm.onAction(LibraryAction.SourceSelected(LibrarySource.Device))
+        vm.updateSession(false, 99)
         advanceUntilIdle()
         // The appended page and its spent cursor left with the account scope; page one re-read.
         page = (vm.uiState.value.content as HistoryContent.Ready).page
@@ -544,18 +559,17 @@ class LibraryViewModelTest {
         assertEquals(AppendState.Idle, vm.uiState.value.append)
     }
 
-    @Test fun signOutKeepsTheDevicePageAndHidesTheSwitch() = runTest {
-        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
-        store.select(LibrarySource.Device)
-        val vm = YouViewModel(sourcedRepository(store), SavedStateHandle(), LibraryScenario.Content, true, sourceStore = store)
+    @Test fun signOutKeepsTheDevicePageBackedContent() = runTest {
+        var signedIn = true
+        val repository = identityRepository { signedIn }
+        val vm = YouViewModel(repository, SavedStateHandle(), LibraryScenario.Content, true)
         advanceUntilIdle()
-        assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        assertEquals("Litube Studio", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
+        signedIn = false
         vm.updateSession(false, 7)
         advanceUntilIdle()
-        // Device data backs the signed-out page too; the choice itself stays for next sign-in.
+        // Device data backs the signed-out page too.
         assertEquals("On this device", (vm.uiState.value.content as LibraryContent.Ready).page.account.name)
-        assertFalse(vm.uiState.value.sourceSelectable)
-        assertEquals(LibrarySource.Device, store.current())
     }
 
     @Test fun historyRefreshResetsAndCancelsAnInterruptedAppend() = runTest {
@@ -597,22 +611,20 @@ class LibraryViewModelTest {
         assertTrue(vm.uiState.value.content is CollectionContent.Ready)
     }
 
-    @Test fun historyUndoIsDiscardedWhenTheLibrarySourceChanges() = runTest {
+    @Test fun historyUndoIsDiscardedWhenTheIdentityChanges() = runTest {
         val entry = historyEntry("a", "token")
         val live = LiveLibraryRepository(listOf(entry, historyEntry("b", "other"))).apply {
             removalRecord = RemovedHistoryEntry(entry, null, "b", 0)
         }
         val repository = object : LibraryRepository by live { override val supportsLocal = true }
-        val store = com.hhst.youtubelite.data.media.LibrarySourceStore(com.hhst.youtubelite.data.media.MemoryAuthStore())
-        store.select(LibrarySource.Device)
         val vm = HistoryViewModel(repository, SavedStateHandle(), LibraryScenario.Content,
-            saveRepository = FakeSaveRepository(), sourceStore = store)
+            saveRepository = FakeSaveRepository())
         advanceUntilIdle()
         vm.onAction(LibraryAction.OpenMenu("a"))
         vm.onAction(LibraryAction.MenuSelected(HistoryMenuAction.RemoveFromHistory))
         advanceUntilIdle()
         assertNotNull(vm.uiState.value.undo)
-        store.select(LibrarySource.Account)
+        vm.updateSession(false, 41)
         advanceUntilIdle()
         vm.onAction(LibraryAction.UndoHistoryRemove)
         advanceUntilIdle()

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.downloader.core
 
+import kotlinx.serialization.Serializable
+
 /** Pipeline stage. Orthogonal to [DownloadStatus]. */
 enum class DownloadPhase {
     RESOLVE,
@@ -73,6 +75,7 @@ sealed interface DownloadTarget {
     data class Batch(val batchId: String) : DownloadTarget
 }
 
+@Serializable
 data class DownloadConfig(
     val videoQuality: String? = null,
     val audioOnly: Boolean = false,
@@ -103,6 +106,7 @@ data class DownloadConfig(
 
 
 
+@Serializable
 data class DownloadRequest(
     val videoId: String,
     val title: String = "",
@@ -111,6 +115,7 @@ data class DownloadRequest(
     val config: DownloadConfig = DownloadConfig(),
 )
 
+@Serializable
 data class BatchSnapshot(
     val source: BatchSource,
     val name: String,
@@ -123,11 +128,13 @@ data class BatchSelection(
     val configOverrides: Map<Int, DownloadConfig> = emptyMap(),
 )
 
+@Serializable
 data class TaskRef(
     val taskId: String,
     val owned: Boolean,
 )
 
+@Serializable
 data class EnqueueResult(
     val newCount: Int,
     val skippedCount: Int,

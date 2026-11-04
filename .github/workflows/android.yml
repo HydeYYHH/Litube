@@ -30,9 +30,9 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v6
-      - name: Unit tests, Lint and debug build
+      - name: Unit tests, Lint and application builds
         run: >-
-          bash gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+          bash gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug :app:lintVitalRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
           --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
           "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
       - name: Build debug-signed R8 verification APKs
@@ -53,6 +53,7 @@ jobs:
           name: android-apks-and-mapping
           path: |
             app/build/outputs/apk
+            app/build/outputs/mapping/release
             app/build/outputs/mapping/minifiedDebug
             app/build/outputs/mapping/minifiedDebugAndroidTest
             app/build/outputs/diagnostic-mappings
@@ -61,7 +62,7 @@ jobs:
   offline-device:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -148,6 +149,11 @@ jobs:
               com.hhst.youtubelite.player.datasource.PlaybackLoadErrorAndroidTest
               com.hhst.youtubelite.player.engine.TransportRecoveryAndroidTest
               com.hhst.youtubelite.player.engine.PinnedVideoRecoveryAndroidTest
+              com.hhst.youtubelite.player.engine.MediaResponseRecoveryAndroidTest
+              com.hhst.youtubelite.player.engine.RemoteResumeAndroidTest
+              com.hhst.youtubelite.player.engine.WatchStartSecondsAndroidTest
+              com.hhst.youtubelite.player.engine.CastStateIsolationAndroidTest
+              com.hhst.youtubelite.core.TrafficVerificationLifecycleAndroidTest
               com.hhst.youtubelite.player.engine.NamedAudioAndroidTest#namedAudioSurvivesQualityChanges
               com.hhst.youtubelite.player.engine.OriginalAudioAndroidTest
               com.hhst.youtubelite.downloader.android.DownloadOptionsAndroidTest

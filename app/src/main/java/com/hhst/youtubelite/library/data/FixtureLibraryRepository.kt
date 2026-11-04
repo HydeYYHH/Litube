@@ -7,8 +7,7 @@ import kotlinx.coroutines.delay
 
 /** All artwork and metadata are packaged locally. This class has no network dependency. */
 class FixtureLibraryRepository(private val scenario: LibraryScenario = LibraryScenario.Content,
-    override val supportsLocal: Boolean = false,
-    private val source: () -> com.hhst.youtubelite.library.domain.LibrarySource = { com.hhst.youtubelite.library.domain.LibrarySource.Account }) : LibraryRepository {
+    override val supportsLocal: Boolean = false) : LibraryRepository {
     // The error models a transient outage: the first load fails and Retry recovers.
     private var failedOnce = false
 
@@ -22,9 +21,6 @@ class FixtureLibraryRepository(private val scenario: LibraryScenario = LibrarySc
     override suspend fun you(): YouPage {
         delay(140)
         guard()
-        // The device source presents the device header even in fixtures, mirroring the live route.
-        if (supportsLocal && source() == com.hhst.youtubelite.library.domain.LibrarySource.Device)
-            return YouPage(AccountProfile("On this device", "Local history and playlists", "", ""), historyEntries(), playlists().playlists)
         return YouPage(profile(), historyEntries(), playlists().playlists)
     }
 

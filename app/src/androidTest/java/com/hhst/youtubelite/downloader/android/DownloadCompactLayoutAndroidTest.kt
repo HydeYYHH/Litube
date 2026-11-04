@@ -19,6 +19,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.downloader.ui.SingleVideoConfirmSheet
 import com.hhst.youtubelite.ui.theme.AppTheme
+import com.hhst.youtubelite.ui.theme.NeutralControls
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -39,9 +40,11 @@ class DownloadCompactLayoutAndroidTest {
         }
         compose.setContent {
             AppTheme(darkTheme = dark, dynamicColor = false) {
-                Surface(Modifier.fillMaxSize()) {
-                    SingleVideoConfirmSheet(vid("dQw4w9wgGcQ"), "Sample clip", "Channel", null,
-                        harness.viewModel, {}, {})
+                NeutralControls {
+                    Surface(Modifier.fillMaxSize()) {
+                        SingleVideoConfirmSheet(vid("dQw4w9wgGcQ"), "Sample clip", "Channel", null,
+                            harness.viewModel, {}, {})
+                    }
                 }
             }
         }

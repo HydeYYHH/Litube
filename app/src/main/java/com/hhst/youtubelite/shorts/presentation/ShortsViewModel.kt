@@ -26,7 +26,9 @@ class ShortsViewModel(
     private val scenario: ShortsScenario,
     private val startItemId: String?,
     private val videoActions: com.hhst.youtubelite.watch.domain.VideoActions? = null,
-    private val preloader: com.hhst.youtubelite.shorts.data.ShortsMediaPreloader? = null,
+    private val preloader: com.hhst.youtubelite.shorts.data.ShortsPreloader? = null,
+    /** Shared save flow; null in fixtures, where the save sheet stays request-only. */
+    private val saves: com.hhst.youtubelite.saves.domain.SaveRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ShortsUiState(
         startItemId = startItemId,
@@ -42,6 +44,7 @@ class ShortsViewModel(
     private val consumedCursors = mutableSetOf<String>()
     private var actionJob: Job? = null
     private var hydrateJob: Job? = null
+    private var readyItemId: String? = null
 
     /** Per-item hydration bookkeeping; only terminal states stop further reads. */
     private sealed interface Hydration {
@@ -62,6 +65,9 @@ class ShortsViewModel(
         if (generation == sessionGeneration) return
         sessionGeneration = generation
         overlay(ShortsOverlay.None)
+        // The open sheet shows the previous account's playlist membership; a
+        // toggle after the switch would write stale choices under the new one.
+        saveSheet?.close()
         preloader?.cancel()
         savedState["currentItem"] = startItemId
         _uiState.update { it.copy(currentItemId = startItemId) }
@@ -72,6 +78,11 @@ class ShortsViewModel(
     val navigationRequests: Flow<ShortsNavigationRequest> = navigation.receiveAsFlow()
     private val notices = Channel<AppNotice>(Channel.BUFFERED)
     val actionNotices: Flow<AppNotice> = notices.receiveAsFlow()
+
+    /** Shared live save-sheet flow (search results pattern); null keeps the row out of the menu. */
+    val saveSheet: com.hhst.youtubelite.saves.presentation.SaveSheetController? = saves?.let {
+        com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
+    }
 
     init {
         if (scenario == ShortsScenario.Loading) {
@@ -85,6 +96,8 @@ class ShortsViewModel(
             ShortsAction.LoadMore -> loadMore()
             ShortsAction.RetryMore -> loadMore(retry = true)
             is ShortsAction.SelectItem -> {
+                if (action.itemId != _uiState.value.currentItemId) readyItemId = null
+                preloader?.select(action.itemId)
                 savedState["currentItem"] = action.itemId
                 _uiState.update { it.copy(currentItemId = action.itemId) }
                 hydrateAround(action.itemId)
@@ -105,12 +118,12 @@ class ShortsViewModel(
                             notices.trySend(AppNotice.SignIn)
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
-                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                            notices.trySend(AppNotice.Message(UNCONFIRMED))
+                        catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                            notices.trySend(failure("shorts_subscribe", error, action.channelId, UNCONFIRMED))
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
-                        catch (_: Exception) {
-                            notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again."))
+                        catch (error: Exception) {
+                            notices.trySend(failure("shorts_subscribe", error, action.channelId, "Couldn't update this subscription. Try again."))
                             _uiState.update { it.copy(subscriptionsPending = it.subscriptionsPending - action.channelId) }
                         }
                     }
@@ -121,6 +134,7 @@ class ShortsViewModel(
             ShortsAction.CloseComments -> overlay(ShortsOverlay.None)
             ShortsAction.CloseMenu -> overlay(ShortsOverlay.None)
             is ShortsAction.OpenMenu -> overlay(ShortsOverlay.Menu(action.itemId))
+            is ShortsAction.OpenSaveToPlaylist -> saveSheet?.open(action.itemId)
             is ShortsAction.MenuSelected -> {
                 val itemId = (_uiState.value.overlay as? ShortsOverlay.Menu)?.itemId
                 overlay(ShortsOverlay.None)
@@ -147,10 +161,14 @@ class ShortsViewModel(
                 _uiState.update { it.copy(ratings = it.ratings + (itemId to next)) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) { notices.trySend(AppNotice.SignIn) }
-            catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(AppNotice.Message(UNCONFIRMED)) }
-            catch (_: Exception) { notices.trySend(AppNotice.Message("Couldn't update this video. Try again.")) }
+            catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) { notices.trySend(failure("shorts_rate", error, itemId, UNCONFIRMED)) }
+            catch (error: Exception) { notices.trySend(failure("shorts_rate", error, itemId, "Couldn't update this video. Try again.")) }
         }
     }
+
+    /** Copyable failure notice for an account write, carrying the sanitized report. */
+    private fun failure(operation: String, error: Exception, itemId: String, message: String): AppNotice =
+        com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error, mapOf("video_id" to itemId), message)
 
     /**
      * Hydrates the settled item and, at most, the next one. A swipe cancels the
@@ -162,13 +180,26 @@ class ShortsViewModel(
         val items = (_uiState.value.content as? ShortsContent.Ready)?.page?.items.orEmpty()
         val index = items.indexOfFirst { it.id == itemId }
         val next = items.getOrNull(index + 1)?.id.takeIf { index >= 0 }
-        preloader?.preload(next)
         hydrateJob = viewModelScope.launch {
             hydrateOne(itemId, request)
             if (request != generation) return@launch
             next ?: return@launch
             hydrateOne(next, request)
         }
+    }
+
+    fun onPlaybackReady(itemId: String) {
+        if (itemId != _uiState.value.currentItemId) return
+        readyItemId = itemId
+        preloadNext()
+    }
+
+    private fun preloadNext() {
+        val state = _uiState.value
+        val id = readyItemId?.takeIf { it == state.currentItemId } ?: return
+        val items = (state.content as? ShortsContent.Ready)?.page?.items ?: return
+        val index = items.indexOfFirst { it.id == id }
+        if (index >= 0) items.getOrNull(index + 1)?.id?.let { preloader?.preload(it) }
     }
 
     private suspend fun hydrateOne(itemId: String, request: Int) {
@@ -252,6 +283,7 @@ class ShortsViewModel(
                             items = (readyPage.items + page.items.filter { it.id !in seen }).distinctBy { it.id },
                             nextKey = page.nextKey?.takeUnless { it in consumedCursors || page.items.isEmpty() })))
                 }
+                preloadNext()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -268,6 +300,7 @@ class ShortsViewModel(
         hydration.clear()
         consumedCursors.clear()
         preloader?.cancel()
+        readyItemId = null
         val request = ++generation
         _uiState.update { it.copy(content = ShortsContent.Loading, appendLoading = false, appendFailed = false,
             ratings = emptyMap(), subscriptions = emptyMap(), subscriptionsPending = emptySet(), details = emptyMap()) }

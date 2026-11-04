@@ -24,6 +24,7 @@ import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.hhst.youtubelite.player.datasource.StreamSelection
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,41 +58,66 @@ class ShortsMediaPreloader(
     private val dataSources: PlayerDataSource,
     private val prefs: ExtensionManager? = null,
     private val demandFor: (String) -> PlaybackDemand? = { null },
-) {
+) : ShortsPreloader {
     /** Serializes prefetch network work; playback always outranks it. */
     private val networkPermit = Semaphore(1)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
     private var job: Job? = null
     @Volatile private var target: String? = null
+    /**
+     * Hand-off flag of the single running prefetch. Set once its target became
+     * the item the user settled on: media warming must stop (its reads would
+     * compete with the player for network and cache locks) while the extraction
+     * result stays claimable by playback. Per-run so a retarget cannot reset a
+     * hand-over the still-finishing job has not observed yet.
+     */
+    @Volatile private var handover: AtomicBoolean? = null
     /** Videos this session's prefetch warmed, with the bytes written. */
     private val warmed = object : LinkedHashMap<String, Long>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_WARMED
     }
 
     /** Starts (or re-targets) the single background prefetch for [videoId]. */
-    fun preload(videoId: String?) {
+    override fun preload(videoId: String?) {
         val id = videoId?.let(VideoId::parse) ?: run { cancel(); return }
         synchronized(lock) {
-            if (id == target && job?.isActive == true) return
+            if (id == target && (job?.isActive == true || warmed[id]?.let { it > 0 } == true)) return
             if (target != null && target != id) AppLog.detail(
                 AppLog.Category.PLAYER, "shorts_prefetch_retarget",
                 mapOf("video_id" to id, "superseded" to true))
             job?.cancel()
             target = id
+            val flag = java.util.concurrent.atomic.AtomicBoolean(false)
+            handover = flag
             val demand = demandFor(id)
-            job = scope.launch { run(id, demand) }
+            job = scope.launch { run(id, demand, flag) }
         }
     }
 
-    /** Stops any in-flight prefetch; called on identity change, privacy switch and leaving Shorts. */
-    fun cancel() {
+    /** Preserves preparation of the selected item while releasing a superseded target. */
+    override fun select(videoId: String) {
+        synchronized(lock) {
+            // Keep the settled item's job: its remaining warming is exactly the
+            // head playback is about to read, so finishing it helps the
+            // foreground instead of fighting it. Measured variant, not a guess.
+            if (target == videoId) return
+            job?.cancel()
+            job = null
+            target = null
+            handover = null
+        }
+    }
+
+    /** Stops prefetch on identity changes, privacy switches and leaving Shorts. */
+    override fun cancel() {
         synchronized(lock) {
             if (job?.isActive == true) AppLog.detail(
                 AppLog.Category.PLAYER, "shorts_prefetch_cancelled", emptyMap())
             job?.cancel()
             job = null
             target = null
+            handover = null
             warmed.clear()
         }
     }
@@ -103,7 +129,7 @@ class ShortsMediaPreloader(
      */
     fun prefetchedBytes(videoId: String): Long = synchronized(lock) { warmed[videoId] ?: 0L }
 
-    private suspend fun run(videoId: String, demand: PlaybackDemand?) {
+    private suspend fun run(videoId: String, demand: PlaybackDemand?, handover: AtomicBoolean) {
         val session = MediaSession.snapshot().generation
         if (MediaSession.privateBrowsing() || prefs?.isEnabled(PreferenceKeys.DATA_SAVER) == true) return
         coroutineContext.ensureActive()
@@ -117,15 +143,19 @@ class ShortsMediaPreloader(
             val requestContext = coroutineContext
             val checkActive = {
                 requestContext.ensureActive()
+                if (handover.get()) throw CancellationException("Foreground claimed")
                 if (MediaSession.privateBrowsing() || MediaSession.snapshot().generation != session ||
                     prefs?.isEnabled(PreferenceKeys.DATA_SAVER) == true) throw CancellationException("Prefetch stopped")
             }
             val formats = pickFormats(stream, demand)
             val transport = if (formats.isNotEmpty()) "dash" else "hls"
-            val cached = if (formats.isNotEmpty()) cacheFormatHeads(formats, checkActive)
-                else cacheHlsHead(videoId, stream, session, demand, checkActive)
+            val cached = if (formats.isNotEmpty()) cacheFormatHeads(videoId, formats, checkActive)
+                else cacheHlsHead(videoId, stream, session, demand, checkActive).also { warmedHls ->
+                    // The HLS path writes in one pass; record its total here (the
+                    // DASH path records each format slice as it lands).
+                    if (warmedHls > 0) synchronized(lock) { warmed[videoId] = (warmed[videoId] ?: 0L) + warmedHls }
+                }
             if (cached > 0) {
-                synchronized(lock) { warmed[videoId] = cached }
                 AppLog.event(AppLog.Category.PLAYER, "shorts_prefetch",
                     mapOf("video_id" to videoId, "bytes" to cached, "formats" to formats.size, "transport" to transport))
             }
@@ -136,7 +166,9 @@ class ShortsMediaPreloader(
             AppLog.event(AppLog.Category.PLAYER, "shorts_prefetch_skip",
                 mapOf("video_id" to videoId, "reason" to "error", "kind" to error.javaClass.simpleName))
         } finally {
-            preparation.cancel()
+            // A claimed preparation belongs to playback now; releasing it would
+            // cancel the shared extraction the foreground is about to join.
+            if (!handover.get()) preparation.cancel()
         }
     }
 
@@ -145,7 +177,7 @@ class ShortsMediaPreloader(
             mapOf("video_id" to videoId, "reason" to reason) + extra)
     }
 
-    private suspend fun cacheFormatHeads(formats: List<Format>, checkActive: () -> Unit): Long {
+    private suspend fun cacheFormatHeads(videoId: String, formats: List<Format>, checkActive: () -> Unit): Long {
         var remaining = TOTAL_BUDGET_BYTES
         var cached = 0L
         for (format in formats) {
@@ -155,6 +187,9 @@ class ShortsMediaPreloader(
             }
             cached += covered
             remaining -= covered
+            // Record as slices land: a hand-over or cancel mid-loop must still
+            // credit the bytes playback can actually serve from cache.
+            if (covered > 0) synchronized(lock) { warmed[videoId] = (warmed[videoId] ?: 0L) + covered }
         }
         return cached
     }

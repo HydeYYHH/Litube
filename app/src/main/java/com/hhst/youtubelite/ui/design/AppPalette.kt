@@ -38,7 +38,7 @@ val LightAppPalette = AppPalette(
 )
 
 val DarkAppPalette = AppPalette(
-    background = Color(0xFF0F0F0F),
+    background = Color.Black,
     ink = Color(0xFFF1F1F1),
     secondary = Color(0xFFAAAAAA),
     surface = Color(0xFF212121),

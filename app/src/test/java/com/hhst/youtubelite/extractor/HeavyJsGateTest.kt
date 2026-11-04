@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import java.util.Collections
 import org.junit.Assert.*
 import org.junit.Test
@@ -19,7 +19,7 @@ class HeavyJsGateTest {
     }
     private fun context(deadline: Long = Long.MAX_VALUE, playback: Boolean = true, current: () -> Boolean = { true }) =
         ExtractionContext(YoutubeWebSession("test", WebAccount.ANONYMOUS, 0, null, null,
-            null, null, "UA", 0, null, "test", JsonObject(), { "" }), noopTransport,
+            null, null, "UA", 0, null, "test", JsonObject(emptyMap()), { "" }), noopTransport,
             false, false, playback, "", deadline, current, noopDiagnostics)
 
     @Test fun queuedDeadlineExpiresBeforeTheOwnerReleases() {

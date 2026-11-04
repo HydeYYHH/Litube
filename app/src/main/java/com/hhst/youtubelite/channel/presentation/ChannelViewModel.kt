@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.channel.data.ChannelScenario
 import com.hhst.youtubelite.channel.domain.*
+import com.hhst.youtubelite.watch.domain.toProvisional
 import com.hhst.youtubelite.post.domain.PostIdentity
 import com.hhst.youtubelite.post.domain.PostMenuAction
 import com.hhst.youtubelite.post.domain.PostSummary
@@ -66,7 +67,10 @@ class ChannelViewModel(
     private val sectionJobs = mutableMapOf<ChannelTab, Job>()
     private val sectionGenerations = mutableMapOf<ChannelTab, Int>()
 
+    /** Identity epoch captured by in-flight writes so a switched session cannot publish into the new one. */
+    private var sessionGeneration = 0L
     fun refreshSession() {
+        sessionGeneration++
         subscribeJob?.cancel()
         searchJob?.cancel()
         appendJob?.cancel()
@@ -102,7 +106,10 @@ class ChannelViewModel(
             is ChannelAction.SelectDestination -> navigation.trySend(ChannelNavigationRequest.Destination(action.destination))
             is ChannelAction.SelectTab -> selectTab(action.tab)
             is ChannelAction.OpenItemMenu -> navigation.trySend(ChannelNavigationRequest.ItemMenu(action.videoId))
-            is ChannelAction.OpenVideo -> navigation.trySend(ChannelNavigationRequest.Watch(action.videoId))
+            is ChannelAction.OpenVideo -> {
+                rememberProvisional(action.videoId)
+                navigation.trySend(ChannelNavigationRequest.Watch(action.videoId))
+            }
             is ChannelAction.OpenPlaylist -> navigation.trySend(ChannelNavigationRequest.Playlist(action.playlistId))
             is ChannelAction.OpenPlaylistMenu -> setOverlay(ChannelOverlay.PlaylistMenu(action.playlistId))
             ChannelAction.CloseOverlay -> setOverlay(ChannelOverlay.None)
@@ -121,10 +128,13 @@ class ChannelViewModel(
                 else if (subscribeJob?.isActive != true) {
                     val ready = uiState.value.content as? ChannelContent.Ready ?: return
                     val target = ready.page.profile.subscribed != true
+                    // A switched session's late failure must not publish into the new one.
+                    val requestSession = sessionGeneration
                     _state.update { it.copy(subscribePending = true) }
                     subscribeJob = viewModelScope.launch {
                         try {
                             actions.subscribe(uiState.value.channelId, target)
+                            if (sessionGeneration != requestSession) return@launch
                             _state.update { state ->
                                 val current = state.content as? ChannelContent.Ready ?: return@update state
                                 state.copy(content = current.copy(page = current.page.copy(
@@ -132,16 +142,22 @@ class ChannelViewModel(
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: com.hhst.youtubelite.watch.domain.SignInRequiredException) {
-                            _state.update { it.copy(subscribePending = false) }
-                            notices.trySend(AppNotice.SignIn)
+                            if (sessionGeneration == requestSession) {
+                                _state.update { it.copy(subscribePending = false) }
+                                notices.trySend(AppNotice.SignIn)
+                            }
                         }
-                        catch (_: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
-                            _state.update { it.copy(subscribePending = false) }
-                            notices.trySend(AppNotice.Message("The server did not confirm this change. Please refresh before trying again."))
+                        catch (error: com.hhst.youtubelite.watch.domain.UnconfirmedActionException) {
+                            if (sessionGeneration == requestSession) {
+                                _state.update { it.copy(subscribePending = false) }
+                                notices.trySend(report("channel_subscribe", error))
+                            }
                         }
-                        catch (_: Exception) {
-                            _state.update { it.copy(subscribePending = false) }
-                            notices.trySend(AppNotice.Message("Couldn't update this subscription. Try again."))
+                        catch (error: Exception) {
+                            if (sessionGeneration == requestSession) {
+                                _state.update { it.copy(subscribePending = false) }
+                                notices.trySend(report("channel_subscribe", error))
+                            }
                         }
                     }
                 }
@@ -207,6 +223,14 @@ class ChannelViewModel(
                 if (video.liveNow) {
                     navigation.trySend(ChannelNavigationRequest.LiveStream(uiState.value.channelId, video.id))
                 } else {
+                    val profile = (uiState.value.content as? ChannelContent.Ready)?.page?.profile
+                    com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(
+                        com.hhst.youtubelite.watch.domain.WatchProvisional(
+                            videoId = video.id, title = video.title, channel = profile?.name.orEmpty(),
+                            channelId = uiState.value.channelId, avatar = profile?.avatar,
+                            artwork = video.artwork, views = video.views, age = video.time,
+                            duration = video.duration,
+                        ))
                     navigation.trySend(ChannelNavigationRequest.Watch(video.id))
                 }
             }
@@ -230,6 +254,23 @@ class ChannelViewModel(
                 ChannelNavigationRequest.PostComments(action.identity)
             )
         }
+    }
+
+    /** Copyable failure notice for an account write, carrying the sanitized report. */
+    private fun report(operation: String, error: Exception): AppNotice =
+        com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error, mapOf(
+            "channel_id" to (_state.value.content as? ChannelContent.Ready)?.page?.profile?.channelId))
+
+    /** Hands the tapped video's known fields to the Watch page before navigating. */
+    private fun rememberProvisional(videoId: String) {
+        val page = (uiState.value.content as? ChannelContent.Ready)?.page ?: return
+        val video = page.videos.firstOrNull { it.id == videoId }
+            ?: page.homeShelves.asSequence().flatMap { it.videos.asSequence() }.firstOrNull { it.id == videoId }
+            ?: (uiState.value.searchResults as? ChannelSection.Ready)?.value
+                ?.firstOrNull { it.id == videoId }
+            ?: return
+        com.hhst.youtubelite.watch.domain.WatchProvisionalStore.put(
+            video.toProvisional(page.profile.name, uiState.value.channelId, page.profile.avatar))
     }
 
     private fun selectTab(tab: ChannelTab) {

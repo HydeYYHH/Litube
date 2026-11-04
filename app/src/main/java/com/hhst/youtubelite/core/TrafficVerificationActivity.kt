@@ -18,11 +18,14 @@ import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.hhst.youtubelite.R
+import org.koin.android.ext.android.inject
 
 /** Isolated traffic verification without page injection. */
 @Suppress("OVERRIDE_DEPRECATION")
 class TrafficVerificationActivity : ComponentActivity() {
     private var web: WebView? = null
+    private val timers: WebViewTimerOccupancy by inject()
+    private var timerHandle: WebViewTimerHandle? = null
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,8 +92,10 @@ class TrafficVerificationActivity : ComponentActivity() {
                 }
             }
         }
-        if (savedInstanceState?.getBundle(WEB_STATE)?.let(web::restoreState) == null) web.loadUrl(challenge)
         this.web = web
+        timers.attach(web)
+        timerHandle = timers.acquire(WebViewTimerOwner.BROWSER)
+        if (savedInstanceState?.getBundle(WEB_STATE)?.let(web::restoreState) == null) web.loadUrl(challenge)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(background)
@@ -116,6 +121,8 @@ class TrafficVerificationActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        timerHandle?.release()
+        timerHandle = null
         web?.let {
             it.stopLoading()
             (it.parent as? ViewGroup)?.removeView(it)

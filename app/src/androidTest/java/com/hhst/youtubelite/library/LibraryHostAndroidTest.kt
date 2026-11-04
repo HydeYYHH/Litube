@@ -48,7 +48,7 @@ class LibraryHostAndroidTest {
         compose.onNodeWithTag("you-account").assertIsDisplayed()
         compose.onNodeWithTag("library-playlists-shelf").assertExists()
         compose.onNodeWithTag("library-history-shelf").assertExists()
-        listOf("History", "Playlists", "WatchLater", "LikedVideos", "Downloads").forEach { row ->
+        listOf("History", "Playlists", "WatchLater", "LikedVideos", "Queue", "Downloads").forEach { row ->
             compose.onNodeWithTag("library-row-$row").assertIsDisplayed()
         }
         compose.onNodeWithTag("you-screen").assertIsDisplayed()

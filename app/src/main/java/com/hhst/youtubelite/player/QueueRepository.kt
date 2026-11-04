@@ -1,17 +1,37 @@
 package com.hhst.youtubelite.player
 
-import com.google.gson.Gson
 import com.hhst.youtubelite.diagnostics.AppLog
-import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extractor.VideoId
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/**
+ * Stable queue owner: this device, or one signed-in account (plus its
+ * delegated channel when present). Derived from session identity fields only —
+ * never from rotating access tokens — so a stored queue survives restarts and
+ * token refreshes under the same owner.
+ */
+data class QueueOwner private constructor(val id: String) {
+    companion object {
+        /** Every signed-out state, including the whole-app anonymous switch. */
+        val DEVICE = QueueOwner("device")
+
+        fun account(accountId: String, onBehalfOfUser: String? = null): QueueOwner = QueueOwner(
+            if (onBehalfOfUser.isNullOrBlank()) "a:$accountId" else "a:$accountId:c:$onBehalfOfUser",
+        )
+
+        fun from(signedIn: Boolean, accountId: String?, onBehalfOfUser: String?): QueueOwner =
+            if (signedIn && !accountId.isNullOrBlank()) account(accountId, onBehalfOfUser) else DEVICE
+    }
+}
+
 /** Queue entry for up-next playback. */
+@kotlinx.serialization.Serializable
 data class QueueItem(
     val videoId: String = "",
     val url: String = "",
@@ -23,37 +43,67 @@ data class QueueItem(
 data class QueueState(
     val enabled: Boolean = false,
     val items: List<QueueItem> = emptyList(),
+    val owner: QueueOwner = QueueOwner.DEVICE,
 )
 
 /**
  * Queue persistence + navigation. Backed by [JsonCache] with a long (but finite)
  * TTL — `Long.MAX_VALUE` would overflow `now + ttl` and expire immediately.
+ *
+ * Storage is partitioned by [QueueOwner]: activating an owner swaps the
+ * published state without touching any other owner's stored queue, and the
+ * current media keeps playing across the swap. Mutators take an optional owner
+ * token captured before async work; a token from a previous owner is dropped
+ * instead of applied, so a late write can never land in the newly active queue.
  */
 class QueueRepository(
     private val cache: JsonCache,
-    private val gson: Gson = Gson(),
+    private val ownerProvider: () -> QueueOwner = { QueueOwner.DEVICE },
 ) {
-    private val _state = MutableStateFlow(load())
+    private val lock = Any()
+    private var active: QueueOwner = ownerProvider()
+    private var playingVideoId: String? = null
+    private val _state = MutableStateFlow(loadState(active))
     val state: StateFlow<QueueState> = _state.asStateFlow()
 
-    @Volatile
-    private var playingVideoId: String? = null
+    /** Owner whose queue is currently active and published. */
+    fun currentOwner(): QueueOwner = synchronized(lock) { active }
 
-    fun setEnabled(enabled: Boolean) {
-        _state.update { it.copy(enabled = enabled) }
-        save()
+    /**
+     * Activates the current owner's stored queue. Same-owner activation is a
+     * no-op: a token refresh is not an identity change and must not reload.
+     */
+    fun activate() {
+        val owner = ownerProvider()
+        synchronized(lock) {
+            if (owner == active) return
+            active = owner
+            playingVideoId = cache.get(playingKey(owner), String::class.java)
+            _state.value = loadState(owner)
+            AppLog.event(AppLog.Category.PLAYER, "queue_owner_activated",
+                mapOf("owner" to owner.id, "item_count" to _state.value.items.size))
+        }
+    }
+
+    fun setEnabled(enabled: Boolean, owner: QueueOwner? = null) {
+        guarded(owner) {
+            _state.update { it.copy(enabled = enabled) }
+            save()
+        }
     }
 
     /** Appends [item]; a video already queued is left untouched. */
-    fun add(item: QueueItem) {
+    fun add(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item)?.let {
             it.copy(title = it.title.ifBlank { it.videoId })
         } ?: return
-        _state.update { s ->
-            if (s.items.any { it.videoId == clean.videoId }) s
-            else s.copy(items = evictOverflow(s.items + clean, keepVideoId = playingVideoId))
+        guarded(owner) {
+            _state.update { s ->
+                if (s.items.any { it.videoId == clean.videoId }) s
+                else s.copy(items = evictOverflow(s.items + clean, keepVideoId = playingVideoId))
+            }
+            save()
         }
-        save()
     }
 
     /**
@@ -63,69 +113,79 @@ class QueueRepository(
      * where [nextStrict] resumes an unknown current. The plain [add] path keeps
      * its append semantics.
      */
-    fun addNext(item: QueueItem) {
+    fun addNext(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item)?.let {
             it.copy(title = it.title.ifBlank { it.videoId })
         } ?: return
-        val playing = playingVideoId
-        if (playing == clean.videoId) return
-        _state.update { s ->
-            val without = s.items.filterNot { it.videoId == clean.videoId }
-            val after = without.indexOfFirst { it.videoId == playing }
-            val at = if (after >= 0) after + 1 else 0
-            val items = without.toMutableList().apply { add(at.coerceAtMost(size), clean) }
-            // Insert-after-current orders targets newest-first, so overflow must
-            // drop from the tail (oldest targets) — the head-first eviction that
-            // fits append order would evict the target the user just chose.
-            s.copy(items = evictOverflow(items, keepVideoId = playingVideoId, dropFromHead = false))
+        guarded(owner) {
+            val playing = playingVideoId
+            if (playing == clean.videoId) return@guarded
+            _state.update { s ->
+                val without = s.items.filterNot { it.videoId == clean.videoId }
+                val after = without.indexOfFirst { it.videoId == playing }
+                val at = if (after >= 0) after + 1 else 0
+                val items = without.toMutableList().apply { add(at.coerceAtMost(size), clean) }
+                // Insert-after-current orders targets newest-first, so overflow must
+                // drop from the tail (oldest targets) — the head-first eviction that
+                // fits append order would evict the target the user just chose.
+                s.copy(items = evictOverflow(items, keepVideoId = playingVideoId, dropFromHead = false))
+            }
+            save()
         }
-        save()
     }
 
-    fun remove(videoId: String) {
-        _state.update { s -> s.copy(items = s.items.filterNot { it.videoId == videoId }) }
-        save()
-    }
-
-    fun clear() {
-        _state.update { it.copy(items = emptyList()) }
-        save()
-    }
-
-    fun move(fromIndex: Int, toIndex: Int) {
-        _state.update { s ->
-            if (fromIndex !in s.items.indices || toIndex !in s.items.indices) return@update s
-            val items = s.items.toMutableList()
-            items.add(toIndex, items.removeAt(fromIndex))
-            s.copy(items = items)
+    fun remove(videoId: String, owner: QueueOwner? = null) {
+        guarded(owner) {
+            _state.update { s -> s.copy(items = s.items.filterNot { it.videoId == videoId }) }
+            save()
         }
-        save()
+    }
+
+    fun clear(owner: QueueOwner? = null) {
+        guarded(owner) {
+            _state.update { it.copy(items = emptyList()) }
+            save()
+        }
+    }
+
+    fun move(fromIndex: Int, toIndex: Int, owner: QueueOwner? = null) {
+        guarded(owner) {
+            _state.update { s ->
+                if (fromIndex !in s.items.indices || toIndex !in s.items.indices) return@update s
+                val items = s.items.toMutableList()
+                items.add(toIndex, items.removeAt(fromIndex))
+                s.copy(items = items)
+            }
+            save()
+        }
     }
 
     /**
      * Insert or refresh the playing item. New videos append; the list is capped
      * so a long session cannot grow without bound.
      */
-    fun upsertPlaying(item: QueueItem) {
+    fun upsertPlaying(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item) ?: return
-        playingVideoId = clean.videoId
-        _state.update { s ->
-            val items = s.items.toMutableList()
-            val existing = items.indexOfFirst { it.videoId == clean.videoId }
-            if (existing >= 0) {
-                val old = items[existing]
-                items[existing] = old.copy(
-                    url = clean.url,
-                    title = clean.title.ifBlank { old.title },
-                    author = clean.author ?: old.author,
-                    thumbnailUrl = clean.thumbnailUrl,
-                )
-            } else {
-                items += clean
+        guarded(owner) {
+            playingVideoId = clean.videoId
+            _state.update { s ->
+                val items = s.items.toMutableList()
+                val existing = items.indexOfFirst { it.videoId == clean.videoId }
+                if (existing >= 0) {
+                    val old = items[existing]
+                    items[existing] = old.copy(
+                        url = clean.url,
+                        title = clean.title.ifBlank { old.title },
+                        author = clean.author ?: old.author,
+                        thumbnailUrl = clean.thumbnailUrl,
+                    )
+                } else {
+                    items += clean
+                }
+                s.copy(items = evictOverflow(items, keepVideoId = clean.videoId))
             }
-            s.copy(items = evictOverflow(items, keepVideoId = clean.videoId))
+            save()
         }
-        save()
     }
 
     /** Caps [items] at [MAX_ITEMS], dropping entries other than [keepVideoId] first. */
@@ -167,22 +227,52 @@ class QueueRepository(
         return candidates.randomOrNull()
     }
 
-    private fun load(): QueueState {
-        val itemsJson = cache.get(KEY_ITEMS, String::class.java)
-        val enabled = cache.get(KEY_ENABLED, String::class.java)?.toBooleanStrictOrNull() == true
+    /**
+     * Runs [block] under the lock. A stale [owner] token captured before async
+     * work (a drag commit, a delayed add) drops the write: operations started
+     * under one owner must never land in the newly active owner's queue.
+     */
+    private fun <T> guarded(owner: QueueOwner?, block: () -> T): T? = synchronized(lock) {
+        if (owner != null && owner != active) {
+            AppLog.event(AppLog.Category.PLAYER, "queue_write_dropped",
+                mapOf("requested" to owner.id, "active" to active.id))
+            return null
+        }
+        block()
+    }
+
+    private fun loadState(owner: QueueOwner): QueueState {
+        var itemsJson = cache.get(itemsKey(owner), String::class.java)
+        var enabledStr = cache.get(enabledKey(owner), String::class.java)
+        // One-time fallback: the pre-identity global queue belongs to this
+        // device — it is never offered to account owners. The fallback stops
+        // once the first per-owner save has written both new keys.
+        if (owner == QueueOwner.DEVICE) {
+            if (itemsJson == null) itemsJson = cache.get(LEGACY_ITEMS, String::class.java)
+            if (enabledStr == null) enabledStr = cache.get(LEGACY_ENABLED, String::class.java)
+        }
+        val enabled = enabledStr?.toBooleanStrictOrNull() == true
         val items = if (itemsJson == null) {
             emptyList()
         } else {
             runCatching {
-                val type = object : TypeToken<List<QueueItem?>>() {}.type
-                gson.fromJson<List<QueueItem?>>(itemsJson, type).orEmpty()
+                // Null entries and null fields were tolerated by the previous
+                // parser: nulls decode as nulls (dropped below) and explicit
+                // nulls coerce to defaults, while any other malformed row still
+                // fails the whole read like it did before.
+                val json = kotlinx.serialization.json.Json {
+                    ignoreUnknownKeys = true; coerceInputValues = true }
+                val array = json.parseToJsonElement(itemsJson)
+                    as kotlinx.serialization.json.JsonArray
+                array.map { if (it is kotlinx.serialization.json.JsonNull) null
+                    else json.decodeFromJsonElement(QueueItem.serializer(), it) }
             }.onFailure { AppLog.event(AppLog.Category.STORAGE, "queue_cache_corrupt", failure = it) }.getOrNull().orEmpty()
                 .mapNotNull { raw -> raw?.let(::sanitize) }
                 .distinctBy { it.videoId }
                 .map { it.copy(title = it.title.ifBlank { it.videoId }) }
                 .takeLast(MAX_ITEMS)
         }
-        return QueueState(enabled = enabled, items = items)
+        return QueueState(enabled = enabled, items = items, owner = owner)
     }
 
     /**
@@ -203,14 +293,22 @@ class QueueRepository(
 
     private fun save() {
         val s = _state.value
-        AppLog.event(AppLog.Category.PLAYER, "queue_changed", mapOf("enabled" to s.enabled, "item_count" to s.items.size))
-        cache.put(KEY_ITEMS, gson.toJson(s.items), TTL_MS)
-        cache.put(KEY_ENABLED, s.enabled.toString(), TTL_MS)
+        AppLog.event(AppLog.Category.PLAYER, "queue_changed",
+            mapOf("owner" to active.id, "enabled" to s.enabled, "item_count" to s.items.size))
+        cache.put(itemsKey(active), kotlinx.serialization.json.Json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(QueueItem.serializer()), s.items), TTL_MS)
+        cache.put(enabledKey(active), s.enabled.toString(), TTL_MS)
+        playingVideoId?.let { cache.put(playingKey(active), it, TTL_MS) }
     }
 
+    private fun itemsKey(owner: QueueOwner) = "queue:items:${owner.id}"
+    private fun enabledKey(owner: QueueOwner) = "queue:enabled:${owner.id}"
+    private fun playingKey(owner: QueueOwner) = "queue:playing:${owner.id}"
+
     companion object {
-        private const val KEY_ITEMS = "queue:items"
-        private const val KEY_ENABLED = "queue:enabled"
+        /** Pre-identity global keys, read once as the device owner's fallback. */
+        private const val LEGACY_ITEMS = "queue:items"
+        private const val LEGACY_ENABLED = "queue:enabled"
         private const val MAX_ITEMS = 50
         private const val MAX_TITLE = 200
         private const val MAX_AUTHOR = 100

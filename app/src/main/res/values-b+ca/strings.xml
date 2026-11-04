@@ -166,6 +166,7 @@
     <string name="copy">Còpia</string>
     <string name="copied">Copiat</string>
     <string name="copy_all">Copia-ho tot</string>
+    <string name="cast_searching">Cercant…</string>
     <string name="queue_now_playing">Ara jugant</string>
     <string name="clear_queue_confirm">Esborra tota la cua?</string>
     <string name="ok">D\'acord</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Tanca</string>
     <string name="verification_completed">Verificació acabada. Reintentant…</string>
     <string name="verification_still_blocked">Encara blocat després de la verificació. Torna-ho a provar més tard.</string>
+    <string name="comments_title">Comentaris</string>
+    <string name="comments_sort_top">Comentaris principals</string>
+    <string name="comments_sort_newest">Els més nous primer</string>
+    <string name="comments_sort_chip_top">Principals</string>
+    <string name="comments_sort_chip_newest">Nous</string>
+    <string name="comments_composer_add">Afegeix un comentari</string>
+    <string name="comments_composer_reply">Respon</string>
+    <string name="comments_composer_edit">Edita el comentari</string>
+    <string name="comments_composer_text_hint">Text del comentari</string>
+    <string name="comments_composer_text_edit_hint">Edita el text del comentari</string>
+    <string name="comments_composer_submit">Comentari</string>
+    <string name="comments_composer_sending">S\'està enviant…</string>
+    <string name="comments_composer_save">Desa</string>
+    <string name="comments_delete_title">Suprimeix</string>
+    <string name="comments_show_more_replies">Mostra més respostes</string>
+    <string name="comments_load_more_failed">No s\'han pogut carregar més comentaris</string>
+    <string name="comments_hide_replies">Amaga les respostes</string>
+    <string name="home_music_charts">Llistes musicals</string>
+    <string name="home_popular_gaming">Tendències en videojocs</string>
+    <string name="home_popular_sports">Tendències en esports</string>
+    <string name="home_top_news">Notícies destacades</string>
 </resources>

@@ -54,6 +54,11 @@ enum class AppIcon(vararg val paths: String, val sourceUnit: Float = 24f, val so
         "M120-320v-80h280v80H120Zm0-160v-80h440v80H120Zm0-160v-80h440v80H120Zm520 480v-160H480v-80h160v-160h80v160h160v80H720v160h-80Z",
         sourceUnit = 960f, sourceTop = -960f,
     ),
+    // Same glyph as the player more-menu queue row (ic_queue) so "Queue" reads consistently.
+    Queue(
+        "M120,720v-80h720v80H120ZM120,520v-80h720v80H120ZM120,320v-80h720v80H120Z",
+        sourceUnit = 960f,
+    ),
     OpenWith("M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1 .9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z", mirrorsInRtl = true),
     // Material notifications_none; source recorded with the icon evidence.
     Add("M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"),
@@ -66,4 +71,6 @@ enum class AppIcon(vararg val paths: String, val sourceUnit: Float = 24f, val so
     Send("M2.01 21L23 12 2.01 3 2 10l15 2-15 2z", mirrorsInRtl = true),
     Pause("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
     Delete("M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"),
+    // Material smartphone; the "On this device" identity row in the account switcher.
+    Device("M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"),
 }

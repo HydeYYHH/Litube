@@ -13,6 +13,20 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 class PlaybackRecoveryTest {
+    @Test fun unavailableManifestsChangeSourceWithoutTreatingLiveEdgeChunksAsExpired() {
+        for (status in listOf(404, 410)) {
+            for (path in listOf("/master.m3u8", "/manifest.mpd", "/api/manifest/hls_playlist/itag/301/file/index.m3u8")) {
+                val reason = PlaybackRecovery.classifyHttp(status, "https://manifest.googlevideo.com$path")
+                assertEquals(PlaybackRecovery.Reason.MANIFEST_UNAVAILABLE, reason)
+                assertEquals(MediaRejection.UNAVAILABLE, reason?.rejection)
+                assertFalse(requireNotNull(reason).needsLightRefresh)
+            }
+            assertNull(PlaybackRecovery.classifyHttp(status, "https://r1.googlevideo.com/videoplayback?sq=20"))
+            assertNull(PlaybackRecovery.classifyHttp(status, "https://www.youtube.com/api/timedtext"))
+        }
+        assertNull(PlaybackRecovery.classifyHttp(429, "https://manifest.googlevideo.com/master.m3u8"))
+        assertNull(PlaybackRecovery.classifyHttp(500, "https://manifest.googlevideo.com/master.m3u8"))
+    }
     @Test fun errorBodiesDoNotRemainUnclassifiedIoFailures() {
         val reason = PlaybackRecovery.classify(IOException("load", IOException("MEDIA_ERROR_BODY")))
         assertNotNull("A media endpoint returned a document, so the source must be replaced", reason)

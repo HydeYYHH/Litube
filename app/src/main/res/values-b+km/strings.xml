@@ -166,6 +166,7 @@
     <string name="copy">ចម្លង</string>
     <string name="copied">ចម្លង</string>
     <string name="copy_all">ចម្លងទាំងអស់។</string>
+    <string name="cast_searching">កំពុងស្វែងរក…</string>
     <string name="queue_now_playing">ឥឡូវនេះកំពុងលេង</string>
     <string name="clear_queue_confirm">ជម្រះជួរទាំងមូល?</string>
     <string name="ok">យល់ព្រម</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">បិទ</string>
     <string name="verification_completed">ការផ្ទៀងផ្ទាត់បានបញ្ចប់។ កំពុងព្យាយាមម្តងទៀត…</string>
     <string name="verification_still_blocked">នៅតែត្រូវបានចាក់ខ្ទប់បន្ទាប់ពីផ្ទៀងផ្ទាត់។ សូមព្យាយាមម្តងទៀតនៅពេលក្រោយ។</string>
+    <string name="comments_title">មតិយោបល់</string>
+    <string name="comments_sort_top">មតិកំពូល</string>
+    <string name="comments_sort_newest">ថ្មីជាដំបូង</string>
+    <string name="comments_sort_chip_top">កំពូល</string>
+    <string name="comments_sort_chip_newest">ថ្មី</string>
+    <string name="comments_composer_add">បន្ថែមមតិយោបល់</string>
+    <string name="comments_composer_reply">ឆ្លើយតប</string>
+    <string name="comments_composer_edit">កែសម្រួលមតិយោបល់</string>
+    <string name="comments_composer_text_hint">អត្ថបទមតិយោបល់</string>
+    <string name="comments_composer_text_edit_hint">កែសម្រួលអត្ថបទមតិយោបល់</string>
+    <string name="comments_composer_submit">បញ្ចេញមតិ</string>
+    <string name="comments_composer_sending">កំពុងផ្ញើ…</string>
+    <string name="comments_composer_save">រក្សាទុក</string>
+    <string name="comments_delete_title">លុប</string>
+    <string name="comments_show_more_replies">បង្ហាញការឆ្លើយតបបន្ថែម</string>
+    <string name="comments_load_more_failed">មិនអាចផ្ទុកមតិយោបល់បន្ថែមបានទេ</string>
+    <string name="comments_hide_replies">លាក់ការឆ្លើយតប</string>
+    <string name="home_music_charts">តារាងតន្ត្រី</string>
+    <string name="home_popular_gaming">ពេញនិយមក្នុងហ្គេម</string>
+    <string name="home_popular_sports">ពេញនិយមក្នុងកីឡា</string>
+    <string name="home_top_news">ព័ត៌មានសំខាន់ៗ</string>
 </resources>

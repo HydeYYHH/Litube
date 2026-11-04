@@ -9,7 +9,6 @@ import android.os.Process
 import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import androidx.webkit.WebViewCompat
-import com.google.gson.Gson
 import com.hhst.youtubelite.BuildConfig
 import java.io.File
 import java.util.ArrayDeque
@@ -220,11 +219,10 @@ internal class DiagnosticQueue(private val normalLimit: Int = 256, private val u
     data class Batch(val records: List<DiagnosticEvent>, val priority: Boolean, val bytes: Int)
     private val normal = ArrayDeque<Batch>()
     private val urgent = ArrayDeque<Batch>()
-    private val gson = Gson()
     @Volatile var bytes = 0; private set
     @Volatile var dropped = 0L; private set
     @Synchronized fun offer(records: List<DiagnosticEvent>, priority: Boolean) {
-        val size = records.sumOf { gson.toJson(it).toByteArray(Charsets.UTF_8).size + 1 }
+        val size = records.sumOf { DiagnosticJson.encode(it).toByteArray(Charsets.UTF_8).size + 1 }
         val limit = if (priority) totalBytes else normalBytes
         if (priority) while (bytes + size > limit && normal.isNotEmpty()) {
             val batch = normal.removeFirst(); bytes -= batch.bytes; dropped += batch.records.size

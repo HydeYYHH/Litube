@@ -105,7 +105,7 @@ class BackgroundDownloadScheduler(
         if (api >= 34) {
             scheduleUidt(ctx, reason, repair)
         } else {
-            enqueueTransfer(batchId, replace = !repair)
+            enqueueTransfer(batchId)
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
         }
     }
@@ -119,6 +119,11 @@ class BackgroundDownloadScheduler(
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), jobId, "uidt", DownloadWorkKind.TRANSFER)
             return
         }
+        if (work.state(DownloadWorkNames.transfer(batchId))?.active == true) {
+            plans += Plan(batchId, DownloadWorkKind.TRANSFER, "wm", "already-present")
+            bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
+            return
+        }
         val userOk = legalUserInteraction &&
             (ScheduleReasons.isUserInitiated(reason) || reason.isEmpty()) &&
             !repair
@@ -126,7 +131,7 @@ class BackgroundDownloadScheduler(
             // UIDT re-registration requires a user interaction. A
             // constraint recovery (network restore) must not strand queued
             // tasks: resume them through WorkManager instead.
-            enqueueTransfer(batchId, replace = false)
+            enqueueTransfer(batchId)
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
             return
         }
@@ -144,11 +149,13 @@ class BackgroundDownloadScheduler(
             }
             UidtRegisterResult.RejectedNoUserInteraction -> {
                 plans += Plan(batchId, DownloadWorkKind.TRANSFER, "uidt", "rejected")
+                enqueueTransfer(batchId)
+                bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
             }
         }
     }
 
-    private fun enqueueTransfer(batchId: String, replace: Boolean) {
+    private fun enqueueTransfer(batchId: String) {
         val name = DownloadWorkNames.transfer(batchId)
         val existing = work.state(name)
         if (existing?.active == true) {

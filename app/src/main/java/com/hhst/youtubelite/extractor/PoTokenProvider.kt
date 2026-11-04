@@ -1,16 +1,23 @@
 package com.hhst.youtubelite.extractor
 
 import android.content.Context
-import com.google.gson.JsonObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
 import java.net.URI
 import android.app.ActivityManager
-import com.google.gson.Gson
-import com.google.gson.JsonParser
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import java.io.IOException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+
+/** The BotGuard markers are interpreter inputs, not page configuration. */
+internal fun JsonObject.stripChallengeMarkers(): JsonObject =
+    JsonObject(filterKeys { it != "_BG_CHALLENGE" && it != "_BG_CHALLENGE_RAW" })
 
 /** BgUtils adapter. Transport uses the immutable extraction context. */
 class PoTokenProvider(
@@ -20,7 +27,6 @@ class PoTokenProvider(
 ) : PoTokenMinter {
     private val app = context.applicationContext
     private val lock = Any()
-    private val gson = Gson()
     private var runtime: HiddenJavascriptRuntime? = null
     private var scope = ""
     private var expires = 0L
@@ -50,7 +56,7 @@ class PoTokenProvider(
             if (runtime == null || scope != request.scope || System.currentTimeMillis() >= refreshAt) {
                 heavy.run(context) { initializeMinter(context, request.scope) }
             }
-            val result = runtime!!.evaluate("WebPo.mint(${gson.toJson(request.identifier)})", 1_000, context)
+            val result = runtime!!.evaluate("WebPo.mint(${JsonPrimitive(request.identifier)})", 1_000, context)
             if (result.isBlank()) throw IOException("PO_EMPTY_TOKEN")
             context.check()
             PoTokenMinter.Token(result, expires).also {
@@ -87,13 +93,15 @@ class PoTokenProvider(
                 it.evaluate(bundle + "\n'loaded'", remaining(), context)
             }
         }
+        // kotlinx configuration objects are immutable, so the challenge markers are
+        // stripped at the use sites instead of being removed from the captured config.
         fun pairedChallenge(config: JsonObject): JsonObject? {
-            config.remove("_BG_CHALLENGE")?.let {
-                return it as? JsonObject
+            if (config.containsKey("_BG_CHALLENGE")) {
+                return config["_BG_CHALLENGE"] as? JsonObject
             }
-            val raw = (config.remove("_BG_CHALLENGE_RAW") as? com.google.gson.JsonPrimitive)?.asString ?: return null
-            val parsed = loadedRuntime().evaluate("WebPo.challenge(${gson.toJson(raw)})", remaining(), context)
-            return JsonParser.parseString(parsed).takeIf { it.isJsonObject }?.asJsonObject
+            val raw = config["_BG_CHALLENGE_RAW"]?.asText ?: return null
+            val parsed = loadedRuntime().evaluate("WebPo.challenge(${JsonPrimitive(raw)})", remaining(), context)
+            return parseJson(parsed) as? JsonObject
         }
         initializationStage = "CHALLENGE"
         var config = context.session.configuration()
@@ -122,12 +130,12 @@ class PoTokenProvider(
             val body = "{\"context\":$inner,\"engagementType\":\"ENGAGEMENT_TYPE_UNBOUND\"}"
             val response = context.post("${YoutubeSessionProvider.ORIGIN}/youtubei/v1/att/get?prettyPrint=false", headers, body.toByteArray())
             requireResponse(response, "PO_ATTESTATION")
-            challenge = JsonParser.parseString(response.responseBody).asJsonObject.getAsJsonObject("bgChallenge")
+            challenge = (parseJson(response.responseBody) as JsonObject)["bgChallenge"] as? JsonObject
             challengeSource = "ATTESTATION_FALLBACK"
         }
         context.diagnostics.event("token-challenge", "WEB", challengeSource, 0, 200)
         remaining()
-        val interpreter = challenge?.getAsJsonObject("interpreterUrl")?.get("privateDoNotAccessOrElseTrustedResourceUrlWrappedValue")?.asString ?: throw IOException("PO_NO_CHALLENGE")
+        val interpreter = challenge?.objOrNull("interpreterUrl")?.get("privateDoNotAccessOrElseTrustedResourceUrlWrappedValue")?.asText ?: throw IOException("PO_NO_CHALLENGE")
         val url = if (interpreter.startsWith("//")) "https:$interpreter" else interpreter
         val uri = URI(url)
         if (uri.scheme != "https" || uri.host !in setOf("www.youtube.com", "www.google.com", "www.gstatic.com")) throw IOException("PO_INTERPRETER_ORIGIN")
@@ -135,17 +143,18 @@ class PoTokenProvider(
         val source = context.get(url, mapOf("User-Agent" to listOf(context.session.userAgent)))
         requireResponse(source, "PO_INTERPRETER")
         initializationStage = "RUNTIME_LOAD"
-        loadedRuntime().evaluate("globalThis.yt={config_:$config};\n" + source.responseBody + "\n'loaded'", remaining(), context)
+        loadedRuntime().evaluate("globalThis.yt={config_:${config.stripChallengeMarkers()}};\n" + source.responseBody + "\n'loaded'", remaining(), context)
         initializationStage = "SNAPSHOT"
-        val snapshot = runtime!!.evaluate("WebPo.snapshot(${gson.toJson(challenge)})", remaining(), context)
+        val snapshot = runtime!!.evaluate("WebPo.snapshot(${challenge?.toString() ?: "null"})", remaining(), context)
         val headers = mapOf("User-Agent" to listOf(context.session.userAgent), "Content-Type" to listOf("application/json+protobuf"),
             "x-goog-api-key" to listOf("AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw"), "x-user-agent" to listOf("grpc-web-javascript/0.1"))
         initializationStage = "INTEGRITY"
-        val response = context.post("${YoutubeSessionProvider.ORIGIN}/api/jnn/v1/GenerateIT", headers, gson.toJson(listOf("O43z0dpjhgX20SCx4KAo", snapshot)).toByteArray())
+        val response = context.post("${YoutubeSessionProvider.ORIGIN}/api/jnn/v1/GenerateIT", headers,
+            JsonArray(listOf("O43z0dpjhgX20SCx4KAo", snapshot).map(::JsonPrimitive)).toString().toByteArray())
         requireResponse(response, "PO_INTEGRITY")
         val integrity = parsePoIntegrity(response.responseBody)
         initializationStage = "MINTER"
-        runtime!!.evaluate("WebPo.initialize(${gson.toJson(integrity)})", remaining(), context)
+        runtime!!.evaluate("WebPo.initialize(${Json.encodeToString(integrity)})", remaining(), context)
         scope = newScope
         expires = System.currentTimeMillis() + integrity.estimatedTtlSecs * 1000
         refreshAt = expires - maxOf(30_000, integrity.mintRefreshThreshold * 1000)
@@ -172,6 +181,7 @@ class PoTokenProvider(
 }
 
 /** GenerateIT's refresh threshold and fallback are optional; a two-item reply is valid. */
+@kotlinx.serialization.Serializable
 internal data class PoIntegrity(
     val integrityToken: String,
     val estimatedTtlSecs: Long,
@@ -180,11 +190,11 @@ internal data class PoIntegrity(
 
 internal fun parsePoIntegrity(body: String): PoIntegrity {
     try {
-        val data = JsonParser.parseString(body).asJsonArray
-        fun item(index: Int) = if (index < data.size()) data[index].takeUnless { it.isJsonNull } else null
-        val token = item(0)?.asString?.takeIf { it.isNotBlank() } ?: throw IOException("PO_INVALID_INTEGRITY")
-        val ttl = item(1)?.asLong?.takeIf { it in 1..(Long.MAX_VALUE / 1000) }
+        val data = parseJson(body) as JsonArray
+        fun item(index: Int) = data.getOrNull(index)?.takeUnless { it is JsonNull }
+        val token = item(0)?.asText?.takeIf { it.isNotBlank() } ?: throw IOException("PO_INVALID_INTEGRITY")
+        val ttl = item(1)?.asLongNum?.takeIf { it in 1..(Long.MAX_VALUE / 1000) }
             ?: throw IOException("PO_INVALID_INTEGRITY")
-        return PoIntegrity(token, ttl, item(2)?.asLong?.coerceAtLeast(0) ?: 0)
+        return PoIntegrity(token, ttl, item(2)?.asLongNum?.coerceAtLeast(0) ?: 0)
     } catch (failure: RuntimeException) { throw IOException("PO_INVALID_INTEGRITY", failure) }
 }

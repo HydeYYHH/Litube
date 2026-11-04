@@ -166,6 +166,7 @@
     <string name="copy">Copiar</string>
     <string name="copied">Copiado</string>
     <string name="copy_all">Copiar todo</string>
+    <string name="cast_searching">Buscando…</string>
     <string name="queue_now_playing">Reproduciendo</string>
     <string name="clear_queue_confirm">¿Vaciar toda la cola?</string>
     <string name="ok">Aceptar</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Cerrar</string>
     <string name="verification_completed">Verificación completada. Reintentando…</string>
     <string name="verification_still_blocked">Sigue bloqueado después de la verificación. Inténtalo de nuevo más tarde.</string>
+    <string name="comments_title">Comentarios</string>
+    <string name="comments_sort_top">Comentarios principales</string>
+    <string name="comments_sort_newest">Los más recientes primero</string>
+    <string name="comments_sort_chip_top">Principales</string>
+    <string name="comments_sort_chip_newest">Recientes</string>
+    <string name="comments_composer_add">Agrega un comentario</string>
+    <string name="comments_composer_reply">Responder</string>
+    <string name="comments_composer_edit">Editar comentario</string>
+    <string name="comments_composer_text_hint">Texto del comentario</string>
+    <string name="comments_composer_text_edit_hint">Editar el texto del comentario</string>
+    <string name="comments_composer_submit">Comentar</string>
+    <string name="comments_composer_sending">Enviando…</string>
+    <string name="comments_composer_save">Guardar</string>
+    <string name="comments_delete_title">Borrar</string>
+    <string name="comments_show_more_replies">Mostrar más respuestas</string>
+    <string name="comments_load_more_failed">No se pudieron cargar más comentarios</string>
+    <string name="comments_hide_replies">Ocultar respuestas</string>
+    <string name="home_music_charts">Listas musicales</string>
+    <string name="home_popular_gaming">Tendencias en videojuegos</string>
+    <string name="home_popular_sports">Tendencias en deportes</string>
+    <string name="home_top_news">Noticias principales</string>
 </resources>

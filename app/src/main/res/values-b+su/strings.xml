@@ -166,6 +166,7 @@
     <string name="copy">Salin</string>
     <string name="copied">Disalin</string>
     <string name="copy_all">Salin sadayana</string>
+    <string name="cast_searching">Nyariekeun…</string>
     <string name="queue_now_playing">Ayeuna maén</string>
     <string name="clear_queue_confirm">Hapus antrian sadayana?</string>
     <string name="ok">OKÉ</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Tutup</string>
     <string name="verification_completed">Vérikasi réngsé. Nyoba deui…</string>
     <string name="verification_still_blocked">Kahalang kénéh sanggeus vérikasi. Coba deui engké.</string>
+    <string name="comments_title">Komentar</string>
+    <string name="comments_sort_top">Komentar pangsaéna</string>
+    <string name="comments_sort_newest">Panganyar heula</string>
+    <string name="comments_sort_chip_top">Pangsaéna</string>
+    <string name="comments_sort_chip_newest">Panganyar</string>
+    <string name="comments_composer_add">Tambahkeun komentar</string>
+    <string name="comments_composer_reply">Wangsulan</string>
+    <string name="comments_composer_edit">Édit komentar</string>
+    <string name="comments_composer_text_hint">Téks komentar</string>
+    <string name="comments_composer_text_edit_hint">Édit téks komentar</string>
+    <string name="comments_composer_submit">Komentarkeun</string>
+    <string name="comments_composer_sending">Ngintun…</string>
+    <string name="comments_composer_save">Nyimpen</string>
+    <string name="comments_delete_title">Pupus</string>
+    <string name="comments_show_more_replies">Témbongkeun wangsulan séjénna</string>
+    <string name="comments_load_more_failed">Gagal ngamuat komentar séjénna</string>
+    <string name="comments_hide_replies">Sumputkeun wangsulan</string>
+    <string name="home_music_charts">Tangga musik</string>
+    <string name="home_popular_gaming">Populér dina kaulinan</string>
+    <string name="home_popular_sports">Populér dina olahraga</string>
+    <string name="home_top_news">Warta utama</string>
 </resources>

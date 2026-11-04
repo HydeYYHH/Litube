@@ -166,6 +166,7 @@
     <string name="copy">Koopia</string>
     <string name="copied">Kopeeritud</string>
     <string name="copy_all">Kopeeri kõik</string>
+    <string name="cast_searching">Otsimine…</string>
     <string name="queue_now_playing">Praegu mängib</string>
     <string name="clear_queue_confirm">Kas tühjendada kogu järjekord?</string>
     <string name="ok">OK</string>
@@ -317,4 +318,25 @@
     <string name="verification_close">Sulge</string>
     <string name="verification_completed">Verifitseerimine lõpetatud. Proovitakse uuesti…</string>
     <string name="verification_still_blocked">Pärast verifitseerimist on ikka blokeeritud. Proovige hiljem uuesti.</string>
+    <string name="comments_title">Kommentaarid</string>
+    <string name="comments_sort_top">Populaarsemad kommentaarid</string>
+    <string name="comments_sort_newest">Uuemad esiteks</string>
+    <string name="comments_sort_chip_top">Populaarsed</string>
+    <string name="comments_sort_chip_newest">Uued</string>
+    <string name="comments_composer_add">Lisa kommentaar</string>
+    <string name="comments_composer_reply">Vasta</string>
+    <string name="comments_composer_edit">Muuda kommentaari</string>
+    <string name="comments_composer_text_hint">Kommentaari tekst</string>
+    <string name="comments_composer_text_edit_hint">Muuda kommentaari teksti</string>
+    <string name="comments_composer_submit">Kommenteeri</string>
+    <string name="comments_composer_sending">Saatmine…</string>
+    <string name="comments_composer_save">Salvesta</string>
+    <string name="comments_delete_title">Kustuta</string>
+    <string name="comments_show_more_replies">Kuva veel vastuseid</string>
+    <string name="comments_load_more_failed">Rohkem kommentaare ei õnnestunud laadida</string>
+    <string name="comments_hide_replies">Peida vastused</string>
+    <string name="home_music_charts">Muusikaedetabelid</string>
+    <string name="home_popular_gaming">Populaarsed mänguvideod</string>
+    <string name="home_popular_sports">Populaarsed spordivideod</string>
+    <string name="home_top_news">Peamised uudised</string>
 </resources>

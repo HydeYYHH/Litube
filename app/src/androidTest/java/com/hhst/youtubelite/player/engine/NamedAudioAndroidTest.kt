@@ -12,7 +12,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
@@ -58,9 +57,30 @@ class NamedAudioAndroidTest {
                 instrumentation.runOnMainSync { ready = engine.snapshot.value.videoId == id && player.isPlaying && engine.snapshot.value.audioTracks.size > 1 }
                 if (!ready) Thread.sleep(100)
             }
-            DeviceEvidence.writeJson("issue-337-live-audio.json", Gson().toJson(mapOf(
+            var sourceEvidence: Map<String, Any?> = emptyMap()
+            instrumentation.runOnMainSync {
+                val stream = engine.javaClass.getDeclaredField("currentStream").apply { isAccessible = true }.get(engine) as? Stream
+                val manifest = player.currentManifest as? androidx.media3.exoplayer.hls.HlsManifest
+                sourceEvidence = mapOf(
+                    "hlsClient" to stream?.hlsRequestPlan?.client?.name,
+                    "formats" to stream?.formats?.map { mapOf("itag" to it.itag, "audioOnly" to it.audioOnly,
+                        "trackId" to it.audioTrackId, "label" to it.audioTrackName, "language" to it.audioLocale,
+                        "original" to it.audioTrackOriginal) },
+                    "renditions" to manifest?.multivariantPlaylist?.audios?.map {
+                        mapOf("label" to it.format.label, "language" to it.format.language, "codecs" to it.format.codecs)
+                    },
+                    "trackGroups" to player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.map { group ->
+                        (0 until group.length).map { index -> group.getTrackFormat(index).let { format ->
+                            mapOf("label" to format.label, "language" to format.language, "supported" to group.isTrackSupported(index),
+                                "selected" to group.isTrackSelected(index), "codecs" to format.codecs)
+                        } }
+                    },
+                )
+            }
+            DeviceEvidence.writeJson("named-audio-source.json", com.hhst.youtubelite.core.TestJson.any(mapOf(
                 "videoId" to id, "ready" to ready, "tracks" to engine.snapshot.value.audioTracks,
-                "selected" to engine.snapshot.value.audioTrackKey, "error" to engine.snapshot.value.error)))
+                "selected" to engine.snapshot.value.audioTrackKey, "error" to engine.snapshot.value.error,
+                "source" to sourceEvidence)))
             assertTrue("Real multilingual video did not become playable: ${engine.snapshot.value}", ready)
             val original = engine.snapshot.value.audioTrackKey
             assertNotNull("Original identity must be known", original)
@@ -99,7 +119,7 @@ class NamedAudioAndroidTest {
                 if (!returned) Thread.sleep(100)
             }
             assertTrue("Returning to original audio failed", returned)
-            DeviceEvidence.writeJson("issue-337-live-switch.json", Gson().toJson(mapOf("videoId" to id,
+            DeviceEvidence.writeJson("issue-337-live-switch.json", com.hhst.youtubelite.core.TestJson.any(mapOf("videoId" to id,
                 "tracks" to engine.snapshot.value.audioTracks.size, "original" to original, "dub" to dub.key,
                 "switched" to switched, "returned" to returned)))
         } finally {
