@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.datasource
 
 import android.net.Uri
+import android.os.SystemClock
 import java.net.NoRouteToHostException
 import java.util.concurrent.TimeUnit
 import android.util.Log
@@ -23,10 +24,16 @@ import okhttp3.Request
 import okhttp3.Response
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
-/** Media3 and cast consume the extractor's session, client, method and bounded range plan. */
+/** Local-only speculative-read budget, carried through cache misses and range reopens. */
+internal data class PrefetchDeadline(val elapsedRealtimeMs: Long)
+
+/** Time already spent joining a speculative manifest, charged to the normal open budget. */
+internal data class ManifestJoinWait(val elapsedMs: Long, val customData: Any?)
+
 @UnstableApi
 class YoutubeHttpDataSource private constructor(
     private val callFactory: Call.Factory,
@@ -34,8 +41,10 @@ class YoutubeHttpDataSource private constructor(
     private val rnParameterEnabled: Boolean,
     private val userAgent: String,
     private val mediaRequests: YoutubeMediaRequests?,
-    private val inheritedPlan: RequestPlan?,
-    private val planResolver: ((String) -> RequestPlan?)?,
+    private val inheritedPlan: MediaRequestPlan?,
+    private val planResolver: ((String) -> MediaRequestPlan?)?,
+    private val openTimeoutMs: Long,
+    private val onSlowInitialRead: (() -> Unit)?,
 ) : BaseDataSource(true), HttpDataSource {
 
     private val requestProperties = HttpDataSource.RequestProperties()
@@ -46,16 +55,14 @@ class YoutubeHttpDataSource private constructor(
     private var responseCode = 0
     private var bytesToRead = 0L
     private var bytesRead = 0L
-    private var activePlan: RequestPlan? = null
+    private var activePlan: MediaRequestPlan? = null
     private var windowRead = 0L
     private var windowLimit = 0L
     private var expectedWindow = -1L
     @Volatile private var activeCall: Call? = null
-    private var effectiveRange = RequestPlan.Range.NONE
+    private var effectiveRange = MediaRange.NONE
     /** True when this [open] put `&range=` on the request that produced [response]. */
     private var rangeQueryApplied = false
-
-    // -- HttpDataSource --
 
     override fun getUri(): Uri? =
         response?.request?.url?.toString()?.let(Uri::parse)
@@ -127,8 +134,7 @@ class YoutubeHttpDataSource private constructor(
             if (responseCode == 403) {
                 Log.w(
                     TAG,
-                    "HTTP 403 host=${resp.request.url.host} path=${resp.request.url.encodedPath} " +
-                        "c=${resp.request.url.queryParameter("c")} " +
+                    "HTTP 403 resource=${com.hhst.youtubelite.diagnostics.DiagnosticRedaction.resource(resp.request.url.toString())} " +
                         "rangeParam=$rangeParameterEnabled rnParam=$rnParameterEnabled " +
                         "pos=${dataSpec.position} len=${dataSpec.length}",
                 )
@@ -136,22 +142,26 @@ class YoutubeHttpDataSource private constructor(
             val cause = if (responseCode == 416) {
                 DataSourceException(PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE)
             } else null
-            throw HttpDataSource.InvalidResponseCodeException(
+            val failure = HttpDataSource.InvalidResponseCodeException(
                 responseCode, responseMessage, cause, headers, dataSpec, ByteArray(0),
             )
+            val readyAt = activePlan?.availableAtNanos ?: 0
+            if (responseCode == 403 && readyAt > System.nanoTime()) {
+                throw MediaNotReadyException(readyAt, failure)
+            }
+            throw failure
         }
 
         activePlan?.let { plan ->
             val window = requireNotNull(mediaRequests).window(resp, plan)
             expectedWindow = window.expectedBytes
-            windowLimit = if (effectiveRange == RequestPlan.Range.NONE) Long.MAX_VALUE
+            windowLimit = if (effectiveRange == MediaRange.NONE) Long.MAX_VALUE
                 else window.expectedBytes.takeIf { it >= 0 } ?: plan.chunkLimit
         }
 
-        // A 200 to a Range-header request is the full representation, so the
-        // body starts at byte 0 and the caller still needs [dataSpec.position]
-        // skipped. The `&range=` query already sliced that window; skipping
-        // again would drop the first `position` bytes of the chunk.
+        // A 200 to a Range-header request is the full representation, so the body starts
+        // at byte 0 and [dataSpec.position] still needs skipping — but the `&range=` query
+        // already sliced that window; skipping again would drop its first bytes.
         val bytesToSkip = skipBytesOnOpen(
             responseCode,
             dataSpec.position,
@@ -178,6 +188,20 @@ class YoutubeHttpDataSource private constructor(
             }
         }
 
+        // An HLS server may ignore our optional Range header and return the entire object;
+        // its Content-Length proves EOF even when the plan does not know the segment length.
+        // Treating a larger prefetch budget as the response length reopens the same segment
+        // at EOF (and can cache its prefix again as if it were the tail).
+        if (activePlan?.range == MediaRange.NONE && responseCode == 200 && !rangeQueryApplied &&
+            resp.header("Content-Range") == null && !compressed) {
+            resp.body?.contentLength()?.takeIf { it >= 0 }?.let { total ->
+                val available = (total - dataSpec.position).coerceAtLeast(0)
+                bytesToRead = if (dataSpec.length == LENGTH_UNSET) available else minOf(dataSpec.length, available)
+                expectedWindow = available
+                windowLimit = available
+            }
+        }
+
         inputStream = try {
             resp.body?.byteStream()?.let { if (compressed) GZIPInputStream(it) else it }
                 ?: throw IOException("Empty response body")
@@ -188,7 +212,7 @@ class YoutubeHttpDataSource private constructor(
                 HttpDataSource.HttpDataSourceException.TYPE_OPEN,
             )
         }
-        if (activePlan != null && effectiveRange != RequestPlan.Range.NONE && dataSpec.length == LENGTH_UNSET) {
+        if (activePlan != null && effectiveRange != MediaRange.NONE && dataSpec.length == LENGTH_UNSET) {
             val total = activePlan?.resourceLength?.takeIf { it > 0 }
                 ?: mediaRequests?.window(resp, requireNotNull(activePlan))?.total
             if (total != null) bytesToRead = total - dataSpec.position
@@ -237,8 +261,6 @@ class YoutubeHttpDataSource private constructor(
         }
     }
 
-    // -- connection --
-
     private fun makeConnection(spec: DataSpec): Response {
         val boundPlan = planResolver?.invoke(spec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(spec.uri.toString())
         if (boundPlan != null) return execute(spec.uri.toString(), spec.httpMethod, spec.position, spec.length,
@@ -283,9 +305,8 @@ class YoutubeHttpDataSource private constructor(
     }
 
     /**
-     * Resolves [location] (absolute, network-path, root- or path-relative) against
-     * [baseUrl] per RFC 3986 — OkHttp's `HttpUrl.resolve` covers all the
-     * forms googlevideo hands back, including query-only and dot-segment refs.
+     * Resolves [location] against [baseUrl] per RFC 3986; OkHttp's `HttpUrl.resolve`
+     * covers the forms googlevideo hands back, including query-only and dot-segment refs.
      */
     private fun resolveRedirect(baseUrl: String, location: String): String? =
         baseUrl.toHttpUrlOrNull()?.resolve(location.trim())?.toString()
@@ -303,13 +324,13 @@ class YoutubeHttpDataSource private constructor(
             if (plan != null) {
                 activePlan = plan
                 val range = when {
-                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
-                    plan.range != RequestPlan.Range.NONE -> plan.range
-                    position > 0 || length >= 0 -> RequestPlan.Range.HEADER
+                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> MediaRange.QUERY
+                    plan.range != MediaRange.NONE -> plan.range
+                    position > 0 || length >= 0 -> MediaRange.HEADER
                     else -> plan.range
                 }
                 effectiveRange = range
-                rangeQueryApplied = range == RequestPlan.Range.QUERY
+                rangeQueryApplied = range == MediaRange.QUERY
                 return executeCall(mediaRequests.build(url, plan, position, length, requestParameters, range))
             }
             val builder = Request.Builder().url(url).header("User-Agent", userAgent)
@@ -346,18 +367,48 @@ class YoutubeHttpDataSource private constructor(
     }
 
     private fun executeCall(request: Request): Response {
-        val diagnostic = dataSpec?.customData as? DiagnosticContext
+        val joinWait = dataSpec?.customData as? ManifestJoinWait
+        val customData = if (joinWait != null) joinWait.customData else dataSpec?.customData
+        val diagnostic = customData as? DiagnosticContext
         val tagged = if (diagnostic != null) DiagnosticNetwork.tag(request, diagnostic) else request
         val call = callFactory.newCall(tagged)
+        // A tiny DASH init/index read cannot progress while its TLS handshake hangs:
+        // bound only these initial reads; ordinary chunks keep their full budget.
+        // Legacy sources without a plan obey the same transport bound.
+        val spec = dataSpec
+        val initialRead = spec != null && spec.position == 0L && spec.length in 1L..65_536L
+        if (initialRead) {
+            call.timeout().timeout(6_000L, TimeUnit.MILLISECONDS)
+        }
+        val prefetchDeadline = customData as? PrefetchDeadline
+        if (prefetchDeadline != null) {
+            val remaining = prefetchDeadline.elapsedRealtimeMs - SystemClock.elapsedRealtime()
+            if (remaining <= 0) throw InterruptedIOException("PREFETCH_DEADLINE")
+            // Progress callbacks cannot bound DNS, TLS or waiting for response headers.
+            // Keep the same absolute budget when a cache miss opens another byte range.
+            call.timeout().deadline(remaining, TimeUnit.MILLISECONDS)
+        }
         activeCall = call
-        return call.execute()
+        try {
+            return if (prefetchDeadline == null) MediaOpenTimeout.execute(call,
+                (openTimeoutMs - (joinWait?.elapsedMs ?: 0L)).coerceAtLeast(1L),
+                onSlowInitialRead.takeIf { initialRead }) else call.execute()
+        } catch (failure: InterruptedIOException) {
+            // OkHttp's whole-call deadline uses InterruptedIOException, whereas a socket
+            // timeout uses SocketTimeoutException. Keep both on the same finite recovery path;
+            // explicit cancellation/interruption must retain its cancellation semantics.
+            if (initialRead && prefetchDeadline == null && failure !is java.net.SocketTimeoutException && failure.message == "timeout") {
+                throw java.net.SocketTimeoutException("MEDIA_INIT_TIMEOUT").apply { initCause(failure) }
+            }
+            throw failure
+        }
     }
 
     private fun readInternal(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
         if (bytesToRead != LENGTH_UNSET && bytesRead >= bytesToRead) return C.RESULT_END_OF_INPUT
         val plan = activePlan
-        if (plan != null && effectiveRange != RequestPlan.Range.NONE && windowRead >= windowLimit) {
+        if (plan != null && effectiveRange != MediaRange.NONE && windowRead >= windowLimit) {
             // A short window with no proven total is the final query-cropped view.
             if (bytesToRead == LENGTH_UNSET && windowLimit < plan.chunkLimit) return C.RESULT_END_OF_INPUT
             inputStream?.close(); response?.close()
@@ -378,7 +429,7 @@ class YoutubeHttpDataSource private constructor(
         }
         val stream = inputStream ?: return C.RESULT_END_OF_INPUT
         var count = if (bytesToRead == LENGTH_UNSET) length else minOf(length.toLong(), bytesToRead - bytesRead).toInt()
-        if (plan != null && effectiveRange != RequestPlan.Range.NONE) count = minOf(count.toLong(), windowLimit - windowRead).toInt()
+        if (plan != null && effectiveRange != MediaRange.NONE) count = minOf(count.toLong(), windowLimit - windowRead).toInt()
         if (count <= 0) return C.RESULT_END_OF_INPUT
         val read = stream.read(buffer, offset, count)
         if (read == -1) {
@@ -405,6 +456,12 @@ class YoutubeHttpDataSource private constructor(
         private var readTimeoutMs = 30_000
         private var rangeParameterEnabled = false
         private var rnParameterEnabled = false
+        private var openTimeoutMs = 6_000L
+        private var onSlowInitialRead: (() -> Unit)? = null
+
+        fun setSlowInitialReadListener(value: (() -> Unit)?) = apply { onSlowInitialRead = value }
+
+        fun setOpenTimeoutMs(value: Long) = apply { require(value > 0); openTimeoutMs = value }
 
         // Required by the Factory interface but unused: every request's headers
         // come from DataSpec.httpRequestHeaders, so factory-level defaults have
@@ -422,16 +479,16 @@ class YoutubeHttpDataSource private constructor(
         fun setRangeParameterEnabled(value: Boolean) = apply { rangeParameterEnabled = value }
         fun setRnParameterEnabled(value: Boolean) = apply { rnParameterEnabled = value }
         private var mediaRequests: YoutubeMediaRequests? = null
-        private var inheritedPlan: RequestPlan? = null
-        private var planResolver: ((String) -> RequestPlan?)? = null
-        fun setPlanResolver(value: (String) -> RequestPlan?) = apply { planResolver = value }
-        fun setMediaRequests(value: YoutubeMediaRequests?, plan: RequestPlan? = null) = apply {
+        private var inheritedPlan: MediaRequestPlan? = null
+        private var planResolver: ((String) -> MediaRequestPlan?)? = null
+        fun setPlanResolver(value: (String) -> MediaRequestPlan?) = apply { planResolver = value }
+        fun setMediaRequests(value: YoutubeMediaRequests?, plan: MediaRequestPlan? = null) = apply {
             mediaRequests = value; inheritedPlan = plan; timedCallFactory = null
         }
 
         override fun createDataSource(): YoutubeHttpDataSource = YoutubeHttpDataSource(
             sharedCallFactory(), rangeParameterEnabled,
-            rnParameterEnabled, userAgent, mediaRequests, inheritedPlan, planResolver,
+            rnParameterEnabled, userAgent, mediaRequests, inheritedPlan, planResolver, openTimeoutMs, onSlowInitialRead,
         )
 
         @Volatile
@@ -462,12 +519,6 @@ class YoutubeHttpDataSource private constructor(
         /** media3's C.LENGTH_UNSET is the int -1; this is the long form used by DataSpec lengths. */
         private const val LENGTH_UNSET: Long = C.LENGTH_UNSET.toLong()
 
-        /**
-         * Bytes to discard from a 200 body before the caller-requested offset.
-         *
-         * [rangeQueryApplied] means the request used a `range=` query,
-         * so a 200 body is already the requested slice and must not be skipped.
-         */
         internal fun skipBytesOnOpen(
             responseCode: Int,
             position: Long,

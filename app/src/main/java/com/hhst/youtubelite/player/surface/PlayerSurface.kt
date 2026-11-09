@@ -4,6 +4,11 @@ import android.view.Gravity
 import android.view.SurfaceView
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
+import com.hhst.youtubelite.ui.design.AppMotion
+import com.hhst.youtubelite.ui.design.LocalMotionScale
+import com.hhst.youtubelite.ui.design.motionDuration
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -27,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -39,9 +45,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -49,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -68,15 +78,8 @@ private const val HINT_AUTO_HIDE_MS = 1_200L
 private const val SEEK_ARC_HIDE_MS = 500L
 
 /**
- * Player overlay: video + gestures + chrome.
- *
- * Embedded: JS-reported in-page box (fallback 48 dp masthead + 16:9).
- * Fullscreen: edge-to-edge. Mini-player is sized by the host.
- *
- * Playback position arrives as [positionState] / [bufferedPositionState]
- * (updated ~4 Hz) instead of fields on [state]: they are consumed only by the
- * time bar and the position text, so ticks never recompose the rest of the
- * surface (sheets, dialogs, menus, subtitle layout, gesture overlays).
+ * Position ticks arrive as [positionState] / [bufferedPositionState] (not fields on
+ * [state]) so ~4 Hz updates recompose only the time bar, not the whole surface.
  */
 @UnstableApi
 @Composable
@@ -95,20 +98,45 @@ fun PlayerSurface(
     modifier: Modifier = Modifier,
     onRefreshCastState: () -> Unit = {},
     managedByHost: Boolean = false,
+    transitionFrame: android.graphics.Bitmap? = null,
+    chromeAlpha: () -> Float = { 1f },
+    showPipLoadingIndicator: Boolean = true,
 ) {
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var dialog by remember { mutableStateOf<PlayerDialog?>(null) }
     var menu by remember { mutableStateOf<PlayerAnchorMenu?>(null) }
+    val miniTransition = LocalMiniTransitionActive.current
+    val miniChromeAlpha = LocalMiniChromeAlpha.current
+    state.castFailure?.let { report -> CastFailureDialog(report, callbacks::onCastFailureDismiss) }
+    LaunchedEffect(state.castFailure?.id) {
+        if (state.castFailure != null) { sheet = null; dialog = null; menu = null }
+    }
+    LaunchedEffect(state.failureReport?.id) {
+        if (state.failureReport != null) { sheet = null; dialog = null; menu = null }
+    }
     var topBarHeightPx by remember { mutableIntStateOf(0) }
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
+    // Measured track anchor (not a hardcoded bar height) shared by sponsor cards
+    // and subtitle clearance.
+    var trackClearancePx by remember { mutableIntStateOf(0) }
+    // Visible height only: the 48 dp touch box is invisible and must not push subtitles up.
+    var skipCardPx by remember { mutableIntStateOf(0) }
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
     val fullscreenSwipe = LocalFullscreenSwipeHandle.current
+    SideEffect {
+        fullscreenSwipe?.let {
+            it.pictureAspectRatio = if (state.videoWidth > 0 && state.videoHeight > 0)
+                state.videoWidth.toFloat() / state.videoHeight else 16f / 9f
+            it.pictureResizeMode = state.resizeMode
+        }
+    }
     val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
-    // The stable local host resizes the same view between embedded and mini.
-    // Fullscreen and system PiP keep their separate window geometries.
+    // Host-managed surfaces resize the same view; only system PiP swaps to a
+    // separate geometry, so it alone gets its own key.
     val surfaceId = when {
         pip -> "pip"
+        managedByHost -> "local"
         state.fullscreen -> "fullscreen"
         else -> "local"
     }
@@ -126,14 +154,13 @@ fun PlayerSurface(
     val topInsetDp = with(density) {
         WindowInsets.safeDrawing.getTop(this).toDp().value.toInt()
     }
-    // Embedded top in window space = WebView's inset top + the page player's
-    // viewport-relative top (player-hook.js reports it): this overlay is a
-    // child of the window root, one level above the inset-padded WebView.
     val topDp = PlayerUi.playerTopOffsetDp(state.fullscreen, embeddedBounds.top, topInsetDp)
     val chromeLeft = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(leftInsetDp) else 0
     val chromeRight = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(rightInsetDp) else 0
     val hudTop = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(topInsetDp) else 0
-    val hudEnd = PlayerUi.hudSidePadDp(screenWidthDp, chromeRight, rightInsetDp)
+    // Already inside the fullscreen chrome inset; add only enough to keep the
+    // countdown 12 dp from the safe edge, not the gesture rail's 12%.
+    val sponsorEnd = (maxOf(12, rightInsetDp) - chromeRight).coerceAtLeast(0)
     val sidePad = if (chromeLeft > 0 || chromeRight > 0) {
         Modifier.padding(start = chromeLeft.dp, end = chromeRight.dp)
     } else {
@@ -149,23 +176,20 @@ fun PlayerSurface(
     }
     LaunchedEffect(state.mini) {
         if (state.mini) {
-            // Queue remains available in the mini player; MiniPlayerChrome has its
-            // own queue button. Other sheets, including More, stay closed so they
-            // do not cover the docked player.
+            // Queue survives in mini (MiniPlayerChrome has its own button);
+            // other sheets would cover the docked player.
             if (sheet != PlayerSheet.Queue) sheet = null
             dialog = null
             menu = null
         }
     }
     LaunchedEffect(state.fullscreen, state.casting, state.mini, state.videoId, pip) {
-        // pip (PiP) included: the PiP window has no controls to reset a
-        // leftover pinch-zoom, and its aspect is computed from raw videoSize.
+        // PiP included: it has no controls to reset a leftover pinch-zoom and
+        // its aspect is computed from raw videoSize.
         if (!state.fullscreen || state.casting || state.mini || pip) zoom.reset()
     }
-    // A new video starts clean even mid-fullscreen autoplay: no inherited
-    // pinch-zoom (the effect above only covers surface geometry swaps) and no
-    // dropdowns/dialogs left open over the autoplayed video. The queue sheet
-    // survives — the queue is what drives the advance.
+    // New video starts clean even mid-fullscreen autoplay (the effect above only
+    // covers geometry swaps); the queue sheet survives — it drives the advance.
     LaunchedEffect(state.videoId) {
         zoom.reset()
         if (sheet != PlayerSheet.Queue) sheet = null
@@ -173,9 +197,13 @@ fun PlayerSurface(
         menu = null
     }
 
-    // Boolean projection of the gesture state: the auto-hide timer keys on
-    // gesture activity, not on each pointer-rate gesture update.
+    // Boolean projection: the auto-hide timer keys on gesture presence, not on
+    // each pointer-rate gesture update.
     val gestureActive by remember { derivedStateOf { gestureState.value != null } }
+    val seekGestureActive by remember { derivedStateOf { gestureState.value is GestureUi.Scrub } }
+    val previewPosition = remember(positionState, gestureState) {
+        derivedStateOf { (gestureState.value as? GestureUi.Scrub)?.targetMs ?: positionState.value }
+    }
 
     LaunchedEffect(
         state.controlsVisible, state.isPlaying, state.locked, state.scrubbing,
@@ -191,9 +219,8 @@ fun PlayerSurface(
             callbacks.onHideControls()
         }
     }
-    // Hint and DoubleTapSeek read their States inside the effects (snapshotFlow):
-    // reading them in composition would subscribe this whole surface to the
-    // pointer-rate writes.
+    // Read States inside snapshotFlow: reading them in composition would
+    // subscribe this whole surface to the pointer-rate writes.
     LaunchedEffect(Unit) {
         snapshotFlow { hintState.value }.collectLatest { hint ->
             if (hint != null) {
@@ -202,8 +229,8 @@ fun PlayerSurface(
             }
         }
     }
-    // Double-tap arcs are one-shot feedback; nothing
-    // else clears them, so they would stick without this timer.
+    // One-shot feedback: nothing else clears the arcs, so they would stick
+    // without this timer.
     LaunchedEffect(Unit) {
         snapshotFlow { gestureState.value }.collectLatest { gesture ->
             if (gesture is GestureUi.DoubleTapSeek) {
@@ -236,10 +263,9 @@ fun PlayerSurface(
         val compactChrome = PlayerUi.compactChrome(maxWidth.value - chromeLeft - chromeRight,
             density.fontScale, state.casting || state.castDevices.isNotEmpty())
         val chromeSizing = PlayerUi.chromeSizing(maxWidth.value - chromeLeft - chromeRight, maxHeight.value)
-        val compactBottom = compactBottomControls(state, maxWidth.value - chromeLeft - chromeRight,
-            chromeSizing.textSp) && maxHeight < 280.dp
         val centerHeightDp = maxHeight.value - with(density) { (topBarHeightPx + bottomBarHeightPx).toDp().value }
         val showChromeAuthor = maxHeight >= 280.dp || density.fontScale < 1.3f
+        val subtitleScale = if (state.mini || miniTransition || pip) (maxWidth.value / 390f).coerceIn(0.35f, 1f) else 1f
         Box(
             Modifier
                 .fillMaxSize()
@@ -253,22 +279,19 @@ fun PlayerSurface(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = zoom.scale
-                        scaleY = zoom.scale
-                        translationX = zoom.offsetX
-                        translationY = zoom.offsetY
+                        scaleX = zoom.scale * (fullscreenSwipe?.pictureScale ?: 1f)
+                        scaleY = zoom.scale * (fullscreenSwipe?.pictureScale ?: 1f)
+                        translationX = zoom.offsetX + (fullscreenSwipe?.pictureTranslationX ?: 0f)
+                        translationY = zoom.offsetY + (fullscreenSwipe?.pictureTranslationY ?: 0f)
                     },
             ) {
                 key(surfaceId) {
-                    // Attach and detach via DisposableEffect keyed on the view.
-                    // AndroidView factory/onRelease are not used: in a same-frame
-                    // swap the new factory runs before the old onRelease, so
-                    // releasing the player surface there would drop the new view.
-                    // onDispose only clears the player when this view is still
-                    // attached. The SurfaceView is created in composition (not in
-                    // a side effect) so the effect below can attach it within the
-                    // same frame the old geometry's view is disposed; a SurfaceView
-                    // has no external side effects until it is attached, so a
+                    // Attach/detach via DisposableEffect, not AndroidView
+                    // factory/onRelease: in a same-frame swap the new factory
+                    // runs before the old onRelease, so releasing there would
+                    // drop the new view. Creating the SurfaceView in composition
+                    // lets the effect attach it in the same frame the old view
+                    // is disposed; it has no side effects until attached, so a
                     // discarded speculative composition is harmless.
                     val context = LocalContext.current
                     val surface = remember { SurfaceView(context) }
@@ -296,19 +319,35 @@ fun PlayerSurface(
                             val w = state.videoWidth
                             val h = state.videoHeight
                             if (w > 0 && h > 0) {
+                                // Fixed buffer size: layout can animate without
+                                // reallocating the decoder output.
+                                surface.holder.setFixedSize(w, h)
                                 frame.setAspectRatio(w.toFloat() / h.toFloat())
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+                // Sits inside the transform layer so it travels with the picture
+                // instead of pinning an old frame over a translated/zoomed Surface.
+                if (!state.hasRenderedVideoFrame && !state.casting) {
+                    Box(Modifier.fillMaxSize().background(Color.Black).testTag("player-frame-shutter"))
+                }
+                transitionFrame?.let { frame -> PlayerTransitionFrame(frame, state.resizeMode) }
             }
         }
         if (state.casting && !pip) {
             Box(Modifier.fillMaxSize().background(Color.Black))
         }
 
+        if (pip && showPipLoadingIndicator && PlayerUi.playPauseAction(state) == PlayerUi.PlayPauseAction.Loading) {
+            PlaybackLoadingIndicator(Modifier.align(Alignment.Center).size(24.dp))
+        }
+
         if (state.mini && !pip) {
+            SubtitleCuesLayer(subtitleCuesState, showChrome = false,
+                style = state.subtitleStyle.copy(textScale = state.subtitleStyle.textScale * subtitleScale),
+                bottomClearDp = 4f)
             MiniPlayerChrome(
                 state = state,
                 onPlayPause = callbacks::onPlayPause,
@@ -317,11 +356,14 @@ fun PlayerSurface(
                 onClose = { miniHandle?.dismiss?.invoke() ?: callbacks.onMiniClose() },
                 onRestore = callbacks::onMiniRestore,
                 onQueue = { sheet = PlayerSheet.Queue },
+                modifier = Modifier.graphicsLayer { alpha = miniChromeAlpha() },
             )
         } else {
             Box(
                 Modifier
                     .fillMaxSize()
+                    .graphicsLayer { alpha = if (miniTransition) 0f else chromeAlpha() }
+                    .then(if (miniTransition) Modifier.clearAndSetSemantics {} else Modifier)
                     .playerGestures(
                         callbacks = rememberGestureCallbacks(
                             callbacks = callbacks,
@@ -341,49 +383,60 @@ fun PlayerSurface(
                         zoomEnabled = state.fullscreen && !state.locked &&
                             !state.mini && !state.casting && !pip,
                         restartKey = state.casting,
+                        fullscreenEntry = !state.fullscreen && !state.mini,
                     ),
             ) {
-                val showChrome = state.controlsVisible && !state.locked && !pip
+                val showChrome = (state.controlsVisible || seekGestureActive) && !state.locked && !pip
+                val trackClearanceDp = with(density) { trackClearancePx.toDp() }
+                val skipCardDp = with(density) { skipCardPx.toDp() }
+                val skipCardsVisible = !pip && !state.locked &&
+                    state.sponsorCountdownSec != null
+                val chipBandBottom by animateDpAsState(
+                    if (showChrome) trackClearanceDp + PlayerUi.TRACK_CHIP_GAP_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                    tween(250),
+                    label = "chipBandBottom",
+                )
+                // Subtitles clear measured bounds (controls row + visible skip
+                // cards), not a flat reserve; invisible touch boxes don't count.
+                val subtitleBottomClearDp = maxOf(
+                    if (showChrome) trackClearanceDp.value + 6f else PlayerUi.SUBTITLE_CLEAR_DP.dp.value,
+                    if (skipCardsVisible) chipBandBottom.value + skipCardDp.value + PlayerUi.TRACK_CHIP_GAP_DP else 0f,
+                )
                 AnimatedVisibility(
                     visible = showChrome,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+                    exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
                 ) {
                     Box(Modifier.fillMaxSize()) {
                         ControlScrims()
                         Box(Modifier.fillMaxSize().then(sidePad)) {
                             TopBar(
                                 state = state,
-                                positionState = positionState,
+                                positionState = previewPosition,
                                 menu = menu,
                                 onBack = callbacks::onBack,
-                                onQueue = { sheet = PlayerSheet.Queue },
-                                onSegments = { menu = PlayerAnchorMenu.Segments },
-                                onLoop = callbacks::onLoop,
                                 onMore = { sheet = PlayerSheet.More },
                                 onSubtitle = { menu = PlayerAnchorMenu.Subtitles },
-                                onSubtitleStyle = { dialog = PlayerDialog.SubtitleStyle },
-                                onCast = { dialog = PlayerDialog.Cast },
+                                onSubtitleStyle = { sheet = PlayerSheet.SubtitleStyle },
                                 onDismissMenu = { menu = null },
                                 callbacks = callbacks,
                                 showAuthor = showChromeAuthor,
-                                compactBottom = compactBottom,
                                 sizing = chromeSizing,
                                 modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { topBarHeightPx = it.height },
                             )
                             BottomBar(
                                 state = state,
-                                positionState = positionState,
+                                positionState = previewPosition,
                                 bufferedPositionState = bufferedPositionState,
-                                menu = menu,
                                 onSeek = callbacks::onSeek,
                                 onFullscreen = callbacks::onFullscreenToggle,
-                                onSpeed = { menu = PlayerAnchorMenu.Speed },
-                                onQuality = { menu = PlayerAnchorMenu.Quality },
-                                onDismissMenu = { menu = null },
+                                chapters = state.chapters,
+                                hasSegments = state.sponsorSegments.isNotEmpty(),
+                                onOpenChapters = { sheet = PlayerSheet.Chapters },
                                 callbacks = callbacks,
-                                compact = compactBottom,
+                                compact = compactChrome,
                                 sizing = chromeSizing,
+                                onTrackAnchor = { trackClearancePx = it },
                                 modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomBarHeightPx = it.height },
                             )
                         }
@@ -391,23 +444,24 @@ fun PlayerSurface(
                 }
 
                 Box(Modifier.fillMaxSize().then(sidePad)) {
+                    val countdown = state.sponsorCountdownSec
                     SubtitleCuesLayer(
                         cuesState = subtitleCuesState,
                         showChrome = showChrome,
-                        style = state.subtitleStyle,
-                        chromeBottomClearDp = maxOf(PlayerUi.SUBTITLE_CHROME_CLEAR_DP.toFloat(),
-                            with(density) { bottomBarHeightPx.toDp().value } + 8f),
+                        style = state.subtitleStyle.copy(textScale = state.subtitleStyle.textScale * subtitleScale),
+                        bottomClearDp = subtitleBottomClearDp,
                     )
 
-                    AnimatedVisibility(
+                    if (!gestureActive) AnimatedVisibility(
                         visible = (showChrome || state.loading) && !state.locked &&
                             state.error == null && !pip,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+                        exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
                         modifier = Modifier.align(Alignment.Center),
                     ) {
                         CenterControls(
                             state = state,
+                            modifier = Modifier.testTag("player-center-controls"),
                             onPlayPause = callbacks::onPlayPause,
                             onPrevious = callbacks::onPrevious,
                             onNext = callbacks::onNext,
@@ -432,24 +486,14 @@ fun PlayerSurface(
                             ),
                     )
 
-                    val countdown = state.sponsorCountdownSec
-                    if (!pip && countdown != null) {
+                    if (!pip && !state.locked && countdown != null) {
                         SponsorCountdownCard(
                             seconds = countdown,
-                            onSkipNow = callbacks::onSponsorSkipNow,
                             onCancel = callbacks::onSponsorSkipCancel,
+                            onVisualHeight = { skipCardPx = it },
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp),
-                        )
-                    }
-                    if (!pip && state.sponsorChip) {
-                        SponsorSkipChip(
-                            highlight = state.sponsorChipHighlight,
-                            onSkip = callbacks::onSponsorChipSkip,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = hudEnd.dp, bottom = PlayerUi.SPONSOR_CARD_BOTTOM_DP.dp),
+                                .padding(end = sponsorEnd.dp, bottom = chipBandBottom),
                         )
                     }
 
@@ -467,9 +511,20 @@ fun PlayerSurface(
                         )
                     }
 
+                    if (state.notice != null && !state.locked && !pip) {
+                        Text(
+                            text = stringResource(R.string.player_payment_required),
+                            color = Color.White,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.align(Alignment.Center).fillMaxWidth().padding(24.dp)
+                                .testTag("player-access-notice"),
+                        )
+                    }
+
                     if (state.error != null && !state.locked && !pip) {
                         ErrorOverlay(
                             message = state.error,
+                            onDetails = if (state.failureReport == null) null else callbacks::onErrorDetails,
                             onRetry = callbacks::onRetry,
                             modifier = Modifier.align(Alignment.Center),
                         )
@@ -520,16 +575,22 @@ fun PlayerSurface(
             }
         }
 
+        if (miniTransition && !pip) {
+            SubtitleCuesLayer(subtitleCuesState, showChrome = false,
+                style = state.subtitleStyle.copy(textScale = state.subtitleStyle.textScale * subtitleScale), bottomClearDp = 4f)
+            MiniPlayerChrome(state = state.copy(mini = true, controlsVisible = true), onPlayPause = {}, onPrevious = {}, onNext = {},
+                onClose = {}, onRestore = {}, onQueue = {}, modifier = Modifier.graphicsLayer { alpha = miniChromeAlpha() })
+        }
+
         PlayerSheetHost(
             sheet = sheet,
             state = state,
+            positionState = positionState,
             callbacks = callbacks,
             onDismiss = { sheet = null },
             onOpenDialog = { dialog = it },
-            onOpenQueue = if (compactChrome) { { sheet = PlayerSheet.Queue } } else null,
-            onSegments = if (compactChrome) { { sheet = null; menu = PlayerAnchorMenu.Segments } } else null,
-            onSpeed = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Speed } } else null,
-            onQuality = if (compactBottom) { { sheet = null; menu = PlayerAnchorMenu.Quality } } else null,
+            onNavigate = { sheet = it },
+            onOpenQueue = { sheet = PlayerSheet.Queue },
         )
         PlayerDialogHost(
             dialog = dialog,
@@ -542,17 +603,29 @@ fun PlayerSurface(
     }
 }
 
-/**
- * Reads [cuesState] here instead of in [PlayerSurface]: cue swaps (1-4 Hz
- * while subtitles are on) then recompose only this layer, not the whole
- * surface tree.
- */
+@Composable
+internal fun PlayerTransitionFrame(frame: android.graphics.Bitmap, resizeMode: ResizeMode = ResizeMode.Fit) {
+    val scale = when (resizeMode) {
+        ResizeMode.Fit -> ContentScale.Fit
+        ResizeMode.Fill -> ContentScale.FillBounds
+        ResizeMode.Zoom -> ContentScale.Crop
+        ResizeMode.FixedWidth -> ContentScale.FillWidth
+        ResizeMode.FixedHeight -> ContentScale.FillHeight
+    }
+    // PixelCopy returns the full buffer without the parent viewport's clipping;
+    // apply the live Surface's resize policy, incl. letterbox cover.
+    androidx.compose.foundation.Image(frame.asImageBitmap(), contentDescription = null,
+        contentScale = scale,
+        modifier = Modifier.fillMaxSize().clipToBounds().background(Color.Black).testTag("player-handoff-frame"))
+}
+
+/** Reads [cuesState] here so cue swaps (1-4 Hz) recompose only this layer, not the whole surface tree. */
 @Composable
 private fun SubtitleCuesLayer(
     cuesState: State<List<String>>,
     showChrome: Boolean,
     style: SubtitleStyle,
-    chromeBottomClearDp: Float,
+    bottomClearDp: Float,
 ) {
     val cues = cuesState.value
     if (cues.isEmpty()) return
@@ -561,7 +634,7 @@ private fun SubtitleCuesLayer(
             .fillMaxSize()
             .padding(
                 top = if (showChrome) PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
-                bottom = if (showChrome) chromeBottomClearDp.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                bottom = bottomClearDp.dp,
             ),
     ) {
         SubtitleOverlay(
@@ -586,22 +659,25 @@ private fun rememberGestureCallbacks(
     fullscreen: Boolean,
     zoom: VideoZoom,
     fullscreenSwipe: FullscreenSwipeHandle?,
-): GestureCallbacks = remember(callbacks, locked, fullscreen, zoom, fullscreenSwipe) {
+): GestureCallbacks {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction(com.hhst.youtubelite.core.HapticsController.Event.GESTURE_THRESHOLD)
+    return remember(callbacks, locked, fullscreen, zoom, fullscreenSwipe, haptic) {
     if (locked) {
         object : GestureCallbacks {
             override fun onTap() = Unit
         }
     } else {
-        ForwardingGestures(callbacks, fullscreen, zoom, fullscreenSwipe)
+        ForwardingGestures(callbacks, fullscreen, zoom, fullscreenSwipe, haptic)
     }
 }
+}
 
-/** Unlocked: map gesture events onto playback/window callbacks. */
 private class ForwardingGestures(
     private val c: PlayerSurfaceCallbacks,
     private val fullscreen: Boolean,
     private val zoom: VideoZoom,
     private val fullscreenSwipe: FullscreenSwipeHandle?,
+    private val fullscreenHaptic: () -> Unit,
 ) : GestureCallbacks {
     override fun onTap() = c.onToggleControls()
     override fun onDoubleTapSeek(offsetMs: Long) = c.onDoubleTapSeek(offsetMs)
@@ -614,11 +690,19 @@ private class ForwardingGestures(
     override fun onVolume(delta: Float) = c.onVolume(delta)
     override fun onGestureEnd() { fullscreenSwipe?.end?.invoke(false); c.onGestureEnd() }
     override fun onFullscreenSwipeProgress(distancePx: Float) { fullscreenSwipe?.drag?.invoke(distancePx) }
+    override fun onWindowSwipeProgress(dx: Float, dy: Float) {
+        fullscreenSwipe?.horizontal = dx
+        fullscreenSwipe?.drag?.invoke(dy)
+    }
     override fun onFullscreenSwipeCancel() { fullscreenSwipe?.end?.invoke(false) }
+    override fun onFullscreenSwipeRelease(distancePx: Float, velocityPxPerSec: Float): Boolean =
+        fullscreenSwipe?.release?.invoke(distancePx, velocityPxPerSec) ?: false
     override fun onFullscreenSwipe(up: Boolean) {
-        if (up != fullscreen) {
-            fullscreenSwipe?.end?.invoke(true)
-            c.onFullscreenToggle()
+        if (fullscreen || up) {
+            fullscreenHaptic()
+            if (fullscreen) {
+                if (up) c.onFullscreenSwipeExit() else c.onFullscreenSwipeRestore()
+            } else c.onFullscreenToggle()
         }
     }
     override fun onZoomScale(factor: Float) = zoom.applyScale(factor)
@@ -633,9 +717,8 @@ private class VideoZoom {
     var widthPx by mutableFloatStateOf(0f)
     var heightPx by mutableFloatStateOf(0f)
 
-    // derivedStateOf: the reset chip reads this inside a large recompose
-    // scope; boolean-flip caching keeps pointer-rate scale/pan writes from
-    // recomposing the whole layer.
+    // derivedStateOf caches the boolean flip so pointer-rate scale/pan writes
+    // don't recompose the layer the reset chip reads in.
     val zoomed: Boolean by derivedStateOf { ZoomMath.isZoomed(scale, offsetX, offsetY) }
     fun reset() {
         scale = 1f

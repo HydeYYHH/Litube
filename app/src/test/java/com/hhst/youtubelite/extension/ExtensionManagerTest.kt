@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** Field storage for extension preferences. */
 class ExtensionManagerTest {
 
     private lateinit var store: MemoryPrefStore
@@ -48,7 +47,6 @@ class ExtensionManagerTest {
             assertEquals(expected, manager.isEnabled(key))
         }
     }
-
 
     @Test
     fun setEnabled_persistsAndRoundTrips() {
@@ -131,5 +129,20 @@ class ExtensionManagerTest {
     @Test
     fun unknownKey_defaultsToFalse() {
         assertFalse(manager.isEnabled("not_a_real_key"))
+    }
+
+    @Test
+    fun importPreferences_appliesValuesAndHapticStrength() {
+        manager.setEnabled(PreferenceKeys.ENABLE_HIDE_SHORTS, true)
+        manager.setHapticStrength(80)
+        manager.importPreferences(
+            mapOf(PreferenceKeys.ENABLE_PIP to false, PreferenceKeys.REMEMBER_QUALITY to false),
+            67,
+        )
+        assertEquals(false, manager.isEnabled(PreferenceKeys.ENABLE_PIP))
+        assertEquals(false, manager.isEnabled(PreferenceKeys.REMEMBER_QUALITY))
+        assertEquals(67, manager.hapticStrength())
+        // keys absent from the payload keep their stored value
+        assertTrue(manager.isEnabled(PreferenceKeys.ENABLE_HIDE_SHORTS))
     }
 }

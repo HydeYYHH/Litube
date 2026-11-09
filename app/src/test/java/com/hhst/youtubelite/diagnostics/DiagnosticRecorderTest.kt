@@ -1,6 +1,8 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
@@ -25,9 +27,11 @@ class DiagnosticRecorderTest {
         assertEquals(f.context.operationId, row.context?.parentOperationId)
         assertEquals(f.context.traceId, row.context?.traceId)
         assertEquals("Wh9klmWAm5s", row.context?.videoId)
-        val json = com.google.gson.JsonParser.parseString(Gson().toJson(row)).asJsonObject
-        assertTrue(json.getAsJsonObject("fields").get("bytes").asJsonPrimitive.isNumber)
-        assertTrue(json.getAsJsonObject("fields").get("ready").asJsonPrimitive.isBoolean)
+        val json = DiagnosticJson.json.parseToJsonElement(DiagnosticJson.encode(row))
+            as kotlinx.serialization.json.JsonObject
+        val fields = json["fields"] as kotlinx.serialization.json.JsonObject
+        assertTrue(fields["bytes"]!!.jsonPrimitive.longOrNull != null)
+        assertTrue(fields["ready"]!!.jsonPrimitive.booleanOrNull != null)
     }
     @Test fun ringRespectsAgeCountAndByteCaps() {
         val f = Fixture()
@@ -111,7 +115,8 @@ class DiagnosticRecorderTest {
         assertTrue(errors[0].causes.any { it.frames.isNotEmpty() })
         assertTrue(errors[1].stackReference)
         assertTrue(errors[1].causes.all { it.frames.isEmpty() })
-        assertFalse(Gson().toJson(errors).contains("private-body"))
+        assertFalse(DiagnosticJson.json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(DiagnosticFailure.serializer()), errors).contains("private-body"))
     }
     @Test fun operationHasExactlyOneTerminalEvenAfterCancellationAndFinally() {
         val terminal = mutableListOf<DiagnosticOutcome>()
@@ -134,7 +139,7 @@ class DiagnosticRecorderTest {
     }
     @Test fun priorityEvictsOrdinaryBytesBeforeBeingDropped() {
         val f = Fixture(); f.event("row", DiagnosticLevel.INFO)
-        val size = Gson().toJson(f.ordinary.single()).toByteArray().size + 1
+        val size = DiagnosticJson.encode(f.ordinary.single()).toByteArray().size + 1
         val queue = DiagnosticQueue(normalBytes = size * 2, totalBytes = size * 2)
         queue.offer(f.ordinary, false); queue.offer(f.ordinary, false); queue.offer(f.ordinary, true)
         assertEquals(1L, queue.dropped)

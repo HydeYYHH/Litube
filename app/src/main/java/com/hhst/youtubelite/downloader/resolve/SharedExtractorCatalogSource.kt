@@ -6,11 +6,9 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * Shared [Extractor] access for downloads. [catalog] joins the in-flight parse
- * (same `/player` as playback). [refresh] uses [Extractor.awaitFreshMedia] so
- * a 403 retry does not cancel or replace playback's in-flight slot and does
- * not write stream URLs into the playback cache.
- *
- * Cancelling the coroutine that calls these methods cancels only the wait.
+ * (same `/player` as playback). [refresh] uses [Extractor.awaitFreshMedia] so a
+ * 403 retry does not cancel/replace playback's in-flight slot or write stream
+ * URLs into the playback cache. Cancelling the caller cancels only the wait.
  */
 class SharedExtractorCatalogSource(
     private val extractor: Extractor,

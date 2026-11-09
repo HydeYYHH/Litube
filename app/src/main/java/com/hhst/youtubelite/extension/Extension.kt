@@ -50,6 +50,7 @@ data class Extension(
                     toggle(PreferenceKeys.REMEMBER_LAST_POSITION, R.string.remember_last_position),
                     toggle(PreferenceKeys.REMEMBER_QUALITY, R.string.remember_quality),
                     toggle(PreferenceKeys.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
+                    toggle(PreferenceKeys.ENABLE_AUTOPLAY, R.string.autoplay),
                     toggle(PreferenceKeys.REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
                     toggle(PreferenceKeys.USE_ORIGINAL_TITLE, R.string.use_original_title),
                 ),
@@ -112,6 +113,17 @@ data class Extension(
                     toggle(PreferenceKeys.SKIP_FILLER, R.string.skip_sponsors_filler),
                     toggle(PreferenceKeys.SKIP_POI_HIGHLIGHT, R.string.skip_sponsors_highlight),
                     toggle(PreferenceKeys.SPONSOR_COUNTDOWN, R.string.sponsor_countdown),
+                ),
+            ),
+            group(
+                id = "dearrow",
+                title = R.string.dearrow,
+                icon = R.drawable.ic_play,
+                children = listOf(
+                    toggle(PreferenceKeys.DEARROW_TITLES, R.string.dearrow_replace_titles,
+                        R.string.dearrow_titles_summary),
+                    toggle(PreferenceKeys.DEARROW_THUMBNAILS, R.string.dearrow_replace_thumbnails,
+                        R.string.dearrow_thumbnails_summary),
                 ),
             ),
             nav(

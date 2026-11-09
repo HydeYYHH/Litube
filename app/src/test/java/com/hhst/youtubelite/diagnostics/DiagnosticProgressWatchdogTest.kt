@@ -33,12 +33,4 @@ class DiagnosticProgressWatchdogTest {
         monitor.sample(130_001, 0, true); monitor.sample(130_002, 0, false)
         assertEquals(listOf("stalled", "deferred"), states)
     }
-    @Test fun bridgeAcceptsOnlyWhitelistedTypedFieldsAndCurrentGeneration() {
-        val raw = """{"code":"selector_missing","generation":2,"video_id":"Wh9klmWAm5s","count":3,"reason":"selector_missing","cookie":"secret","script_body":"secret"}"""
-        assertNull(DiagnosticJsEvents.parse(raw, 1))
-        val report = DiagnosticJsEvents.parse(raw, 2)!!
-        assertTrue(report.failed); assertEquals(3, report.fields["count"])
-        assertFalse(report.fields.containsKey("cookie")); assertFalse(report.fields.containsKey("script_body"))
-        assertNull(DiagnosticJsEvents.parse("""{"code":"console","generation":2}""", 2))
-    }
 }

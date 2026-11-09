@@ -1,13 +1,9 @@
-Litube is an Android video client with an embedded browser, native playback and built-in downloads.
+An unofficial, open-source YouTube client for Android.
 
 <b>Features</b>
-* Ad-free playback and configurable sponsor segment skipping
-* Native controls for quality, playback speed, subtitles and audio tracks
-* Audio-only playback, background playback, picture-in-picture and a mini-player
-* Local queues, playlist playback and autoplay
-* Video, audio and playlist downloads with quality and language selection
-* Voice search
-* Live streams and live chat
-* Casting through an open-source sender
-* Settings backup and restore
-* Diagnostic reports that can be saved or shared
+* <b>Browse YouTube.</b> Explore your home feed, search for videos, and browse channels, playlists, Shorts, and your library.
+* <b>Play your way.</b> Enjoy ad-free playback with controls for video quality, speed, subtitles, and audio tracks. Keep listening in the background, use picture-in-picture or the mini-player, or cast to another device.
+* <b>Download for later.</b> Save videos, audio, subtitles, or entire playlists. Choose the quality and language, and pause or resume downloads as needed.
+* <b>Keep things organized.</b> Build queues with shuffle, repeat, and autoplay. Watch history and Watch later are available even when you're signed out.
+* <b>Multiple accounts, all in one.</b> Easily switch between your anonymous account and multiple signed-in accounts.
+* <b>Make it yours.</b> Customize SponsorBlock, playback gestures, themes, and language. Enable DeArrow for alternative titles and thumbnails.

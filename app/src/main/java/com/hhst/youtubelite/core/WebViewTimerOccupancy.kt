@@ -3,11 +3,11 @@ package com.hhst.youtubelite.core
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Process-global [android.webkit.WebView.pauseTimers] / [android.webkit.WebView.resumeTimers]
- * are shared by every WebView. Occupancy is who currently needs timers running
- * (browser foreground, PoToken mint). Count 0 pauses; count > 0 resumes.
+ * [android.webkit.WebView.pauseTimers]/[resumeTimers] are process-global and shared
+ * by every WebView; occupancy tracks who needs timers running. Count 0 pauses, > 0 resumes.
  */
 interface WebViewTimerClock {
+    /** Timer changes must not wait for another thread. */
     fun pauseTimers()
     fun resumeTimers()
     fun attach(host: Any) {}
@@ -46,15 +46,13 @@ class WebViewTimerOccupancy(
     fun attach(host: Any) = clock.attach(host)
 
     fun acquire(owner: WebViewTimerOwner): WebViewTimerHandle {
-        val shouldResume: Boolean
         synchronized(lock) {
             counts[owner] = (counts[owner] ?: 0) + 1
-            shouldResume = paused
-            if (paused) paused = false
+            if (paused) {
+                paused = false
+                clock.resumeTimers()
+            }
         }
-        // Clock hops to the main looper; never wait for that while holding [lock]
-        // or Browser ON_RESUME on main deadlocks against PoToken on IO.
-        if (shouldResume) clock.resumeTimers()
         return WebViewTimerHandle(this, owner)
     }
 
@@ -68,14 +66,14 @@ class WebViewTimerOccupancy(
     }
 
     internal fun release(owner: WebViewTimerOwner) {
-        val shouldPause: Boolean
         synchronized(lock) {
             val next = (counts[owner] ?: 0) - 1
             if (next <= 0) counts.remove(owner) else counts[owner] = next
-            shouldPause = counts.values.sum() == 0 && !paused
-            if (shouldPause) paused = true
+            if (counts.isEmpty() && !paused) {
+                paused = true
+                clock.pauseTimers()
+            }
         }
-        if (shouldPause) clock.pauseTimers()
     }
 
     companion object {

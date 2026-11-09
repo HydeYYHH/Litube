@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.ui.theme.AppTheme
-import com.tencent.mmkv.MMKV
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +25,7 @@ class EmbeddedBoundsAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<PlayerTestActivity>()
 
     @Test fun embeddedBoundsFollowWidthAndOffsetWithoutReplacingContent() {
-        val store = MiniPlayerStore(MMKV.mmkvWithID("embedded-bounds")!!.apply { clearAll() })
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "embedded-bounds").apply { clearAll() })
         var state by mutableStateOf(PlayerUiState(pageLeftDp = 60, pageTopDp = 48,
             pageWidthDp = 240, pageHeightDp = 135, pageViewportWidthDp = 400))
         var fullscreen by mutableStateOf(false)
@@ -46,8 +45,10 @@ class EmbeddedBoundsAndroidTest {
         fun check(left: Int, width: Int) {
             compose.waitForIdle()
             val rect = compose.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
+            // The compose root cannot exceed the physical window: a 400dp window on a 440dpi screen is capped at the device width.
+            val cap = compose.onNodeWithTag("root").fetchSemanticsNode().boundsInRoot.width
             assertEquals(left * density, rect.left, 1.5f)
-            assertEquals(width * density, rect.width, 1.5f)
+            assertEquals(minOf(width * density, cap), rect.width, 1.5f)
         }
         check(60, 240)
         compose.runOnIdle { state = state.copy(pageLeftDp = 20, pageWidthDp = 300) }

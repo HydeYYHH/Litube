@@ -7,33 +7,45 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.hhst.youtubelite.core.PipAutoEnter
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import com.hhst.youtubelite.ui.theme.AppTheme
+import com.hhst.youtubelite.ui.theme.NeutralControls
 import org.koin.androidx.compose.koinViewModel
 
-/** Independent download manager: filters, batch details, settings, history. */
 class DownloadActivity : ComponentActivity() {
 
     private var pipHandle: PipAutoEnter.Handle? = null
 
+    /** Batch requests from new intents reach the live screen without recreating it. */
+    private val batchRequests = Channel<String>(Channel.CONFLATED)
+    private val batchEvents = batchRequests.receiveAsFlow()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as com.hhst.youtubelite.App).startMediaRuntime()
         enableEdgeToEdge()
         val batchId = intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID)
         setContent {
-            AppTheme {
+            AppTheme { NeutralControls {
                 DownloadManagerScreen(
                     viewModel = koinViewModel(),
                     initialBatchId = batchId,
+                    newBatchRequests = batchEvents,
                     onClose = { finish() },
                 )
-            }
+            } }
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
+    // Public so tests can deliver the runtime batch intent directly, without
+    // depending on windowing-dependent startActivity routing.
+    public override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        recreate()
+        intent.getStringExtra(DownloadUi.EXTRA_BATCH_ID)?.takeIf(String::isNotBlank)?.let { id ->
+            batchRequests.trySend(id)
+        }
     }
 
     override fun onStart() {

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">i još %1$d link</item>
+        <item quantity="few">i još %1$d linka</item>
+        <item quantity="other">i još %1$d linkova</item>
+    </plurals>
+</resources>

@@ -34,7 +34,7 @@ class DownloadBatchRemovalAndroidTest {
             BatchSelection(setOf(0, 1)), "batch-removal") }
         try {
             compose.setContent { AppTheme(darkTheme = true) {
-                DownloadManagerScreen(vm, batch.batchId, {})
+                DownloadManagerScreen(vm, batch.batchId, onClose = {})
             } }
             compose.waitUntil(5_000) { compose.onAllNodesWithText("Delete first").fetchSemanticsNodes().isNotEmpty() }
             for ((index, title) in listOf("Delete first", "Keep second").withIndex()) {

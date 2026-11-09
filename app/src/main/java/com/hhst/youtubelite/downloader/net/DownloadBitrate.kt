@@ -3,10 +3,9 @@ package com.hhst.youtubelite.downloader.net
 import com.hhst.youtubelite.extractor.Format
 
 /**
- * Playback stores video [Format.bitrate] in bits/s and audio
- * [Format.bitrate] as NewPipe `averageBitrate` when present (typically kb/s).
- * Download expected-size math always uses bits/s. Playback display/selection
- * is not changed here.
+ * Playback stores video [Format.bitrate] in bits/s but audio as NewPipe
+ * `averageBitrate` (typically kb/s); download size math always uses bits/s
+ * and playback display is untouched here.
  */
 object DownloadBitrate {
     /** Audio values below this are treated as kb/s; audio bitrates are at least about 30 kb/s * 1000. */

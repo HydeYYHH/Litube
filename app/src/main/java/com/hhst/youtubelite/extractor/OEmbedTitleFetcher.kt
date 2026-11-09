@@ -1,21 +1,19 @@
 package com.hhst.youtubelite.extractor
 
-import com.google.gson.Gson
 import java.net.URLEncoder
-import com.google.gson.JsonObject
 import com.hhst.youtubelite.core.Constants
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * Fetches the original (untranslated) video title via the locale-agnostic
- * oEmbed endpoint.
+ * Fetches the original (untranslated) video title via the locale-agnostic oEmbed endpoint.
  */
 class OEmbedTitleFetcher(
     client: OkHttpClient,
-    private val gson: Gson = Gson(),
 ) {
     private val http = client.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -41,8 +39,7 @@ class OEmbedTitleFetcher(
             if (System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) return null
             failures.remove(id, failedAt)
         }
-        // Losers of a concurrent first lookup skip this round and re-check the
-        // caches on their next call instead of issuing a duplicate request.
+        // Concurrent first-lookup losers skip this round and re-check caches instead of duplicating the request.
         if (!inFlight.add(id)) return null
         try {
             val title = runCatching {
@@ -58,8 +55,8 @@ class OEmbedTitleFetcher(
                 http.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@runCatching null
                     val body = response.body?.string() ?: return@runCatching null
-                    val json = runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
-                    json?.get("title")?.takeIf { !it.isJsonNull }?.asString
+                    val json = runCatching { parseJson(body) as? JsonObject }.getOrNull()
+                    json?.get("title")?.asText
                         ?.takeIf { it.isNotBlank() }
                 }
             }.getOrNull()
@@ -80,10 +77,8 @@ class OEmbedTitleFetcher(
     }
 
     private companion object {
-        /** How long a failed lookup suppresses retries. */
         val FAILURE_TTL_MS = TimeUnit.MINUTES.toMillis(5)
 
-        /** Upper bound on remembered failures; expired entries are pruned past it. */
         const val MAX_FAILURES = 64
     }
 }

@@ -10,6 +10,9 @@ import com.hhst.youtubelite.downloader.data.DownloadRepository
 import com.hhst.youtubelite.downloader.data.DownloadSession
 import com.hhst.youtubelite.extractor.VideoId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class DownloadCoordinator(
     private val repository: DownloadRepository,
@@ -18,6 +21,7 @@ class DownloadCoordinator(
     private val publisher: DownloadPublisher = NoOpPublisher,
     private val ids: IdFactory = UuidIdFactory,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    private val effectsDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private suspend fun log(event: String, fields: Map<String, Any?>, critical: Boolean = false) =
         AppLog.event(AppLog.Category.DOWNLOADER, event, fields, critical = critical,
@@ -293,10 +297,7 @@ class DownloadCoordinator(
         true
     }
 
-    /**
-     * Writes resolved mime, expected bytes, and stream identity onto the
-     * current generation's component/asset rows. Stale generations are ignored.
-     */
+    /** Stale generations are ignored. */
     suspend fun reportResolved(
         taskId: String,
         generation: Long,
@@ -376,9 +377,9 @@ class DownloadCoordinator(
     }
 
     /**
-     * Interrupted RUNNING work becomes waiting-system. Does not schedule: a
-     * still-alive system job is a restore path, and a missing job after
-     * force-stop must wait for a later user action.
+     * Interrupted RUNNING → waiting-system; does not schedule. A still-alive
+     * system job is a restore path; a missing job after force-stop waits for
+     * a later user action.
      */
     suspend fun onProcessRestore() {
         repository.transact {
@@ -406,7 +407,6 @@ class DownloadCoordinator(
         }
     }
 
-    /** Persist WorkManager unique name / UIDT job id after the system accepts work. */
     suspend fun bindSystemWork(
         taskId: String,
         uniqueWorkName: String? = null,
@@ -650,8 +650,6 @@ class DownloadCoordinator(
         taskIds(target, ownedOnly = true).forEach { taskId ->
             val task = getTask(taskId) ?: return@forEach
             if (task.removed || task.userCancelled || task.status == DownloadStatus.CANCELLED) return@forEach
-            // An explicit user resume covers system waits (WAITING_SYSTEM)
-            // and network waits, in addition to user pauses.
             val resumable = task.userPaused ||
                 task.status == DownloadStatus.PAUSED ||
                 task.status == DownloadStatus.PAUSING ||
@@ -884,7 +882,7 @@ class DownloadCoordinator(
         if (pending) effects.schedule += taskId else effects.unschedule += taskId
     }
 
-    private suspend fun applyEffects(effects: SideEffects) {
+    private suspend fun applyEffects(effects: SideEffects) = withContext(effectsDispatcher) {
         effects.cancelInFlight.distinct().forEach { transport.cancelInFlight(it) }
         effects.unschedule.distinct().forEach { scheduler.cancel(it) }
         effects.schedule.distinct().forEach { scheduler.schedule(it) }

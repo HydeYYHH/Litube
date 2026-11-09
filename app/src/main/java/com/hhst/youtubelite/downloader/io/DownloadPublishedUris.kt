@@ -1,9 +1,6 @@
 package com.hhst.youtubelite.downloader.io
 
-/**
- * JVM-safe published-URI checks. Avoids [android.net.Uri] so unit tests do not
- * depend on Robolectric stubs.
- */
+/** JVM-safe published-URI checks; avoids [android.net.Uri] so unit tests need no Robolectric. */
 object DownloadPublishedUris {
 
     fun isOpenable(raw: String?): Boolean {

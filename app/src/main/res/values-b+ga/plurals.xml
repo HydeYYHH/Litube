@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">agus %1$d nasc eile</item>
+        <item quantity="two">agus %1$d nasc eile</item>
+        <item quantity="few">agus %1$d nasc eile</item>
+        <item quantity="many">agus %1$d nasc eile</item>
+        <item quantity="other">agus %1$d nasc eile</item>
+    </plurals>
+</resources>

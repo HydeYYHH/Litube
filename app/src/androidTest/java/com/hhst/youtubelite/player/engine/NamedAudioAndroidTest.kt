@@ -12,9 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
-import com.hhst.youtubelite.MainActivity
-import com.hhst.youtubelite.browser.PageOrigin
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -35,7 +33,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Verifies audio identity across source changes. */
 class NamedAudioAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
 
@@ -43,32 +40,63 @@ class NamedAudioAndroidTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1")
-        val id = args.getString("videoId") ?: "0e3GPea1Tyg"
+        val id = args.getString("videoId") ?: "zIN0foYC6_Y"
         val app = instrumentation.targetContext
         val engine = GlobalContext.get().get<PlaybackApi>() as PlaybackEngine
-        val scenario = ActivityScenario.launch<MainActivity>(
-            Intent(Intent.ACTION_VIEW, Uri.parse(VideoId.watchUrl(id)),
-                app, MainActivity::class.java))
+        val scenario = ActivityScenario.launch<WatchActivity>(
+            com.hhst.youtubelite.watch.WatchActivity.intent(app, id))
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
         try {
             instrumentation.runOnMainSync {
-                GlobalContext.get().get<PlayerViewModel>().playVideo(VideoId.watchUrl(id), PageOrigin.HOST)
+                GlobalContext.get().get<PlayerViewModel>().openVideo(id)
             }
             var ready = false
+            var menuOpened = false
             val deadline = SystemClock.elapsedRealtime() + 60_000
             while (!ready && SystemClock.elapsedRealtime() < deadline) {
-                instrumentation.runOnMainSync { ready = engine.snapshot.value.videoId == id && player.isPlaying && engine.snapshot.value.audioTracks.size > 1 }
+                instrumentation.runOnMainSync {
+                    if (!menuOpened && engine.snapshot.value.videoId == id && player.isPlaying) {
+                        engine.onAudioMenuOpened()
+                        menuOpened = true
+                    }
+                    ready = engine.snapshot.value.videoId == id && player.isPlaying && engine.snapshot.value.audioTracks.size > 1
+                }
                 if (!ready) Thread.sleep(100)
             }
-            DeviceEvidence.writeJson("issue-337-live-audio.json", Gson().toJson(mapOf(
+            var sourceEvidence: Map<String, Any?> = emptyMap()
+            var audioFormats: List<Format> = emptyList()
+            instrumentation.runOnMainSync {
+                val stream = engine.javaClass.getDeclaredField("currentStream").apply { isAccessible = true }.get(engine) as? Stream
+                val supplement = engine.javaClass.getDeclaredField("audioSupplement").apply { isAccessible = true }.get(engine) as? Pair<*, *>
+                audioFormats = stream?.formats.orEmpty() + (supplement?.second as? Stream)?.formats.orEmpty()
+                val manifest = player.currentManifest as? androidx.media3.exoplayer.hls.HlsManifest
+                sourceEvidence = mapOf(
+                    "hlsClient" to stream?.hlsRequestPlan?.client?.name,
+                    "formats" to stream?.formats?.map { mapOf("itag" to it.itag, "audioOnly" to it.audioOnly,
+                        "trackId" to it.audioTrackId, "label" to it.audioTrackName, "language" to it.audioLocale,
+                        "original" to it.audioTrackOriginal) },
+                    "renditions" to manifest?.multivariantPlaylist?.audios?.map {
+                        mapOf("label" to it.format.label, "language" to it.format.language, "codecs" to it.format.codecs)
+                    },
+                    "trackGroups" to player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.map { group ->
+                        (0 until group.length).map { index -> group.getTrackFormat(index).let { format ->
+                            mapOf("label" to format.label, "language" to format.language, "supported" to group.isTrackSupported(index),
+                                "selected" to group.isTrackSelected(index), "codecs" to format.codecs)
+                        } }
+                    },
+                )
+            }
+            DeviceEvidence.writeJson("named-audio-source.json", com.hhst.youtubelite.core.TestJson.any(mapOf(
                 "videoId" to id, "ready" to ready, "tracks" to engine.snapshot.value.audioTracks,
-                "selected" to engine.snapshot.value.audioTrackKey, "error" to engine.snapshot.value.error)))
+                "selected" to engine.snapshot.value.audioTrackKey, "error" to engine.snapshot.value.error,
+                "source" to sourceEvidence)))
             assertTrue("Real multilingual video did not become playable: ${engine.snapshot.value}", ready)
-            val original = engine.snapshot.value.audioTrackKey
+            val original = engine.snapshot.value.audioTrackKey ?: audioFormats.firstOrNull(AudioTrackIdentity::isOriginal)
+                ?.let(AudioTrackIdentity::key)
             assertNotNull("Original identity must be known", original)
             val originalChoice = engine.snapshot.value.audioTracks.single { it.key == original }
             assertTrue("Expected original audio: $originalChoice",
-                engine.snapshot.value.audioFormat?.let(AudioTrackIdentity::isOriginal) == true ||
+                audioFormats.any { AudioTrackIdentity.key(it) == original && AudioTrackIdentity.isOriginal(it) } ||
                     originalChoice.label.contains("original", ignoreCase = true))
             val dub = engine.snapshot.value.audioTracks.first { it.key != original }
             instrumentation.runOnMainSync { engine.setAudioTrack(dub.key) }
@@ -87,6 +115,10 @@ class NamedAudioAndroidTest {
                 if (!switched) Thread.sleep(100)
             }
             assertTrue("Live dub failed", switched)
+            instrumentation.runOnMainSync {
+                val activeStream = engine.javaClass.getDeclaredField("currentStream").apply { isAccessible = true }.get(engine) as Stream
+                assertTrue("Selected dub must remain in the active catalog", AudioTrackIdentity.matchingFormats(activeStream.formats, dub.key).isNotEmpty())
+            }
             instrumentation.runOnMainSync { engine.setAudioTrack(null) }
             var returned = false
             val returnDeadline = SystemClock.elapsedRealtime() + 20_000
@@ -101,7 +133,7 @@ class NamedAudioAndroidTest {
                 if (!returned) Thread.sleep(100)
             }
             assertTrue("Returning to original audio failed", returned)
-            DeviceEvidence.writeJson("issue-337-live-switch.json", Gson().toJson(mapOf("videoId" to id,
+            DeviceEvidence.writeJson("issue-337-live-switch.json", com.hhst.youtubelite.core.TestJson.any(mapOf("videoId" to id,
                 "tracks" to engine.snapshot.value.audioTracks.size, "original" to original, "dub" to dub.key,
                 "switched" to switched, "returned" to returned)))
         } finally {
@@ -153,7 +185,7 @@ class NamedAudioAndroidTest {
             instrumentation.runOnMainSync {
                 val prefs = GlobalContext.get().get<ExtensionManager>()
                 val http = OkHttpClient()
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), fixtureCache, scope),
+                engine = PlaybackEngine(app, Extractor(fixtureCache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), GlobalContext.get().get<JsonCache>(), prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer

@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.cast.LocalStreamProxy
 import com.hhst.youtubelite.downloader.core.*
 import com.hhst.youtubelite.downloader.io.FileIntegrity
@@ -56,10 +55,10 @@ class YoutubeTransferAndroidTest {
         val directory = File(app.cacheDir, "youtube-transfer-acceptance").apply { mkdirs() }
         val dest = File(directory, "media.part")
         val chunks = mutableListOf<DownloadChunk>()
-        val record = linkedMapOf<String, Any>("videoId" to id, "profile" to plan.profile.name, "expectedBytes" to length)
+        val record = linkedMapOf<String, Any>("videoId" to id, "profile" to plan.client.name, "expectedBytes" to length)
         val proxy = LocalStreamProxy(app, client, advertisedHost = "127.0.0.1", mediaRequests = policy)
         try {
-            val paused = transport.downloadComponent("device-transfer", component, source, dest, emptyList()) {
+            val paused = transport.downloadComponent("device-transfer", 0, component, source, dest, emptyList()) {
                 chunks += it
                 false
             }
@@ -67,7 +66,7 @@ class YoutubeTransferAndroidTest {
             assertEquals(1, chunks.size)
             assertTrue(FileIntegrity.verify(dest, chunks[0].startByte, chunks[0].receivedBytes, chunks[0].checksum))
             val firstChecksum = chunks[0].checksum
-            val completed = transport.downloadComponent("device-transfer", component, source, dest, chunks.toList()) {
+            val completed = transport.downloadComponent("device-transfer", 0, component, source, dest, chunks.toList()) {
                 chunks += it
                 true
             }
@@ -118,11 +117,11 @@ class YoutubeTransferAndroidTest {
                 record["proxyBytes"] = bytes.size
                 record["proxyMatchesDownload"] = true
             }
-            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeTransfer", Gson().toJson(record)) })
+            instrumentation.sendStatus(2, Bundle().apply { putString("youtubeTransfer", com.hhst.youtubelite.core.TestJson.any(record)) })
         } finally {
             proxy.stop()
             transport.cancelInFlight("device-transfer")
-            File(app.filesDir, "youtube-transfer.json").writeText(Gson().toJson(record))
+            File(app.filesDir, "youtube-transfer.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
             File(app.filesDir, "youtube-transfer-diagnostics.txt").writeText(extractor.extractionDiagnostics())
             directory.listFiles()?.forEach { it.delete() }
             directory.delete()

@@ -11,7 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Proves the MediaCombo acceptance matrix on real MP4/M4A extract-mux round trips. */
 class MediaComboTest {
 
     @Test

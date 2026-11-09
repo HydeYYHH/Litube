@@ -1,8 +1,6 @@
 package com.hhst.youtubelite.player.sponsor
 
 import com.hhst.youtubelite.diagnostics.*
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.extractor.VideoId
@@ -15,16 +13,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Call
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.atomic.AtomicLong
 import okhttp3.Request
 
-/**
- * SponsorBlock client: fetches skip segments and reports them to the engine.
- *
- * API: `https://sponsor.ajay.app/api/skipSegments/<sha256(videoId)[0..4)>`
- * with categories driven by extension prefs.
- */
+/** API: `https://sponsor.ajay.app/api/skipSegments/<sha256(videoId)[0..4)>`, categories driven by extension prefs. */
 class SponsorBlockManager(
     private val http: OkHttpClient,
     private val prefs: ExtensionManager,
@@ -59,16 +50,17 @@ class SponsorBlockManager(
     val currentSegments: List<Segment> get() = segments
 
     /** Request id: a slow reply for video A must not clobber video B's. */
-    private val requestSeq = AtomicLong()
+    private var requestSeq = 0L
 
     /** In-flight call; a newer [load] cancels the superseded one outright. */
-    private val currentCall = AtomicReference<Call?>()
+    private var currentCall: Call? = null
 
-    /** Fetches segments for [videoId]; no-op when every category is disabled. */
+    @Synchronized
     fun load(videoId: String, diagnosticContext: DiagnosticContext? = null) {
         val id = VideoId.parse(videoId) ?: return
-        val requestId = requestSeq.incrementAndGet()
-        currentCall.getAndSet(null)?.cancel()
+        val requestId = ++requestSeq
+        currentCall?.cancel()
+        currentCall = null
         if (segmentsVideoId != id) {
             segmentsVideoId = id
             segments = emptyList()
@@ -83,23 +75,27 @@ class SponsorBlockManager(
         scope.launch {
             val context = (diagnosticContext ?: DiagnosticContext(videoId = id)).child(requestId.toString())
             val operation = AppLog.operation(AppLog.Category.PLAYER, "sponsorblock", context, mapOf("categories" to categories))
-            // Failed refreshes retain segments for the current video.
-            val result = runCatching { fetch(id, categories, context) }
-            if (requestId != requestSeq.get()) { operation.finish(DiagnosticOutcome.SUPERSEDED, "video_replaced"); return@launch }
-            val failure = result.exceptionOrNull()
-            if (failure != null) {
-                operation.finish(DiagnosticOutcome.FAILURE,
-                    if (failure is SponsorBlockParseException) "parse_failed" else "fetch_failed", failure)
+            val result = runCatching { fetch(id, categories, context, requestId) }
+            synchronized(this@SponsorBlockManager) {
+                if (requestId != requestSeq) {
+                    operation.finish(DiagnosticOutcome.SUPERSEDED, "video_replaced")
+                    return@launch
+                }
+                val failure = result.exceptionOrNull()
+                if (failure != null) {
+                    operation.finish(DiagnosticOutcome.FAILURE,
+                        if (failure is SponsorBlockParseException) "parse_failed" else "fetch_failed", failure)
+                    onSegmentsLoaded?.invoke(segments)
+                    return@launch
+                }
+                val fetched = result.getOrThrow()
+                segments = fetched
+                segmentsVideoId = id
                 onSegmentsLoaded?.invoke(segments)
-                return@launch
+                operation.finish(DiagnosticOutcome.SUCCESS,
+                    if (fetched.isEmpty()) "no_segments" else "segments_loaded",
+                    fields = mapOf("segment_count" to fetched.size))
             }
-            val fetched = result.getOrThrow()
-            segments = fetched
-            segmentsVideoId = id
-            onSegmentsLoaded?.invoke(segments)
-            operation.finish(DiagnosticOutcome.SUCCESS,
-                if (fetched.isEmpty()) "no_segments" else "segments_loaded",
-                fields = mapOf("segment_count" to fetched.size))
         }
     }
 
@@ -107,10 +103,14 @@ class SponsorBlockManager(
         CATEGORY_PREFS.filter { prefs.isEnabled(it.first) }.map { it.second }
 
     /** Drop categories the user just disabled; refetch if a category was enabled. */
+    @Synchronized
     private fun applyEnabledCategories() {
         val cats = enabledCategories()
         if (cats.isEmpty()) {
-            currentCall.getAndSet(null)?.cancel()
+            // Invalidate queued work as well as a request already on the wire.
+            requestSeq++
+            currentCall?.cancel()
+            currentCall = null
             segments = emptyList()
             onSegmentsLoaded?.invoke(emptyList())
             return
@@ -125,7 +125,7 @@ class SponsorBlockManager(
         load(id)
     }
 
-    private fun fetch(videoId: String, categories: List<String>, diagnostic: DiagnosticContext): List<Segment> {
+    private fun fetch(videoId: String, categories: List<String>, diagnostic: DiagnosticContext, requestId: Long): List<Segment> {
         val prefix = sha256(videoId).substring(0, 4)
         val categoryParam = URLEncoder.encode(
             categories.joinToString(",", "[", "]") { "\"$it\"" },
@@ -136,11 +136,18 @@ class SponsorBlockManager(
             .tag(DiagnosticNetwork.Policy::class.java, DiagnosticNetwork.Policy(setOf(404)))
             .build()
         val call = http.newCall(DiagnosticNetwork.tag(request, diagnostic))
-        currentCall.set(call)
-        call.execute().use { response ->
-            val body = response.body?.string()
-            return interpretHttp(response.code, body, videoId)
-                ?: throw IOException("sponsorblock HTTP ${response.code}")
+        synchronized(this) {
+            if (requestId != requestSeq) throw kotlinx.coroutines.CancellationException("SponsorBlock request replaced")
+            currentCall = call
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string()
+                return interpretHttp(response.code, body, videoId)
+                    ?: throw IOException("sponsorblock HTTP ${response.code}")
+            }
+        } finally {
+            synchronized(this) { if (currentCall === call) currentCall = null }
         }
     }
 
@@ -171,16 +178,13 @@ class SponsorBlockManager(
             .joinToString("") { "%02x".format(it) }
 }
 
-/** Parses SponsorBlock responses for one video. */
 object SponsorBlockParser {
 
-    private val gson = Gson()
-    private val type =
-        object : TypeToken<List<Response>>() {}.type
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val type = kotlinx.serialization.builtins.ListSerializer(Response.serializer())
 
-    fun parse(json: String, videoId: String): List<SponsorBlockManager.Segment> = try {
-        val responses = gson.fromJson<List<Response>>(json, type)
-            ?: throw IllegalArgumentException("Missing SponsorBlock response")
+    fun parse(text: String, videoId: String): List<SponsorBlockManager.Segment> = try {
+        val responses = json.decodeFromString(type, text)
         responses
             .filter { it.videoID == videoId }
             .flatMap { it.segments }
@@ -199,11 +203,13 @@ object SponsorBlockParser {
         throw SponsorBlockParseException(failure)
     }
 
+    @kotlinx.serialization.Serializable
     private data class Response(
         val videoID: String = "",
         val segments: List<SegmentData> = emptyList(),
     )
 
+    @kotlinx.serialization.Serializable
     private data class SegmentData(
         val category: String = "",
         val segment: List<Double> = emptyList(),

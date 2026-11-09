@@ -5,6 +5,21 @@ import org.junit.Test
 
 class PlaybackProgressTest {
 
+    @Test fun remoteProgressOverridesLocalButExplicitLinksRemainAuthoritative() {
+        assertEquals(60_000L, PlaybackProgress.resolveStartMs(null, 30_000, 120_000, 60_000))
+        assertEquals(0L, PlaybackProgress.resolveStartMs(0, 30_000, 120_000, 60_000))
+        assertEquals(0L, PlaybackProgress.resolveStartMs(null, 30_000, 120_000, 118_000))
+        assertEquals(0L, PlaybackProgress.resolveStartMs(null, 30_000, 120_000, 0))
+        assertEquals(30_000L, PlaybackProgress.resolveStartMs(null, 30_000, 120_000, -1))
+    }
+
+    @Test fun localProgressKeysAreIsolatedByAccountAndDelegatedChannel() {
+        val owners = listOf("device", "a:first", "a:second", "a:first:c:channel")
+        val keys = owners.map { PlaybackProgress.cacheKey("abcdefghijk", it) }
+        assertEquals(owners.size, keys.toSet().size)
+        assertEquals(keys[1], PlaybackProgress.cacheKey("abcdefghijk", owners[1]))
+    }
+
     @Test
     fun write_clearsOnEndedOrNearEnd_savesMidRoll() {
         val duration = 120_000L

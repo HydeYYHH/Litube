@@ -18,6 +18,13 @@ class DownloadNotificationController(
     private val lastSignature = HashMap<String, String>()
     private val lastPayload = HashMap<String, DownloadNotificationPayload>()
 
+    fun restore(view: BatchView) {
+        val payload = payload(view)
+        if (!payload.complete) return
+        lastPayload[view.batch.id] = payload
+        lastSignature[view.batch.id] = signature(view)
+    }
+
     fun publish(view: BatchView) {
         val batchId = view.batch.id
         val payload = payload(view)

@@ -101,4 +101,38 @@ class SettingsBackupTest {
         assertNull(SettingsBackup.parse(""))
         assertNull(SettingsBackup.parse("{\"schema\":\"other\"}"))
     }
+
+    @Test fun parseRejectsInvalidVersionsAndCoercedToggleValues() {
+        listOf("-9", "0", "2", "1.5", "\"1\"", "null").forEach { version ->
+            assertNull(SettingsBackup.parse("""{"schema":"litube-settings","version":$version}"""))
+        }
+        listOf("null", "\"true\"", "1", "[]", "{}").forEach { value ->
+            assertNull(SettingsBackup.parse("""{"schema":"litube-settings","version":1,"preferences":{"enable_pip":$value}}"""))
+        }
+    }
+
+    @Test fun parseRejectsOutOfRangeAndFractionalSettings() {
+        listOf("-1", "101", "25.5", "\"30\"").forEach { haptic ->
+            assertNull(SettingsBackup.parse("""{"schema":"litube-settings","version":1,"hapticStrength":$haptic}"""))
+        }
+        listOf("0", "17", "2.5", "\"4\"").forEach { connections ->
+            assertNull(SettingsBackup.parse("""{"schema":"litube-settings","version":1,"download":{"maxConnections":$connections}}"""))
+        }
+    }
+
+    @Test fun hapticOnlyBackupIsApplied() {
+        val data = requireNotNull(SettingsBackup.parse("""{"schema":"litube-settings","version":1,"hapticStrength":70}"""))
+        SettingsBackup.apply(data, manager, downloadPrefs)
+        assertEquals(70, manager.hapticStrength())
+    }
+
+    @Test fun invalidDirectBackupIsRejectedBeforeAnySettingChanges() {
+        val before = manager.allPreferences()
+        val backup = SettingsBackupData(schema = SettingsBackup.SCHEMA,
+            preferences = mapOf(PreferenceKeys.ENABLE_PIP to false),
+            download = DownloadBackupData(maxConnections = 999))
+        assertTrue(runCatching { SettingsBackup.apply(backup, manager, downloadPrefs) }.isFailure)
+        assertEquals(before, manager.allPreferences())
+        assertNull(downloadPrefs.savedMaxConnections)
+    }
 }

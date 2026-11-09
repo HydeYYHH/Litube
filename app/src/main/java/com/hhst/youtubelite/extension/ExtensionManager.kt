@@ -3,7 +3,7 @@ package com.hhst.youtubelite.extension
 import android.util.Log
 import com.hhst.youtubelite.diagnostics.AppLog
 
-/** MMKV-backed toggle store under the `preferences:` prefix. */
+/** [PrefStore]-backed toggle store under the `preferences:` prefix. */
 class ExtensionManager(private val store: PrefStore) {
 
     init {
@@ -104,6 +104,34 @@ class ExtensionManager(private val store: PrefStore) {
         AppLog.event(AppLog.Category.EXTENSION, "preference_changed", mapOf("key" to PreferenceKeys.HAPTIC_STRENGTH, "before" to previous, "after" to next))
         bumpVersion()
         notifyChanged(PreferenceKeys.HAPTIC_STRENGTH)
+    }
+
+    /** Persisted appearance; System follows the OS. Applied by [AppAppearance] at startup. */
+    fun themeMode(): com.hhst.youtubelite.ui.theme.ThemeMode =
+        com.hhst.youtubelite.ui.theme.ThemeMode.entries.getOrElse(
+            store.getLong(prefKey(PreferenceKeys.THEME_MODE), 0L).toInt()) { com.hhst.youtubelite.ui.theme.ThemeMode.System }
+
+    fun setThemeMode(mode: com.hhst.youtubelite.ui.theme.ThemeMode) {
+        if (mode == themeMode()) return
+        val previous = themeMode()
+        store.putLong(prefKey(PreferenceKeys.THEME_MODE), mode.ordinal.toLong())
+        AppLog.event(AppLog.Category.EXTENSION, "preference_changed",
+            mapOf("key" to PreferenceKeys.THEME_MODE, "before" to previous.name, "after" to mode.name))
+        bumpVersion()
+        notifyChanged(PreferenceKeys.THEME_MODE)
+    }
+
+    /** Persisted app language as a BCP-47 tag; empty means "follow the system". */
+    fun appLanguage(): String = store.getString(prefKey(PreferenceKeys.APP_LANGUAGE), "")
+
+    fun setAppLanguage(tag: String) {
+        if (tag == appLanguage()) return
+        val previous = appLanguage()
+        store.putString(prefKey(PreferenceKeys.APP_LANGUAGE), tag)
+        AppLog.event(AppLog.Category.EXTENSION, "preference_changed",
+            mapOf("key" to PreferenceKeys.APP_LANGUAGE, "before" to previous, "after" to tag))
+        bumpVersion()
+        notifyChanged(PreferenceKeys.APP_LANGUAGE)
     }
 
     fun version(): Long = store.getLong(KEY_VERSION, 0L)

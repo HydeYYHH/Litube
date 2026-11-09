@@ -1,6 +1,12 @@
 package com.hhst.youtubelite.player.surface
 
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.animation.AnimatedVisibility
+import com.hhst.youtubelite.ui.design.AppMotion
+import com.hhst.youtubelite.ui.design.LocalMotionScale
+import com.hhst.youtubelite.ui.design.motionDuration
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -19,6 +25,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -32,31 +39,40 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -65,10 +81,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.PlayerUiState
-import com.hhst.youtubelite.player.engine.LoopMode
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 
 private val ScrimTop = Brush.verticalGradient(
@@ -78,7 +95,6 @@ private val ScrimBottom = Brush.verticalGradient(
     listOf(Color.Transparent, PlayerUi.Scrim),
 )
 
-/** Chrome button. Default hit target is 48 dp; pass [modifier] size to override. */
 @Composable
 fun PlayerIconButton(
     icon: Int,
@@ -89,7 +105,9 @@ fun PlayerIconButton(
     enabled: Boolean = true,
     iconSize: Int = PlayerUi.CHROME_ICON_DP,
     onLongClick: (() -> Unit)? = null,
+    loading: Boolean = false,
 ) {
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
@@ -101,7 +119,7 @@ fun PlayerIconButton(
                         enabled = enabled,
                         interactionSource = interaction,
                         indication = ripple(bounded = false, radius = 24.dp),
-                        onClick = onClick,
+                        onClick = { haptic(); onClick() },
                         onLongClick = onLongClick,
                     )
                 } else {
@@ -109,13 +127,15 @@ fun PlayerIconButton(
                         enabled = enabled,
                         interactionSource = interaction,
                         indication = ripple(bounded = false, radius = 24.dp),
-                        onClick = onClick,
+                        onClick = { haptic(); onClick() },
                     )
                 },
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
+        if (loading) {
+            PlaybackLoadingIndicator(Modifier.size(iconSize.dp), tint)
+        } else Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
             tint = tint.copy(alpha = if (enabled) 0.92f else 0.35f),
@@ -124,160 +144,111 @@ fun PlayerIconButton(
     }
 }
 
-/** Top: back + title/author + queue / segments / loop / cast / CC / settings. */
+@Composable
+internal fun PlaybackLoadingIndicator(modifier: Modifier = Modifier, color: Color = Color.White) {
+    val description = stringResource(R.string.a11y_loading)
+    CircularProgressIndicator(
+        color = color,
+        strokeWidth = 3.dp,
+        modifier = modifier.testTag("player-buffering").semantics { contentDescription = description },
+    )
+}
+
 @Composable
 fun TopBar(
     state: PlayerUiState,
     positionState: State<Long>,
     onBack: () -> Unit,
-    onQueue: () -> Unit,
-    onSegments: () -> Unit,
-    onLoop: () -> Unit,
     onMore: () -> Unit,
     onSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
     menu: PlayerAnchorMenu? = null,
     onDismissMenu: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
-    onCast: () -> Unit = {},
     onSubtitleStyle: () -> Unit = {},
     showAuthor: Boolean = true,
-    compactBottom: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
 ) {
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val compact = PlayerUi.compactChrome(maxWidth.value, LocalDensity.current.fontScale,
-            state.casting || state.castDevices.isNotEmpty())
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Row(
+        modifier = modifier.fillMaxWidth().testTag("player-topbar")
+            .padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerIconButton(
+            icon = R.drawable.ic_arrow_back,
+            contentDescription = stringResource(R.string.navigate_back),
+            onClick = onBack,
+            iconSize = sizing.iconDp,
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            PlayerIconButton(
-                icon = R.drawable.ic_arrow_back,
-                contentDescription = stringResource(R.string.navigate_back),
-                onClick = onBack,
-                iconSize = sizing.iconDp,
+            Text(
+                text = state.title,
+                style = PlayerUi.TitleStyle.copy(fontSize = (sizing.textSp + 2).sp,
+                    lineHeight = (sizing.textSp + 8).sp),
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = PlayerUi.TITLE_PADDING_DP.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
+            state.author?.takeIf { showAuthor }?.let { author ->
                 Text(
-                    text = state.title,
-                    style = PlayerUi.TitleStyle.copy(fontSize = (sizing.textSp + 2).sp,
-                        lineHeight = (sizing.textSp + 8).sp),
+                    text = author,
+                    style = PlayerUi.AuthorStyle.copy(fontSize = (sizing.textSp - 2).sp,
+                        lineHeight = (sizing.textSp + 4).sp),
                     maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                    overflow = TextOverflow.Ellipsis,
                 )
-                state.author?.takeIf { showAuthor }?.let { author ->
-                    Text(
-                        text = author,
-                        style = PlayerUi.AuthorStyle.copy(fontSize = (sizing.textSp - 2).sp,
-                            lineHeight = (sizing.textSp + 4).sp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            Box {
+                PlayerIconButton(
+                    icon = if (state.subtitleEnabled) {
+                        R.drawable.ic_subtitles_on
+                    } else {
+                        R.drawable.ic_subtitles_off
+                    },
+                    contentDescription = stringResource(R.string.subtitles),
+                    onClick = onSubtitle,
+                    modifier = Modifier.width(40.dp),
+                    iconSize = sizing.iconDp,
+                    onLongClick = onSubtitleStyle,
+                    tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
+                )
+                if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
+                    PlayerAnchorDropdown(
+                        menu,
+                        state,
+                        positionState,
+                        callbacks,
+                        onDismissMenu,
+                        onSubtitleStyle = {
+                            onDismissMenu()
+                            onSubtitleStyle()
+                        },
                     )
                 }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
-            ) {
-                if (!compact) {
-                    PlayerIconButton(
-                        icon = R.drawable.ic_queue,
-                        contentDescription = stringResource(R.string.queue),
-                        onClick = onQueue,
-                        iconSize = sizing.iconDp,
-                    )
-                    Box {
-                        PlayerIconButton(
-                            icon = R.drawable.ic_segment,
-                            contentDescription = stringResource(R.string.segments),
-                            onClick = onSegments,
-                            iconSize = sizing.iconDp,
-                        )
-                        if (menu == PlayerAnchorMenu.Segments && callbacks != null) {
-                            PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                        }
-                    }
-                }
-                if (!compact) {
-                    PlayerIconButton(
-                        icon = PlayerUi.loopIcon(state.loopMode),
-                        contentDescription = loopDescription(state.loopMode),
-                        onClick = onLoop,
-                        iconSize = sizing.iconDp,
-                        tint = if (state.loopMode == LoopMode.QUEUE_NEXT) PlayerUi.Icon else PlayerUi.YtRed,
-                    )
-                    // Show the cast control only when a route exists or a session is
-                    // active. Users without a receiver do not get a permanent button.
-                    if (state.casting || state.castDevices.isNotEmpty()) {
-                        PlayerIconButton(
-                            icon = if (state.casting) R.drawable.ic_cast_connected else R.drawable.ic_cast,
-                            contentDescription = stringResource(R.string.cast),
-                            onClick = onCast,
-                            iconSize = sizing.iconDp,
-                            tint = if (state.casting) PlayerUi.YtRed else PlayerUi.Icon,
-                        )
-                    }
-                }
-                Box {
-                    PlayerIconButton(
-                        icon = if (state.subtitleEnabled) {
-                            R.drawable.ic_subtitles_on
-                        } else {
-                            R.drawable.ic_subtitles_off
-                        },
-                        contentDescription = stringResource(R.string.subtitles),
-                        onClick = onSubtitle,
-                        modifier = Modifier.width(40.dp),
-                        iconSize = sizing.iconDp,
-                        onLongClick = onSubtitleStyle,
-                        tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
-                    )
-                    if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {
-                        PlayerAnchorDropdown(
-                            menu,
-                            state,
-                            positionState,
-                            callbacks,
-                            onDismissMenu,
-                            onSubtitleStyle = {
-                                onDismissMenu()
-                                onSubtitleStyle()
-                            },
-                        )
-                    }
-                }
-                Box {
-                    PlayerIconButton(
-                        icon = R.drawable.ic_settings,
-                        contentDescription = stringResource(R.string.more_options),
-                        onClick = onMore,
-                        modifier = Modifier.width(40.dp),
-                        iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
-                    )
-                    val overflowMenu = (compact && menu == PlayerAnchorMenu.Segments) ||
-                        (compactBottom && (menu == PlayerAnchorMenu.Speed || menu == PlayerAnchorMenu.Quality))
-                    if (overflowMenu && callbacks != null) {
-                        PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                    }
-                }
+            Box {
+                PlayerIconButton(
+                    icon = R.drawable.ic_settings,
+                    contentDescription = stringResource(R.string.more_options),
+                    onClick = onMore,
+                    modifier = Modifier.width(40.dp),
+                    iconSize = (sizing.iconDp * 5 / 6).coerceAtLeast(20),
+                )
             }
         }
     }
 }
 
-@Composable
-private fun loopDescription(mode: LoopMode): String =
-    stringResource(PlayerUi.loopLabelRes(mode))
-
-/** Center prev / play-pause / next. Hidden with the rest of the chrome when locked or auto-hidden; the play slot becomes a spinner while loading. */
 @Composable
 fun CenterControls(
     state: PlayerUiState,
@@ -290,13 +261,15 @@ fun CenterControls(
     skipSizeDp: Int = 48,
     gapDp: Int = 12,
 ) {
+    if (state.notice != null) return
+    val action = PlayerUi.playPauseAction(state)
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         PlayerIconButton(
-            icon = R.drawable.ic_previous,
+            icon = R.drawable.ic_player_previous,
             contentDescription = stringResource(R.string.action_previous),
             onClick = onPrevious,
             enabled = state.hasPrevious,
@@ -315,36 +288,19 @@ fun CenterControls(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (state.loading) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(minOf(36, playSizeDp - 16).dp),
-                )
+            if (action == PlayerUi.PlayPauseAction.Loading) {
+                PlaybackLoadingIndicator(Modifier.size(minOf(36, playSizeDp - 16).dp))
             } else {
-                val replay = state.ended && !state.isPlaying
                 Icon(
-                    painter = painterResource(
-                        when {
-                            state.isPlaying -> R.drawable.ic_pause
-                            replay -> R.drawable.ic_replay
-                            else -> R.drawable.ic_play
-                        },
-                    ),
-                    contentDescription = stringResource(
-                        when {
-                            state.isPlaying -> R.string.action_pause
-                            replay -> R.string.action_replay
-                            else -> R.string.action_play
-                        },
-                    ),
+                    painter = painterResource(action.playerIcon),
+                    contentDescription = stringResource(action.label),
                     tint = Color.White,
                     modifier = Modifier.size((playSizeDp * 0.65f).dp),
                 )
             }
         }
         PlayerIconButton(
-            icon = R.drawable.ic_next,
+            icon = R.drawable.ic_player_next,
             contentDescription = stringResource(R.string.action_next),
             onClick = onNext,
             enabled = state.hasNext,
@@ -355,11 +311,11 @@ fun CenterControls(
 }
 
 /**
- * Bottom: 2 dp time bar (drawn just above the controls row), then
- * position / duration | speed | quality | fullscreen.
- *
  * Position/buffered arrive as [State]s and are consumed only by the time bar
  * and [PositionText], so 4 Hz playback ticks never recompose this bar.
+ * [onTrackAnchor] reports the px distance from this bar's bottom edge to the
+ * visible track center so overlays anchor to the measured track, not a guessed
+ * constant (the controls row grows with font scale and wrapping).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -370,33 +326,40 @@ fun BottomBar(
     onSeek: (Long) -> Unit,
     onFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
-    onSpeed: () -> Unit = {},
-    onQuality: () -> Unit = {},
-    menu: PlayerAnchorMenu? = null,
-    onDismissMenu: () -> Unit = {},
+    chapters: List<Chapter> = emptyList(),
+    hasSegments: Boolean = false,
+    onOpenChapters: () -> Unit = {},
     callbacks: PlayerSurfaceCallbacks? = null,
     compact: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
+    onTrackAnchor: (Int) -> Unit = {},
 ) {
-    val autoLabel = stringResource(R.string.player_quality_auto)
-    Column(modifier = modifier.fillMaxWidth()) {
+    val trackMeasurements = remember { IntArray(2) }
+    fun reportTrackAnchor() = onTrackAnchor((trackMeasurements[0] - trackMeasurements[1]).coerceAtLeast(0))
+    Column(modifier = modifier.fillMaxWidth().onSizeChanged { trackMeasurements[0] = it.height; reportTrackAnchor() }) {
         PlayerTimeBar(
             positionState = positionState,
             bufferedPositionState = bufferedPositionState,
             durationMs = state.durationMs,
             segments = state.sponsorSegments,
+            chapterStarts = state.chapters.map { it.startSeconds.toLong() * 1000 },
             onSeek = onSeek,
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
             onCommit = { callbacks?.onTimeBarCommit() },
-            // Keep the 48 dp seek target while sharing its lower half with the
-            // controls row. The visible track sits at the boundary of the row.
-            modifier = Modifier.layout { measurable, constraints ->
+            // Shares the 48 dp slot's lower half with the controls row; the visible
+            // track sits at the halved slot's bottom edge. onGloballyPositioned must
+            // precede the layout modifier — after it, size.height would be the full
+            // 48 dp canvas.
+            modifier = Modifier.onGloballyPositioned { coords ->
+                trackMeasurements[1] = coords.positionInParent().y.roundToInt() + coords.size.height
+                reportTrackAnchor()
+            }.layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height / 2) { placeable.place(0, 0) }
             },
         )
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val wraps = !compact && compactBottomControls(state, maxWidth.value, sizing.textSp)
+            val chipMaxWidth = maxWidth * 0.4f
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -411,37 +374,22 @@ fun BottomBar(
                         isLive = state.isLive,
                         textSizeSp = sizing.textSp,
                     )
+                    // Part of the always-shown bottom readout; compact mode drops only
+                    // the secondary action buttons, never this chip.
+                    ChapterEntryChip(
+                        chapters = chapters,
+                        hasSegments = hasSegments,
+                        positionState = positionState,
+                        onOpen = onOpenChapters,
+                        textSizeSp = sizing.textSp,
+                        modifier = Modifier.padding(start = 6.dp).widthIn(max = chipMaxWidth),
+                    )
                 }
                 Row(
-                    modifier = (if (wraps) Modifier.fillMaxWidth() else Modifier.weight(1f))
-                        .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp),
+                    modifier = Modifier.heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (!compact) {
-                        Box {
-                            ChromeTextButton(label = PlayerUi.speedLabel(state.speed), onClick = onSpeed,
-                                textSizeSp = sizing.textSp)
-                            if (menu == PlayerAnchorMenu.Speed && callbacks != null) {
-                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                            }
-                        }
-                        Box(Modifier.weight(1f, fill = false)) {
-                            ChromeTextButton(
-                                label = PlayerUi.qualityButtonLabel(
-                                    pinned = state.qualityLabel,
-                                    active = state.activeQuality,
-                                    autoPrefix = autoLabel,
-                                    videoHeight = state.videoHeight,
-                                ),
-                                onClick = onQuality,
-                                textSizeSp = sizing.textSp,
-                            )
-                            if (menu == PlayerAnchorMenu.Quality && callbacks != null) {
-                                PlayerAnchorDropdown(menu, state, positionState, callbacks, onDismissMenu)
-                            }
-                        }
-                    }
                     PlayerIconButton(
                         icon = if (state.fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
                         contentDescription = stringResource(R.string.action_fullscreen),
@@ -454,26 +402,7 @@ fun BottomBar(
     }
 }
 
-/** Measure the bottom labels off-screen; returns true when they must wrap into More. */
-@Composable
-internal fun compactBottomControls(state: PlayerUiState, widthDp: Float,
-    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP): Boolean {
-    val density = LocalDensity.current
-    val measurer = rememberTextMeasurer()
-    val style = TextStyle(fontSize = textSizeSp.sp)
-    fun width(label: String) = with(density) { measurer.measure(label, style).size.width.toDp().value }
-    val duration = if (state.isLive) stringResource(R.string.player_live) else PlayerUi.formatTime(state.durationMs)
-    // Width probe: widen every digit to '8' (the widest) so the reservation covers any time value.
-    val sample = if (state.isLive) "88:88:88" else PlayerUi.formatTime(state.durationMs)
-        .map { if (it.isDigit()) '8' else it }.joinToString("").let { if (it.length < 5) "88:88" else it }
-    val speedWidth = maxOf(48f, width(PlayerUi.speedLabel(state.speed)) + 12)
-    val quality = PlayerUi.qualityButtonLabel(state.qualityLabel, state.activeQuality,
-        stringResource(R.string.player_quality_auto), state.videoHeight)
-    val qualityWidth = maxOf(48f, width(quality) + 12)
-    return width("$sample / $duration") + speedWidth + qualityWidth + 48 + 16 > widthDp
-}
-
-/** Position / duration text, isolated so position ticks stay inside this leaf. */
+/** Isolated so position ticks stay inside this leaf. */
 @Composable
 private fun PositionText(
     positionState: State<Long>,
@@ -507,7 +436,6 @@ private fun PositionText(
     }
 }
 
-/** 100 dp edge fades used behind top/bottom chrome. */
 @Composable
 fun ControlScrims(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize()) {
@@ -528,41 +456,7 @@ fun ControlScrims(modifier: Modifier = Modifier) {
     }
 }
 
-/** Readable speed / quality label with an independent 48 dp touch target. */
-@Composable
-private fun ChromeTextButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    textSizeSp: Int = PlayerUi.CHROME_TEXT_SP,
-) {
-    Box(
-        modifier = modifier
-            .heightIn(min = PlayerUi.BOTTOM_ROW_DP.dp)
-            .widthIn(min = PlayerUi.TOP_ACTION_DP.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
-                onClick = onClick,
-            )
-            .padding(horizontal = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = PlayerUi.Icon,
-            fontSize = textSizeSp.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** One-shot hint: top-center, 12 sp. The last non-null text is kept so the
- *  exit fade does not collapse the pill before it animates out. Reads
- *  [hintState] here (not in the caller) so hint writes recompose only this
- *  overlay. */
+/** Keeps the last non-null text so the exit fade doesn't collapse the pill; reads [hintState] here so hint writes recompose only this overlay. */
 @Composable
 fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier = Modifier) {
     val hint = if (enabled) hintState.value else null
@@ -570,8 +464,8 @@ fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier 
     SideEffect { if (hint != null) lastText = hint }
     AnimatedVisibility(
         visible = hint != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+        exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
         modifier = modifier,
     ) {
         Text(
@@ -585,7 +479,6 @@ fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier 
     }
 }
 
-/** Chromecast + link-cast banners. */
 @Composable
 fun CastStatusBanners(
     casting: Boolean,
@@ -624,10 +517,9 @@ fun CastStatusBanners(
                 )
             }
         }
-        // The link banner appears only while a receiver/browser is actually
-        // connected (30 s liveness window in the proxy) — not merely because
-        // the cast dialog once opened. A Chromecast session is a separate
-        // mode: its proxy serves the receiver, so no link banner then.
+        // The link banner needs an actually connected receiver/browser (30 s liveness
+        // window in the proxy), not merely an opened cast dialog; a Chromecast session
+        // is a separate mode whose proxy serves the receiver, so no banner then.
         if (linkUrl != null && linkConnected && !casting) {
             Row(
                 modifier = Modifier
@@ -660,13 +552,14 @@ fun CastStatusBanners(
     }
 }
 
-/** Playback failure: keep chrome usable, offer a one-tap retry. */
 @Composable
 fun ErrorOverlay(
     message: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onDetails: (() -> Unit)? = null,
 ) {
+    val title = stringResource(R.string.player_error)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -674,13 +567,13 @@ fun ErrorOverlay(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.player_error),
+            text = title,
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
         )
-        Text(
+        if (message.isNotBlank() && !message.trim().equals(title.trim(), ignoreCase = true)) Text(
             text = message,
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 12.sp,
@@ -695,6 +588,9 @@ fun ErrorOverlay(
                 color = PlayerUi.YtRed,
                 fontWeight = FontWeight.Medium,
             )
+        }
+        if (onDetails != null) TextButton(onClick = onDetails, modifier = Modifier.testTag("playback-error-details")) {
+            Text(stringResource(R.string.info), color = Color.White)
         }
     }
 }
@@ -717,10 +613,8 @@ fun LockAffordance(
 }
 
 /**
- * Compact in-app mini-player chrome.
- *
- * Background tap toggles chrome; the center restore button returns to watch.
- * Drag / pinch are handled on the background layer so control buttons stay tappable.
+ * Compact in-app mini-player chrome: background tap toggles chrome, the center
+ * restore button returns to watch; drags/pinches are claimed before child controls.
  */
 @Composable
 fun MiniPlayerChrome(
@@ -734,17 +628,33 @@ fun MiniPlayerChrome(
     modifier: Modifier = Modifier,
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val playPauseAction = PlayerUi.playPauseAction(state)
     val handle = LocalMiniPlayerHandle.current
+    val collapsedSide = handle?.collapsedSide
+    val suppressControls = handle?.interacting == true || collapsedSide != null
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .then(if (handle != null) Modifier.miniPlayerInteract(handle) else Modifier),
     ) {
+        if (collapsedSide != null) {
+            Box(Modifier.align(if (collapsedSide == MiniPlayerLayout.CollapsedSide.LEFT) AbsoluteAlignment.CenterRight else AbsoluteAlignment.CenterLeft)
+                .width(MiniPlayerLayout.COLLAPSED_PEEK_DP.dp).fillMaxHeight()
+                .background(Color(0xE6303030))
+                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.action_expand_miniplayer),
+                    onClick = { handle?.tap?.invoke() })
+                .testTag("mini-expand"), contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.action_expand_miniplayer),
+                    tint = Color.White, modifier = Modifier.size(24.dp)
+                        .rotate(if (collapsedSide == MiniPlayerLayout.CollapsedSide.RIGHT) 180f else 0f))
+            }
+        }
         val gap = MiniPlayerLayout.controlGap(maxWidth.value.toInt(), screenWidthDp)
         AnimatedVisibility(
-            visible = state.controlsVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = !suppressControls && (state.controlsVisible || playPauseAction == PlayerUi.PlayPauseAction.Loading),
+            modifier = if (suppressControls) Modifier.clearAndSetSemantics {} else Modifier,
+            enter = fadeIn(tween(motionDuration(AppMotion.ChromeInMs, LocalMotionScale.current))),
+            exit = fadeOut(tween(motionDuration(AppMotion.ChromeOutMs, LocalMotionScale.current))),
         ) {
             Box(Modifier.fillMaxSize()) {
                 Box(
@@ -756,6 +666,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_queue,
                     contentDescription = stringResource(R.string.queue),
                     onClick = onQueue,
+                    enabled = !suppressControls,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .size(48.dp),
@@ -765,6 +676,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_close,
                     contentDescription = stringResource(R.string.close),
                     onClick = onClose,
+                    enabled = !suppressControls,
                     tint = Color.White,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -775,6 +687,7 @@ fun MiniPlayerChrome(
                     icon = R.drawable.ic_fullscreen,
                     contentDescription = stringResource(R.string.action_restore_watch),
                     onClick = onRestore,
+                    enabled = !suppressControls,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .size(40.dp),
@@ -787,29 +700,29 @@ fun MiniPlayerChrome(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     PlayerIconButton(
-                        icon = R.drawable.ic_previous,
+                        icon = R.drawable.ic_player_previous,
                         contentDescription = stringResource(R.string.action_previous),
                         onClick = onPrevious,
-                        enabled = state.hasPrevious,
+                        enabled = state.hasPrevious && !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_SIDE_DP.dp),
                         iconSize = 20,
                     )
                     Spacer(Modifier.width(gap.dp))
                     PlayerIconButton(
-                        icon = if (state.isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-                        contentDescription = stringResource(
-                            if (state.isPlaying) R.string.action_pause else R.string.action_play,
-                        ),
+                        icon = playPauseAction.playerIcon,
+                        contentDescription = stringResource(playPauseAction.label),
+                        loading = playPauseAction == PlayerUi.PlayPauseAction.Loading,
                         onClick = onPlayPause,
+                        enabled = !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_PLAY_DP.dp),
                         iconSize = 24,
                     )
                     Spacer(Modifier.width(gap.dp))
                     PlayerIconButton(
-                        icon = R.drawable.ic_next,
+                        icon = R.drawable.ic_player_next,
                         contentDescription = stringResource(R.string.action_next),
                         onClick = onNext,
-                        enabled = state.hasNext,
+                        enabled = state.hasNext && !suppressControls,
                         modifier = Modifier.size(MiniPlayerLayout.CONTROL_SIDE_DP.dp),
                         iconSize = 20,
                     )
@@ -835,7 +748,9 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
         .pointerInput(handle) {
             awaitEachGesture {
                 try {
-                val down = awaitFirstDown(requireUnconsumed = true)
+                // Initial pass observes button presses and takes ownership as
+                // soon as movement crosses slop, before any child handles it.
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 handle.begin()
                 val slop = viewConfiguration.touchSlop
                 var dragging = false
@@ -846,9 +761,12 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                 var backgroundTap = false
                 val start = rootPos(down)
                 do {
-                    val event = awaitPointerEvent()
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.any { it.isConsumed }) {
+                        handle.cancel()
+                        return@awaitEachGesture
+                    }
                     val pressed = event.changes.filter { it.pressed }
-                    backgroundTap = event.changes.any { !it.isConsumed }
                     if (pressed.size >= 2) {
                         val p0 = rootPos(pressed[0])
                         val p1 = rootPos(pressed[1])
@@ -857,8 +775,10 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                             (p0.y - p1.y).toDouble(),
                         ).toFloat()
                         if (pinchStartDist <= 0f) pinchStartDist = dist
-                        if (dist > 0f && pinchStartDist > 0f) {
+                        if (dist > 0f && pinchStartDist > 0f &&
+                            (pinching || abs(dist - pinchStartDist) > slop)) {
                             pinching = true
+                            handle.interacting = true
                             dragging = false
                             pressed.forEach { it.consume() }
                             handle.pinchScale(dist / pinchStartDist)
@@ -868,15 +788,20 @@ private fun Modifier.miniPlayerInteract(handle: MiniPlayerHandle): Modifier {
                         val delta = current - start
                         if (!dragging && (abs(delta.x) > slop || abs(delta.y) > slop)) {
                             dragging = true
+                            handle.interacting = true
                         }
                         if (dragging) {
                             pressed[0].consume()
                             handle.dragFromStart(delta.x, delta.y)
                         }
                     }
-                    event.changes.forEach { change ->
-                        if ((dragging || pinching) && change.positionChanged()) change.consume()
-                    }
+                    // Consume UP too, even with no position change: a drag
+                    // release must never click a control beneath the finger.
+                    if (dragging || pinching) event.changes.forEach { it.consume() }
+                    // Children handle ordinary taps in Main before the parent
+                    // decides whether an unhandled tap toggles the chrome.
+                    val mainEvent = awaitPointerEvent(PointerEventPass.Main)
+                    backgroundTap = mainEvent.changes.none { it.isConsumed }
                 } while (event.changes.any { it.pressed })
                 when {
                     dragging || pinching -> {

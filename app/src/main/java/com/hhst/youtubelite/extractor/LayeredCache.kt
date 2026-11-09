@@ -3,14 +3,10 @@ package com.hhst.youtubelite.extractor
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Reads mem first, then disk. Writes fill both so player hits stay hot in RAM.
- *
- * Disk hits are promoted into mem with the disk entry's remaining lifetime:
- * re-boxing with a fresh TTL would let the mem copy outlive the disk entry and
- * keep serving expired googlevideo URLs, which 403 on the player.
- *
- * Stream get / put / invalidate for one id share a lock so a disk→mem
- * promotion cannot resurrect an entry [invalidateStream] just cleared.
+ * Reads mem first, then disk; writes fill both so player hits stay hot in RAM.
+ * Disk hits promote into mem with the remaining disk lifetime: a fresh TTL would let the
+ * mem copy outlive disk and keep serving expired googlevideo URLs (403 on the player).
+ * Stream get/put/invalidate for one id share a lock so a promotion cannot resurrect a cleared entry.
  */
 class LayeredCache(
     private val mem: MemCache,

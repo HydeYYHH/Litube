@@ -1,5 +1,11 @@
 package com.hhst.youtubelite.downloader.engine
 
+import com.hhst.youtubelite.extractor.MediaProtocol
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
+import com.hhst.youtubelite.extractor.StreamClient
+import com.hhst.youtubelite.extractor.WebAccount
+import com.hhst.youtubelite.extractor.YoutubeWebSession
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.CompletionKind
 import com.hhst.youtubelite.downloader.core.DownloadConfig
@@ -23,10 +29,7 @@ import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.muxedFormat
 import com.hhst.youtubelite.downloader.resolve.subtitle
-import com.grack.nanojson.JsonObject
-import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -100,8 +103,7 @@ class DownloadEngineE2ETest {
         val taskId = env.coordinator.enqueue(request("a"), "s1").created.single().taskId
         val first = async(Dispatchers.IO) { env.engine.run(taskId) }
         assertTrue(firstDone.await(5, TimeUnit.SECONDS))
-        // The request arriving does not mean the chunk is checkpointed yet:
-        // poll until the first verified chunk lands, then pause mid-transfer.
+        // Request arrival does not imply checkpointing; poll until a chunk is verified, then pause mid-transfer.
         val deadline = System.nanoTime() + 5_000_000_000L
         while (System.nanoTime() < deadline) {
             val count = env.repo.transact { snapshot(taskId) }!!.assets.single().components
@@ -178,9 +180,9 @@ class DownloadEngineE2ETest {
     @Test
     fun attachmentFailure_isPartialAndRetryFailedOnly() = runBlocking {
         val media = load("downloader/media/avc_aac.mp4")
-        val session = YoutubeSession("subtitle-test", YoutubeSession.Account.ANONYMOUS,
-            0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(), { "" })
-        val subtitlePlan = RequestPlan(session, ClientProfile.WEB, RequestPlan.Protocol.HTTPS, RequestPlan.Range.NONE, false)
+        val session = YoutubeWebSession("subtitle-test", WebAccount.ANONYMOUS,
+            0, null, null, null, "visitor", "browser-UA", 1, null, "test", JsonObject(emptyMap()), { "" })
+        val subtitlePlan = MediaRequestPlan(session, StreamClient.WEB, MediaProtocol.HTTPS, MediaRange.NONE, false)
         server.dispatcher = mediaDispatcher(media) { request ->
             if ("timedtext" in request.path.orEmpty()) MockResponse().setResponseCode(404) else null
         }

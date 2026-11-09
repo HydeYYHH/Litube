@@ -13,11 +13,10 @@ import androidx.annotation.RequiresApi
 import androidx.javascriptengine.IsolateStartupParameters
 import androidx.javascriptengine.JavaScriptIsolate
 import androidx.javascriptengine.JavaScriptSandbox
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.AndroidWebViewMainGate
+import kotlinx.serialization.json.JsonPrimitive
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.Future
@@ -42,12 +41,18 @@ class HeavyJsGate {
     private var playbackWaiting = 0
     fun <T> run(context: ExtractionContext, block: () -> T): T {
         lock.lock()
-        val playback = context.playbackPriority
+        var playback = context.playbackPriority
         waiting++
         if (playback) playbackWaiting++
         try {
-            while (busy || !playback && playbackWaiting > 0) {
+            while (true) {
+                if (!playback && context.playbackPriority) {
+                    playback = true
+                    playbackWaiting++
+                    available.signalAll()
+                }
                 context.check()
+                if (!busy && (playback || playbackWaiting == 0)) break
                 available.await(minOf(50L, context.remainingMillis()), TimeUnit.MILLISECONDS)
             }
             context.check()
@@ -91,11 +96,10 @@ internal interface JavascriptRuntime : AutoCloseable {
     }
 
     fun loadPlayerInput(file: File, timeoutMs: Long, context: ExtractionContext) {
-        val json = Gson()
         evaluate("globalThis._sourceParts=[];'ready'", timeoutMs, context)
         file.bufferedReader().use { reader ->
             sourceChunks(reader, context) { chunk ->
-                evaluate("_sourceParts.push(${json.toJson(chunk)});'chunk'", timeoutMs, context)
+                evaluate("_sourceParts.push(${JsonPrimitive(chunk)});'chunk'", timeoutMs, context)
             }
         }
         evaluate("globalThis._input=_sourceParts.join('');_sourceParts=null;'ready'", timeoutMs, context)
@@ -170,7 +174,6 @@ internal class SandboxRuntime private constructor(
 
     override fun compilePlayer(file: File, prepared: Boolean, timeoutMs: Long, context: ExtractionContext, output: File?): String {
         val script = File.createTempFile("ejs-player-", ".js", app.cacheDir)
-        val json = Gson()
         try {
             script.bufferedWriter().use { writer ->
                 writer.write("globalThis._input=[")
@@ -179,7 +182,7 @@ internal class SandboxRuntime private constructor(
                     sourceChunks(reader, context) { chunk ->
                         if (!first) writer.write(",")
                         first = false
-                        json.toJson(chunk, writer)
+                        writer.write(JsonPrimitive(chunk).toString())
                     }
                 }
                 writer.write("].join('');" + compileInput(prepared))
@@ -276,7 +279,7 @@ internal class HiddenJavascriptRuntime(
             pending[id] = future
             try {
                 main.run {
-                    view?.evaluateJavascript("Promise.resolve().then(function(){return (0,eval)(${Gson().toJson(code)});}).then(function(r){JsResult.result($id,String(r));},function(e){JsResult.error($id,e&&e.name||'Error');});", null)
+                    view?.evaluateJavascript("Promise.resolve().then(function(){return (0,eval)(${JsonPrimitive(code)});}).then(function(r){JsResult.result($id,String(r));},function(e){JsResult.error($id,e&&e.name||'Error');});", null)
                 }
                 await(future, timeoutMs, context) { close() }
             } finally { pending.remove(id) }

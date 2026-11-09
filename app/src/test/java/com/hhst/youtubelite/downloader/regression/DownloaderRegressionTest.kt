@@ -44,7 +44,6 @@ import com.hhst.youtubelite.downloader.resolve.videoFormat
 import com.hhst.youtubelite.downloader.ui.DownloadPresentation
 import com.hhst.youtubelite.downloader.ui.DownloadRowAction
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
-import com.hhst.youtubelite.downloader.webview.DownloadWebGuard
 import com.hhst.youtubelite.downloader.engine.DownloadBatchExecutor
 import com.hhst.youtubelite.downloader.engine.SchedulerHarness
 import kotlinx.coroutines.runBlocking
@@ -61,10 +60,6 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 
-/**
- * Regression tests for the download pipeline. Each test pins one behavioral
- * guarantee: a failing run means the guarded behavior regressed.
- */
 class DownloaderRegressionTest {
 
     @Test
@@ -150,7 +145,7 @@ class DownloaderRegressionTest {
             override suspend fun catalog(videoId: String) = cat
             override suspend fun refresh(videoId: String) = cat
         })
-        resolver.resolve(id)
+        resolver.resolve(id, h.repo.transact { getTask(id) }!!.executionGeneration)
         assertEquals("Custom name.mp4", h.repo.transact { assetsForTask(id) }.single().outputName)
     }
 
@@ -166,7 +161,7 @@ class DownloaderRegressionTest {
             override suspend fun catalog(videoId: String) = cat
             override suspend fun refresh(videoId: String) = cat
         })
-        resolver.resolve(id)
+        resolver.resolve(id, h.repo.transact { getTask(id) }!!.executionGeneration)
         assertFalse(
             "only subtitle should fail",
             h.repo.transact { assetsForTask(id) }.first { it.kind == AssetKind.VIDEO }.failed,
@@ -200,11 +195,6 @@ class DownloaderRegressionTest {
     }
 
     @Test
-    fun malformedBridgeItems_isRejectedWithoutThrowing() {
-        assertNull(DownloadWebGuard.parse("""{"type":"openBatch","items":{}}"""))
-    }
-
-    @Test
     fun fullResponse_shorterThanTrustedLength_doesNotSucceed() = runBlocking {
         val root = temp()
         val server = MockWebServer()
@@ -223,7 +213,7 @@ class DownloaderRegressionTest {
             )
             // A known-length stream with a non-ranged plan still must match total bytes.
             val out = t.downloadComponent(
-                "task",
+                "task", 0,
                 InputComponent("comp", "asset", InputComponentKind.VIDEO),
                 src,
                 File(root, "x"),
@@ -278,7 +268,7 @@ class DownloaderRegressionTest {
                 client,
                 chunkBytes = 4,
                 sleeper = DownloadSleeper {},
-                forbidden = ForbiddenRecovery { _, _ ->
+                forbidden = ForbiddenRecovery { _, _, _ ->
                     RecoveredSource(
                         source.copy(url = server.url("/new").toString(), resourceIdentity = "dl:y:1::8"),
                         true,
@@ -288,7 +278,7 @@ class DownloaderRegressionTest {
             )
             val kept = listOf(DownloadChunk("comp:0", "comp", 0, 3, 4, true, file.path, checksum))
             val result = transport.downloadComponent(
-                "task",
+                "task", 0,
                 InputComponent("comp", "asset", InputComponentKind.VIDEO),
                 source,
                 file,
@@ -315,8 +305,7 @@ class DownloaderRegressionTest {
         val names = linkedMapOf<String, String>()
         var fail = true
         val backend = object : PublishBackend {
-            override fun existingNames() = names.values.toSet()
-            override fun createTarget(displayName: String, mimeType: String): PublishTarget {
+            override fun reserveTarget(displayName: String, mimeType: String): PublishTarget {
                 val id = "content://test/" + (targets.size + 1)
                 targets[id] = byteArrayOf()
                 names[id] = displayName
@@ -338,6 +327,7 @@ class DownloaderRegressionTest {
                 targets.remove(uri)
                 return DeleteResult.OK
             }
+            override fun discardIncomplete(uri: String) = delete(uri)
             override fun openableUri(uri: String) = uri
         }
         try {

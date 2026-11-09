@@ -1,8 +1,5 @@
 package com.hhst.youtubelite.extractor
 
-/**
- * In-memory [Cache] for unit / network tests only.
- */
 class FakeCache : Cache {
     private val metadata = mutableMapOf<String, Metadata>()
     private val streams = mutableMapOf<String, Stream>()

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">आणि आणखी %1$d लिंक</item>
+        <item quantity="other">आणि आणखी %1$d लिंक्स</item>
+    </plurals>
+</resources>

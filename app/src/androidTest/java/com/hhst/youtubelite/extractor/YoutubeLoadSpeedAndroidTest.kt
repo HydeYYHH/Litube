@@ -13,11 +13,9 @@ import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import com.hhst.youtubelite.player.datasource.PlaybackStartup
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
-import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.engine.defaultLoadControl
 import java.io.File
@@ -34,7 +32,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 
 /** Same-account native extraction through first decoded frame, with immediate cache replays. */
 @UnstableApi
@@ -65,98 +62,152 @@ class YoutubeLoadSpeedAndroidTest {
             }
             else MediaSourceResolver(GlobalContext.get().get<PlayerDataSource>())
         val records = mutableListOf<Map<String, Any>>()
-        val demand = StreamDemand(720, null, false, setOf("avc", "vp9", "vp09", "hvc", "hev", "av01"))
+        val demand = PlaybackDemand(720, null, false, setOf("avc", "vp9", "vp09", "hvc", "hev", "av01"))
         val leadMs = args.getString("prepareLeadMs", "0").toLong()
-        // Stands in for the browser document: "session" captures configuration only, "full" also initializes.
+        // Stands in for the browser document: "session" configures only, "full" also
+        // initializes, "media" additionally warms rendition heads in the playback cache.
         val preload = args.getString("preload", "none")
+        val preloader = com.hhst.youtubelite.shorts.data.ShortsMediaPreloader(
+            instrumentation.targetContext, extractor, GlobalContext.get().get<PlayerDataSource>(),
+            demandFor = { demand })
         var preloadMs = 0L
-        if (preload != "none") {
-            val preloadStarted = SystemClock.elapsedRealtime()
-            GlobalContext.get().get<YoutubeSessionProvider>().capture(ids.first())
-            if (preload == "full") extractor.initialize()
-            preloadMs = SystemClock.elapsedRealtime() - preloadStarted
-            Thread.sleep(args.getString("preloadIdleMs", "1000").toLong())
-        }
+        var prefetchedBytes = 0L
         try {
-            for (id in ids) for (replay in 0..1) {
-                if (replay == 0) extractor.invalidateStream(id)
-                val mark = diagnostics.mark()
-                val started = SystemClock.elapsedRealtime()
-                if (leadMs > 0 && replay == 0) {
-                    extractor.preparePlayback(id, demand)
-                    Thread.sleep(leadMs)
-                }
-                val requestAt = SystemClock.elapsedRealtime()
-                val extraction = extractor.extract(id, demand = demand)
-                val stream = try {
-                    withTimeout(50_000) { extraction.stream.await() }
-                } catch (failure: Exception) {
-                    val record = mapOf("videoId" to id, "replay" to (replay == 1),
-                        "failure" to failure.javaClass.simpleName, "events" to diagnostics.since(mark))
-                    records += record
-                    instrumentation.sendStatus(2, Bundle().apply {
-                        putString("youtubeLoadFailure", Gson().toJson(record))
-                    })
-                    throw failure
-                }
-                val streamAt = SystemClock.elapsedRealtime()
-                val metadata = extraction.metadata.await()
-                val metadataAt = SystemClock.elapsedRealtime()
-                val source = resolver.resolve(stream, metadata, preferredQuality = manualQuality)
-                val sourceAt = SystemClock.elapsedRealtime()
-                val firstFrame = AtomicLong()
-                val ready = CountDownLatch(1)
-                val failure = AtomicReference<String>()
-                val waterfall = Collections.synchronizedList(mutableListOf<Map<String, Any>>())
-                lateinit var player: ExoPlayer
-                activity.scenario.onActivity { host ->
-                    player = ExoPlayer.Builder(host).setLoadControl(defaultLoadControl())
-                        .apply { if (startup) {
-                            selection = DefaultTrackSelector(host, StartCappedSelectionFactory())
-                            setTrackSelector(selection)
-                        } }
-                        .build().apply {
-                        volume = 0f
-                        trackSelectionParameters = trackSelectionParameters.buildUpon()
-                            .setMaxVideoSize(1280, 720).apply {
-                                manualQuality?.let { setMinVideoSize(0, StreamSelection.parseHeight(it)) }
-                            }.build()
-                        setVideoSurfaceView(host.surface)
-                        addListener(object : Player.Listener {
-                            override fun onRenderedFirstFrame() { firstFrame.compareAndSet(0, SystemClock.elapsedRealtime()); ready.countDown() }
-                            override fun onPlayerError(error: PlaybackException) { failure.set(error.errorCodeName); ready.countDown() }
-                        })
-                        addAnalyticsListener(LoadWaterfall(sourceAt, waterfall))
-                        setMediaSource(source.mediaSource)
-                        prepare()
-                        play()
+            val reopenGapMs = args.getString("reopenGapMs", "0").toLong()
+            for (id in ids) {
+                preloader.cancel()
+                com.hhst.youtubelite.player.datasource.PlaybackClaim.videoId = null
+                // Clear BEFORE warming; clearing after invalidates the extraction under test.
+                extractor.invalidateStream(id)
+                preloadMs = 0L
+                prefetchedBytes = 0L
+                val preloadMark = diagnostics.mark()
+                if (preload != "none") {
+                    val preloadStarted = SystemClock.elapsedRealtime()
+                    GlobalContext.get().get<YoutubeSessionProvider>().capture(id)
+                    if (preload == "full" || preload == "media") extractor.initialize()
+                    if (preload == "media") {
+                        preloader.preload(id)
+                        val deadline = preloadStarted + args.getString("preloadBudgetMs", "15000").toLong()
+                        while (SystemClock.elapsedRealtime() < deadline) {
+                            Thread.sleep(minOf(50, deadline - SystemClock.elapsedRealtime()).coerceAtLeast(1))
+                        }
+                        prefetchedBytes = preloader.prefetchedBytes(id)
                     }
+                    preloadMs = SystemClock.elapsedRealtime() - preloadStarted
+                    Thread.sleep(args.getString("preloadIdleMs", "0").toLong())
                 }
-                try {
-                    assertTrue("First frame timed out", ready.await(25, TimeUnit.SECONDS))
-                    assertTrue("Media3 failed: ${failure.get()}", failure.get() == null && firstFrame.get() > 0)
-                    val events = diagnostics.since(mark)
-                    val record = linkedMapOf<String, Any>("videoId" to id, "replay" to (replay == 1),
-                        "startup" to startup, "quality" to (manualQuality ?: "auto"), "preload" to preload, "preloadMs" to preloadMs,
-                        "streamMs" to streamAt - started, "metadataWaitMs" to metadataAt - streamAt,
-                        "sourceMs" to sourceAt - metadataAt, "mediaToFrameMs" to firstFrame.get() - sourceAt,
-                        "firstFrameMs" to firstFrame.get() - started,
-                        "prepareLeadMs" to requestAt - started,
-                        "requestToFrameMs" to firstFrame.get() - requestAt,
-                        "networkRequests" to events.count { it.stage == "request" },
-                        "playerRequests" to events.count { it.stage == "player" && it.detail != "browser-response-cache" },
-                        "streamCacheHit" to events.any { it.stage == "stream-cache" && it.detail == "HIT" },
-                        "events" to events,
-                        "waterfall" to synchronized(waterfall) { waterfall.toList() })
-                    records += record
-                    instrumentation.sendStatus(2, Bundle().apply { putString("youtubeLoadSpeed", Gson().toJson(record.filterKeys { it != "events" && it != "waterfall" })) })
-                } finally { instrumentation.runOnMainSync { player.release() } }
-                runCatching { extraction.chapters.await() }
+                val preloadEvents = diagnostics.since(preloadMark).map(::eventFields)
+                for (replay in 0..if (args.getString("replay", "on") == "off") 0 else 1) {
+                    // Stands in for "watch something else, then come back": a gap longer than
+                    // the stream TTL must re-resolve, so reopen cost is what the user pays.
+                    if (replay == 1 && reopenGapMs > 0) Thread.sleep(reopenGapMs)
+                    val mark = diagnostics.mark()
+                    val started = SystemClock.elapsedRealtime()
+                    if (leadMs > 0 && replay == 0) {
+                        extractor.preparePlayback(id, demand)
+                        Thread.sleep(leadMs)
+                    }
+                    val requestAt = SystemClock.elapsedRealtime()
+                    // Foreground ownership starts at the tap, after the dwell window.
+                    if (args.getString("claim", "off") != "off") {
+                        com.hhst.youtubelite.player.datasource.PlaybackClaim.videoId = id
+                    }
+                    val extraction = extractor.extract(id, demand = demand)
+                    val stream = try {
+                        withTimeout(50_000) { extraction.stream.await() }
+                    } catch (failure: Exception) {
+                        val record = mapOf("videoId" to id, "replay" to (replay == 1),
+                            "failure" to failure.javaClass.simpleName, "events" to diagnostics.since(mark).map(::eventFields))
+                        records += record
+                        instrumentation.sendStatus(2, Bundle().apply {
+                            putString("youtubeLoadFailure", com.hhst.youtubelite.core.TestJson.any(record))
+                        })
+                        throw failure
+                    }
+                    val streamAt = SystemClock.elapsedRealtime()
+                    val metadata = extraction.metadata.await()
+                    val metadataAt = SystemClock.elapsedRealtime()
+                    val source = resolver.resolve(stream, metadata, preferredQuality = manualQuality)
+                    val sourceAt = SystemClock.elapsedRealtime()
+                    val firstFrame = AtomicLong()
+                    val ready = CountDownLatch(1)
+                    val failure = AtomicReference<String>()
+                    val waterfall = Collections.synchronizedList(mutableListOf<Map<String, Any>>())
+                    lateinit var player: ExoPlayer
+                    activity.scenario.onActivity { host ->
+                        player = ExoPlayer.Builder(host).setLoadControl(defaultLoadControl())
+                            .apply { if (startup) {
+                                selection = DefaultTrackSelector(host)
+                                setTrackSelector(selection)
+                            } }
+                            .build().apply {
+                            volume = 0f
+                            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                                .setMaxVideoSize(1280, 720).apply {
+                                    manualQuality?.let { setMinVideoSize(0, StreamSelection.parseHeight(it)) }
+                                }.build()
+                            setVideoSurfaceView(host.surface)
+                            addListener(object : Player.Listener {
+                                override fun onRenderedFirstFrame() { firstFrame.compareAndSet(0, SystemClock.elapsedRealtime()); ready.countDown() }
+                                override fun onPlayerError(error: PlaybackException) { failure.set(error.errorCodeName); ready.countDown() }
+                            })
+                            addAnalyticsListener(LoadWaterfall(sourceAt, waterfall))
+                            setMediaSource(source.mediaSource)
+                            prepare()
+                            play()
+                        }
+                    }
+                    try {
+                        val completed = ready.await(25, TimeUnit.SECONDS)
+                        val frameAt = firstFrame.get().takeIf { it > 0 }
+                        val events = diagnostics.since(mark)
+                        val record = linkedMapOf<String, Any>("videoId" to id, "replay" to (replay == 1),
+                            "benchmarkSchema" to 2, "startup" to startup, "quality" to (manualQuality ?: "auto"), "preload" to preload, "preloadMs" to preloadMs,
+                            "prefetchedBytesAtTap" to if (preload == "media" && replay == 0) prefetchedBytes else 0L,
+                            "prefetchedBytes" to if (preload == "media" && replay == 0) preloader.prefetchedBytes(id) else 0L,
+                            "streamMs" to streamAt - started, "metadataWaitMs" to metadataAt - streamAt,
+                            "sourceMs" to sourceAt - metadataAt, "mediaToFrameMs" to (frameAt?.minus(sourceAt) ?: -1),
+                            "firstFrameMs" to (frameAt?.minus(started) ?: -1),
+                            "prepareLeadMs" to requestAt - started,
+                            "requestToFrameMs" to (frameAt?.minus(requestAt) ?: -1),
+                            "playbackError" to (failure.get() ?: if (completed) "none" else "first_frame_timeout"),
+                            "networkRequests" to events.count { it.stage == "request" },
+                            "networkRequestsScope" to "extraction_only",
+                            "mediaCacheState" to "retained",
+                            "playerResponses" to events.count { it.stage == "player-response" },
+                            "streamCacheHit" to events.any { it.stage == "stream-cache" && it.detail == "HIT" },
+                            "hasPlaybackTracking" to !stream.tracking?.playbackUrl.isNullOrBlank(),
+                            "hasWatchTimeTracking" to !stream.tracking?.watchTimeUrl.isNullOrBlank(),
+                            "playbackTrackingOrigin" to trackingOrigin(stream.tracking?.playbackUrl),
+                            "watchTimeTrackingOrigin" to trackingOrigin(stream.tracking?.watchTimeUrl),
+                            "events" to events.map(::eventFields),
+                            "preloadEvents" to preloadEvents,
+                            "waterfall" to synchronized(waterfall) { waterfall.toList() })
+                        records += record
+                        instrumentation.sendStatus(2, Bundle().apply { putString("youtubeLoadSpeed", com.hhst.youtubelite.core.TestJson.any(record.filterKeys { it != "events" && it != "waterfall" })) })
+                        assertTrue("First frame timed out", completed)
+                        assertTrue("Media3 failed: ${failure.get()}", failure.get() == null && frameAt != null)
+                    } finally { instrumentation.runOnMainSync { player.release() } }
+                    runCatching { extraction.chapters.await() }
+                }
             }
         } finally {
-            File(instrumentation.targetContext.filesDir, "youtube-load-speed.json").writeText(Gson().toJson(records))
+            preloader.cancel()
+            com.hhst.youtubelite.player.datasource.PlaybackClaim.videoId = null
+            File(instrumentation.targetContext.filesDir, "youtube-load-speed.json").writeText(com.hhst.youtubelite.core.TestJson.any(records))
         }
     }
+
+    private fun trackingOrigin(url: String?): String = runCatching {
+        val uri = java.net.URI(url.orEmpty())
+        "${uri.scheme}://${uri.host}${uri.path}"
+    }.getOrDefault("invalid")
+
+    private fun eventFields(event: ExtractionDiagnostics.Event): Map<String, Any> = mapOf(
+        "sequence" to event.sequence, "stage" to event.stage, "profile" to event.profile,
+        "detail" to event.detail, "elapsedMs" to event.elapsedMillis, "httpStatus" to event.httpStatus,
+    )
 }
 
 /** Media3 load timeline relative to source creation; URLs reduce to kind, itag and segment index. */

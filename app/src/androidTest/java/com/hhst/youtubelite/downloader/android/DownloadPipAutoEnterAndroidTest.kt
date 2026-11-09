@@ -9,8 +9,7 @@ import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.rule.GrantPermissionRule
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.downloader.core.DownloadShareOnce
 import com.hhst.youtubelite.downloader.ui.DownloadActionActivity
@@ -27,18 +26,15 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 /**
- * API 31+ auto-PiP: MainActivity.setPictureInPictureParams(setAutoEnterEnabled)
- * must stay off while DownloadActivity / sheet / share trampolines hold
- * [PipAutoEnter.suppress], then restore from [PreferenceKeys.ENABLE_PIP].
- *
- * Player eligibility is applied through the real [PipAutoEnter] host (no live
- * media stream). Skipped below API 31 where setAutoEnterEnabled does not exist.
+ * API 31+ auto-PiP: setAutoEnterEnabled must stay off while DownloadActivity /
+ * sheet / share trampolines hold [PipAutoEnter.suppress], then restore from
+ * [PreferenceKeys.ENABLE_PIP]. Player eligibility is applied through the real
+ * [PipAutoEnter] host (no live media stream).
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadPipAutoEnterAndroidTest {
@@ -46,12 +42,13 @@ class DownloadPipAutoEnterAndroidTest {
     private val instrumentation: Instrumentation
         get() = InstrumentationRegistry.getInstrumentation()
 
-    @get:Rule
-    val notifications: GrantPermissionRule =
-        GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
-
     @Before
     fun reset() {
+        // POST_NOTIFICATIONS exists from API 33; granting it on older platforms fails.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            instrumentation.uiAutomation.grantRuntimePermission(
+                instrumentation.targetContext.packageName, Manifest.permission.POST_NOTIFICATIONS)
+        }
         assumeTrue(
             "PictureInPictureParams.setAutoEnterEnabled is API 31+",
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
@@ -68,14 +65,14 @@ class DownloadPipAutoEnterAndroidTest {
 
     @Test
     fun mainAutoEnter_offForManagerSheetShare_restoresWithEnablePipPref() {
-        ActivityScenario.launch(MainActivity::class.java).use { main ->
+        ActivityScenario.launch(WatchActivity::class.java).use { main ->
             instrumentation.waitForIdleSync()
             main.onActivity { host ->
                 host.setPlayerPipEligible(true)
                 assertFalse("suppress must be clear before auto-enter", PipAutoEnter.isSuppressed())
                 assertTrue(PipAutoEnter.shouldAutoEnter(eligible = true, sdk = sdk()))
                 assertTrue(
-                    "eligible MainActivity must setAutoEnterEnabled " +
+                    "eligible WatchActivity must setAutoEnterEnabled " +
                         "pushError=${PipAutoEnter.lastPushError} " +
                         "requested=${PipAutoEnter.lastRequestedAutoEnter} " +
                         "paramsOn=${PipAutoEnter.isAutoEnterEnabled(host)}",
@@ -140,10 +137,10 @@ class DownloadPipAutoEnterAndroidTest {
     }
 
     private fun openAndFinishOverlay(
-        main: ActivityScenario<MainActivity>,
+        main: ActivityScenario<WatchActivity>,
         overlayClass: String,
         playerEligible: Boolean = true,
-        launch: (MainActivity) -> Unit,
+        launch: (WatchActivity) -> Unit,
     ) {
         val monitor = instrumentation.addMonitor(overlayClass, null, false)
         var overlay: Activity? = null
@@ -168,9 +165,9 @@ class DownloadPipAutoEnterAndroidTest {
     }
 
     /**
-     * Prefer the live [PictureInPictureParams] getter. Some API 33 emulator
-     * images do not echo [PictureInPictureParams.isAutoEnterEnabled]; then the
-     * successful [Activity.setPictureInPictureParams] request is the proof.
+     * Prefer the live [PictureInPictureParams] getter: some API 33 emulator
+     * images do not echo [PictureInPictureParams.isAutoEnterEnabled], and then
+     * the successful [Activity.setPictureInPictureParams] request is the proof.
      */
     private fun autoEnterOn(activity: Activity): Boolean {
         if (PipAutoEnter.isAutoEnterEnabled(activity)) return true
@@ -179,7 +176,7 @@ class DownloadPipAutoEnterAndroidTest {
             !PipAutoEnter.isSuppressed()
     }
 
-    private fun assertRestoredOn(main: ActivityScenario<MainActivity>) {
+    private fun assertRestoredOn(main: ActivityScenario<WatchActivity>) {
         main.onActivity { host ->
             assertFalse(PipAutoEnter.isSuppressed())
             assertTrue(PipAutoEnter.shouldAutoEnter(eligible = true, sdk = sdk()))

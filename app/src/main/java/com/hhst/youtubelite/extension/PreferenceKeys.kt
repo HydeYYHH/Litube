@@ -1,19 +1,24 @@
 package com.hhst.youtubelite.extension
 
-/** Preference keys and first-launch defaults. Strings match the existing MMKV layout. */
+/** Preference keys and first-launch defaults. Strings keep the historical key layout. */
 object PreferenceKeys {
     const val HAPTIC_STRENGTH = "haptic_strength"
+    const val THEME_MODE = "theme_mode"
+    const val APP_LANGUAGE = "app_language"
     const val ENABLE_DISPLAY_DISLIKES = "enable_display_dislikes"
     const val ENABLE_HIDE_SHORTS = "enable_hide_shorts"
+    const val PRIVATE_BROWSING = "private_browsing"
     const val REMEMBER_QUALITY = "remember_quality"
     const val REMEMBER_PLAYBACK_SPEED = "remember_playback_speed"
     const val REMEMBER_LAST_POSITION = "remember_last_position"
     const val REMEMBER_RESIZE_MODE = "remember_resize_mode"
     const val USE_ORIGINAL_TITLE = "use_original_title"
 
+    const val ENABLE_AUTOPLAY = "enable_autoplay"
     const val ENABLE_BACKGROUND_PLAY = "enable_background_play"
     const val ENABLE_PIP = "enable_pip"
     const val ENABLE_IN_APP_MINI_PLAYER = "enable_in_app_mini_player"
+    const val DATA_SAVER = "data_saver"
 
     const val SKIP_SPONSORS = "skip_sponsors"
     const val SKIP_SELF_PROMO = "skip_self_promo"
@@ -25,6 +30,9 @@ object PreferenceKeys {
     const val SKIP_FILLER = "skip_filler"
     const val SKIP_POI_HIGHLIGHT = "skip_poi_highlight"
     const val SPONSOR_COUNTDOWN = "sponsor_countdown"
+
+    const val DEARROW_TITLES = "dearrow_titles"
+    const val DEARROW_THUMBNAILS = "dearrow_thumbnails"
 
     const val ENABLE_SHOW_LIKES = "enable_show_likes"
 
@@ -67,6 +75,7 @@ object PreferenceKeys {
         ENABLE_DISPLAY_DISLIKES to true,
         ENABLE_SHOW_LIKES to true,
         ENABLE_HIDE_SHORTS to false,
+        PRIVATE_BROWSING to false,
         SKIP_SPONSORS to true,
         SKIP_SELF_PROMO to true,
         SKIP_INTERACTION to true,
@@ -77,11 +86,15 @@ object PreferenceKeys {
         SKIP_FILLER to true,
         SKIP_POI_HIGHLIGHT to true,
         SPONSOR_COUNTDOWN to true,
+        DEARROW_TITLES to false,
+        DEARROW_THUMBNAILS to false,
         REMEMBER_LAST_POSITION to true,
         REMEMBER_QUALITY to true,
         ENABLE_BACKGROUND_PLAY to true,
+        ENABLE_AUTOPLAY to true,
         ENABLE_PIP to true,
         ENABLE_IN_APP_MINI_PLAYER to true,
+        DATA_SAVER to false,
         REMEMBER_RESIZE_MODE to false,
         REMEMBER_PLAYBACK_SPEED to false,
         USE_ORIGINAL_TITLE to false,

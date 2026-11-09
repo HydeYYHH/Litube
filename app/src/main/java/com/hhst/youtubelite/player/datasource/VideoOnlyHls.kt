@@ -15,10 +15,9 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable
 import java.io.InputStream
 
 /**
- * Audio renditions name each language but omit `CODECS`, channel count,
- * and sample rate. Media3 then either skips chunkless preparation or marks the
- * track unsupported, so the menu never sees the other languages. Fill those in
- * from the variant so every name is a supported track.
+ * Audio renditions name each language but omit CODECS/channel count/sample rate; Media3 then
+ * skips chunkless prep or marks the track unsupported so the menu never sees other languages.
+ * Fill those in from the variant so every name is a supported track.
  */
 @UnstableApi
 internal fun declareAudioCodecs(playlist: HlsPlaylist): HlsPlaylist {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">ಮತ್ತು ಇನ್ನೂ %1$d ಲಿಂಕ್</item>
+        <item quantity="other">ಮತ್ತು ಇನ್ನೂ %1$d ಲಿಂಕ್‌ಗಳು</item>
+    </plurals>
+</resources>

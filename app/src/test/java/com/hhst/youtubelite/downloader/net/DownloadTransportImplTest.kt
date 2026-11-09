@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.downloader.net
 
 import com.hhst.youtubelite.downloader.core.AssetKind
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import com.hhst.youtubelite.downloader.core.TransferResult
 import com.hhst.youtubelite.downloader.core.InputComponentKind
@@ -10,15 +11,18 @@ import com.hhst.youtubelite.downloader.core.DownloadChunk
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
 import com.hhst.youtubelite.downloader.io.FileIntegrity
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,6 +62,7 @@ class DownloadTransportImplTest {
         val chunks = mutableListOf<DownloadChunk>()
         val result = transport(chunkBytes = 32).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(32),
             source = source(32),
             dest = File(dir, "c.part"),
@@ -89,6 +94,7 @@ class DownloadTransportImplTest {
         val dest = File(dir, "full.part")
         val result = transport(chunkBytes = 8).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(24),
             source = source(24, DownloadRangeMode.HTTP_HEADER),
             dest = dest,
@@ -111,6 +117,7 @@ class DownloadTransportImplTest {
         )
         val result = transport(chunkBytes = 8).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(8),
             source = source(8, DownloadRangeMode.QUERY_PARAM),
             dest = File(dir, "q.part"),
@@ -135,6 +142,7 @@ class DownloadTransportImplTest {
         }
         val result = transport(chunkBytes = 32).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(32),
             source = source(32),
             dest = File(dir, "eof.part"),
@@ -157,6 +165,7 @@ class DownloadTransportImplTest {
         val chunks = mutableListOf<DownloadChunk>()
         val result = transport().downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(null),
             source = source(null),
             dest = dest,
@@ -180,6 +189,7 @@ class DownloadTransportImplTest {
         val delays = mutableListOf<Long>()
         val result = transport(chunkBytes = 4, sleeper = { delays += it }).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(4),
             source = source(4),
             dest = File(dir, "r.part"),
@@ -188,6 +198,67 @@ class DownloadTransportImplTest {
         )
         assertEquals(TransferResult.Completed, result)
         assertTrue(delays.isNotEmpty())
+    }
+
+    @Test
+    fun permanentClientErrorsFailWithoutRepeatingTheSameRequest() = runBlocking {
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val status = request.requestUrl!!.pathSegments.last().toInt()
+                return MockResponse().setResponseCode(status).apply {
+                    // An unsatisfied range with a different total cannot prove a completed file.
+                    if (status == 416) setHeader("Content-Range", "bytes */8")
+                }
+            }
+        }
+        val delays = mutableListOf<Long>()
+        val transfer = transport(chunkBytes = 4, sleeper = { delays += it })
+        val statuses = listOf(400, 401, 404, 405, 410, 416, 422, 451)
+        statuses.forEach { status ->
+            val result = transfer.downloadComponent(
+                "status-$status", 0, component(4), source(4).copy(url = server.url("/$status").toString()),
+                File(dir, "$status.part"), emptyList(), onChunk = { true },
+            )
+            assertEquals(TransferResult.Failed("http-$status"), result)
+        }
+        assertEquals(statuses.size, server.requestCount)
+        assertTrue(delays.isEmpty())
+    }
+
+    @Test
+    fun temporaryClientAndServerErrorsStillRetry() = runBlocking {
+        val delays = mutableListOf<Long>()
+        listOf(408, 425, 500, 503).forEach { status ->
+            // Keep OkHttp's own 408/503 follow-up out of this application-retry assertion.
+            server.enqueue(MockResponse().setResponseCode(status).setHeader("Retry-After", "1"))
+            server.enqueue(MockResponse().setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-3/4").setBody("data"))
+            val result = transport(chunkBytes = 4, sleeper = { delays += it }).downloadComponent(
+                "status-$status", 0, component(4), source(4), File(dir, "$status.part"), emptyList(),
+                onChunk = { true },
+            )
+            assertEquals(TransferResult.Completed, result)
+        }
+        assertEquals(8, server.requestCount)
+        assertEquals(4, delays.size)
+    }
+
+    @Test
+    fun permanentFailureKeepsAlreadyVerifiedChunks() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(206)
+            .setHeader("Content-Range", "bytes 0-3/8").setBody("data"))
+        repeat(4) { server.enqueue(MockResponse().setResponseCode(404)) }
+        val delays = mutableListOf<Long>()
+        val chunks = mutableListOf<DownloadChunk>()
+        val dest = File(dir, "partial.part")
+        val result = transport(chunkBytes = 4, sleeper = { delays += it }).downloadComponent(
+            "partial", 0, component(8), source(8), dest, emptyList(),
+            onChunk = { chunks += it; true },
+        )
+        assertEquals(TransferResult.Failed("http-404"), result)
+        assertEquals(2, server.requestCount)
+        assertTrue(delays.isEmpty())
+        assertTrue(FileIntegrity.verify(dest, 0, 4, chunks.single().checksum))
     }
 
     @Test
@@ -202,7 +273,7 @@ class DownloadTransportImplTest {
         var recovered = false
         val transport = transport(
             chunkBytes = 4,
-            forbidden = ForbiddenRecovery { _, _ ->
+            forbidden = ForbiddenRecovery { _, _, _ ->
                 recovered = true
                 RecoveredSource(source(4), needsRedownload = true, exhausted = false)
             },
@@ -210,6 +281,7 @@ class DownloadTransportImplTest {
         val dest = File(dir, "f.part")
         val result = transport.downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(4),
             source = source(4),
             dest = dest,
@@ -233,11 +305,12 @@ class DownloadTransportImplTest {
         )
         val result = transport(
             chunkBytes = 4,
-            forbidden = ForbiddenRecovery { _, _ ->
+            forbidden = ForbiddenRecovery { _, _, _ ->
                 RecoveredSource(source(4), needsRedownload = true, exhausted = false)
             },
         ).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(4).copy(needsRedownload = true),
             source = source(4),
             dest = first,
@@ -253,6 +326,7 @@ class DownloadTransportImplTest {
         val monitor = NetworkMonitor { NetworkKind.NONE }
         val result = transport(network = monitor).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(4),
             source = source(4),
             dest = File(dir, "n.part"),
@@ -265,16 +339,19 @@ class DownloadTransportImplTest {
 
     @Test
     fun enospc_duringFetch_isFailedEnospc() = runBlocking {
+        var calls = 0
+        val delays = mutableListOf<Long>()
         val client = DownloadHttpClients.create().newBuilder()
-            .addInterceptor { throw java.io.IOException("No space left on device") }
+            .addInterceptor { calls++; throw java.io.IOException("No space left on device") }
             .build()
         val result = DownloadTransportImpl(
             client = client,
             chunkBytes = 4,
-            sleeper = { },
+            sleeper = { delays += it },
             random = kotlin.random.Random(0),
         ).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(4),
             source = source(4),
             dest = File(dir, "enospc.part"),
@@ -282,6 +359,8 @@ class DownloadTransportImplTest {
             onChunk = { true },
         )
         assertEquals(TransferResult.Failed("ENOSPC"), result)
+        assertEquals(1, calls)
+        assertTrue(delays.isEmpty())
     }
 
     @Test
@@ -294,31 +373,42 @@ class DownloadTransportImplTest {
                 .setBody(okio.Buffer().write(body)),
         )
         server.enqueue(
-            MockResponse()
-                .setResponseCode(206)
-                .addHeader("Content-Range", "bytes 8-15/16")
-                .setBodyDelay(30, TimeUnit.SECONDS)
-                .setBody(okio.Buffer().write(body)),
+            MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE),
         )
         val chunks = mutableListOf<DownloadChunk>()
+        val firstChunkVerified = CompletableDeferred<Unit>()
         val t = transport(chunkBytes = 8)
         val dest = File(dir, "p.part")
-        val job = async {
+        val job = async(Dispatchers.IO) {
             t.downloadComponent(
                 taskId = "t1",
+                generation = 0,
                 component = component(16),
                 source = source(16),
                 dest = dest,
                 verified = emptyList(),
-                onChunk = { chunks += it; true },
+                onChunk = {
+                    chunks += it
+                    firstChunkVerified.complete(Unit)
+                    true
+                },
             )
         }
-        delay(200)
-        t.cancelInFlight("t1")
-        val result = job.await()
-        assertTrue(result == TransferResult.Paused || result is TransferResult.Failed || result == TransferResult.Completed)
-        assertTrue(chunks.isNotEmpty())
-        assertTrue(chunks.all { it.verified })
+        try {
+            withTimeout(10_000) { firstChunkVerified.await() }
+            withContext(Dispatchers.IO) {
+                assertEquals("bytes=0-7", server.takeRequest(10, TimeUnit.SECONDS)?.getHeader("Range"))
+                assertEquals("bytes=8-15", server.takeRequest(10, TimeUnit.SECONDS)?.getHeader("Range"))
+            }
+            t.cancelInFlight("t1")
+            assertEquals(TransferResult.Paused, withTimeout(10_000) { job.await() })
+            assertEquals(1, chunks.size)
+            assertTrue(chunks.single().verified)
+            assertEquals(8L, chunks.single().receivedBytes)
+            assertTrue(FileIntegrity.verify(dest, 0, 8, chunks.single().checksum))
+        } finally {
+            job.cancelAndJoin()
+        }
     }
 
     @Test
@@ -345,6 +435,7 @@ class DownloadTransportImplTest {
         val chunks = mutableListOf<DownloadChunk>()
         val result = transport(chunkBytes = 8).downloadComponent(
             taskId = "t1",
+            generation = 0,
             component = component(16),
             source = source(16),
             dest = dest,
@@ -362,13 +453,23 @@ class DownloadTransportImplTest {
         repeat(3) { server.enqueue(MockResponse().setResponseCode(403)) }
         var refreshed = 0
         var backups = 0
+        val recoveryGenerations = mutableListOf<Long>()
         val transfer = DownloadTransportImpl(client = DownloadHttpClients.create(), chunkBytes = 4,
-            forbidden = ForbiddenRecovery { _, _ -> refreshed++; RecoveredSource(source(4), false, false) },
-            fallback = ForbiddenRecovery { _, _ -> backups++; RecoveredSource(source(4), false, false) })
-        val result = transfer.downloadComponent("t1", component(4), source(4), File(dir, "bounded.part"), emptyList()) { true }
+            forbidden = ForbiddenRecovery { _, generation, _ ->
+                recoveryGenerations += generation
+                refreshed++
+                RecoveredSource(source(4), false, false)
+            },
+            fallback = ForbiddenRecovery { _, generation, _ ->
+                recoveryGenerations += generation
+                backups++
+                RecoveredSource(source(4), false, false)
+            })
+        val result = transfer.downloadComponent("t1", 73, component(4), source(4), File(dir, "bounded.part"), emptyList()) { true }
         assertEquals(TransferResult.Failed("403"), result)
         assertEquals(1, refreshed)
         assertEquals(1, backups)
+        assertEquals(listOf(73L, 73L), recoveryGenerations)
         assertEquals(3, server.requestCount)
     }
 
@@ -378,7 +479,7 @@ class DownloadTransportImplTest {
             .setBody("data").setBodyDelay(2, TimeUnit.SECONDS))
         val transfer = transport(chunkBytes = 4)
         val job = async(Dispatchers.IO) {
-            transfer.downloadComponent("t1", component(4), source(4), File(dir, "cancel.part"), emptyList()) { true }
+            transfer.downloadComponent("t1", 0, component(4), source(4), File(dir, "cancel.part"), emptyList()) { true }
         }
         server.takeRequest(3, TimeUnit.SECONDS)
         delay(100)
@@ -399,7 +500,7 @@ class DownloadTransportImplTest {
         val checkpoints = mutableListOf<DownloadChunk>()
         val progress = mutableListOf<DownloadChunk>()
         val result = transport(chunkBytes = length).downloadComponent(
-            "live", component(length), source(length), File(dir, "live.part"), emptyList(),
+            "live", 0, component(length), source(length), File(dir, "live.part"), emptyList(),
             onProgress = { chunk, total ->
                 assertEquals(length, total)
                 assertFalse(chunk.verified)
@@ -420,7 +521,7 @@ class DownloadTransportImplTest {
         server.enqueue(MockResponse().setBody("media"))
         val totals = mutableListOf<Long?>()
         val result = transport().downloadComponent(
-            "headers", component(null), source(null, DownloadRangeMode.NONE), File(dir, "headers.part"), emptyList(),
+            "headers", 0, component(null), source(null, DownloadRangeMode.NONE), File(dir, "headers.part"), emptyList(),
             onProgress = { _, total -> totals += total; true },
             onChunk = { true },
         )
@@ -434,7 +535,7 @@ class DownloadTransportImplTest {
             .addHeader("Content-Range", "bytes 0-3/4").setBody("data"))
         val checkpoints = mutableListOf<DownloadChunk>()
         val result = transport(chunkBytes = 4).downloadComponent(
-            "stale", component(4), source(4), File(dir, "stale.part"), emptyList(),
+            "stale", 0, component(4), source(4), File(dir, "stale.part"), emptyList(),
             onProgress = { _, _ -> false },
             onChunk = { checkpoints += it; true },
         )
@@ -450,27 +551,89 @@ class DownloadTransportImplTest {
         server.enqueue(cropped("EFGH"))
         server.enqueue(cropped("IJKL"))
         server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
-        val session = org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession(
-            "test", org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession.Account.ANONYMOUS,
-            0, null, null, null, null, "UA", 0, null, "test", com.grack.nanojson.JsonObject(), { "" })
-        val plan = RequestPlan(session,
-            org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS,
-            RequestPlan.Protocol.HTTPS,
-            RequestPlan.Range.QUERY, false)
+        val session = com.hhst.youtubelite.extractor.YoutubeWebSession(
+            "test", com.hhst.youtubelite.extractor.WebAccount.ANONYMOUS,
+            0, null, null, null, null, "UA", 0, null, "test", kotlinx.serialization.json.JsonObject(emptyMap()), { "" })
+        val plan = com.hhst.youtubelite.extractor.MediaRequestPlan(session,
+            com.hhst.youtubelite.extractor.StreamClient.VISIONOS,
+            com.hhst.youtubelite.extractor.MediaProtocol.HTTPS,
+            com.hhst.youtubelite.extractor.MediaRange.QUERY, false)
         val requests = YoutubeMediaRequests({ true }, ExtractionDiagnostics())
         val transfer = DownloadTransportImpl(client = DownloadHttpClients.create(), chunkBytes = 4,
             sleeper = DownloadSleeper { }, mediaRequests = requests)
         val input = source(null, DownloadRangeMode.QUERY_PARAM).copy(requestPlan = plan)
         val dest = File(dir, "unknown.part")
         val chunks = mutableListOf<DownloadChunk>()
-        assertEquals(TransferResult.Paused, transfer.downloadComponent("t1", component(null), input,
+        assertEquals(TransferResult.Paused, transfer.downloadComponent("t1", 0, component(null), input,
             dest, emptyList(), onChunk = { chunks += it; false }))
         dest.appendText("unverified-tail")
-        assertEquals(TransferResult.Completed, transfer.downloadComponent("t1", component(null), input,
+        assertEquals(TransferResult.Completed, transfer.downloadComponent("t1", 0, component(null), input,
             dest, chunks, onChunk = { true }))
         assertEquals("ABCDEFGHIJKL", dest.readText())
         assertEquals(listOf("0-3", "4-7", "8-11", "12-15"), (1..4).map {
             server.takeRequest().requestUrl!!.queryParameter("range")
+        })
+    }
+
+    @Test
+    fun connectionLimitCoversOpenBodiesAcrossClonedClientsAndUpdatesLive() = runBlocking {
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(206)
+            .addHeader("Content-Range", "bytes 0-3/4").setBody("data")) }
+        val http = DownloadHttpClients.create(maxRequests = 1)
+        val firstTransport = DownloadTransportImpl(http, chunkBytes = 4)
+        val secondTransport = DownloadTransportImpl(http.newBuilder().build(), chunkBytes = 4)
+        val open = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val first = async(Dispatchers.IO) {
+            firstTransport.downloadComponent("first", 0, component(4), source(4), File(dir, "first.part"), emptyList(),
+                onProgress = { chunk, _ -> if (chunk.receivedBytes == 0L) { open.complete(Unit); release.await() }; true },
+                onChunk = { true })
+        }
+        try {
+            withTimeout(3_000) { open.await() }
+            assertTrue(server.takeRequest(1, TimeUnit.SECONDS) != null)
+            val started = CompletableDeferred<Unit>()
+            val second = async(Dispatchers.IO) {
+                started.complete(Unit)
+                secondTransport.downloadComponent("second", 0, component(4), source(4), File(dir, "second.part"),
+                    emptyList(), onChunk = { true })
+            }
+            started.await()
+            assertEquals(null, server.takeRequest(200, TimeUnit.MILLISECONDS))
+            DownloadHttpClients.setMaxConnections(http, 2)
+            assertEquals(TransferResult.Completed, withTimeout(3_000) { second.await() })
+            assertFalse(first.isCompleted)
+        } finally { release.complete(Unit) }
+        assertEquals(TransferResult.Completed, first.await())
+    }
+
+    @Test
+    fun pausingWhileWaitingForAConnectionDoesNotOpenARequestOrLeakTheSlot() = runBlocking {
+        repeat(2) { server.enqueue(MockResponse().setResponseCode(206)
+            .addHeader("Content-Range", "bytes 0-3/4").setBody("data")) }
+        val transfer = DownloadTransportImpl(DownloadHttpClients.create(maxRequests = 1), chunkBytes = 4)
+        val open = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val first = async(Dispatchers.IO) {
+            transfer.downloadComponent("owner", 0, component(4), source(4), File(dir, "owner.part"), emptyList(),
+                onProgress = { chunk, _ -> if (chunk.receivedBytes == 0L) { open.complete(Unit); release.await() }; true },
+                onChunk = { true })
+        }
+        try {
+            withTimeout(3_000) { open.await() }
+            assertTrue(server.takeRequest(1, TimeUnit.SECONDS) != null)
+            val pending = async(Dispatchers.IO) {
+                transfer.downloadComponent("paused", 0, component(4), source(4), File(dir, "paused.part"),
+                    emptyList(), onChunk = { true })
+            }
+            assertEquals(null, server.takeRequest(200, TimeUnit.MILLISECONDS))
+            transfer.cancelInFlight("paused")
+            assertEquals(TransferResult.Paused, withTimeout(3_000) { pending.await() })
+            assertEquals(1, server.requestCount)
+        } finally { release.complete(Unit) }
+        assertEquals(TransferResult.Completed, first.await())
+        assertEquals(TransferResult.Completed, withContext(Dispatchers.IO) {
+            transfer.downloadComponent("next", 0, component(4), source(4), File(dir, "next.part"), emptyList(), onChunk = { true })
         })
     }
 

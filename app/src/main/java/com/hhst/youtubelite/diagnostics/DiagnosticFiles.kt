@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.URI
@@ -22,23 +21,37 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
     }
     private data class Segment(val file: File, val handle: RandomAccessFile, val lock: FileLock, val at: Long)
     private val segments = mutableMapOf<String, Segment>()
-    private val gson = Gson()
     private var nextSegment = 0L
     @Volatile var snapshotTruncatedBytes = 0L; private set
     fun files(): List<File> = if (directory.exists()) directory.walkTopDown().filter { it.isFile && it.extension == "jsonl" }.toList() else emptyList()
-    fun snapshot(deadline: () -> Boolean): Pair<Map<String, String>, Int> = locked(deadline) {
+    fun snapshot(maxBytes: Long = Long.MAX_VALUE, deadline: () -> Boolean): Pair<Map<String, String>, Int> = locked(deadline) {
         val result = linkedMapOf<String, String>(); var skipped = 0
+        var remaining = maxBytes.coerceAtLeast(0)
         snapshotTruncatedBytes = 0
-        files().sortedBy { it.path }.forEach { file ->
-            if (deadline()) { skipped++; return@forEach }
+        files().sortedWith(compareByDescending<File> { it.lastModified() }.thenByDescending { critical(it) }).forEach { file ->
+            val length = file.length()
+            if (deadline() || remaining == 0L) {
+                skipped++; snapshotTruncatedBytes += length; return@forEach
+            }
             runCatching {
-                val bytes = ByteArray(file.length().coerceAtMost(2L * 1024 * 1024).toInt())
-                if (file.length() > bytes.size) {
-                    snapshotTruncatedBytes += file.length() - bytes.size
+                val bytes = ByteArray(minOf(length, 2L * 1024 * 1024, remaining).toInt())
+                val start = length - bytes.size
+                var leading = 0
+                RandomAccessFile(file, "r").use {
+                    if (start > 0) {
+                        it.seek(start - 1)
+                        if (it.read() != '\n'.code) leading = -1
+                    }
+                    it.readFully(bytes)
+                }
+                if (leading == -1) leading = (bytes.indexOf('\n'.code.toByte()).takeIf { it >= 0 }?.plus(1) ?: bytes.size)
+                if (start > 0) {
+                    snapshotTruncatedBytes += start + leading
                     skipped++
                 }
-                RandomAccessFile(file, "r").use { it.readFully(bytes) }
-                result[file.relativeTo(directory).invariantSeparatorsPath] = bytes.toString(Charsets.UTF_8).substringBeforeLast('\n', "")
+                remaining -= bytes.size
+                result[file.relativeTo(directory).invariantSeparatorsPath] =
+                    String(bytes, leading, bytes.size - leading, Charsets.UTF_8).substringBeforeLast('\n', "")
             }.onFailure { skipped++ }
         }
         result to skipped
@@ -83,7 +96,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
             if (deleteClosed(file)) { total -= length; if (!critical(file)) ordinary -= length }
         }
     }
-    /** Returns dropped rows if protected active segments leave no room. */
+    /** Dropped-row count when protected active segments leave no room. */
     fun append(records: List<DiagnosticEvent>, priority: Boolean, deadline: () -> Boolean = { false }): Int = locked(deadline) {
         var dropped = 0
         val initial = files()
@@ -91,7 +104,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
         var ordinaryBytes = initial.filterNot(::critical).sumOf { it.length() }
         records.forEach { record ->
             if (deadline()) { dropped++; return@forEach }
-            val line = (gson.toJson(record) + "\n").toByteArray(Charsets.UTF_8)
+            val line = (DiagnosticJson.encode(record) + "\n").toByteArray(Charsets.UTF_8)
             val key = "${record.pid}-${record.session}-${if (priority) "incidents" else "events"}"
             var segment = segments[key]
             if (segment != null && (segment.file.length() + line.size > SEGMENT_BYTES || clock() - segment.at >= 3_600_000)) {
@@ -131,7 +144,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
 object DiagnosticRedaction {
     @Volatile private var salt = UUID.randomUUID().toString()
     private val errorIds = WeakHashMap<Throwable, String>()
-    /** One private installation salt allows identifiers to correlate across auxiliary processes. */
+    /** One private installation salt lets identifiers correlate across auxiliary processes. */
     fun initialize(directory: File) = synchronized(errorIds) {
         runCatching {
             directory.mkdirs()

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="zero">un vēl %1$d saišu</item>
+        <item quantity="one">un vēl %1$d saite</item>
+        <item quantity="other">un vēl %1$d saites</item>
+    </plurals>
+</resources>

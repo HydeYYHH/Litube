@@ -1,10 +1,12 @@
 package com.hhst.youtubelite.downloader.ui
 
+import com.hhst.youtubelite.ui.components.watchSheetHeight
 import android.content.res.Configuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,8 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
-import com.hhst.youtubelite.ui.components.YoutubeCheckbox as Checkbox
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppCheckbox as Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,11 +29,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import com.hhst.youtubelite.ui.components.YoutubeRadioButton as RadioButton
 import androidx.compose.material3.SheetState
-import com.hhst.youtubelite.ui.components.YoutubeSwitch as Switch
+import com.hhst.youtubelite.ui.components.AppSwitch as Switch
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,8 +58,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
-import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
+import com.hhst.youtubelite.ui.components.AppSheetHandle
 import com.hhst.youtubelite.downloader.core.BatchSelection
 import com.hhst.youtubelite.downloader.core.BatchSnapshot
 import com.hhst.youtubelite.downloader.core.DownloadConfig
@@ -79,8 +81,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Batch rows have no per-video catalog, so the subtitle picker offers common
- * language codes. Language-only keys keep the selector's fallback
- * (human captions first); per-track precision stays on the single-video sheet.
+ * language codes. Language-only keys keep the selector's fallback (human captions
+ * first); per-track precision stays on the single-video sheet.
  */
 private val BatchSubtitleLanguages =
     listOf("en", "ja", "ko", "zh", "zh-Hant", "de", "fr", "es", "pt", "ru", "tr", "hi", "ar")
@@ -196,17 +198,12 @@ fun SingleVideoConfirmSheet(
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = DownloadTokens.PageInset)) {
             val scroll = if (embedded) Modifier else Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
             Column(Modifier.fillMaxWidth().then(scroll)) {
-                if (landscape) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                        DownloadThumbnail(thumbnailUrl, Modifier.weight(1f).padding(end = 12.dp))
-                        Column(Modifier.weight(1.4f)) { SheetIdentity(catalogTitle, catalogAuthor) }
-                    }
-                } else {
-                    DownloadThumbnail(thumbnailUrl, Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(14.dp))
-                    SheetIdentity(catalogTitle, catalogAuthor)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    DownloadThumbnail(thumbnailUrl, Modifier.width(if (landscape) 120.dp else 104.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) { SheetIdentity(catalogTitle, catalogAuthor) }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(8.dp))
                 MediaToggle(audioOnly) { audioOnly = it; attachmentsOnly = false }
                 if (catalogState == null) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically,
@@ -257,9 +254,13 @@ fun SingleVideoConfirmSheet(
         }
     }
     if (embedded) body() else ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { YoutubeSheetHandle() },
-        tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) { body() }
+        sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+        containerColor = AppStyle.Panel, contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        tonalElevation = 0.dp, shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner)) {
+        Column(Modifier.fillMaxWidth().watchSheetHeight()) { AppSheetHandle(); body() }
+    }
     picker?.let { kind ->
         val options = when (kind) { "quality" -> qualityOptions; "audio" -> audioOptions; else -> subOptions }
         val selected = when (kind) { "quality" -> qualityKey; "audio" -> selectedAudioKey; else -> selectedSubKey }
@@ -285,35 +286,38 @@ fun SingleVideoConfirmSheet(
 @Composable
 private fun SelectionRow(name: String, selected: String, enabled: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
-        .heightIn(min = 56.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(name, Modifier.weight(1f), fontWeight = FontWeight.Normal)
+        .heightIn(min = DownloadTokens.MinTouch).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(name, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp)
         Text(selected, Modifier.weight(1.2f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+            fontSize = 14.sp, lineHeight = 20.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
         Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.padding(start = 8.dp).size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else .4f))
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .4f))
     }
 }
 
 @Composable
 private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, selected: String,
     onDismiss: () -> Unit, onSelect: (String) -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp,
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium) },
+        containerColor = AppStyle.Panel, tonalElevation = 0.dp,
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 options.forEach { (key, label) ->
                     Row(Modifier.fillMaxWidth().selectable(selected = selected == key,
                         role = Role.RadioButton, onClick = { onSelect(key) })
-                        .heightIn(min = 52.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected == key, onClick = null)
-                        Text(label, Modifier.padding(start = 12.dp))
+                        .heightIn(min = 48.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        if (selected == key) Icon(painterResource(R.drawable.ic_check), null,
+                            Modifier.padding(start = 12.dp).size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        else Spacer(Modifier.width(36.dp))
                     }
                 }
             }
         }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
-/** Section heading shared by the download sheets. */
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -332,8 +336,8 @@ private fun SheetIdentity(title: String, author: String) {
         maxLines = DownloadTokens.TITLE_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
         fontWeight = FontWeight.Medium,
-        fontSize = SettingsTokens.TitleSize.sp,
-        lineHeight = SettingsTokens.TitleLine.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
         color = MaterialTheme.colorScheme.onSurface,
     )
     if (author.isNotBlank()) {
@@ -351,8 +355,8 @@ private fun SheetIdentity(title: String, author: String) {
 @Composable
 private fun MediaToggle(audioOnly: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        DownloadFilterChip(!audioOnly, stringResource(R.string.download_video)) { onChange(false) }
-        DownloadFilterChip(audioOnly, stringResource(R.string.download_audio)) { onChange(true) }
+        DownloadFilterChip(!audioOnly, stringResource(R.string.download_video), capsule = true) { onChange(false) }
+        DownloadFilterChip(audioOnly, stringResource(R.string.download_audio), capsule = true) { onChange(true) }
     }
 }
 
@@ -385,7 +389,6 @@ private fun SizeRow(kind: SizeKind, bytes: Long?) {
     )
 }
 
-/** Full-width expander for the advanced block, with a rotating chevron. */
 @Composable
 private fun MoreOptionsHandle(open: Boolean, onToggle: () -> Unit) {
     val moreLabel = stringResource(R.string.download_more_options)
@@ -510,7 +513,6 @@ fun BatchConfirmSheet(
         attachmentsOnly = attachmentsOnly,
     )
     val downloadLabel = stringResource(R.string.download)
-    // Same embedded/host distinction as SingleVideoConfirmSheet above.
     val bodyScroll = if (embedded) Modifier else Modifier.verticalScroll(rememberScrollState())
     val sheetBody: @Composable () -> Unit = {
         Column(
@@ -520,13 +522,6 @@ fun BatchConfirmSheet(
                 .navigationBarsPadding()
                 .padding(horizontal = DownloadTokens.PageInset),
         ) {
-            Text(
-                snapshot.name,
-                fontWeight = FontWeight.Medium,
-                fontSize = SettingsTokens.TitleSize.sp,
-                lineHeight = SettingsTokens.TitleLine.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
             Text(
                 stringResource(R.string.download_batch_meta, snapshot.items.size, snapshot.source.name),
                 fontSize = SettingsTokens.DetailSize.sp,
@@ -640,12 +635,14 @@ fun BatchConfirmSheet(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            dragHandle = { YoutubeSheetHandle() },
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            containerColor = AppStyle.Panel,
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(topStart = DownloadTokens.SheetCorner, topEnd = DownloadTokens.SheetCorner),
         ) {
-            sheetBody()
+            Column(Modifier.fillMaxWidth().watchSheetHeight()) { AppSheetHandle(); sheetBody() }
         }
     }
 }

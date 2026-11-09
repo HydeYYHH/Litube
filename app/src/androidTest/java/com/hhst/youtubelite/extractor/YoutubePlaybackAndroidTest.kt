@@ -17,7 +17,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -38,6 +37,46 @@ import java.util.concurrent.TimeUnit
 @UnstableApi
 class YoutubePlaybackAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ExtractionTestActivity::class.java)
+
+    @Test fun requestedVideoStartsThroughTheProductionRecoveryPath() = runBlocking(Dispatchers.IO) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        val id = args.getString("videoId").orEmpty()
+        assumeTrue(args.getString("network") == "1" && id.matches(Regex("[A-Za-z0-9_-]{11}")))
+        lateinit var engine: PlaybackApi
+        instrumentation.runOnMainSync { engine = GlobalContext.get().get() }
+        val started = SystemClock.elapsedRealtime()
+        try {
+            activity.scenario.onActivity { host ->
+                engine.setVideoSurface(host.surface)
+                engine.setVideoVisible(true)
+                engine.play(id)
+            }
+            val deadline = started + 60_000
+            while (SystemClock.elapsedRealtime() < deadline) {
+                val state = engine.snapshot.value
+                if (state.error != null || state.firstFrameRendered && state.isPlaying && state.positionMs > 1500) break
+                kotlinx.coroutines.delay(100)
+            }
+            val state = engine.snapshot.value
+            File(instrumentation.targetContext.filesDir, "production-playback-acceptance.json").writeText(
+                com.hhst.youtubelite.core.TestJson.any(mapOf("videoId" to id,
+                    "elapsedMs" to SystemClock.elapsedRealtime() - started,
+                    "firstFrameMs" to state.diagnostics.firstFrameMs,
+                    "firstFrame" to state.firstFrameRendered, "playing" to state.isPlaying,
+                    "positionMs" to state.positionMs, "activeQuality" to state.activeQuality,
+                    "error" to state.error, "failureReport" to state.failureReport?.text)))
+            assertNull("Production playback failed; see production-playback-acceptance.json", state.error)
+            assertTrue("No decoded first frame", state.firstFrameRendered)
+            assertTrue("Playback did not advance", state.isPlaying && state.positionMs > 1500)
+        } finally {
+            instrumentation.runOnMainSync {
+                engine.stop()
+                engine.setVideoSurface(null)
+                engine.setVideoVisible(false)
+            }
+        }
+    }
 
     @Test fun rememberedManualHlsHeightMatchesFirstDecodedFrameAndSwitches() = runBlocking(Dispatchers.IO) {
         assumeTrue("Supply -e network 1 for real-network playback acceptance",
@@ -90,7 +129,7 @@ class YoutubePlaybackAndroidTest {
             assertNotNull(diagnostics.audioDecoder)
             assertNotNull(diagnostics.videoCodec)
             assertEquals(720, diagnostics.height)
-            File(instrumentation.targetContext.filesDir, "upgrade-native-diagnostics.json").writeText(Gson().toJson(diagnostics))
+            File(instrumentation.targetContext.filesDir, "upgrade-native-diagnostics.json").writeText(kotlinx.serialization.json.Json.encodeToString(com.hhst.youtubelite.player.engine.PlaybackDiagnostics.serializer(), diagnostics))
             activity.scenario.moveToState(Lifecycle.State.CREATED)
             val backgroundDeadline = SystemClock.elapsedRealtime() + 4000
             while (engine.snapshot.value.diagnostics.renderedFps != null && SystemClock.elapsedRealtime() < backgroundDeadline) Thread.sleep(100)
@@ -102,7 +141,7 @@ class YoutubePlaybackAndroidTest {
             assertNull(error.get())
             assertEquals("480p", engine.snapshot.value.activeQuality)
             File(instrumentation.targetContext.filesDir, "followup-manual-start.json").writeText(
-                Gson().toJson(mapOf("firstFrameHeight" to firstHeight.get(), "afterSwitch" to engine.snapshot.value.activeQuality,
+                com.hhst.youtubelite.core.TestJson.any(mapOf("firstFrameHeight" to firstHeight.get(), "afterSwitch" to engine.snapshot.value.activeQuality,
                     "audioRenditions" to engine.snapshot.value.audioTracks.size)))
         } finally {
             instrumentation.runOnMainSync {
@@ -228,10 +267,10 @@ class YoutubePlaybackAndroidTest {
             if (args.getString("height") != null) assertEquals("Requested height must reach the decoder", height, final.height)
             assertTrue("Insufficient sustained playback: $record", played >= seconds * 1000L)
             if (metadata.duration > 120) assertTrue("Seek failed: $record", resumedAfterSeek)
-            instrumentation.sendStatus(2, Bundle().apply { putString("youtubePlayback", Gson().toJson(record)) })
+            instrumentation.sendStatus(2, Bundle().apply { putString("youtubePlayback", com.hhst.youtubelite.core.TestJson.any(record)) })
         } finally {
             failure.get()?.let { record["error"] = it }
-            File(app.filesDir, "youtube-playback-$mode.json").writeText(Gson().toJson(record))
+            File(app.filesDir, "youtube-playback-$mode.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
             File(app.filesDir, "youtube-playback-diagnostics.txt").writeText(extractor.extractionDiagnostics())
             instrumentation.runOnMainSync { player.release() }
         }

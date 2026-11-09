@@ -21,10 +21,6 @@ object WebViewCookies : DownloadCookieSource {
         runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
 }
 
-/**
- * Builds a download-owned OkHttp request from a request plan: method, `range=` vs
- * Range header, client headers, Cookie.
- */
 object DownloadRequestFactory {
     private val POST_BODY = byteArrayOf(0x78, 0)
     private val OCTET = "application/octet-stream".toMediaType()

@@ -6,7 +6,6 @@ import android.media.MediaFormat
 import android.os.Bundle
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.downloader.core.*
 import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.io.DownloadFinalizerImpl
@@ -76,14 +75,14 @@ class YoutubeDownloadSelectionAndroidTest {
                 val dest = File(dir, "input-$index.mp4")
                 val chunks = mutableListOf<DownloadChunk>()
                 if (index == 0 && length > 65_536) {
-                    assertEquals(TransferResult.Paused, transport.downloadComponent("followup", component, source, dest, emptyList()) {
+                    assertEquals(TransferResult.Paused, transport.downloadComponent("followup", 0, component, source, dest, emptyList()) {
                         chunks += it; false
                     })
                     assertEquals(1, chunks.size)
                     assertTrue(FileIntegrity.verify(dest, chunks[0].startByte, chunks[0].receivedBytes, chunks[0].checksum))
                     record["pauseResumeVerified"] = true
                 }
-                assertEquals(TransferResult.Completed, transport.downloadComponent("followup", component, source, dest, chunks.toList()) {
+                assertEquals(TransferResult.Completed, transport.downloadComponent("followup", 0, component, source, dest, chunks.toList()) {
                     chunks += it; true
                 })
                 assertEquals(length, dest.length())
@@ -152,9 +151,9 @@ class YoutubeDownloadSelectionAndroidTest {
                 }
             }
             record["audioTrack"] = plan.audio?.audioTrackKey.orEmpty()
-            instrumentation.sendStatus(2, Bundle().apply { putString("downloadSelection", Gson().toJson(record)) })
+            instrumentation.sendStatus(2, Bundle().apply { putString("downloadSelection", com.hhst.youtubelite.core.TestJson.any(record)) })
         } finally {
-            File(app.filesDir, "followup-download.json").writeText(Gson().toJson(record))
+            File(app.filesDir, "followup-download.json").writeText(com.hhst.youtubelite.core.TestJson.any(record))
             transport.cancelInFlight("followup")
             dir.listFiles()?.forEach { it.delete() }
             dir.delete()

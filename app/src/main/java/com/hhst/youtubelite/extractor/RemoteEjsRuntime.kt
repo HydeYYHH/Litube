@@ -20,11 +20,11 @@ import android.os.RemoteException
 import android.webkit.WebView
 import androidx.webkit.ProcessGlobalConfig
 import androidx.webkit.WebViewFeature
-import com.grack.nanojson.JsonObject
+import kotlinx.serialization.json.JsonObject
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
+import com.hhst.youtubelite.diagnostics.DiagnosticJson
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.WebViewTimerOccupancy
 import com.hhst.youtubelite.core.WebViewTimerOwner
 import java.io.File
@@ -33,12 +33,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import org.schabi.newpipe.extractor.downloader.Downloader
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.services.youtube.streams.ChallengeSolver
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
-import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
 
 /** The fallback owns a separate browser process/data directory; terminating it cannot kill the account WebView. */
 internal object EjsRuntimeProcess {
@@ -95,8 +89,8 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         remote?.let { return it }
         val startup = context.withTimeLimit(5_000)
         try {
-            // Android can briefly retain the old ServiceRecord after a deliberate termination.
-            // Retry only that startup race, with a fresh connection and the same deadline.
+            // Android can briefly retain the old ServiceRecord after a deliberate
+            // termination; retry only that race with the same deadline.
             repeat(3) { attempt ->
                 val connected = SettableFuture.create<Messenger>()
                 val candidate = object : ServiceConnection {
@@ -144,7 +138,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         pending[id] = future
         data.putLong("id", id)
         data.putLong("timeout", minOf(timeoutMs, context.remainingMillis()))
-        ExtractionDiagnostics.diagnosticContext(context)?.let { data.putString("diagnostic_context", Gson().toJson(it)) }
+        ExtractionDiagnostics.diagnosticContext(context)?.let { data.putString("diagnostic_context", DiagnosticJson.encodeContext(it)) }
         try {
             remote.send(Message.obtain().apply { what = kind; replyTo = replies; this.data = data })
             return await(future, timeoutMs, context) { if (closeOnFailure) close() }
@@ -183,8 +177,8 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         connection?.let { runCatching { app.unbindService(it) } }
         connection = null
         remote = null
-        // Remove AUTO_CREATE before termination; otherwise a concurrent new binding can
-        // attach to the dying service record or trigger an unwanted automatic restart.
+        // Remove AUTO_CREATE before termination; otherwise a concurrent binding can
+        // attach to the dying service record or trigger an unwanted restart.
         val pid = servicePid
         servicePid = 0
         if (pid > 0 && pid != Process.myPid()) {
@@ -197,7 +191,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
     }
 }
 
-/** No credentials/HTTP/session cache are initialized in this process. The host sends public EJS code via FD. */
+/** No credentials/HTTP/session cache in this process; the host sends public EJS code via FD. */
 class EjsRuntimeService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     private val diagnosticWorker = Executors.newSingleThreadExecutor()
@@ -221,7 +215,7 @@ class EjsRuntimeService : Service() {
                 val started = System.nanoTime()
                 val response = Bundle().apply { putLong("id", data.getLong("id")) }
                 val origin = runCatching { data.getString("diagnostic_context")?.takeIf { it.length <= 2_048 }
-                    ?.let { Gson().fromJson(it, DiagnosticContext::class.java) } }.getOrNull() ?: DiagnosticContext()
+                    ?.let { DiagnosticJson.decodeContext(it) } }.getOrNull() ?: DiagnosticContext()
                 val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "ejs_process", origin.child(data.getLong("id").toString()),
                     mapOf("kind" to kind))
                 AppLog.snapshot(AppLog.Category.EXTRACTOR, operation.context, mapOf("phase" to
@@ -248,12 +242,15 @@ class EjsRuntimeService : Service() {
                             text.toString()
                         }
                         val timeout = data.getLong("timeout").coerceAtLeast(1)
-                        val context = ExtractionContext(YoutubeSession("ejs-only", YoutubeSession.Account.ANONYMOUS,
-                            0, null, null, null, null, "", 0, null, "isolated-ejs", JsonObject(), { "" }),
-                            object : Downloader() { override fun execute(request: Request): Response = throw IOException("JS_NO_NETWORK") },
-                            ChallengeSolver { _, _, _, _ -> ChallengeSolver.Solutions(emptyMap(), emptyMap()) }, null,
-                            false, false, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout), { live },
-                            { _, _, _, _, _ -> })
+                        val context = ExtractionContext(YoutubeWebSession("ejs-only", WebAccount.ANONYMOUS,
+                            0, null, null, null, null, "", 0, null, "isolated-ejs", JsonObject(emptyMap()), { "" }),
+                            object : ExtractionTransport {
+                                override fun get(context: ExtractionContext, url: String, headers: Map<String, List<String>>): PageResponse = throw IOException("JS_NO_NETWORK")
+                                override fun post(context: ExtractionContext, url: String, headers: Map<String, List<String>>, body: ByteArray): PageResponse = throw IOException("JS_NO_NETWORK")
+                            },
+                            live = false, catalog = false, playbackPriority = false,
+                            deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout), current = { live },
+                            diagnostics = object : EngineDiagnostics { override fun event(stage: String, profile: String, detail: String, elapsedMillis: Long, httpStatus: Int) {} })
                         val result = requireNotNull(runtime).evaluate(code, timeout, context)
                         if (result.length > 256 * 1024) throw IOException("JS_RESULT_LIMIT")
                         response.putString("result", result)

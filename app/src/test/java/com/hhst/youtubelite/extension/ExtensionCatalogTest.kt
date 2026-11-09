@@ -6,7 +6,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Catalog shape and migrated keys. */
 class ExtensionCatalogTest {
 
 

@@ -93,13 +93,17 @@ class DownloadManagerAndroidTest {
             composeRule.onAllNodesWithText("Completed clip").fetchSemanticsNodes().isEmpty(),
         )
 
+        val more = composeRule.activity.getString(R.string.download_more_actions)
+        composeRule.onAllNodesWithContentDescription(more)[0].performClick()
         val pause = composeRule.activity.getString(R.string.action_pause)
         composeRule.onNodeWithContentDescription(pause).assertHeightIsAtLeast(48.dp).performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithContentDescription(composeRule.activity.getString(R.string.download_resume))
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription(more)[0].performClick()
+        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.download_resume))
+            .assertIsDisplayed()
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithText(completed).performClick()
         composeRule.waitForIdle()
@@ -110,7 +114,6 @@ class DownloadManagerAndroidTest {
         composeRule.onNodeWithText(composeRule.activity.getString(R.string.download_file_not_found))
             .assertIsDisplayed()
 
-        val more = composeRule.activity.getString(R.string.download_more_actions)
         composeRule.onAllNodesWithContentDescription(more)[0]
             .assertHeightIsAtLeast(48.dp)
             .performClick()
@@ -209,7 +212,7 @@ class DownloadManagerAndroidTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
                 AppTheme(darkTheme = false, dynamicColor = false) {
                     androidx.compose.foundation.layout.Box(Modifier.width(320.dp)) {
-                        DownloadManagerScreen(harness.viewModel, null, {})
+                        DownloadManagerScreen(harness.viewModel, null, onClose = {})
                     }
                 }
             }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">och %1$d länk till</item>
+        <item quantity="other">och %1$d länkar till</item>
+    </plurals>
+</resources>

@@ -9,7 +9,6 @@ import android.os.Process
 import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import androidx.webkit.WebViewCompat
-import com.google.gson.Gson
 import com.hhst.youtubelite.BuildConfig
 import java.io.File
 import java.util.ArrayDeque
@@ -22,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Ordinary events only enqueue sanitized records; disk IO belongs to the writer. */
 object AppLog {
+    private const val EXPORT_SNAPSHOT_BYTES = 2L * 1024 * 1024
     enum class Category { APP, CRASH, NETWORK, BROWSER, EXTRACTOR, DOWNLOADER, PLAYER, CAST, EXTENSION, GALLERY, STORAGE }
     private val session = UUID.randomUUID().toString().take(8)
     @Volatile private var app: Context? = null
@@ -29,6 +29,9 @@ object AppLog {
     @Volatile private var recorder: DiagnosticRecorder? = null
     private val queue = DiagnosticQueue()
     private val enqueueLock = Any()
+    private val snapshotTasks = DiagnosticTasks()
+    /** Event wake for the writer thread; a permit may arrive with no data and costs one idle spin. */
+    private val wake = java.util.concurrent.ArrayBlockingQueue<Unit>(1)
     private val dropped = AtomicLong()
     private val writeFailures = AtomicLong()
     private val flushes = mutableListOf<CountDownLatch>()
@@ -44,7 +47,11 @@ object AppLog {
         val process = if (Build.VERSION.SDK_INT >= 28) Application.getProcessName()
             else runCatching { File("/proc/self/cmdline").readText().trimEnd('\u0000') }.getOrDefault(application.packageName)
         recorder = DiagnosticRecorder(process, Process.myPid(), session, System::currentTimeMillis, SystemClock::elapsedRealtime, ::enqueue) {
-            providers.mapValues { runCatching { it.value.snapshot() }.getOrDefault(mapOf("state" to "unknown")) }
+            val deadline = SystemClock.elapsedRealtime() + 250
+            providers.mapValues {
+                snapshotTasks.call((deadline - SystemClock.elapsedRealtime()).coerceAtMost(100)) { it.value.snapshot() }
+                    ?: mapOf("state" to "unavailable")
+            }
         }
         Thread({ writeLoop() }, "diagnostics-writer").apply { isDaemon = true; start() }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -53,11 +60,15 @@ object AppLog {
                 event(Category.CRASH, "uncaught", mapOf("thread" to thread.name), failure, true, level = DiagnosticLevel.FATAL)
                 storage?.append(recorder?.recent().orEmpty(), true) { SystemClock.elapsedRealtime() >= deadline }
         })
+        val tickGate = AtomicLong()
         scheduler.scheduleAtFixedRate({
             runCatching {
+                // A frozen process unfreezing can owe several fixed-rate fires at once; coalesce them into one sample.
+                val now = SystemClock.elapsedRealtime()
+                if (now - tickGate.getAndSet(now) < 500) return@scheduleAtFixedRate
                 recorder?.tick()
                 DiagnosticNetwork.sample()
-                if (SystemClock.elapsedRealtime() / 1000 % 30 == 0L) event(Category.APP, "logger_health", statistics())
+                if (now / 1000 % 30 == 0L) event(Category.APP, "logger_health", statistics())
             }
         }, 1, 1, TimeUnit.SECONDS)
         scheduler.execute {
@@ -105,8 +116,13 @@ object AppLog {
     fun statistics(): Map<String, Any> = recorder?.statistics().orEmpty() +
         mapOf("dropped" to dropped.get() + queue.dropped, "write_failures" to writeFailures.get(), "queued_bytes" to queue.bytes,
             "snapshot_truncated_bytes" to (storage?.snapshotTruncatedBytes ?: 0))
+    fun recent(context: DiagnosticContext?): List<DiagnosticEvent> = if (context == null) emptyList() else
+        recorder?.recent().orEmpty().filter { it.context?.traceId == context.traceId }.takeLast(32)
     private fun enqueue(records: List<DiagnosticEvent>, priority: Boolean) {
-        synchronized(enqueueLock) { records.chunked(64).forEach { queue.offer(it, priority) } }
+        synchronized(enqueueLock) {
+            records.chunked(64).forEach { queue.offer(it, priority) }
+            runCatching { wake.offer(Unit) }
+        }
     }
     private fun writeLoop() {
         while (true) {
@@ -120,25 +136,34 @@ object AppLog {
                 catch (_: Throwable) { writeFailures.incrementAndGet(); dropped.addAndGet(batch.records.size.toLong()) }
             }
             barriers.forEach(CountDownLatch::countDown)
-            if (batches.isEmpty()) try { Thread.sleep(25) } catch (_: InterruptedException) { return }
+            if (batches.isEmpty() && barriers.isEmpty()) {
+                // Sleep until the next signal instead of spinning; the minute cap is only a liveness net, ordinary traffic wakes immediately.
+                try { wake.poll(60, TimeUnit.SECONDS) } catch (_: InterruptedException) { return }
+            }
         }
     }
     fun flush(timeoutMs: Long = 2_000): Boolean {
         recorder?.flushAggregates()
         event(Category.APP, "logger_health", statistics())
         val latch = CountDownLatch(1)
-        synchronized(enqueueLock) { flushes += latch }
+        synchronized(enqueueLock) {
+            flushes += latch
+            runCatching { wake.offer(Unit) }
+        }
         return runCatching { latch.await(timeoutMs.coerceAtLeast(0), TimeUnit.MILLISECONDS) }.getOrDefault(false)
     }
     /** Called on IO; unresponsive auxiliary processes yield an explicitly partial archive. */
     fun export(context: Context): File {
         val deadline = SystemClock.elapsedRealtime() + 5_000
+        fun expired() = SystemClock.elapsedRealtime() >= deadline
         event(Category.APP, "diagnostic_export.start")
         val coverage = linkedMapOf("main" to flush(minOf(2_000, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))))
         remoteFlushes.forEach { (name, remote) ->
-            coverage[name] = runCatching { remote(minOf(2_000, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))) }.getOrDefault(false)
+            val budget = minOf(2_000L, (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            coverage[name] = snapshotTasks.call(budget) { remote(budget) } ?: false
         }
-        val sources = storage?.snapshot { SystemClock.elapsedRealtime() >= deadline } ?: (emptyMap<String, String>() to 0)
+        val sources = storage?.snapshot(maxBytes = EXPORT_SNAPSHOT_BYTES) { expired() }
+            ?: (emptyMap<String, String>() to 0)
         val environment = mapOf("app_version" to context.packageManager.getPackageInfo(context.packageName, 0).versionName,
             "build_id" to BuildConfig.DIAGNOSTIC_BUILD_ID, "build_type" to BuildConfig.BUILD_TYPE,
             "android_sdk" to Build.VERSION.SDK_INT, "android_release" to Build.VERSION.RELEASE,
@@ -146,12 +171,26 @@ object AppLog {
             "webview" to (WebViewCompat.getCurrentWebViewPackage(context)?.versionName ?: "unknown"),
             "dependencies" to BuildConfig.DIAGNOSTIC_DEPENDENCIES, "available_storage_bytes" to context.filesDir.usableSpace,
             "snapshots" to recorder?.currentSnapshots().orEmpty().map { mapOf("category" to it.category, "context" to it.context, "fields" to it.fields) },
-            "providers" to providers.mapValues { runCatching { DiagnosticRedaction.fields(it.value.snapshot()) }.getOrDefault(mapOf("state" to "unknown")) })
+            "providers" to providers.mapValues { (name, provider) ->
+                val result = snapshotTasks.call(minOf(250L, deadline - SystemClock.elapsedRealtime())) {
+                    DiagnosticRedaction.fields(provider.snapshot())
+                }
+                coverage["provider:$name"] = result != null
+                result ?: mapOf("state" to "unavailable")
+            })
         cleanExports(context)
         val directory = File(context.cacheDir, "diagnostic-exports").apply { mkdirs() }
-        val archive = File(directory, "litube-diagnostics-" + System.currentTimeMillis() + ".zip")
-        DiagnosticArchive.write(archive, sources.first, environment, statistics() + mapOf("process_flush" to coverage, "skipped_files" to sources.second))
-        event(Category.APP, "diagnostic_export.end", mapOf("outcome" to "SUCCESS", "partial" to (coverage.values.any { !it } || sources.second > 0), "files" to sources.first.size))
+        val archive = File.createTempFile("litube-diagnostics-", ".zip", directory)
+        try {
+            DiagnosticArchive.write(archive, sources.first, environment,
+                statistics() + mapOf("process_flush" to coverage, "skipped_files" to sources.second), deadline = ::expired)
+        } catch (failure: Exception) {
+            archive.delete()
+            throw failure
+        }
+        event(Category.APP, "diagnostic_export.end", mapOf("outcome" to "SUCCESS",
+            "partial" to (coverage.values.any { !it } || sources.second > 0 || expired()), "files" to sources.first.size,
+            "deadline_hit" to expired()))
         return archive
     }
     private fun cleanExports(context: Context) {
@@ -178,11 +217,10 @@ internal class DiagnosticQueue(private val normalLimit: Int = 256, private val u
     data class Batch(val records: List<DiagnosticEvent>, val priority: Boolean, val bytes: Int)
     private val normal = ArrayDeque<Batch>()
     private val urgent = ArrayDeque<Batch>()
-    private val gson = Gson()
     @Volatile var bytes = 0; private set
     @Volatile var dropped = 0L; private set
     @Synchronized fun offer(records: List<DiagnosticEvent>, priority: Boolean) {
-        val size = records.sumOf { gson.toJson(it).toByteArray(Charsets.UTF_8).size + 1 }
+        val size = records.sumOf { DiagnosticJson.encode(it).toByteArray(Charsets.UTF_8).size + 1 }
         val limit = if (priority) totalBytes else normalBytes
         if (priority) while (bytes + size > limit && normal.isNotEmpty()) {
             val batch = normal.removeFirst(); bytes -= batch.bytes; dropped += batch.records.size

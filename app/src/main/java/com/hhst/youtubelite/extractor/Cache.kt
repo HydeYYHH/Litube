@@ -13,11 +13,6 @@ internal object CacheTtl {
     val CHAPTERS_MS: Long = TimeUnit.HOURS.toMillis(6)
 }
 
-/**
- * Persistent cache for [Metadata], [Stream], and [ChapterList].
- *
- * Stream URLs expire sooner (~2 min) than metadata and chapters (~6 h).
- */
 interface Cache {
     fun getMetadata(videoId: String): Metadata?
     fun putMetadata(videoId: String, metadata: Metadata)
@@ -30,7 +25,6 @@ interface Cache {
     fun putChapters(videoId: String, chapters: ChapterList)
 }
 
-/** [Cache] backed by [JsonCache] (MMKV in production). */
 class DiskCache(
     private val store: JsonCache,
 ) : Cache {
@@ -64,15 +58,13 @@ class DiskCache(
     fun getMetadataWithExpiry(videoId: String): Pair<Metadata, Long>? =
         withExpiry(METADATA_KEY + videoId, Metadata::class.java, CacheTtl.METADATA_MS)
 
-    /** [Stream] plus its absolute expiry, for TTL-inheriting promotion into mem. */
     fun getStreamWithExpiry(videoId: String): Pair<Stream, Long>? =
         withExpiry(STREAM_KEY + videoId, Stream::class.java, CacheTtl.STREAM_MS)
 
-    /** [ChapterList] plus its absolute expiry, for TTL-inheriting promotion into mem. */
     fun getChaptersWithExpiry(videoId: String): Pair<ChapterList, Long>? =
         withExpiry(CHAPTERS_KEY + videoId, ChapterList::class.java, CacheTtl.CHAPTERS_MS)
 
-    private fun <T> withExpiry(key: String, type: Class<T>, ttlMs: Long): Pair<T, Long>? {
+    private fun <T : Any> withExpiry(key: String, type: Class<T>, ttlMs: Long): Pair<T, Long>? {
         val (value, entryUntil) = store.getWithExpiry(key, type) ?: return null
         val until = entryUntil
             // Store cannot report an expiry: assume the full write TTL from now.

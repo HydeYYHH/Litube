@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.engine
 
 /** Renderer samples are transient; only anomaly transitions reach persistent logging. */
+@kotlinx.serialization.Serializable
 data class PlaybackDiagnostics(
     val nominalFps: Float? = null, val renderedFps: Float? = null, val expectedFps: Float? = null,
     val videoCodec: String? = null, val audioCodec: String? = null,

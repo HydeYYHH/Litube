@@ -3,23 +3,14 @@ package com.hhst.youtubelite.player.sponsor
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager.Segment
 
 /**
- * Countdown-gated sponsor skipping (pure state machine, unit-testable).
- *
- * Rules:
- * - Default (countdown on): a pre-skip card counts down while the position
- *   approaches a segment (or for [countdownMs] after first finding the
- *   position already inside one); the skip fires at the deadline. Cancelling
- *   — or seeking into a segment by hand — suppresses that segment for the
- *   rest of the video; a small manual "skip" chip covers the suppressed case.
- * - Countdown off: legacy behavior — the first frame inside a segment skips
- *   to its end immediately.
- * - Zero-length segments (SponsorBlock's poi_highlight point markers) never
- *   auto-skip: while the playhead is within [HIGHLIGHT_CHIP_WINDOW_MS] of the
- *   point, a "jump" chip appears; tapping seeks to the point and retires it
- *   for the video.
- *
- * Suppression is keyed on [Segment] identity (start/end/category), not list
- * index, so a later refetch of the same segments keeps the user's opt-out.
+ * Countdown-gated sponsor skipping (pure state machine).
+ * Default: pre-skip card counts down; skip fires at the deadline. Cancel or
+ * manual seek into a segment suppresses it for the rest of the video (manual
+ * chip covers that). Countdown off: first frame inside a segment skips to end.
+ * Zero-length poi_highlight markers never auto-skip; a jump chip appears
+ * within [HIGHLIGHT_CHIP_WINDOW_MS] and retires the point on tap.
+ * Suppression keys on [Segment] identity (start/end/category), not list index,
+ * so a later refetch keeps the user's opt-out.
  */
 class SponsorSkipController(
     private val countdownMs: Long = DEFAULT_COUNTDOWN_MS,
@@ -34,18 +25,15 @@ class SponsorSkipController(
     var countdownSec: Int? = null
         private set
 
-    /** True while the position sits inside a segment that will not auto-skip. */
+    /** True while position sits inside a segment that will not auto-skip. */
     var chipActive: Boolean = false
         private set
 
-    /** True when [chipActive] is driven by a highlight point (chip jumps TO it). */
+    /** True when [chipActive] is a highlight point (chip jumps TO it). */
     var chipIsHighlight: Boolean = false
         private set
 
-    /**
-     * Advances the state by [posMs]. Returns the seek target when the skip
-     * should fire now, else null.
-     */
+    /** Advances state by [posMs]; returns seek target when skip should fire, else null. */
     fun tick(posMs: Long, segments: List<Segment>, countdownEnabled: Boolean): Long? {
         val skippable = segments.filter { it.endMs > it.startMs }
         countdownSec = null
@@ -74,8 +62,7 @@ class SponsorSkipController(
             countdownSec = remainingSeconds(countdownDeadlineMs - posMs)
             return null
         }
-        // API order is not guaranteed; the earliest segment in the window
-        // owns the countdown card.
+        // API order is not guaranteed; earliest segment in the window owns the card.
         val upcoming = skippable
             .filter { posMs < it.startMs && posMs >= it.startMs - countdownMs }
             .minByOrNull { it.startMs }
@@ -88,8 +75,8 @@ class SponsorSkipController(
         } else if (pending != null && pending != upcoming) {
             pending = null
         }
-        // Highlight chip only when no segment chip shows (skip logic above
-        // owns the surface then); official semantics: manual, never auto.
+        // Highlight chip only when no segment chip shows; official semantics:
+        // manual, never auto.
         if (highlightChip != null) {
             chipActive = true
             chipIsHighlight = true
@@ -97,15 +84,10 @@ class SponsorSkipController(
         return null
     }
 
-    /** Segment whose countdown/skip logic owns [posMs]. */
     private fun segmentAt(posMs: Long, segments: List<Segment>): Segment? =
         segments.firstOrNull { posMs >= it.startMs && posMs < it.endMs }
 
-    /**
-     * The highlight point whose chip window covers [posMs]. Zero-length
-     * segments are point markers; ±window keeps the chip reachable without
-     * frame-perfect timing.
-     */
+    /** Highlight point whose chip window covers [posMs]; ±window avoids frame-perfect timing. */
     private fun highlightAt(posMs: Long, segments: List<Segment>): Segment? =
         segments.firstOrNull {
             it.endMs == it.startMs && it.endMs > 0 && it !in retiredHighlights &&
@@ -113,16 +95,14 @@ class SponsorSkipController(
                 posMs < it.startMs + HIGHLIGHT_CHIP_WINDOW_MS
         }
 
-    /** Milliseconds remaining → whole seconds, rounding up, never negative. */
+    /** Ms remaining → whole seconds, rounding up, never negative. */
     private fun remainingSeconds(ms: Long): Int =
         ((ms + 999) / 1000).toInt().coerceAtLeast(0)
 
     /**
-     * Marks a just-skipped segment suppressed and returns its end. Without
-     * this a keyframe/cue snap-back that lands before [Segment.endMs] would
-     * re-enter the segment on the next tick and re-arm the skip — a seek
-     * storm (countdown off) or a repeated countdown (countdown on). The chip
-     * covers the suppressed case, so the user can still skip again manually.
+     * Marks a just-skipped segment suppressed and returns its end. Without this
+     * a keyframe/cue snap-back before [Segment.endMs] re-enters and re-arms the
+     * skip (seek storm or repeated countdown). The chip covers the suppressed case.
      */
     private fun skipFired(segment: Segment): Long {
         suppressed += segment
@@ -151,11 +131,11 @@ class SponsorSkipController(
         countdownSec = null
     }
 
-    /** Target for the manual chip: the highlight point, or the segment end at [posMs]. */
+    /** Manual chip target: highlight point, or segment end at [posMs]. */
     fun chipTarget(posMs: Long, segments: List<Segment>): Long? =
         if (chipIsHighlight) highlightChip?.startMs else segmentAt(posMs, segments)?.endMs
 
-    /** The highlight chip was tapped: retire that point for the rest of the video. */
+    /** Highlight chip tapped: retire that point for the rest of the video. */
     fun dismissHighlightChip() {
         highlightChip?.let { retiredHighlights += it }
         highlightChip = null

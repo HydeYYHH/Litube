@@ -9,19 +9,17 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
-import com.google.gson.Gson
 import java.io.IOException
 
 /** EventTime owns the media identity, even while another video is being extracted. */
 class PlaybackTelemetry : AnalyticsListener {
-    private val gson = Gson()
     private val audioStarted = linkedSetOf<String>()
     internal fun context(time: AnalyticsListener.EventTime): DiagnosticContext? = runCatching {
         if (time.timeline.isEmpty || time.windowIndex !in 0 until time.timeline.windowCount) return@runCatching null
         val json = time.timeline.getWindow(time.windowIndex, Timeline.Window()).mediaItem.mediaMetadata.extras
             ?.getString("litube.diagnostic_context") ?: return@runCatching null
         if (json.length > 2048) return@runCatching null
-        gson.fromJson(json, DiagnosticContext::class.java)
+        DiagnosticJson.decodeContext(json)
     }.getOrNull()
     private fun event(time: AnalyticsListener.EventTime, name: String, fields: Map<String, Any?> = emptyMap(), failure: Throwable? = null) =
         AppLog.event(AppLog.Category.PLAYER, name, fields + mapOf("media_identity_known" to (context(time) != null)), failure, context = context(time))

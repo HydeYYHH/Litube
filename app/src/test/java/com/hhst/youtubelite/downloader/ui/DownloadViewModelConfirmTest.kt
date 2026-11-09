@@ -155,7 +155,6 @@ class DownloadViewModelConfirmTest {
         val done = vm.enqueue(request("b"), "s2").created.single().taskId
         h.coordinator.reportAssetPublished(done, 0, AssetKind.VIDEO, "file://b.mp4")
         vm.remove(DownloadTarget.Task(done), RemoveMode.RECORD_ONLY).join()
-        // live task remains
         assertEquals(1, vm.observeDownloads().first().size)
         assertEquals(live, vm.observeDownloads().first().single().taskId)
     }

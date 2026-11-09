@@ -3,7 +3,6 @@ package com.hhst.youtubelite.player.datasource
 import com.hhst.youtubelite.extractor.Format
 import java.util.Locale
 
-/** Menu row for one audio track: stable key + human label. */
 data class AudioTrackChoice(
     val key: String,
     val label: String,
@@ -12,10 +11,7 @@ data class AudioTrackChoice(
     val trackName: String? = null,
 )
 
-/**
- * Concrete audio identity: track id when present, otherwise
- * locale tag + type, then display name. Old language-only prefs (`en`) still match.
- */
+/** Keys fall back id → locale+type → name; old language-only prefs (`en`) still match. */
 object AudioTrackIdentity {
     private val originalLabel = Regex("\\boriginal\\b|原始|原聲|原声|オリジナル|오리지널", RegexOption.IGNORE_CASE)
 
@@ -118,7 +114,7 @@ object AudioTrackIdentity {
         }.filter { it.key.isNotBlank() }
     }
 
-    /** Stable key for one HLS rendition. Blank when the playlist gave it no identity. */
+    /** Blank when the playlist gave it no identity. */
     fun renditionKey(language: String?, label: String?): String {
         val lang = language?.trim().orEmpty()
         val name = label?.trim().orEmpty()
@@ -134,7 +130,9 @@ object AudioTrackIdentity {
         val unique = LinkedHashMap<String, AudioTrackChoice>()
         for ((language, label) in entries) {
             val key = renditionKey(language, label)
-            if (key.isBlank() || unique.containsKey(key)) continue
+            if (key.isBlank() || unique.containsKey(key)) {
+                continue
+            }
             val text = label?.trim()?.takeIf { it.isNotEmpty() }
                 ?: language?.trim()?.takeIf { it.isNotEmpty() }?.let(::displayLanguage)
                 ?: continue

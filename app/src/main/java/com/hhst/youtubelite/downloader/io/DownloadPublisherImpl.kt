@@ -2,7 +2,6 @@ package com.hhst.youtubelite.downloader.io
 
 import android.content.ContentValues
 import android.content.Context
-import java.util.concurrent.ConcurrentHashMap
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -13,25 +12,30 @@ import com.hhst.youtubelite.downloader.core.DownloadPublisher
 import com.hhst.youtubelite.downloader.core.PublishPhase
 import com.hhst.youtubelite.downloader.core.PublishRequest
 import com.hhst.youtubelite.downloader.core.PublishResult
+import com.hhst.youtubelite.diagnostics.AppLog
+import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
+import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
-import com.hhst.youtubelite.diagnostics.AppLog
-import com.hhst.youtubelite.diagnostics.DiagnosticCoroutineContext
 
 private const val DOWNLOAD_FILE_PROVIDER_SUFFIX = ".download.fileprovider"
 
 interface PublishBackend {
-    fun existingNames(): Set<String>
-    fun createTarget(displayName: String, mimeType: String): PublishTarget
+    /** Reserve a distinct target, including names held by unfinished publications. */
+    fun reserveTarget(displayName: String, mimeType: String): PublishTarget
     fun openTarget(uri: String): PublishTarget?
     fun write(target: PublishTarget, source: File)
     fun complete(target: PublishTarget)
     fun exists(uri: String): Boolean
     fun verified(uri: String, expectedBytes: Long, checksum: String?): Boolean
+    /** Recovery must never delete a completed file that happens to occupy this name. */
+    fun discardIncomplete(uri: String): DeleteResult
     fun delete(uri: String): DeleteResult
     fun openableUri(uri: String): String
 }
@@ -41,10 +45,11 @@ data class PublishTarget(
     val file: File?,
 )
 
+private class PublishNameCollision : IOException("publish-name-collision")
+
 /**
- * Crash-safe publish: register → create target → write+verify → complete →
- * success state (caller) → delete temp. Incomplete ops are reconciled so a
- * retry does not create a duplicate file.
+ * Crash-safe publish: register → create → write+verify → complete → success → delete temp.
+ * Incomplete ops are reconciled so a retry does not create a duplicate file.
  */
 class DownloadPublisherImpl(
     private val backend: PublishBackend,
@@ -52,7 +57,7 @@ class DownloadPublisherImpl(
     private val workDir: File? = null,
 ) : DownloadPublisher {
 
-    /** publishId → created target; lets a same-process retry reconcile instead of duplicating. */
+    /** publishId → created target; same-process retry reconciles instead of duplicating. */
     private val inFlight = ConcurrentHashMap<String, String>()
 
     override fun delete(uri: String): DeleteResult = backend.delete(uri)
@@ -62,27 +67,25 @@ class DownloadPublisherImpl(
     override suspend fun publish(request: PublishRequest): PublishResult {
         coroutineContext.ensureActive()
         if (!request.source.isFile) return PublishResult.Failed("missing-source")
-        val needed = FileIntegrity.estimateNeeded(listOf(request.source), includeMux = false, includePublishCopy = true)
-        val dir = workDir ?: request.source.parentFile
-        if (dir != null && freeSpace.bytes(dir) in 0 until needed) {
-            return PublishResult.Failed("ENOSPC")
-        }
-        val recovered = reconcile(request) ?: reconcileInFlight(request)
-        if (recovered != null) {
-            inFlight.remove(request.publishId)
-            return recovered
-        }
-        val ext = DownloadFileNames.extensionOf(request.displayName, fallback = "bin")
-        val name = DownloadFileNames.sanitize(request.displayName, ext, backend.existingNames())
         return try {
-            val target = backend.createTarget(name, request.mimeType)
+            val recovered = reconcile(request) ?: reconcileInFlight(request)
+            if (recovered != null) {
+                inFlight.remove(request.publishId)
+                return recovered
+            }
+            val needed = FileIntegrity.estimateNeeded(listOf(request.source), includeMux = false, includePublishCopy = true)
+            val dir = workDir ?: request.source.parentFile
+            if (dir != null && freeSpace.bytes(dir) in 0 until needed) {
+                return PublishResult.Failed("ENOSPC")
+            }
+            val target = backend.reserveTarget(request.displayName, request.mimeType)
             inFlight[request.publishId] = target.uri
             request.onTargetCreated?.invoke(target.uri)
             coroutineContext.ensureActive()
             backend.write(target, request.source)
             val checksum = FileIntegrity.sha256(request.source)
             if (!backend.verified(target.uri, request.source.length(), checksum)) {
-                backend.delete(target.uri)
+                discardIncomplete(target.uri)
                 inFlight.remove(request.publishId)
                 return PublishResult.Failed("verify")
             }
@@ -94,8 +97,7 @@ class DownloadPublisherImpl(
         } catch (t: Throwable) {
             AppLog.event(AppLog.Category.DOWNLOADER, "publish_io_failed", mapOf("phase" to "publish", "source_bytes" to request.source.length()),
                 t, context = coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
-            // The half-written target stays registered: the retry reconciles
-            // (verify → complete, or delete → recreate) instead of duplicating.
+            // Half-written target stays registered: the retry reconciles (verify→complete or delete→recreate).
             if (FileIntegrity.isNoSpace(t)) PublishResult.Failed("ENOSPC")
             else PublishResult.Failed(t.message ?: "publish")
         }
@@ -116,50 +118,72 @@ class DownloadPublisherImpl(
         if (request.existingPhase == PublishPhase.IN_PROGRESS &&
             backend.verified(existing, request.source.length(), FileIntegrity.sha256(request.source))
         ) {
-            backend.openTarget(existing)?.let { backend.complete(it) }
+            val target = backend.openTarget(existing) ?: return null
+            try {
+                backend.complete(target)
+            } catch (_: PublishNameCollision) {
+                // Recorded URI cannot change during completion; keep the other final file and re-reserve.
+                discardIncomplete(existing)
+                inFlight.remove(request.publishId, existing)
+                return null
+            }
             return PublishResult.Published(backend.openableUri(existing))
         }
         if (request.existingPhase == PublishPhase.IN_PROGRESS) {
-            backend.delete(existing)
+            discardIncomplete(existing)
+            inFlight.remove(request.publishId, existing)
         }
         return null
+    }
+
+    private fun discardIncomplete(uri: String) {
+        val result = backend.discardIncomplete(uri)
+        if (!result.ok) throw IOException(result.reason ?: "discard-incomplete-failed")
     }
 }
 
 /**
- * File-backed publisher used on API 26–28 and in JVM tests. Writes into a
- * dedicated directory, fsyncs, then rename-publishes.
+ * File-backed publisher for API 24–28 and JVM tests: dedicated directory, fsync, rename-publish.
  */
 class LocalPublishBackend(
     private val outputDir: File,
     private val uriPrefix: String = "content://com.hhst.youtubelite.download.fileprovider/downloads/",
-    private val filesByUri: MutableMap<String, File> = mutableMapOf(),
     private val openable: ((File) -> String)? = null,
 ) : PublishBackend {
+
+    private val metadataLock = Any()
+    private val directory = outputDir.canonicalFile
+    private val authority = URI(uriPrefix).rawAuthority
 
     init {
         outputDir.mkdirs()
     }
 
-    fun fileFor(uri: String): File? = filesByUri[uri] ?: uriToFile(uri)
-
-    override fun existingNames(): Set<String> =
-        outputDir.listFiles()?.map { it.name }?.toSet().orEmpty()
-
-    override fun createTarget(displayName: String, mimeType: String): PublishTarget {
-        val dest = File(outputDir, displayName)
-        val pending = File(outputDir, "$displayName.pending")
-        if (pending.exists()) pending.delete()
-        pending.createNewFile()
-        val uri = uriPrefix + displayName
-        filesByUri[uri] = pending
-        return PublishTarget(uri, pending)
+    fun fileFor(uri: String): File? = synchronized(metadataLock) {
+        val finalFile = finalFile(uri) ?: return@synchronized null
+        finalFile.takeIf { it.isFile } ?: pendingFile(finalFile)?.takeIf { it.isFile }
     }
 
-    override fun openTarget(uri: String): PublishTarget? {
-        val file = fileFor(uri) ?: return null
-        val pending = File(file.parentFile, file.name + ".pending")
-        return PublishTarget(uri, if (pending.exists()) pending else file)
+    override fun reserveTarget(displayName: String, mimeType: String): PublishTarget = synchronized(metadataLock) {
+        val occupied = directory.listFiles().orEmpty()
+            .flatMap { listOf(it.name, it.name.removeSuffix(".pending")) }.toMutableSet()
+        val extension = DownloadFileNames.extensionOf(displayName, fallback = "bin")
+        var name: String
+        var finalFile: File
+        var pending: File
+        do {
+            name = DownloadFileNames.sanitize(displayName, extension, occupied)
+            finalFile = ownedFile(name) ?: error("invalid-publish-name")
+            pending = pendingFile(finalFile) ?: error("invalid-publish-name")
+            occupied += name
+        } while (finalFile.exists() || !pending.createNewFile())
+        PublishTarget(uriPrefix + name, pending)
+    }
+
+    override fun openTarget(uri: String): PublishTarget? = synchronized(metadataLock) {
+        val finalFile = finalFile(uri) ?: return@synchronized null
+        val file = pendingFile(finalFile)?.takeIf { it.isFile } ?: finalFile.takeIf { it.isFile }
+        file?.let { PublishTarget(uri, it) }
     }
 
     override fun write(target: PublishTarget, source: File) {
@@ -174,21 +198,18 @@ class LocalPublishBackend(
     }
 
     override fun complete(target: PublishTarget) {
-        val pending = target.file ?: return
-        val finalFile = if (pending.name.endsWith(".pending")) {
-            File(pending.parentFile, pending.name.removeSuffix(".pending"))
-        } else {
-            pending
-        }
-        if (pending != finalFile) {
-            if (finalFile.exists()) finalFile.delete()
-            if (!pending.renameTo(finalFile)) {
-                pending.copyTo(finalFile, overwrite = true)
-                pending.delete()
+        val completed = synchronized(metadataLock) {
+            val finalFile = finalFile(target.uri) ?: error("invalid-publish-uri")
+            val file = target.file ?: error("no local target")
+            if (file != finalFile) {
+                check(file == pendingFile(finalFile)) { "invalid-publish-target" }
+                if (finalFile.exists()) throw PublishNameCollision()
+                if (!file.renameTo(finalFile)) throw IOException("publish-rename-failed")
             }
+            check(finalFile.isFile) { "missing-publish-target" }
+            finalFile
         }
-        FileIntegrity.fsync(finalFile)
-        filesByUri[target.uri] = finalFile
+        FileIntegrity.fsync(completed)
     }
 
     override fun exists(uri: String): Boolean = fileFor(uri)?.isFile == true
@@ -200,21 +221,14 @@ class LocalPublishBackend(
         return FileIntegrity.sha256(file).equals(checksum, ignoreCase = true)
     }
 
-    override fun delete(uri: String): DeleteResult {
-        val file = fileFor(uri)
-        val pending = file?.let { File(it.parentFile, it.name + ".pending") }
-        var failed: String? = null
-        listOfNotNull(file, pending).forEach { f ->
-            if (f.exists() && !f.delete()) failed = "delete-failed"
-        }
-        if (uri.startsWith("file:")) {
-            val f = File(Uri.parse(uri).path ?: uri.removePrefix("file://"))
-            if (f.exists() && !f.delete()) failed = "delete-failed"
-        } else if (!uri.startsWith("content:")) {
-            val f = File(uri)
-            if (f.exists() && !f.delete()) failed = "delete-failed"
-        }
-        return failed?.let { DeleteResult.fail(it) } ?: DeleteResult.OK
+    override fun discardIncomplete(uri: String): DeleteResult = synchronized(metadataLock) {
+        val finalFile = finalFile(uri) ?: return@synchronized DeleteResult.fail("invalid-publish-uri")
+        deleteFiles(listOfNotNull(pendingFile(finalFile)))
+    }
+
+    override fun delete(uri: String): DeleteResult = synchronized(metadataLock) {
+        val finalFile = finalFile(uri) ?: return@synchronized DeleteResult.fail("invalid-publish-uri")
+        deleteFiles(listOfNotNull(finalFile, pendingFile(finalFile)))
     }
 
     override fun openableUri(uri: String): String {
@@ -223,11 +237,33 @@ class LocalPublishBackend(
         return uri
     }
 
-    private fun uriToFile(uri: String): File? {
-        val name = uri.substringAfterLast('/')
-        if (name.isBlank()) return null
-        val direct = File(outputDir, name)
-        return if (direct.exists()) direct else File(outputDir, "$name.pending").takeIf { it.exists() }
+    private fun finalFile(uri: String): File? {
+        val name = if (uri.startsWith(uriPrefix)) {
+            // Old in-progress records used an unescaped filename; literal "%20" and "#" must survive.
+            uri.removePrefix(uriPrefix)
+        } else {
+            val parsed = runCatching { URI(uri) }.getOrNull() ?: return null
+            if (parsed.scheme != "content" || parsed.rawAuthority != authority ||
+                parsed.rawQuery != null || parsed.rawFragment != null) return null
+            val path = parsed.path ?: return null // URI.path decodes exactly once.
+            if (!path.startsWith("/download_ext/")) return null
+            path.removePrefix("/download_ext/")
+        }
+        return ownedFile(name)
+    }
+
+    private fun ownedFile(name: String): File? {
+        if (name.isBlank() || name == "." || name == ".." || '/' in name || '\\' in name) return null
+        return runCatching { File(directory, name).canonicalFile }
+            .getOrNull()?.takeIf { it.parentFile == directory }
+    }
+
+    private fun pendingFile(finalFile: File): File? = ownedFile(finalFile.name + ".pending")
+
+    private fun deleteFiles(files: List<File>): DeleteResult {
+        var failed = false
+        files.forEach { if (it.exists() && !it.delete()) failed = true }
+        return if (failed) DeleteResult.fail("delete-failed") else DeleteResult.OK
     }
 }
 
@@ -236,7 +272,7 @@ class MediaStorePublishBackend(
 ) : PublishBackend {
     private val resolver get() = context.contentResolver
 
-    override fun existingNames(): Set<String> {
+    private fun existingNames(): Set<String> {
         if (Build.VERSION.SDK_INT < 29) return emptySet()
         val names = mutableSetOf<String>()
         resolver.query(
@@ -254,10 +290,12 @@ class MediaStorePublishBackend(
         return names
     }
 
-    override fun createTarget(displayName: String, mimeType: String): PublishTarget {
+    override fun reserveTarget(displayName: String, mimeType: String): PublishTarget {
         if (Build.VERSION.SDK_INT < 29) error("MediaStore Downloads requires API 29+")
+        val extension = DownloadFileNames.extensionOf(displayName, fallback = "bin")
+        val name = DownloadFileNames.sanitize(displayName, extension, existingNames())
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
             put(MediaStore.Downloads.MIME_TYPE, mimeType)
             put(MediaStore.Downloads.IS_PENDING, 1)
             put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Litube")
@@ -292,15 +330,7 @@ class MediaStorePublishBackend(
     override fun verified(uri: String, expectedBytes: Long, checksum: String?): Boolean {
         if (!exists(uri)) return false
         resolver.openInputStream(Uri.parse(uri))?.use { input ->
-            val tmp = File.createTempFile("pub-verify", ".bin")
-            try {
-                tmp.outputStream().use { input.copyTo(it) }
-                if (tmp.length() != expectedBytes) return false
-                if (checksum.isNullOrBlank()) return true
-                return FileIntegrity.sha256(tmp).equals(checksum, ignoreCase = true)
-            } finally {
-                tmp.delete()
-            }
+            return FileIntegrity.verify(input, expectedBytes, checksum)
         }
         return false
     }
@@ -313,6 +343,16 @@ class MediaStorePublishBackend(
             AppLog.event(AppLog.Category.STORAGE, "published_file_delete_failed", failure = t)
             DeleteResult.fail(t.message ?: "delete-failed")
         }
+    }
+
+    override fun discardIncomplete(uri: String): DeleteResult = try {
+        val pending = resolver.query(
+            Uri.parse(uri), arrayOf(MediaStore.Downloads.IS_PENDING), null, null, null,
+        )?.use { cursor -> cursor.moveToFirst() && cursor.getInt(0) == 1 } == true
+        if (pending) delete(uri) else DeleteResult.OK
+    } catch (t: Throwable) {
+        AppLog.event(AppLog.Category.STORAGE, "incomplete_publish_discard_failed", failure = t)
+        DeleteResult.fail(t.message ?: "discard-incomplete-failed")
     }
 
     override fun openableUri(uri: String): String = uri

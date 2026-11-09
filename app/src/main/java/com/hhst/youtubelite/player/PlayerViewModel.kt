@@ -3,8 +3,6 @@
 package com.hhst.youtubelite.player
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.SurfaceView
 import androidx.compose.runtime.State
@@ -13,14 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.browser.PageKind
-import com.hhst.youtubelite.browser.PageOrigin
-import com.hhst.youtubelite.browser.PlayerHooks
-import com.hhst.youtubelite.browser.WatchPage
-import com.hhst.youtubelite.browser.WatchAutoplayCandidate
-import com.google.gson.Gson
 import com.hhst.youtubelite.cast.CastController
 import com.hhst.youtubelite.cast.CastDevice
+import com.hhst.youtubelite.cast.DlnaController
+import com.hhst.youtubelite.cast.DlnaUiState
 import com.hhst.youtubelite.cast.LocalStreamProxy
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.core.PipSupport
@@ -32,12 +26,12 @@ import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.datasource.AudioTrackChoice
 import com.hhst.youtubelite.player.engine.LoopMode
 import com.hhst.youtubelite.player.engine.PlaybackApi
+import com.hhst.youtubelite.player.engine.CastSource
 import com.hhst.youtubelite.player.engine.PlaybackDiagnostics
 import com.hhst.youtubelite.player.engine.PlaybackSnapshot
 import com.hhst.youtubelite.player.engine.SubtitleTrack
 import com.hhst.youtubelite.player.service.PlaybackCommandRouter
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
-import com.hhst.youtubelite.player.surface.AutoFullscreen
 import com.hhst.youtubelite.player.surface.GestureMath.GestureZone
 import com.hhst.youtubelite.player.surface.PlayerPlaybackActions
 import com.hhst.youtubelite.player.surface.PlayerUi
@@ -48,38 +42,47 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Structured per-gesture overlay state shown on the player surface. */
 sealed interface GestureUi {
-    /** Double-tap seek arcs: side + accumulating offset. */
     data class DoubleTapSeek(val forward: Boolean, val accumMs: Long) : GestureUi
-    /** Long-press 2x hold. Only set while the hold is live; cleared on end. */
     data object SpeedHold : GestureUi
-    /** Scrub / timebar drag target bubble. */
     data class Scrub(val targetMs: Long, val deltaMs: Long) : GestureUi
-    /** Edge slider for volume or brightness. */
     data class EdgeSlider(val volume: Boolean, val percent: Int) : GestureUi
 }
 
-/** Player-facing UI state: engine snapshot + surface-only flags. */
+enum class MediaKind { NONE, WATCH, SHORTS }
+
 data class PlayerUiState(
     val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
     val visible: Boolean = false,
     val fullscreen: Boolean = false,
+    val fullscreenKeepsOrientation: Boolean = false,
+    val fullscreenRestoresEntryOrientation: Boolean = false,
     val controlsVisible: Boolean = true,
     val loading: Boolean = false,
     val isPlaying: Boolean = false,
+    val userWantsPlay: Boolean = false,
+    val shortPausedByUser: Boolean = false,
     val durationMs: Long = 0L,
     val speed: Float = 1f,
     val title: String = "",
     val author: String? = null,
     val isLive: Boolean = false,
     val videoId: String? = null,
+    /** Media is attached; the first video frame may still be pending. */
+    val prepared: Boolean = false,
+    val firstFrameRendered: Boolean = false,
+    /** This load has rendered video, even if a replacement surface is still waiting for its frame. */
+    val hasRenderedVideoFrame: Boolean = false,
     val url: String? = null,
     val loopMode: LoopMode = LoopMode.QUEUE_NEXT,
     val qualityLabel: String? = null,
@@ -89,23 +92,25 @@ data class PlayerUiState(
     val audioTracks: List<AudioTrackChoice> = emptyList(),
     val audioTrackKey: String? = null,
     val error: String? = null,
+    val notice: com.hhst.youtubelite.player.engine.PlaybackNotice? = null,
+    val failureReport: com.hhst.youtubelite.diagnostics.PlaybackFailureReport? = null,
+    val failureDialogVisible: Boolean = false,
     /** True while the time bar is being dragged; keeps chrome from auto-hiding. */
     val scrubbing: Boolean = false,
-    /** Queue navigation availability for prev/next buttons. */
     val hasNext: Boolean = false,
     val hasPrevious: Boolean = false,
     val locked: Boolean = false,
     val queueItems: List<QueueItem> = emptyList(),
     val queueEnabled: Boolean = false,
+    /** Owner of the published queue; gesture commits carry it back for validation. */
+    val queueOwner: QueueOwner = QueueOwner.DEVICE,
     val sponsorSegments: List<SponsorBlockManager.Segment> = emptyList(),
     val resizeMode: ResizeMode = ResizeMode.Fit,
     val pipAvailable: Boolean = false,
     val ended: Boolean = false,
     val mini: Boolean = false,
     val pageHeightDp: Int? = null,
-    /** Page player's viewport-relative top from player-hook.js, in dp. */
     val pageTopDp: Int? = null,
-    /** CSS viewport coordinates; the host converts page zoom to window dp. */
     val pageLeftDp: Int = 0,
     val pageWidthDp: Int? = null,
     val pageViewportWidthDp: Int? = null,
@@ -115,44 +120,33 @@ data class PlayerUiState(
     /** Quality actually rendering; badge shows "Auto · 720p" when unpinned. */
     val activeQuality: String? = null,
     val subtitleEnabled: Boolean = false,
-    /** Info-sheet stream details. */
     val videoItag: Int? = null,
     val audioBitrate: Int = 0,
     val audioSampleRate: Int = 0,
     val audioChannels: Int = 0,
-    /** Whole seconds left on the sponsor pre-skip card; null hides it. */
     val sponsorCountdownSec: Int? = null,
     /** Manual skip chip while inside a suppressed segment. */
     val sponsorChip: Boolean = false,
     /** True when [sponsorChip] targets a highlight point (chip jumps TO it). */
     val sponsorChipHighlight: Boolean = false,
+    /** Seek counter from the engine; watch reporting re-anchors its interval on change. */
+    val discontinuityEpoch: Long = 0,
     val casting: Boolean = false,
     val castingDeviceName: String? = null,
     val castLinkUrl: String? = null,
     val castLinkConnected: Boolean = false,
     val castAvailable: Boolean = false,
     val castDevices: List<CastDevice> = emptyList(),
-    /** User-adjustable subtitle appearance (persists across videos). */
+    val castFailure: com.hhst.youtubelite.cast.CastFailureReport? = null,
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
 )
 
 /**
- * Thin reducer between the surface and [PlaybackApi].
- *
- * The engine is the single source of truth for playback; this class keeps
- * UI-only state (visibility, fullscreen, controls, hints) and forwards intents.
- * Queue navigation and end-of-playback auto-advance live here.
+ * Thin reducer between the surface and [PlaybackApi]: the engine is the single
+ * source of truth for playback; UI-only state lives here, intents forward down.
  *
  * Registered as a Koin single (process scope): background play, MediaSession
- * keys and queue auto-advance must outlive the activity, so [onCleared] never
- * runs and nothing here is torn down on activity death.
- *
- * Composition wiring contract: BrowserScreen attaches/detaches
- * [onRestoreWatch], [onWatchClosed] and [watchPage] in DisposableEffects.
- * All of them may be null whenever the browser is not composed (activity
- * destroyed with background play still running); page-playlist navigation
- * and the WebView-back "previous" fallback then degrade to queue-only until
- * the browser re-attaches.
+ * keys and queue auto-advance must outlive the activity, so [onCleared] never runs.
  */
 class PlayerViewModel(
     private val engine: PlaybackApi,
@@ -160,65 +154,45 @@ class PlayerViewModel(
     private val prefs: ExtensionManager,
     private val cache: JsonCache,
     private val cast: CastController,
+    /** DLNA route; null in unit tests, where all DLNA branches no-op. */
+    private val dlna: DlnaController? = null,
     private val appContext: Context? = null,
     private val haptics: HapticsController? = null,
-) : ViewModel(), PlayerHooks, PlayerPlaybackActions {
+    private val nextVideo: (suspend (String) -> String?)? = null,
+    private val reporting: com.hhst.youtubelite.data.media.PlaybackWatchReporting? = null,
+    private val identityChanges: Flow<Long> = com.hhst.youtubelite.data.media.MediaSession.changes.map { it.generation },
+) : ViewModel(), PlayerPlaybackActions {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    // Layout fallback keeps the watch tab active; it must not suspend the tab
-    // or persist the user's mini-player mode when the window grows again.
-    @Volatile private var compactPlayer = false
-
-    fun setCompactPlayer(compact: Boolean) {
-        if (compactPlayer == compact) return
-        compactPlayer = compact
-        watchPage?.evaluate("window.__syncPlayerCompact && window.__syncPlayerCompact();") { }
-    }
-
-    override fun isPlayerCompact(origin: PageOrigin): Boolean {
-        val state = _uiState.value
-        return compactPlayer && state.visible && !state.fullscreen && !state.mini &&
-            acceptsPageCallback(playbackOrigin, origin)
-    }
-
-    // Position lives outside [PlayerUiState]: the ~4 Hz snapshot tick must
-    // not recompose the whole surface tree, only the time readouts that
-    // observe these States. (PlayerSurface receives them as parameters.)
+    // Position lives outside [PlayerUiState] so the ~4 Hz snapshot tick
+    // recomposes only the time readouts, not the whole surface tree.
     private val _positionState = mutableLongStateOf(0L)
     private val _bufferedPositionState = mutableLongStateOf(0L)
 
     // Transient overlays live outside [PlayerUiState] for the same reason:
-    // pointer-rate gesture updates (~60-120 Hz) and subtitle cue swaps
-    // (1-4 Hz) must recompose only the leaf overlay that renders them.
+    // ~60-120 Hz gesture updates recompose only the leaf overlay.
     private val _gestureState = mutableStateOf<GestureUi?>(null)
     private val _hintState = mutableStateOf<String?>(null)
     private val _subtitleCuesState = mutableStateOf<List<String>>(emptyList())
 
-    /** Current playback position in ms, updated on every engine snapshot. */
     val positionState: State<Long> get() = _positionState
-
-    /** Buffered-ahead position in ms, updated on every engine snapshot. */
     val bufferedPositionState: State<Long> get() = _bufferedPositionState
 
-    /** Structured gesture overlay (DoubleTapSeek/Scrub/SpeedHold/EdgeSlider); null hides. */
     val gestureState: State<GestureUi?> get() = _gestureState
 
-    /** One-shot hint text (e.g. "2x", "Copied"); null hides. */
     val hintState: State<String?> get() = _hintState
 
-    /** Current subtitle cue lines rendered by SubtitleOverlay. */
     val subtitleCuesState: State<List<String>> get() = _subtitleCuesState
 
-    private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** Cast failure hint, resolved lazily (context may be null in tests). */
+    /** Resolved lazily; context may be null in tests. */
     private val hintCastFailed: String by lazy {
         appContext?.getString(R.string.cast_failed) ?: "Cast failed"
     }
 
-    /** Unavailable-subtitle hint, resolved lazily (context may be null in tests). */
+    /** Resolved lazily; context may be null in tests. */
     private val hintSubtitleUnavailable: String by lazy {
         appContext?.getString(R.string.subtitle_unavailable) ?: "Subtitle unavailable"
     }
@@ -226,69 +200,60 @@ class PlayerViewModel(
     /** Avoid rewriting the queue on every 4 Hz snapshot tick. */
     private var queuedSignature: String? = null
 
-    /** Speed captured when the long-press 2x gesture starts. */
     private var speedBeforeHold: Float? = null
 
-    /** Auto-rotate entered fullscreen (not a tap/swipe). Portrait exits only this. */
-    private var autoEnteredFullscreen = false
-    /** After a manual exit, wait for portrait so landscape does not bounce back in. */
-    private var suppressAutoEnter = false
-    private var lastOrientationBand = AutoFullscreen.Band.OTHER
-    private var lastSystemAutoRotate = true
-    private var lastInPip = false
+    private val fullscreenState = FullscreenState()
 
-    /** Double-tap seek accumulation. */
     private var seekAccumMs = 0L
     private var lastSeekTapAt = 0L
 
     /** Live-scrub anchor: position captured on the first preview of a scrub. */
     private var scrubAnchorMs: Long? = null
 
-    /** WebView document that started the current media; filters stale callbacks. */
-    private var playbackOrigin: PageOrigin? = null
-
     /** Supersedes in-flight cast-handoff waiters when a newer play/close wins. */
     private var playbackRequestSeq = 0
+    private var dlnaTransfer: kotlinx.coroutines.Job? = null
+    private var castReloadJob: kotlinx.coroutines.Job? = null
     private var handledEndSeq: Int? = null
     private val autoplayRequestId = AtomicLong()
-    @Volatile private var autoplayOrigin: PageOrigin? = null
 
     /** Last notification nav push; snapshots tick 4x/s, refresh is not free. */
     private var lastNavNext: Boolean? = null
     private var lastNavPrev: Boolean? = null
 
     /**
-     * Set when the user stops casting and kept until the next session starts:
-     * a session-end echo arriving late (weak network) must never resume local
-     * playback behind the user's back, and any later receiver-side disconnect
-     * implies a fresh session, which clears the flag in [onCastSessionStarted].
+     * Set when the user stops casting, held until the next session starts: a
+     * late session-end echo must never resume local playback behind the user's
+     * back; a fresh session clears it in [onCastSessionStarted].
      */
     private var userCastStop = false
-
-    /** Browser navigates back to the watch URL when restoring the mini-player. */
-    var onRestoreWatch: ((String) -> Unit)? = null
-
-    /** Mini-player closed; the browser drops the suspended watch tab. */
-    var onWatchClosed: (() -> Unit)? = null
-
-    /** Watch-page operations (JS eval + back stack) provided by the browser. */
-    var watchPage: WatchPage? = null
-
-    /** Last "playlist present" answer from the page (Bridge push). */
-    @Volatile private var pageHasPlaylist = false
 
     /** Installed once in the init block; the process-scoped router is never re-pointed. */
     private val commandHandler = object : PlaybackCommandRouter.Handler {
         override fun onPlayPause() { this@PlayerViewModel.onPlayPause() }
         override fun onPlay() { autoplayRequestId.incrementAndGet(); engine.play() }
         override fun onPause() { autoplayRequestId.incrementAndGet(); engine.pause() }
+        override fun onStop() { stopPlayback() }
         override fun onNext() { skipToNext() }
         override fun onPrevious() { skipToPrevious() }
     }
 
-    /** True when [zone] is enabled in the current fullscreen state (prefs). */
     fun gestureEnabled(zone: GestureZone): Boolean =
         prefs.isEnabled(gesturePrefKey(zone, _uiState.value.fullscreen))
+
+    private var playlistItems: List<QueueItem> = emptyList()
+    private var playlistActive = false
+    /** The first notification establishes the startup identity, rather than switching it. */
+    private var identityGeneration: Long? = null
+    @Volatile private var inShorts = false
+    private var shortsHoldWasPlaying = false
+    private var shortsHeldItemId: String? = null
+    private var shortsResumeOnOpen = false
+    @Volatile private var mediaKind = MediaKind.NONE
+    val currentMediaKind: MediaKind get() = mediaKind
+    private val sessionTrail = ArrayDeque<String>()
+    private var relatedNext: Pair<String, String?>? = null
+    private var relatedJob: kotlinx.coroutines.Job? = null
 
     init {
         val rememberedResize = if (prefs.isEnabled(PreferenceKeys.REMEMBER_RESIZE_MODE)) {
@@ -310,6 +275,13 @@ class PlayerViewModel(
         viewModelScope.launch {
             engine.snapshot.collect { s -> mergeSnapshot(s) }
         }
+        // Playback responses carry short-lived watch-reporting endpoints; the
+        // session owner consumes them directly, keyed by the loaded media identity.
+        engine.onWatchContext = { videoId, tracking, generation -> reporting?.armTracking(videoId, tracking, generation) }
+        engine.onWatchBoundary = { state, position ->
+            reporting?.finishPlayback(com.hhst.youtubelite.data.media.PlaybackSample(state.videoId, position,
+                state.durationMs, state.isPlaying, state.discontinuityEpoch))
+        }
         viewModelScope.launch {
             queue.state.collect { q ->
                 val nav = queueNavAvailability()
@@ -318,6 +290,8 @@ class PlayerViewModel(
                     it.copy(
                         queueItems = q.items,
                         queueEnabled = q.enabled,
+                        // Attribution for gesture commits (drag reorder), not display data.
+                        queueOwner = queue.currentOwner(),
                         hasNext = nav.next,
                         hasPrevious = nav.previous,
                     )
@@ -325,17 +299,61 @@ class PlayerViewModel(
             }
         }
         viewModelScope.launch {
-            cast.state.collect { c ->
+            identityChanges.collect { generation ->
+                val previousGeneration = identityGeneration
+                val previousOwner = queue.currentOwner()
+                queue.activate()
+                // StateFlow skips structurally equal states: republish the owner
+                // here or drag commits validate against a stale owner.
+                _uiState.update { state -> state.copy(queueOwner = queue.currentOwner()) }
+                identityGeneration = generation
+                if (previousGeneration == null) return@collect
+                // A missing access token can recover without a new transport
+                // generation, but still move the queue from device to account.
+                if (previousGeneration == generation && previousOwner == queue.currentOwner()) return@collect
+                // The previous identity's playlist, back trail and prefetch die
+                // with it; the current video keeps playing under the new identity.
+                playlistActive = false
+                playlistItems = emptyList()
+                sessionTrail.clear()
+                relatedNext = null
+                relatedJob?.cancel()
+                queuedSignature = null
+                refreshNavAvailability()
+            }
+        }
+        viewModelScope.launch {
+            val dlnaState: Flow<DlnaUiState> = dlna?.state ?: flowOf(DlnaUiState())
+            combine(cast.state, dlnaState) { c, d -> c to d }.collect { (c, d) ->
                 _uiState.update {
                     it.copy(
-                        casting = c.chromecastSession,
-                        castingDeviceName = c.deviceName,
+                        casting = c.chromecastSession || d.session,
+                        castingDeviceName = c.deviceName ?: d.deviceName,
                         castLinkUrl = c.linkUrl,
                         castLinkConnected = c.linkConnected,
-                        castAvailable = c.available,
-                        castDevices = c.devices,
+                        castAvailable = c.available || d.available,
+                        castDevices = c.devices + d.devices,
+                        castFailure = d.failure ?: c.failure ?: it.castFailure,
                     )
                 }
+            }
+        }
+        dlna?.initialize()
+        dlna?.let { d ->
+            d.onSessionEnded = {
+                if (!userCastStop) {
+                    detachCastAndResumeLocal(d.stopCasting(), resume = true)
+                }
+                d.endSession()
+                cast.stopLink()
+            }
+            d.onSessionFailed = {
+                if (!userCastStop) {
+                    detachCastAndResumeLocal(d.stopCasting(), resume = false)
+                    onHint(hintCastFailed)
+                }
+                d.endSession()
+                cast.stopLink()
             }
         }
         engine.onEnded = { onPlaybackEnded() }
@@ -352,19 +370,18 @@ class PlayerViewModel(
                 onHint(hintCastFailed)
             }
         }
-        // Receiver error: engine already detached (and resumed local unless
-        // a recast was in flight). End the Cast session.
+        // Already detached (and resumed local unless a recast was in flight);
+        // end whichever route is active.
         engine.onCastError = {
-            if (!userCastStop) teardownCast()
+            if (!userCastStop) teardownCasting()
         }
         cast.urlRefresher = object : LocalStreamProxy.UrlRefresher {
             override fun refreshUrl(token: String, videoId: String?, itag: Int?) = engine.refreshCastUrl(token, videoId, itag)
             override fun backupUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?) = engine.backupCastUrl(token, videoId, itag, failedProfile)
         }
         PlaybackCommandRouter.handler = commandHandler
-        // Link banner: poll receiver/browser liveness only while a link is live.
-        // 5 s keeps the connected banner snappy against the proxy's 30 s
-        // liveness window without busy-polling an idle session.
+        // Poll link liveness only while a link is live: 5 s stays snappy
+        // against the proxy's 30 s window without busy-polling an idle session.
         viewModelScope.launch {
             while (true) {
                 if (cast.state.value.linkUrl == null) {
@@ -376,7 +393,6 @@ class PlayerViewModel(
         }
     }
 
-    /** Pushes nav availability to the notification when it changed. */
     private fun pushNavIfChanged(next: Boolean, prev: Boolean) {
         if (next == lastNavNext && prev == lastNavPrev) return
         lastNavNext = next
@@ -400,12 +416,16 @@ class PlayerViewModel(
                 diagnostics = s.diagnostics,
                 loading = s.isBuffering && s.userWantsPlay,
                 isPlaying = s.isPlaying,
+                userWantsPlay = s.userWantsPlay,
                 durationMs = s.durationMs,
                 speed = s.speed,
                 title = s.title,
                 author = s.author,
                 isLive = s.isLive,
                 videoId = s.videoId,
+                prepared = s.prepared,
+                firstFrameRendered = s.firstFrameRendered,
+                hasRenderedVideoFrame = s.hasRenderedVideoFrame,
                 url = s.url,
                 loopMode = s.loopMode,
                 qualityLabel = s.qualityLabel,
@@ -417,15 +437,17 @@ class PlayerViewModel(
                 audioTracks = s.audioTracks,
                 audioTrackKey = s.audioTrackKey,
                 error = s.error,
+                notice = s.notice,
+                failureReport = s.failureReport,
+                failureDialogVisible = s.failureReport != null &&
+                    (it.failureReport?.id != s.failureReport.id || it.failureDialogVisible),
                 hasNext = nav.next,
                 hasPrevious = nav.previous,
                 sponsorSegments = s.sponsorSegments,
-                // Controls are forced on only when the screen ENTERS the
-                // error/ended state (the retry/replay affordances must show);
-                // afterwards the user's hide toggle must stick instead of
-                // being re-asserted by every snapshot that still carries
-                // error/ended.
-                controlsVisible = if ((s.error != null || s.ended) && !(it.error != null || it.ended)) {
+                // Force controls on only when the screen ENTERS error/ended
+                // (retry/replay must show); afterwards the user's hide toggle
+                // must stick instead of being re-asserted by every snapshot.
+                controlsVisible = if ((s.error != null || s.notice != null || s.ended) && !(it.error != null || it.notice != null || it.ended)) {
                     true
                 } else {
                     it.controlsVisible
@@ -442,9 +464,11 @@ class PlayerViewModel(
                 sponsorCountdownSec = s.sponsorCountdownSec,
                 sponsorChip = s.sponsorChip,
                 sponsorChipHighlight = s.sponsorChipHighlight,
+                discontinuityEpoch = s.discontinuityEpoch,
             )
         }
         maybeSyncQueue(s)
+        maybePrefetchRelated(s)
     }
 
     private fun maybeSyncQueue(s: PlaybackSnapshot) {
@@ -466,126 +490,145 @@ class PlayerViewModel(
         }
     }
 
-    // -- PlayerHooks (from JS bridge) --
-
-    /** A web feed suspends local playback until the user resumes the preserved watch item. */
-    private var shortsPausedId: String? = null
-    @Volatile private var inShorts = false
-
-    override fun playVideo(url: String, origin: PageOrigin) {
-        if (inShorts || PageKind.isShorts(url)) return
-        if (VideoId.parse(url) == shortsPausedId) { onReturnToWatch(url); return }
-        shortsPausedId = null
-        val current = engine.snapshot.value
-        val documentReloaded = !origin.isHost && origin.tabId == playbackOrigin?.tabId &&
-            origin.documentGeneration != playbackOrigin?.documentGeneration
-        if (documentReloaded && current.prepared && current.videoId == VideoId.parse(url)) {
-            playbackOrigin = origin
-            return
-        }
-        if (!origin.isHost) playbackOrigin = origin
-        startPlayback(url, keepMini = _uiState.value.mini)
+    /** PiP entry can resume the browse host before the mode callback arrives. */
+    fun onPipEntered() {
+        _uiState.update { it.copy(mini = false) }
     }
 
-    override fun prepareVideo(url: String) {
-        if (!inShorts && !PageKind.isShorts(url)) engine.preparePlayback(url)
+    fun onBrowseOpened() {
+        if (!_uiState.value.visible || _uiState.value.mini) return
+        if (mediaKind == MediaKind.SHORTS) {
+            onShortsStopped()
+            return
+        }
+        if (prefs.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) enterMiniPlayer()
+        else onLeaveWatch()
+    }
+
+    fun openVideo(videoId: String, startSeconds: Long? = null) {
+        val id = VideoId.parse(videoId) ?: return
+        inShorts = false
+        mediaKind = MediaKind.WATCH
+        engine.setShortsMode(false)
+        if (playlistActive && playlistItems.none { it.videoId == id }) {
+            playlistItems = emptyList()
+            playlistActive = false
+        }
+        val current = engine.snapshot.value
+        if (current.videoId == id && current.prepared && startSeconds != null) engine.seekTo(startSeconds.coerceAtLeast(0).coerceAtMost(Long.MAX_VALUE / 1000) * 1000)
+        if (current.videoId == id && (current.prepared || _uiState.value.visible)) {
+            _uiState.update { it.copy(visible = true, mini = false, controlsVisible = true) }
+            // A Shorts session turned the engine output off; a same-video
+            // restore must turn it back on or the surface stays black.
+            engine.setVideoVisible(true)
+            return
+        }
+        // Any non-null start (0 included) must stay explicit or resume logic overrides it.
+        startPlayback(VideoId.watchUrl(id) + (startSeconds?.let { "&t=" + it } ?: ""), keepMini = false, kind = MediaKind.WATCH)
     }
 
     fun setVideoVisible(visible: Boolean) = engine.setVideoVisible(visible)
 
     fun onShortsOpened() {
-        if (inShorts) return
+        mediaKind = MediaKind.SHORTS
+        engine.setShortsMode(true)
+        if (inShorts) {
+            engine.setVideoVisible(true)
+            if (shortsResumeOnOpen) engine.play()
+            shortsResumeOnOpen = false
+            return
+        }
         inShorts = true
-        shortsPausedId = _uiState.value.videoId
         playbackRequestSeq++
         engine.cancelPending(pausePlayback = !_uiState.value.casting)
         engine.pauseLocal()
         if (speedBeforeHold != null) onSpeedHoldEnd()
-        autoEnteredFullscreen = false
+        fullscreenState.clearAutoEntry()
         _uiState.update { it.copy(visible = false, mini = false, fullscreen = false, locked = false) }
     }
 
-    fun onShortsClosed() { inShorts = false }
+    fun onShortsClosed() {
+        if (mediaKind != MediaKind.SHORTS) return
+        onShortsStopped()
+        inShorts = false
+        shortsResumeOnOpen = false
+        stopShortsPresentation()
+    }
+
+    fun onShortsStopped() {
+        if (mediaKind != MediaKind.SHORTS || !inShorts) return
+        if (_uiState.value.visible) shortsResumeOnOpen = engine.snapshot.value.userWantsPlay
+        onSpeedHoldEnd()
+        playbackRequestSeq++
+        engine.cancelPending(pausePlayback = true)
+        engine.setVideoVisible(false)
+        engine.pause()
+        stopShortsPresentation()
+    }
+
+    /** Shorts never keep a floating window: every presentation flag ends here. */
+    private fun stopShortsPresentation() {
+        _uiState.update { it.copy(visible = false, mini = false, fullscreen = false, locked = false) }
+    }
+
+    fun openShort(videoId: String) {
+        val id = VideoId.parse(videoId) ?: return
+        inShorts = true
+        mediaKind = MediaKind.SHORTS
+        engine.setShortsMode(true)
+        val current = engine.snapshot.value
+        if (current.videoId == id && (current.prepared || _uiState.value.visible)) {
+            _uiState.update { it.copy(visible = true, mini = false, fullscreen = false) }
+            engine.setVideoVisible(true)
+        } else {
+            // A new short starts at zero; account/local resume belongs to watch playback.
+            // Re-entering the prepared short above keeps its position and pause intent.
+            startPlayback(VideoId.watchUrl(id) + "&t=0", keepMini = false, kind = MediaKind.SHORTS)
+        }
+    }
+
+    fun pauseShort() {
+        engine.pauseLocal()
+        _uiState.update { it.copy(visible = false, fullscreen = false, mini = false) }
+        inShorts = false
+    }
+
+    /** A swipe started: silence the settled short without leaving the Shorts session. */
+    fun holdShortsForSwipe() {
+        if (!inShorts) return
+        shortsHeldItemId = engine.snapshot.value.videoId
+        shortsHoldWasPlaying = engine.snapshot.value.userWantsPlay
+        onSpeedHoldEnd()
+        engine.pause()
+    }
 
     /**
-     * Page left the active watch surface (in-place navigation or tab switch).
-     * While suspended/mini the hook is a no-op — the mini-player
-     * owns the player; otherwise the player hides completely.
-     *
-     * With background play enabled the hide is UI-only: the engine keeps
-     * playing and the media notification owns control (there is no mini
-     * surface left to represent it).
+     * A swipe cancelled back to its origin short: only the short the engine
+     * still owns resumes; a newer target keeps playback, a user-paused short
+     * stays paused.
      */
-    override fun hidePlayer(origin: PageOrigin) {
-        if (!acceptsPageCallback(playbackOrigin, origin)) return
+    fun resumeShortsAfterSwipe(videoId: String) {
+        if (!inShorts) return
+        val expected = VideoId.parse(videoId)
+        val resume = shortsHoldWasPlaying && expected != null && expected == shortsHeldItemId &&
+            engine.snapshot.value.videoId == expected
+        shortsHeldItemId = null
+        shortsHoldWasPlaying = false
+        if (resume) engine.play()
+    }
+
+    fun onLeaveWatch() {
         val state = _uiState.value
-        if (state.mini) return
-        if (!state.visible) return
+        if (state.mini || !state.visible) return
         if (prefs.isEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY) || state.casting) {
-            autoEnteredFullscreen = false
-            _uiState.update {
-                it.copy(visible = false, fullscreen = false, locked = false, mini = false)
-            }
+            fullscreenState.clearAutoEntry()
+            _uiState.update { it.copy(visible = false, fullscreen = false, locked = false, mini = false) }
             if (state.casting) engine.pauseLocal()
-            return
-        }
-        stopAndHide()
+        } else stopAndHide()
     }
 
-    /** Page left watch (JS or tab URL). Same path as [hidePlayer]. */
-    fun onLeaveWatch() = hidePlayer(PageOrigin.HOST)
-
-    override fun setPlayerLayout(topDp: Int, heightDp: Int, origin: PageOrigin) {
-        if (!acceptsPageCallback(playbackOrigin, origin)) return
-        // Viewport-relative page-player box from player-hook.js. The top is
-        // consumed by PlayerSurface (converted to window space with the
-        // system-bar inset — the overlay sits one level above the inset-padded
-        // WebView); the height sizes the embedded overlay.
-        _uiState.update {
-            it.copy(
-                pageTopDp = topDp,
-                pageHeightDp = heightDp.coerceAtLeast(0).takeIf { h -> h > 0 },
-                pageLeftDp = 0,
-                pageWidthDp = null,
-                pageViewportWidthDp = null,
-            )
-        }
-    }
-
-    override fun setPlayerBounds(left: Int, top: Int, width: Int, height: Int, viewportWidth: Int, origin: PageOrigin) {
-        if (!acceptsPageCallback(playbackOrigin, origin) || width <= 0 || height <= 0 || viewportWidth <= 0) return
-        _uiState.update { it.copy(pageLeftDp = left, pageTopDp = top, pageWidthDp = width,
-            pageHeightDp = height, pageViewportWidthDp = viewportWidth) }
-    }
-
-    /** An active watch page expands the preserved local player. */
-    fun onReturnToWatch(pageUrl: String? = null) {
-        if (PageKind.isShorts(pageUrl)) return
-        val state = _uiState.value
-        if (shortsPausedId != null && VideoId.parse(pageUrl) == shortsPausedId) {
-            inShorts = false
-            _uiState.update { it.copy(visible = true, mini = false, fullscreen = false, controlsVisible = true) }
-            return
-        }
-        if (state.mini) {
-            if (shouldExpandMiniOnReturn(pageUrl)) {
-                _uiState.update {
-                    it.copy(mini = false, visible = true, controlsVisible = true)
-                }
-                applyAutoFullscreen()
-            }
-            return
-        }
-        if (state.visible) return
-        val pageId = VideoId.parse(pageUrl) ?: return
-        if (pageId != state.videoId) return
-        val resumeUrl = state.url ?: return
-        startPlayback(resumeUrl, keepMini = false)
-    }
-
-    /** Watch tab suspended by the browser. */
     fun enterMiniPlayer() {
-        autoEnteredFullscreen = false
+        fullscreenState.clearAutoEntry()
         _uiState.update {
             it.copy(
                 visible = true,
@@ -597,10 +640,18 @@ class PlayerViewModel(
         }
     }
 
+    /** A center-area downward drag on the embedded player asks for the mini player. */
+    fun onMiniSwipeRequested() {
+        if (mediaKind != MediaKind.WATCH || !prefs.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)) return
+        val state = _uiState.value
+        if (!state.visible || state.mini || state.fullscreen) return
+        enterMiniPlayer()
+    }
+
     private fun stopAndHide(pausePlayback: Boolean = true) {
         playbackRequestSeq++
         autoplayRequestId.incrementAndGet()
-        autoEnteredFullscreen = false
+        fullscreenState.clearAutoEntry()
         if (audioOnlyBackground) {
             audioOnlyBackground = false
             engine.setAudioOnly(false)
@@ -612,15 +663,24 @@ class PlayerViewModel(
     }
 
     /** Queue navigation keeps the current surface. */
-    private fun startPlayback(url: String, keepMini: Boolean) {
+    private fun startPlayback(url: String, keepMini: Boolean, kind: MediaKind? = null, recordHistory: Boolean = true) {
+        if (dlnaTransfer?.isActive == true) onCastStop()
         autoplayRequestId.incrementAndGet()
         playbackRequestSeq++
         val token = playbackRequestSeq
         val id = VideoId.parse(url)
+        val previousId = _uiState.value.videoId
+        val previousKind = mediaKind
+        if (kind != null) mediaKind = kind
+        engine.setShortsMode(mediaKind == MediaKind.SHORTS)
+        val switching = id != null && id != previousId
+        if (recordHistory && switching && previousKind == MediaKind.WATCH && previousId != null) {
+            if (sessionTrail.lastOrNull() != previousId) sessionTrail.addLast(previousId)
+            if (sessionTrail.size > MAX_SESSION_TRAIL) sessionTrail.removeFirst()
+        }
         // A speed-hold or scrub interrupted by surface mode swaps (PiP enter,
         // mini collapse) never sees its End/Commit; drop the stale gesture
         // state so the next video starts clean.
-        val switching = id != null && id != _uiState.value.videoId
         speedBeforeHold = null
         engine.setSpeedHold(false)
         scrubAnchorMs = null
@@ -631,10 +691,20 @@ class PlayerViewModel(
                 visible = true,
                 mini = if (keepMini) it.mini else false,
                 error = null,
+                notice = null,
+                failureReport = null,
+                failureDialogVisible = false,
                 locked = false,
                 url = url,
                 videoId = id ?: it.videoId,
                 loading = if (switching) true else it.loading,
+                prepared = if (switching) false else it.prepared,
+                firstFrameRendered = if (switching) false else it.firstFrameRendered,
+                hasRenderedVideoFrame = if (switching) false else it.hasRenderedVideoFrame,
+                isPlaying = if (switching) false else it.isPlaying,
+                userWantsPlay = if (switching) true else it.userWantsPlay,
+                shortPausedByUser = if (switching) false else it.shortPausedByUser,
+                ended = if (switching) false else it.ended,
                 pageHeightDp = null,
                 pageTopDp = null,
                 pageLeftDp = 0,
@@ -646,15 +716,18 @@ class PlayerViewModel(
                 pipAvailable = pipEnabled(),
             )
         }
+        // Activity.onStart can run before openVideo, while visible is still
+        // false. Publish the new session's output intent as well as its UI.
+        engine.setVideoVisible(!audioOnlyBackground)
         engine.play(url)
         applyAutoFullscreen()
         // Queue advance mid-cast: the receiver must switch videos too, or the
-        // TV keeps the old stream under the new title.
-        // Skipped when the receiver already plays this exact video (user
-        // re-opened its watch page mid-cast): engine.play short-circuited and
-        // resumed the receiver — re-handing off would reload it at 0.
+        // TV keeps the old stream under the new title. Skipped when the
+        // receiver already plays this exact video (user re-opened its watch
+        // page mid-cast): engine.play short-circuited and resumed the
+        // receiver — re-handing off would reload it at 0.
         if (
-            cast.state.value.chromecastSession &&
+            isCasting() &&
             id != null &&
             engine.currentCastSource()?.videoId != id
         ) {
@@ -664,58 +737,31 @@ class PlayerViewModel(
                 }
                 if (token != playbackRequestSeq) return@launch
                 if (ready == null) return@launch
-                if (engine.snapshot.value.error != null) return@launch
-                fun handoffFailed() {
-                    teardownCast()
+                if (engine.snapshot.value.error != null || engine.snapshot.value.notice != null) return@launch
+                val source = recastToActiveRoute(0L)
+                if (token != playbackRequestSeq) return@launch
+                if (source != null) {
+                    engine.markReceiverSource(source)
+                } else {
+                    teardownCasting()
                     onHint(hintCastFailed)
                 }
-                val source = engine.prepareCastSource()
-                if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
-                if (source == null) {
-                    handoffFailed()
-                    return@launch
-                }
-                if (cast.startCasting(source, 0L)) {
-                    engine.markReceiverIdentity(
-                        source.videoId, source.title, engine.snapshot.value.author,
-                    )
-                    return@launch
-                }
-                handoffFailed()
             }
         }
     }
 
-    override fun seekLoadedVideo(url: String, positionMs: Long): Boolean {
-        val currentId = _uiState.value.videoId ?: return false
-        val targetId = VideoId.parse(url) ?: return false
-        if (currentId != targetId) return false
+    override fun onPlayPause() {
         autoplayRequestId.incrementAndGet()
-        mainHandler.post { engine.seekTo(positionMs) }
-        return true
-    }
-
-    /** JS `Bridge.setPageHasPlaylist(bool)` lands here via Bridge. */
-    fun onPageHasPlaylist(has: Boolean) {
-        if (pageHasPlaylist == has) return
-        pageHasPlaylist = has
-        val nav = queueNavAvailability()
-        pushNavIfChanged(nav.next, nav.previous)
-        _uiState.update {
-            it.copy(
-                hasNext = nav.next,
-                hasPrevious = nav.previous,
-            )
+        if (mediaKind == MediaKind.SHORTS) {
+            val pausing = engine.snapshot.value.userWantsPlay && !engine.snapshot.value.ended
+            _uiState.update { it.copy(shortPausedByUser = pausing) }
         }
+        engine.playOrPause()
     }
-
-    // -- PlayerPlaybackActions --
-
-    override fun onPlayPause() { autoplayRequestId.incrementAndGet(); engine.playOrPause() }
     override fun onSeek(positionMs: Long) { autoplayRequestId.incrementAndGet(); engine.seekTo(positionMs) }
 
-    /** Double-tap seek with accumulation (±10 s per tap, 600 ms window). */
     override fun onDoubleTapSeek(offsetMs: Long) {
+        haptics?.perform(HapticsController.Event.SELECTION)
         autoplayRequestId.incrementAndGet()
         val now = SystemClock.uptimeMillis()
         if (now - lastSeekTapAt > SEEK_ACCUM_WINDOW_MS || (seekAccumMs > 0) != (offsetMs > 0)) seekAccumMs = 0L
@@ -726,9 +772,7 @@ class PlayerViewModel(
         _hintState.value = null
     }
 
-    /**
-     * Scrub preview: the bubble tracks the finger; the seek lands on commit.
-     */
+    /** Preview only: the bubble tracks the finger; the seek lands on commit. */
     override fun onScrubPreview(offsetMs: Long) {
         val anchor = scrubAnchorMs
             ?: _positionState.longValue.also { scrubAnchorMs = it }
@@ -743,10 +787,10 @@ class PlayerViewModel(
         val anchor = scrubAnchorMs ?: return
         scrubAnchorMs = null
         autoplayRequestId.incrementAndGet()
+        haptics?.perform(HapticsController.Event.SELECTION)
         engine.seekTo(scrubTarget(anchor + offsetMs))
     }
 
-    /** Time-bar drag: preview shows the target, seek lands on release. */
     override fun onTimeBarPreview(targetMs: Long?) {
         if (targetMs == null) {
             _gestureState.value = null
@@ -777,7 +821,6 @@ class PlayerViewModel(
         onHint(PlayerUi.speedLabel(speed))
     }
 
-    /** Long-press 2x: save the current speed so release restores it. */
     override fun onSpeedHoldStart() {
         if (speedBeforeHold != null) return
         haptics?.perform(HapticsController.Event.HOLD)
@@ -789,22 +832,20 @@ class PlayerViewModel(
     }
 
     override fun onSpeedHoldEnd() {
+        val previousSpeed = speedBeforeHold ?: return
         engine.setSpeedHold(false)
-        engine.setSpeed(speedBeforeHold ?: 1f)
+        engine.setSpeed(previousSpeed)
         speedBeforeHold = null
         _gestureState.value = null
     }
 
-    override fun onLoop() {
-        engine.setLoopMode(_uiState.value.loopMode.next())
+    override fun onLoopMode(mode: LoopMode) {
+        engine.setLoopMode(mode)
     }
 
     override fun onQuality(label: String?) { haptics?.perform(HapticsController.Event.SELECTION); engine.setQuality(label) }
 
-    /**
-     * Subtitle menu: no "off" row. Tapping the active language
-     * turns captions off; any other pick enables and switches.
-     */
+    /** No "off" row: tapping the active language turns captions off; other picks enable and switch. */
     override fun onSubtitle(trackKey: String?) {
         haptics?.perform(HapticsController.Event.SELECTION)
         if (trackKey == null) return
@@ -816,7 +857,8 @@ class PlayerViewModel(
 
     override fun onAudioTrack(trackKey: String?) = engine.setAudioTrack(trackKey)
 
-    /** Applies the subtitle appearance live and persists it for next sessions. */
+    override fun onAudioMenuOpened() = engine.onAudioMenuOpened()
+
     override fun onSubtitleStyle(style: SubtitleStyle) {
         val snapped = style.clamped()
         if (snapped == _uiState.value.subtitleStyle) return
@@ -824,11 +866,23 @@ class PlayerViewModel(
         cache.put(KEY_SUBTITLE_STYLE, snapped.encode(), PREF_TTL_MS)
     }
 
-    // -- queue / playlist navigation --
+    fun startPlaylist(items: List<QueueItem>, shuffle: Boolean = false, startId: String? = null) {
+        val clean = items.mapNotNull { item ->
+            VideoId.parse(item.videoId)?.let { item.copy(videoId = it, url = VideoId.watchUrl(it)) }
+        }
+        playlistItems = if (shuffle) clean.shuffled() else clean
+        playlistActive = playlistItems.isNotEmpty()
+        (playlistItems.firstOrNull { it.videoId == startId } ?: playlistItems.firstOrNull())?.let { openVideo(it.videoId) }
+    }
+
+    private fun playlistNeighbor(direction: Int): QueueItem? {
+        val index = playlistItems.indexOfFirst { it.videoId == playbackQueueId() }
+        return if (index < 0) null else playlistItems.getOrNull(index + direction)
+    }
 
     private fun queueActive(): Boolean {
         val q = queue.state.value
-        return q.enabled && q.items.isNotEmpty()
+        return !playlistActive && q.enabled && q.items.isNotEmpty()
     }
 
     private fun playbackQueueId(): String? =
@@ -839,98 +893,145 @@ class PlayerViewModel(
         return queue.state.value.items.any { it.videoId == id }
     }
 
-    /** canGoBack is a synchronous WebView read; the 4 Hz tick must not re-ask it. */
-    private var pageCanGoBackCache = false
-    private var pageCanGoBackAtMs = 0L
-
-    private fun pageCanGoBack(): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        if (now - pageCanGoBackAtMs >= CAN_GO_BACK_REFRESH_MS) {
-            pageCanGoBackAtMs = now
-            pageCanGoBackCache = watchPage?.canGoBack() == true
+    /**
+     * The single navigation decision shared by surface buttons, the media
+     * notification, PiP actions and headset keys. Queue and playlist navigate
+     * only inside their own context (no stale-queue hijack); Shorts expose
+     * no watch navigation.
+     */
+    private fun nextTarget(id: String?): QueueItem? {
+        if (id == null) return null
+        return when {
+            queueActive() && currentInQueue() -> when (_uiState.value.loopMode) {
+                LoopMode.QUEUE_RANDOM -> queue.random(id)
+                else -> queue.nextStrict(id)
+            }
+            playlistActive && playlistItems.any { it.videoId == id } -> playlistNeighbor(1)
+            else -> null
         }
-        return pageCanGoBackCache
     }
 
-    /**
-     * Navigation availability: local queue (enabled + non-empty) wins over the
-     * page playlist in the watch page; WebView back is the previous-only
-     * fallback.
-     */
+    private fun previousTarget(id: String?): QueueItem? {
+        if (id == null) return null
+        return when {
+            queueActive() && currentInQueue() -> queue.previous(id)
+            playlistActive && playlistItems.any { it.videoId == id } -> playlistNeighbor(-1)
+            else -> null
+        }
+    }
+
+    private fun relatedAvailable(id: String?): Boolean {
+        if (id == null || nextVideo == null) return false
+        if (queueActive() && currentInQueue()) return false
+        if (playlistActive && playlistItems.any { it.videoId == id }) return false
+        val resolved = relatedNext
+        return resolved?.first != id || resolved.second != null
+    }
+
+    private fun restartAvailable(): Boolean =
+        engine.snapshot.value.positionMs > PREVIOUS_RESTART_MS
+
     private fun queueNavAvailability(): QueueNav {
-        val canGoBack = pageCanGoBack()
         val id = playbackQueueId()
-        val queueActive = queueActive()
-        return queueNav(
-            queueActive = queueActive,
-            queueHasNext = queueActive && queue.next(id) != null,
-            inQueueAndHasPrevious = queueActive && currentInQueue() && queue.previous(id) != null,
-            pageHasPlaylist = pageHasPlaylist,
-            pageCanGoBack = canGoBack,
-        )
+        if (mediaKind == MediaKind.SHORTS || id == null) return QueueNav(false, false)
+        val next = nextTarget(id) != null || relatedAvailable(id)
+        val previous = restartAvailable() || previousTarget(id) != null || sessionTrail.isNotEmpty()
+        return QueueNav(next, previous)
     }
 
     internal data class QueueNav(val next: Boolean, val previous: Boolean)
 
-    /** Menu picks and notification buttons land here. */
     fun skipToNext() {
-        if (queueActive()) {
-            queue.next(playbackQueueId())?.url?.let { startPlayback(it, keepMini = true) }
-            return
-        }
-        if (pageHasPlaylist) navigatePlaylist(1)
+        val id = playbackQueueId()
+        if (mediaKind == MediaKind.SHORTS || id == null) return
+        nextTarget(id)?.let { startPlayback(it.url, keepMini = true); return }
+        if (relatedAvailable(id)) startRelatedNext(id)
     }
 
     fun skipToPrevious() {
-        // A previous tap past the
-        // first seconds restarts the current video; only near the start does
-        // it actually go back — queue first, then the page playlist, then
-        // WebView history.
         if (engine.snapshot.value.positionMs > PREVIOUS_RESTART_MS) {
             engine.seekTo(0)
             return
         }
-        val canGoBack = watchPage?.canGoBack() == true
-        if (queueActive()) {
-            val prev = if (currentInQueue()) queue.previous(playbackQueueId()) else null
-            if (prev != null) {
-                startPlayback(prev.url, keepMini = true)
-                return
-            }
-            if (canGoBack) watchPageGoBack()
-            return
-        }
-        if (pageHasPlaylist) {
-            navigatePlaylist(-1, fallbackToBack = canGoBack)
-            return
-        }
-        if (canGoBack) watchPageGoBack()
+        val id = playbackQueueId()
+        if (mediaKind == MediaKind.SHORTS || id == null) return
+        previousTarget(id)?.let { startPlayback(it.url, keepMini = true); return }
+        // Plain watch without queue/playlist: walk back this session's trail.
+        sessionTrail.removeLastOrNull()?.let { startPlayback(VideoId.watchUrl(it), keepMini = true, recordHistory = false) }
     }
 
-    /** Runs the page's playlist nav; sentinel answers route to WebView back. */
-    private fun navigatePlaylist(dir: Int, fallbackToBack: Boolean = false) {
-        val page = watchPage ?: return
-        page.evaluate("window.__playlistNav && window.__playlistNav($dir);") { result ->
-            when (result?.trim()) {
-                // Any no-op answer falls back to WebView back navigation.
-                null, "\"missing-playlist\"", "\"missing-current-video-id\"",
-                "\"missing-current-video\"", "\"missing-target\"", "\"playlist-head\"",
-                "\"playlist-end\"",
-                -> if (fallbackToBack) watchPageGoBack()
-                // "navigating": the page changes URL; the watch hook replays it.
-            }
+    /**
+     * Manual next resolves the related target even when autoplay is off;
+     * a resolved miss keeps the current playback untouched and refreshes
+     * the button to its now-known disabled state.
+     */
+    private fun startRelatedNext(id: String, requireEnded: Boolean = false, honorAutoplay: Boolean = false) {
+        val provider = nextVideo ?: return
+        if (honorAutoplay &&
+            (!prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) || _uiState.value.loopMode != LoopMode.QUEUE_NEXT)
+        ) return
+        val resolved = relatedNext
+        if (resolved?.first == id) {
+            if (requireEnded && (!engine.snapshot.value.ended || !_uiState.value.visible)) return
+            val next = resolved.second
+            if (next != null && next != id) startPlayback(VideoId.watchUrl(next), keepMini = true)
+            return
+        }
+        val token = playbackRequestSeq
+        val request = autoplayRequestId.incrementAndGet()
+        // The prefetch belongs to the identity it was requested under; an
+        // identity switch discards it so Next never uses another identity's data.
+        val owner = queue.currentOwner()
+        viewModelScope.launch {
+            val next = try { provider(id) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+            if (request != autoplayRequestId.get() || token != playbackRequestSeq) return@launch
+            if (queue.currentOwner() != owner) return@launch
+            if (honorAutoplay && (!prefs.isEnabled(PreferenceKeys.ENABLE_AUTOPLAY) ||
+                _uiState.value.loopMode != LoopMode.QUEUE_NEXT || mediaKind != MediaKind.WATCH)) return@launch
+            if (relatedNext?.first != id) relatedNext = id to next
+            if (requireEnded && (!engine.snapshot.value.ended || !_uiState.value.visible)) return@launch
+            if (next != null && next != id) startPlayback(VideoId.watchUrl(next), keepMini = true)
+            else refreshNavAvailability()
         }
     }
 
-    private fun watchPageGoBack() {
-        watchPage?.goBack()
+    private fun refreshNavAvailability() {
+        val nav = queueNavAvailability()
+        pushNavIfChanged(nav.next, nav.previous)
+        _uiState.update { it.copy(hasNext = nav.next, hasPrevious = nav.previous) }
+    }
+
+    /** Resolves the related next once per video so the Next button is honest. */
+    private fun maybePrefetchRelated(s: PlaybackSnapshot) {
+        val id = s.videoId ?: return
+        if (mediaKind != MediaKind.WATCH || !s.prepared) return
+        if (queueActive() || playlistActive || nextVideo == null) return
+        if (relatedNext?.first == id || relatedJob?.isActive == true) return
+        val provider = nextVideo!!
+        val token = playbackRequestSeq
+        val owner = queue.currentOwner()
+        relatedJob = viewModelScope.launch {
+            val next = try { provider(id) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+            if (token != playbackRequestSeq) return@launch
+            if (queue.currentOwner() != owner) return@launch
+            if (relatedNext?.first != id) relatedNext = id to next
+            refreshNavAvailability()
+        }
     }
 
     override fun onNext() = skipToNext()
 
     override fun onPrevious() = skipToPrevious()
 
-    override fun onQueueItem(url: String) = startPlayback(url, keepMini = true)
+    override fun onQueueItem(url: String) {
+        playlistActive = false
+        playlistItems = emptyList()
+        startPlayback(url, keepMini = true)
+    }
 
     override fun onToggleControls() =
         _uiState.update { it.copy(controlsVisible = !it.controlsVisible) }
@@ -944,9 +1045,23 @@ class PlayerViewModel(
 
     override fun onFullscreenToggle() {
         val next = !_uiState.value.fullscreen
-        autoEnteredFullscreen = false
-        if (!next) suppressAutoEnter = true
+        fullscreenState.onManualChange(next)
         setFullscreen(next)
+    }
+
+    override fun onFullscreenSwipeExit() = setFullscreenManual(false)
+
+    override fun onFullscreenSwipeRestore() {
+        if (!_uiState.value.fullscreen) return
+        fullscreenState.onManualChange(false)
+        setFullscreen(false, restoreEntryOrientation = true)
+    }
+
+    /** Content pulls enter and fullscreen swipes exit in the current orientation. */
+    fun setFullscreenManual(fullscreen: Boolean) {
+        if (_uiState.value.fullscreen == fullscreen) return
+        fullscreenState.onManualChange(fullscreen)
+        setFullscreen(fullscreen, keepOrientation = true)
     }
 
     /**
@@ -954,14 +1069,7 @@ class PlayerViewModel(
      * auto-rotate enters; only an auto-entered session leaves on portrait.
      */
     fun onPhysicalOrientation(degrees: Int, systemAutoRotate: Boolean, inPip: Boolean) {
-        val band = AutoFullscreen.band(degrees)
-        val rotateChanged = systemAutoRotate != lastSystemAutoRotate
-        val pipChanged = inPip != lastInPip
-        lastSystemAutoRotate = systemAutoRotate
-        lastInPip = inPip
-        if (band == lastOrientationBand && !rotateChanged && !pipChanged) return
-        lastOrientationBand = band
-        applyAutoFullscreen()
+        if (fullscreenState.updateOrientation(degrees, systemAutoRotate, inPip)) applyAutoFullscreen()
     }
 
     /**
@@ -970,35 +1078,16 @@ class PlayerViewModel(
      * event and leave the player embedded.
      */
     private fun applyAutoFullscreen() {
-        val band = lastOrientationBand
         val s = _uiState.value
-        val landscape = band == AutoFullscreen.Band.LANDSCAPE
-        val portrait = band == AutoFullscreen.Band.PORTRAIT
-        if (portrait) suppressAutoEnter = false
-        if (AutoFullscreen.shouldEnter(
-                watchVisible = s.visible && !s.mini,
-                systemAutoRotate = lastSystemAutoRotate,
+        fullscreenState.evaluate(
+            FullscreenState.Window(
+                visible = s.visible,
                 fullscreen = s.fullscreen,
-                pip = lastInPip,
                 mini = s.mini,
                 casting = s.casting,
                 locked = s.locked,
-                physicalLandscape = landscape,
-                suppressed = suppressAutoEnter,
-            )
-        ) {
-            autoEnteredFullscreen = true
-            setFullscreen(true)
-        } else if (AutoFullscreen.shouldExit(
-                fullscreen = s.fullscreen,
-                autoEntered = autoEnteredFullscreen,
-                locked = s.locked,
-                physicalPortrait = portrait,
-            )
-        ) {
-            autoEnteredFullscreen = false
-            setFullscreen(false)
-        }
+            ),
+        )?.let { setFullscreen(it) }
     }
 
     override fun onLockToggle() = setLocked(!_uiState.value.locked)
@@ -1011,19 +1100,54 @@ class PlayerViewModel(
     }
 
     override fun onRetry() = engine.retry()
+    override fun onErrorDetails() {
+        _uiState.update { it.copy(failureDialogVisible = it.failureReport != null) }
+    }
+    fun dismissPlaybackFailure() {
+        _uiState.update { it.copy(failureDialogVisible = false) }
+    }
 
-    override fun onQueueEnabled(enabled: Boolean) = queue.setEnabled(enabled)
+    override fun onQueueEnabled(enabled: Boolean) {
+        playlistActive = false
+        playlistItems = emptyList()
+        queue.setEnabled(enabled)
+    }
     override fun onQueueClear() = queue.clear()
     override fun onQueueRemove(videoId: String) = queue.remove(videoId)
-    override fun onQueueMove(fromIndex: Int, toIndex: Int) = queue.move(fromIndex, toIndex)
+    /** [owner] is the queue owner captured when the drag started; null applies to the active one. */
+    override fun onQueueMove(fromIndex: Int, toIndex: Int, owner: QueueOwner?) = queue.move(fromIndex, toIndex, owner)
 
     /** Page "Add to queue" (media menu) — the manual queue population path. */
     override fun onQueueAdd(item: QueueItem) {
+        playlistActive = false
+        playlistItems = emptyList()
         if (!queue.state.value.enabled) queue.setEnabled(true)
         queue.add(item)
     }
 
+    /** "Play next" — same manual population path, but positioned after the playing entry. */
+    override fun onQueueAddNext(item: QueueItem) {
+        playlistActive = false
+        playlistItems = emptyList()
+        if (!queue.state.value.enabled) queue.setEnabled(true)
+        queue.addNext(item)
+    }
+
+    /** True when [videoId] is already in the manual queue (dedupe feedback for menus). */
+    fun queueContains(videoId: String): Boolean = queue.state.value.items.any { it.videoId == videoId }
+
     override fun onCastStop() {
+        castReloadJob?.cancel()
+        castReloadJob = null
+        if (dlnaActive() || dlnaTransfer?.isActive == true) {
+            userCastStop = true
+            dlnaTransfer?.cancel()
+            dlnaTransfer = null
+            detachCastAndResumeLocal(dlna?.stopCasting() ?: 0L, resume = true)
+            dlna?.endSession()
+            cast.stopLink()
+            return
+        }
         // Guard against a stop tap after the session already ended: the
         // detached castPlayer keeps its last position, and seeking the local
         // player there would jump the video backward (or to 0) unprompted.
@@ -1036,25 +1160,58 @@ class PlayerViewModel(
     }
 
     override fun onCastDevice(id: String) {
+        onCastFailureDismiss()
+        if (id.startsWith(DlnaController.ID_PREFIX)) {
+            startDlnaCast(id)
+            return
+        }
+        if (dlnaActive() || dlnaTransfer?.isActive == true) onCastStop()
         // Only select the route; onSessionStarted performs the single load
         // once the CastSession actually exists (startCasting before it is a
         // silent no-op and races the session-started path).
         cast.selectDevice(id)
     }
 
-    /** Cast dialog open/close toggles the MediaRouter discovery window. */
-    override fun onCastDiscovery(enabled: Boolean) = cast.setDiscoveryEnabled(enabled)
+    override fun onCastFailureDismiss() {
+        dlna?.clearFailure()
+        cast.clearFailure()
+        _uiState.update { it.copy(castFailure = null) }
+    }
 
-    override fun onShareCastLink() {
+    override fun onCastDiscovery(enabled: Boolean) {
+        cast.setDiscoveryEnabled(enabled)
+        dlna?.setDiscoveryEnabled(enabled)
+    }
+
+    override fun onShareCastLink(onReady: () -> Unit) {
+        // A DLNA session owns the proxy for its own stream; reconfiguring it
+        // for the link page would retarget the renderer's byte requests.
+        if (dlnaActive()) return
         val token = playbackRequestSeq
         viewModelScope.launch {
-            val source = engine.prepareCastSource()
-            if (token != playbackRequestSeq) return@launch
-            if (source == null || cast.ensureProxy(source) == null) onHint(hintCastFailed)
+            var stage = "media"
+            try {
+                val source = engine.prepareCastSource()
+                if (token != playbackRequestSeq || dlnaActive() || dlnaTransfer?.isActive == true) return@launch
+                checkNotNull(source) { "No compatible media is available for local sharing" }
+                stage = "proxy"
+                checkNotNull(cast.ensureProxy(source)) { "Could not publish media on the local network" }
+                onReady()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (token != playbackRequestSeq) return@launch
+                val report = com.hhst.youtubelite.cast.CastFailureReport.create(
+                    "LOCAL_LINK", null, _uiState.value.videoId, stage, error)
+                _uiState.update { it.copy(castFailure = report) }
+            }
         }
     }
 
-    override fun onCloseCastLink() = cast.stopLink()
+    override fun onCloseCastLink() {
+        if (isCasting()) return
+        cast.stopLink()
+    }
 
     override fun onSponsorSkipCancel() {
         engine.cancelSponsorSkip()
@@ -1068,12 +1225,10 @@ class PlayerViewModel(
         engine.skipSponsorChipSegment()
     }
 
-    /** Edge-slider (volume/brightness) gesture feedback from the surface. */
     fun onEdgeSlider(volume: Boolean, percent: Int) {
         _gestureState.value = GestureUi.EdgeSlider(volume, percent)
     }
 
-    /** Gesture overlays clear (finger up / gesture end). */
     override fun onGestureEnd() {
         scrubAnchorMs = null
         _gestureState.value = null
@@ -1083,14 +1238,24 @@ class PlayerViewModel(
         val casting = _uiState.value.casting
         if (casting) engine.pauseLocal()
         stopAndHide(pausePlayback = !casting)
-        onWatchClosed?.invoke()
     }
 
-    /** Restore expands the mini-player back into the suspended watch tab. */
     override fun onMiniRestore() {
-        val url = _uiState.value.url ?: return
-        onRestoreWatch?.invoke(url)
+        val id = _uiState.value.videoId ?: return
+        appContext?.let { context ->
+            prepareWindowHandoff {
+                if (_uiState.value.visible && _uiState.value.mini && _uiState.value.videoId == id)
+                    com.hhst.youtubelite.navigation.WatchTransition.restore(context, id)
+            }
+        }
     }
+
+    fun prepareWindowHandoff(onReady: () -> Unit) =
+        com.hhst.youtubelite.navigation.WatchTransition.captureVideo(_uiState.value.videoId, attachedSurface?.get(), onReady)
+
+    fun hasRenderedFrame(surface: SurfaceView): Boolean =
+        attachedSurface?.get() === surface && surface.holder.surface.isValid &&
+            engine.snapshot.value.let { it.firstFrameRendered && it.videoId == _uiState.value.videoId }
 
     fun currentCastLink(): String? = cast.state.value.linkUrl
 
@@ -1098,6 +1263,126 @@ class PlayerViewModel(
         cast.stopCasting()
         cast.endSession()
         onHint(hintCastFailed)
+    }
+
+    private fun dlnaActive(): Boolean = dlna?.state?.value?.session == true
+
+    private fun isCasting(): Boolean = cast.state.value.chromecastSession || dlnaActive()
+
+    /**
+     * Ends whichever route is active after a receiver error. The engine has
+     * already detached (and resumed local unless a recast was in flight).
+     */
+    private fun teardownCasting() {
+        castReloadJob?.cancel()
+        castReloadJob = null
+        if (dlnaActive()) {
+            dlna?.stopCasting()
+            dlna?.endSession()
+            cast.stopLink()
+            onHint(hintCastFailed)
+        } else {
+            teardownCast()
+        }
+    }
+
+    /**
+     * Loads the current video on whichever route is active. DLNA needs the
+     * muxed pick and a range-served URL from the shared proxy; chromecast
+     * keeps the adaptive DASH path. Null = load failed, caller tears down.
+     */
+    private suspend fun recastToActiveRoute(positionMs: Long): CastSource? {
+        val token = playbackRequestSeq
+        if (dlnaActive()) {
+            val dlna = dlna ?: return null
+            val source = engine.prepareMuxedCastSource() ?: return null
+            if (token != playbackRequestSeq || !dlnaActive()) return null
+            val streamUrl = cast.dlnaStreamUrl(source, dlna.selectedHost()) ?: return null
+            return source.takeIf { dlna.startCasting(source, positionMs, streamUrl) && token == playbackRequestSeq }
+        }
+        if (!cast.state.value.chromecastSession) return null
+        val source = engine.prepareCastSource() ?: return null
+        return source.takeIf { cast.startCasting(source, positionMs) }
+    }
+
+    /**
+     * DLNA route selection: no session handshake exists, so the load happens
+     * immediately. One active route — a chromecast session and any live link
+     * proxy yield before the muxed URL is published.
+     */
+    private fun startDlnaCast(deviceId: String) {
+        val dlna = dlna ?: return
+        if (dlna.state.value.session || dlnaTransfer?.isActive == true) onCastStop()
+        dlna.selectDevice(deviceId)
+        val token = playbackRequestSeq
+        val resumeOnFailure = engine.snapshot.value.userWantsPlay
+        dlnaTransfer = viewModelScope.launch {
+            var stage = "media"
+            try {
+                if (cast.state.value.chromecastSession) {
+                    userCastStop = true
+                    detachCastAndResumeLocal(cast.stopCasting(), resume = false)
+                    cast.endSession()
+                }
+                cast.stopLink()
+                val source = engine.prepareMuxedCastSource()
+                if (token != playbackRequestSeq) return@launch
+                if (source == null) {
+                    showCastFailure(deviceId, "media", IllegalStateException("No compatible combined audio and video stream is available"))
+                    dlna.endSession()
+                    onHint(hintCastFailed)
+                    return@launch
+                }
+                stage = "proxy"
+                val streamUrl = cast.dlnaStreamUrl(source, dlna.selectedHost())
+                if (streamUrl == null) {
+                    showCastFailure(deviceId, "proxy", IllegalStateException("Could not publish media on the local network"))
+                    dlna.endSession()
+                    onHint(hintCastFailed)
+                    return@launch
+                }
+                engine.pause()
+                stage = "start"
+                if (dlna.startCasting(source, _positionState.longValue, streamUrl)) {
+                    if (token != playbackRequestSeq) {
+                        dlna.stopCasting()
+                        dlna.endSession()
+                        cast.stopLink()
+                        return@launch
+                    }
+                    // Re-arm the remote-stop echo for the new DLNA session: the
+                    // stale userCastStop from a previous user stop (or from the
+                    // chromecast yield above) would suppress TV-side teardown.
+                    userCastStop = false
+                    engine.attachCastPlayer(dlna.remotePlayer())
+                    engine.markReceiverSource(source)
+                } else {
+                    val report = dlna.state.value.failure
+                    if (report != null) _uiState.update { it.copy(castFailure = report) }
+                    else showCastFailure(deviceId, "start", IllegalStateException("The selected renderer is no longer available"))
+                    dlna.stopCasting()
+                    dlna.endSession()
+                    cast.stopLink()
+                    onHint(hintCastFailed)
+                    if (resumeOnFailure) engine.play()
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (token != playbackRequestSeq) return@launch
+                showCastFailure(deviceId, stage, error)
+                dlna.stopCasting()
+                dlna.endSession()
+                cast.stopLink()
+                if (resumeOnFailure) engine.play()
+            }
+        }
+    }
+
+    private fun showCastFailure(deviceId: String, stage: String, error: Throwable) {
+        val device = _uiState.value.castDevices.firstOrNull { it.id == deviceId }
+        val report = com.hhst.youtubelite.cast.CastFailureReport.create("DLNA", device, _uiState.value.videoId, stage, error)
+        _uiState.update { it.copy(castFailure = report) }
     }
 
     private fun detachCastAndResumeLocal(positionMs: Long, resume: Boolean) {
@@ -1108,7 +1393,6 @@ class PlayerViewModel(
         }
     }
 
-    /** Re-reads the PiP pref after a settings flip (wired from MainActivity). */
     fun refreshPipAvailability() {
         _uiState.update { it.copy(pipAvailable = pipEnabled()) }
     }
@@ -1116,17 +1400,15 @@ class PlayerViewModel(
     private fun pipEnabled(): Boolean = appContext?.let(PipSupport::isSupported) == true &&
         prefs.isEnabled(PreferenceKeys.ENABLE_PIP)
 
-    /** Polls device discovery + link liveness (cast dialog open). */
     fun refreshCastState() {
         cast.publishRoutes()
         cast.refreshLinkBanner()
     }
 
     /**
-     * Session established: push the current video onto the receiver.
-     * Control delegation only attaches on a
-     * successful load — a failed load resumes local playback instead of
-     * delegating to a dead receiver.
+     * Session established: push the current video onto the receiver. Control
+     * delegation attaches only on a successful load — a failed load resumes
+     * local playback instead of delegating to a dead receiver.
      */
     private fun onCastSessionStarted() {
         // A fresh session re-arms the session-end echo: the user is casting
@@ -1134,12 +1416,18 @@ class PlayerViewModel(
         userCastStop = false
         val token = playbackRequestSeq
         viewModelScope.launch {
+            // One active route: a DLNA session yields the proxy to the receiver.
+            if (dlnaActive()) {
+                dlna?.stopCasting()
+                dlna?.endSession()
+            }
             val source = engine.prepareCastSource()
             if (token != playbackRequestSeq || !cast.state.value.chromecastSession) return@launch
             if (source == null) { teardownCast(); return@launch }
             engine.pause()
             if (cast.startCasting(source, _positionState.longValue)) {
                 engine.attachCastPlayer(cast.remotePlayer())
+                engine.markReceiverSource(source)
             } else {
                 teardownCast()
                 engine.play()
@@ -1149,22 +1437,47 @@ class PlayerViewModel(
 
     /**
      * Quality/audio change while casting: publish a new proxy generation and
-     * reload the receiver at the current position with the receiver-capable
-     * tracks from [PlaybackApi.currentCastSource].
+     * reload the active receiver at the current position — the adaptive
+     * receiver-capable pick for chromecast, the best muxed file for DLNA.
      */
     private fun recastPublishedSource() {
+        castReloadJob?.cancel()
+        castReloadJob = null
+        if (dlnaActive()) {
+            val dlna = dlna ?: return
+            val token = playbackRequestSeq
+            val remote = dlna.remotePlayer() ?: return
+            val position = remote.currentPosition
+            val autoplay = remote.playWhenReady
+            castReloadJob = viewModelScope.launch {
+                val source = engine.currentMuxedCastSource() ?: return@launch
+                val streamUrl = cast.dlnaStreamUrl(source, dlna.selectedHost()) ?: return@launch
+                if (dlna.startCasting(source, position, streamUrl, autoplay)) {
+                    if (token == playbackRequestSeq) engine.markReceiverSource(source)
+                } else if (token == playbackRequestSeq) {
+                    teardownCasting()
+                }
+            }
+            return
+        }
         if (!cast.state.value.chromecastSession) return
+        val remote = cast.remotePlayer() ?: return
         val source = engine.currentCastSource() ?: return
-        if (!cast.startCasting(source, engine.snapshot.value.positionMs)) {
+        if (cast.startCasting(source, remote.currentPosition, remote.playWhenReady)) {
+            engine.markReceiverSource(source)
+        } else {
             teardownCast()
         }
     }
 
     private fun onPlaybackEnded() {
+        // The Shorts host advances its own feed and pager, never the watch queue.
+        if (mediaKind == MediaKind.SHORTS) return
         if (!engine.snapshot.value.ended || handledEndSeq == playbackRequestSeq) return
         handledEndSeq = playbackRequestSeq
-        // Queue and playlist playback take priority over page autoplay.
-        val queueContext = queueActive()
+        // Queue and playlist playback take priority over page autoplay; both
+        // navigate strictly inside their own context (no stale-queue hijack).
+        val queueContext = queueActive() && currentInQueue()
         val current = playbackQueueId()
         val target = when (_uiState.value.loopMode) {
             LoopMode.QUEUE_NEXT ->
@@ -1178,40 +1491,18 @@ class PlayerViewModel(
             startPlayback(target.url, keepMini = true)
             return
         }
-        if (!queueContext && pageHasPlaylist &&
-            _uiState.value.loopMode == LoopMode.QUEUE_NEXT
-        ) {
-            watchPage?.evaluate("window.__playlistNav && window.__playlistNav(1);") { }
+        if (!queueContext && playlistItems.any { it.videoId == current } && _uiState.value.loopMode == LoopMode.QUEUE_NEXT) {
+            playlistNeighbor(1)?.let { startPlayback(it.url, keepMini = true) }
             return
         }
-        if (queueContext || pageHasPlaylist || inShorts || _uiState.value.loopMode != LoopMode.QUEUE_NEXT) return
-        val page = watchPage ?: return
-        val id = engine.snapshot.value.videoId ?: return
-        val token = playbackRequestSeq
-        val origin = page.origin()
-        val request = autoplayRequestId.incrementAndGet()
-        autoplayOrigin = origin
-        page.evaluate("JSON.stringify(window.__watchAutoplayNext?.() ?? null);") { raw ->
-            if (request != autoplayRequestId.get() || token != playbackRequestSeq || watchPage !== page || page.origin() != origin ||
-                engine.snapshot.value.videoId != id || !engine.snapshot.value.ended) return@evaluate
-            if (_uiState.value.loopMode != LoopMode.QUEUE_NEXT || queueActive() || pageHasPlaylist) return@evaluate
-            val candidate = WatchAutoplayCandidate.parse(raw, id) ?: return@evaluate
-            val gson = Gson()
-            page.evaluate("window.__watchAutoplayAdvance?.(${gson.toJson(id)},${gson.toJson(candidate.url)},$request) === true;") { }
+        if (!queueContext && !playlistActive && mediaKind == MediaKind.WATCH && _uiState.value.loopMode == LoopMode.QUEUE_NEXT) {
+            current?.let { startRelatedNext(it, requireEnded = true, honorAutoplay = true) }
         }
     }
 
-    override fun canAutoplayAdvance(videoId: String, requestId: Long, origin: PageOrigin): Boolean {
-        val snapshot = engine.snapshot.value
-        return requestId == autoplayRequestId.get() && autoplayOrigin == origin &&
-            snapshot.videoId == videoId && snapshot.ended && _uiState.value.visible &&
-            _uiState.value.loopMode == LoopMode.QUEUE_NEXT && !queueActive() && !pageHasPlaylist && !inShorts
-    }
-
-    // Weak on purpose: this VM is a process-scoped singleton and the view
-    // belongs to an activity window. Normal attach/detach pairs it, but a
-    // missed dispose must not pin the activity in memory. The engine holds
-    // the surface until the next attach/detach — stop() does not clear it —
+    // Weak on purpose: this VM is a process-scoped singleton; a missed
+    // dispose must not pin the activity's view in memory. The engine holds
+    // the surface until the next attach/detach (stop() does not clear it),
     // so only the normal dispose path releases a dead activity's view.
     private var attachedSurface: WeakReference<SurfaceView>? = null
 
@@ -1231,20 +1522,20 @@ class PlayerViewModel(
         engine.setVideoSurface(null)
     }
 
-    fun setFullscreen(fullscreen: Boolean) =
-        _uiState.update { it.copy(fullscreen = fullscreen, controlsVisible = true) }
+    fun setFullscreen(fullscreen: Boolean, keepOrientation: Boolean = false, restoreEntryOrientation: Boolean = false) =
+        _uiState.update { it.copy(fullscreen = fullscreen,
+            fullscreenKeepsOrientation = keepOrientation,
+            fullscreenRestoresEntryOrientation = restoreEntryOrientation, controlsVisible = true) }
 
     fun setLocked(locked: Boolean) =
         _uiState.update { it.copy(locked = locked, controlsVisible = !locked) }
 
     fun pauseForBackground() = engine.pauseLocal()
 
-    /** Closing the system PiP window explicitly ends local playback. */
     fun onPipDismissed() {
-        val remote = cast.state.value.chromecastSession || cast.state.value.linkConnected
+        val remote = isCasting() || cast.state.value.linkConnected
         stopAndHide(pausePlayback = !remote)
         if (remote) engine.pauseLocal() else engine.stop()
-        onWatchClosed?.invoke()
     }
 
     /** Explicit PiP headphone action; applies to this background session only. */
@@ -1253,7 +1544,7 @@ class PlayerViewModel(
 
     fun playAudioOnlyInBackground() {
         audioOnlyBackground = true
-        autoEnteredFullscreen = false
+        fullscreenState.clearAutoEntry()
         _uiState.update { it.copy(fullscreen = false, locked = false) }
         engine.setAudioOnly(true)
         engine.setVideoVisible(false)
@@ -1279,13 +1570,21 @@ class PlayerViewModel(
             stopAndHide(pausePlayback = false)
             return
         }
+        stopPlayback()
+    }
+
+    /** Explicit Stop ends local and remote playback regardless of background-play preferences. */
+    fun stopPlayback() {
         userCastStop = true
-        if (cast.state.value.chromecastSession) {
-            cast.stopCasting()
-            cast.endSession()
-        } else {
-            cast.stopLink()
-        }
+        dlnaTransfer?.cancel()
+        dlnaTransfer = null
+        castReloadJob?.cancel()
+        castReloadJob = null
+        dlna?.stopCasting()
+        dlna?.endSession()
+        // A selected receiver owns a pending session before chromecastSession becomes true.
+        cast.stopCasting()
+        cast.endSession()
         stopAndHide()
         engine.stop()
     }
@@ -1296,8 +1595,6 @@ class PlayerViewModel(
 
     companion object {
         private const val SEEK_ACCUM_WINDOW_MS = 600L
-        /** Rate limit for the synchronous WebView canGoBack read. */
-        private const val CAN_GO_BACK_REFRESH_MS = 1_000L
         private const val KEY_RESIZE = "player:resize_mode"
         private const val KEY_SUBTITLE_STYLE = "player:subtitle_style"
 
@@ -1307,43 +1604,13 @@ class PlayerViewModel(
         /** Previous tap past this position restarts the current video. */
         private const val PREVIOUS_RESTART_MS = 3_000L
 
+        /** Bound on the plain-watch Previous trail. */
+        private const val MAX_SESSION_TRAIL = 50
+
         /** Cast handoff readiness: the target video prepared or failed. */
         internal fun loadSettledFor(snapshot: PlaybackSnapshot, videoId: String?): Boolean =
             videoId != null && snapshot.videoId == videoId &&
-                (snapshot.prepared || snapshot.error != null)
-
-        /**
-         * Pure priority rules behind [queueNavAvailability]: the local queue
-         * wins over the page playlist, and the watch page's back
-         * history is a previous-only fallback. Static so the rules stay
-         * unit-testable.
-         */
-        internal fun queueNav(
-            queueActive: Boolean,
-            queueHasNext: Boolean,
-            inQueueAndHasPrevious: Boolean,
-            pageHasPlaylist: Boolean,
-            pageCanGoBack: Boolean,
-        ): QueueNav = when {
-            queueActive -> QueueNav(next = queueHasNext, previous = inQueueAndHasPrevious || pageCanGoBack)
-            else -> QueueNav(next = pageHasPlaylist, previous = pageCanGoBack)
-        }
-
-        /**
-         * Page callbacks apply when they come from the host, from the playing
-         * tab's current-or-newer document, or when no page owns playback yet.
-         * Another tab, or an older document on the same tab, is ignored.
-         */
-        internal fun acceptsPageCallback(owner: PageOrigin?, incoming: PageOrigin): Boolean {
-            if (incoming.isHost) return true
-            if (owner == null || owner.isHost) return true
-            return incoming.tabId == owner.tabId &&
-                incoming.documentGeneration >= owner.documentGeneration
-        }
-
-        /** Only a watch page can expand the native mini-player. */
-        internal fun shouldExpandMiniOnReturn(pageUrl: String?): Boolean =
-            !PageKind.isShorts(pageUrl) && VideoId.parse(pageUrl) != null
+                (snapshot.prepared || snapshot.error != null || snapshot.notice != null)
 
         internal fun gesturePrefKey(zone: GestureZone, fullscreen: Boolean): String = when (zone) {
             GestureZone.TAP ->

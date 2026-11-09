@@ -11,7 +11,6 @@ import org.junit.internal.TextListener;
 import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 
-/** Runs JUnit against the optimized application. */
 public final class R8VerificationRunner extends Instrumentation {
     private Bundle arguments;
 
@@ -27,6 +26,7 @@ public final class R8VerificationRunner extends Instrumentation {
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         this.arguments = arguments == null ? new Bundle() : arguments;
+        androidx.test.platform.app.InstrumentationRegistry.registerInstance(this, this.arguments);
         start();
     }
 

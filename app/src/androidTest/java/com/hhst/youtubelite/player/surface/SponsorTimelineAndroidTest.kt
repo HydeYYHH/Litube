@@ -17,7 +17,6 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.extension.ExtensionManager
 import com.hhst.youtubelite.extension.PreferenceKeys
@@ -61,15 +60,16 @@ class SponsorTimelineAndroidTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val loaded = CountDownLatch(1)
         val videoId = "sponsor0001"
-        val payload = Gson().toJson(listOf(mapOf("videoID" to videoId, "segments" to
+        val payload = com.hhst.youtubelite.core.TestJson.any(listOf(mapOf("videoID" to videoId, "segments" to
             categoryPrefs.keys.map { category -> mapOf("category" to category,
                 "actionType" to if (category == "poi_highlight") "poi" else "skip",
                 "segment" to if (category == "poi_highlight") listOf(50, 50) else listOf(20, 80)) })))
         var requestChecked = false
         val http = OkHttpClient.Builder().addInterceptor { chain ->
             assertEquals(listOf("skip", "poi"), chain.request().url.queryParameterValues("actionType"))
-            assertEquals(categoryPrefs.keys.toList(), Gson().fromJson(
-                chain.request().url.queryParameter("categories"), Array<String>::class.java).toList())
+            assertEquals(categoryPrefs.keys.toList(), kotlinx.serialization.json.Json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer(String::class.java)),
+                chain.request().url.queryParameter("categories")!!))
             requestChecked = true
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
                 .message("OK").body(payload.toResponseBody("application/json".toMediaType())).build()
@@ -114,7 +114,7 @@ class SponsorTimelineAndroidTest {
             assertEquals(expectedColors.last(), edges[0, edges.height / 2].toArgb())
             assertEquals(expectedColors.last(), edges[edges.width - 1, edges.height / 2].toArgb())
             DeviceEvidence.captureScene("sponsorblock-nine-category-colors")
-            DeviceEvidence.writeJson("sponsorblock-colors.json", Gson().toJson(mapOf(
+            DeviceEvidence.writeJson("sponsorblock-colors.json", com.hhst.youtubelite.core.TestJson.any(mapOf(
                 "requestIncludesSkipAndPoi" to true, "allNineCategoryPixelsMatch" to true,
                 "zeroDurationHighlightVisible" to true, "boundaryHighlightsVisible" to true)))
         } finally {

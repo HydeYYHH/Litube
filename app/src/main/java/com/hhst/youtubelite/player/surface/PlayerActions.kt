@@ -1,10 +1,11 @@
 package com.hhst.youtubelite.player.surface
 
 import com.hhst.youtubelite.player.QueueItem
+import com.hhst.youtubelite.player.QueueOwner
 
 /**
- * Playback intents handled by [player.PlayerViewModel].
- * Window/activity side effects live on [PlayerWindowActions].
+ * Playback intents handled by [player.PlayerViewModel]; window/activity side
+ * effects live on [PlayerWindowActions].
  */
 interface PlayerPlaybackActions {
     fun onPlayPause()
@@ -12,13 +13,17 @@ interface PlayerPlaybackActions {
     fun onToggleControls()
     fun onHideControls()
     fun onFullscreenToggle()
+    /** A swipe exit keeps the current direction; the button retains its own policy. */
+    fun onFullscreenSwipeExit() = onFullscreenToggle()
+    /** Downward exit restores the presentation from before fullscreen entry. */
+    fun onFullscreenSwipeRestore() = onFullscreenToggle()
     fun onSpeedHoldStart()
     fun onSpeedHoldEnd()
     fun onHint(text: String?)
     fun onSpeed(speed: Float)
     fun onQuality(label: String?)
     fun onSubtitle(trackKey: String?)
-    fun onLoop()
+    fun onLoopMode(mode: com.hhst.youtubelite.player.engine.LoopMode)
     fun onNext()
     fun onPrevious()
     fun onDoubleTapSeek(offsetMs: Long)
@@ -26,45 +31,51 @@ interface PlayerPlaybackActions {
     fun onScrubCommit(offsetMs: Long)
     /** Time-bar drag preview: non-null target shows a bubble, null ends the drag. */
     fun onTimeBarPreview(targetMs: Long?)
-    /** Time-bar drag released. */
     fun onTimeBarCommit()
     fun onLockToggle()
     fun onAudioTrack(trackKey: String?)
-    /** Subtitle appearance changed (applies live and persists). */
+    /** May trigger a bounded audio-catalog supplement. */
+    fun onAudioMenuOpened() {}
+    /** Applies live and persists. */
     fun onSubtitleStyle(style: SubtitleStyle)
     fun onQueueItem(url: String)
     fun onResize(mode: ResizeMode)
     fun onQueueEnabled(enabled: Boolean)
     fun onQueueClear()
     fun onQueueRemove(videoId: String)
-    /** Queue sheet drag-reorder commit. */
-    fun onQueueMove(fromIndex: Int, toIndex: Int)
+    /**
+     * [owner] is the queue owner captured at drag start; a commit from a
+     * switched identity is dropped, never applied to the newly active queue.
+     */
+    fun onQueueMove(fromIndex: Int, toIndex: Int, owner: QueueOwner? = null)
     /** Page media-menu "Add to queue". */
     fun onQueueAdd(item: QueueItem)
+    /** Video action panel "Play next": after the playing entry, moving an existing entry. */
+    fun onQueueAddNext(item: QueueItem)
     fun onRetry()
+    fun onErrorDetails() {}
     fun onCastStop()
     fun onCastDevice(id: String)
-    fun onShareCastLink()
+    fun onCastFailureDismiss() {}
+    fun onShareCastLink(onReady: () -> Unit = {})
     fun onCloseCastLink()
     fun onMiniClose()
     fun onMiniRestore()
-    /** User cancelled the sponsor pre-skip countdown. */
     fun onSponsorSkipCancel()
-    /** User tapped the countdown card: skip the pending segment now. */
+    /** User tapped the countdown card. */
     fun onSponsorSkipNow()
     /** Manual skip via the chip while inside a suppressed segment. */
     fun onSponsorChipSkip()
     /**
-     * Cast dialog opened/closed: gates Cast device discovery scanning, which
-     * is too battery-hungry to leave running outside the dialog. No-op by
-     * default so implementors that do not own cast discovery stay unaffected.
+     * Gates cast device discovery scanning, too battery-hungry to leave
+     * running outside the dialog. No-op by default so implementors that do
+     * not own cast discovery stay unaffected.
      */
     fun onCastDiscovery(enabled: Boolean) {}
     /** Finger up: gesture overlays (edge sliders) clear. */
     fun onGestureEnd()
 }
 
-/** Activity-window side effects: back, brightness, volume, PiP, share. */
 interface PlayerWindowActions {
     fun onBack()
     fun onBrightness(delta: Float)
@@ -77,7 +88,6 @@ interface PlayerWindowActions {
     fun onGestureEnd() {}
 }
 
-/** Surface contract: playback intents + window side effects. */
 interface PlayerSurfaceCallbacks : PlayerPlaybackActions, PlayerWindowActions {
     override fun onGestureEnd()
 }
@@ -94,10 +104,10 @@ class PlayerCallbackBridge(
         window.onGestureEnd()
     }
 
-    override fun onShareCastLink() {
-        // One user action, two surfaces: ensure the proxy serves the current
-        // source, then hand the URL to the system share sheet.
-        playback.onShareCastLink()
-        window.shareCastLink()
+    override fun onShareCastLink(onReady: () -> Unit) {
+        playback.onShareCastLink {
+            window.shareCastLink()
+            onReady()
+        }
     }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="zero">و%1$d روابط أخرى</item>
+        <item quantity="one">ورابط واحد آخر</item>
+        <item quantity="two">ورابطان آخران</item>
+        <item quantity="few">و%1$d روابط أخرى</item>
+        <item quantity="many">و %1$d رابطًا آخر</item>
+        <item quantity="other">و%1$d رابط آخر</item>
+    </plurals>
+</resources>

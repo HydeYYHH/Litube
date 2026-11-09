@@ -32,6 +32,7 @@ object DiagnosticNetwork {
             val response = try { chain.proceed(chain.request()) } catch (failure: IOException) {
                 trace.finish("FAILURE", failure); throw failure
             }
+            trace.response(response.code)
             val body = response.body ?: run { trace.finish("SUCCESS"); return@Interceptor response }
             val wrapped = object : ResponseBody() {
                 private val stream = object : ForwardingSource(body.source()) {
@@ -83,6 +84,7 @@ object DiagnosticNetwork {
         private var requestSentAt: Long? = null
         private var headersAt: Long? = null
         @Volatile private var consumerReading = false
+        fun response(code: Int) { status = code }
         private val watchdog = DiagnosticProgressWatchdog(30_000, { state, duration ->
             AppLog.event(AppLog.Category.DOWNLOADER, "transfer_progress.$state", state() + mapOf("reason" to "no_byte_progress", "duration_ms" to duration),
                 critical = state == "stalled", context = context)
@@ -124,18 +126,27 @@ object DiagnosticNetwork {
         }
         fun finish(outcome: String, failure: Throwable? = null) {
             if (!finished.compareAndSet(false, true)) return
-            val fields = state() + mapOf("outcome" to outcome, "cancelled" to call.isCanceled())
-            if (outcome == "FAILURE" && !call.isCanceled() || (status ?: 0) >= 400 && status !in call.request().tag(Policy::class.java)?.acceptedStatuses.orEmpty())
+            val rejected = (status ?: 0) >= 400 && status !in call.request().tag(Policy::class.java)?.acceptedStatuses.orEmpty()
+            val result = when {
+                rejected -> "FAILURE"
+                call.isCanceled() -> "CANCELLED"
+                outcome == "CANCELLED" -> "ABANDONED"
+                else -> outcome
+            }
+            val fields = state() + mapOf("outcome" to result, "cancelled" to call.isCanceled()) +
+                if (rejected) mapOf("reason" to "http_rejected") else emptyMap()
+            if (result == "FAILURE")
                 AppLog.event(AppLog.Category.NETWORK, "request.failed", fields, failure, true, context)
             else AppLog.detail(AppLog.Category.NETWORK, "request.end", fields, context)
             active.remove(call)
-            watchdog.reset(if (outcome == "SUCCESS") "completed" else "cancelled")
+            watchdog.reset(if (result == "SUCCESS") "completed" else if (result == "FAILURE") "failed" else "cancelled")
             AppLog.endContext(context)
         }
         val listener = @Suppress("UNUSED_PARAMETER") object : EventListener() {
             override fun callStart(call: Call) {
                 if (active.size > 256) active.entries.firstOrNull { it.key != call }?.let { active.remove(it.key) }
                 phase("start", mapOf("method" to call.request().method,
+                    "call_timeout_ms" to java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(call.timeout().timeoutNanos()),
                     "range" to call.request().header("Range")?.takeIf { it.matches(Regex("bytes=\\d+-\\d*")) }))
             }
             override fun dnsStart(call: Call, domainName: String) { dnsAt = SystemClock.elapsedRealtime(); phase("dns_start") }

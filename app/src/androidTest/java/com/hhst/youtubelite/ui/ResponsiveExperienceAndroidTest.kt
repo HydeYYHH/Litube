@@ -7,7 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.extension.ExtensionManager
+import com.hhst.youtubelite.extension.PreferenceKeys
+import com.hhst.youtubelite.settings.presentation.AdvancedScreen
+import com.hhst.youtubelite.settings.presentation.HapticsSettings
 import com.hhst.youtubelite.ui.about.AboutScreen
-import com.hhst.youtubelite.ui.extension.ExtensionScreen
-import com.hhst.youtubelite.ui.extension.ExtensionViewModel
 import com.hhst.youtubelite.ui.theme.AppTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -31,10 +32,19 @@ import org.koin.core.context.GlobalContext
 class ResponsiveExperienceAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun extensionUsesMeasuredWebSettingsTypographyAndRowHeight() {
+    @Test fun advancedUsesSharedSettingsTypographyAndRowHeight() {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
-                AppTheme { ExtensionScreen({}) }
+                AppTheme {
+                    AdvancedScreen(
+                        preferences = emptyMap(),
+                        onToggle = { _, _ -> },
+                        onBack = {},
+                        onOpenData = {},
+                        onOpenDownloads = {},
+                        haptics = HapticsSettings(30) {},
+                    )
+                }
             }
         }
         val label = compose.onNodeWithText(compose.activity.getString(R.string.interface_category))
@@ -42,10 +52,12 @@ class ResponsiveExperienceAndroidTest {
         label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         assertEquals(14.sp, results.single().layoutInput.style.fontSize)
         assertEquals(20.sp, results.single().layoutInput.style.lineHeight)
-        assertEquals(FontWeight.Normal, results.single().layoutInput.style.fontWeight)
-        assertEquals(48f, label.fetchSemanticsNode().boundsInRoot.height, 1f)
+        assertEquals(FontWeight.Medium, results.single().layoutInput.style.fontWeight)
+        val row = compose.onNodeWithTag("settings-toggle-${PreferenceKeys.ENABLE_DISPLAY_DISLIKES}")
+        row.performScrollTo().assertIsDisplayed()
+        assertTrue("Touch target too short", row.fetchSemanticsNode().boundsInRoot.height >= 48f)
         results.clear()
-        compose.onNodeWithText(compose.activity.getString(R.string.extension))
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_advanced))
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         assertEquals(20.sp, results.single().layoutInput.style.fontSize)
         assertEquals(FontWeight.Medium, results.single().layoutInput.style.fontWeight)
@@ -68,27 +80,30 @@ class ResponsiveExperienceAndroidTest {
         assertTrue("Touch target too short", bounds.height >= 48f)
     }
 
-    @Test fun extensionSliderSupportsZeroAndResetWithLargeFont() {
+    @Test fun advancedSliderSupportsZeroWithLargeFont() {
         val manager = GlobalContext.get().get<ExtensionManager>()
         val previous = manager.allPreferences()
         val strength = manager.hapticStrength()
-        val model = ExtensionViewModel(manager)
         try {
             compose.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
-                    AppTheme { ExtensionScreen({}, viewModel = model) }
+                    AppTheme {
+                        AdvancedScreen(
+                            preferences = previous,
+                            onToggle = { key, enabled -> manager.setEnabled(key, enabled) },
+                            onBack = {},
+                            onOpenData = {},
+                            onOpenDownloads = {},
+                            haptics = HapticsSettings(manager.hapticStrength()) { manager.setHapticStrength(it) },
+                        )
+                    }
                 }
             }
-            compose.onNodeWithText(compose.activity.getString(R.string.interface_category)).performClick()
             val slider = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
             slider.performScrollTo().assertIsDisplayed()
             slider.performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
             compose.waitForIdle()
             assertEquals(0, manager.hapticStrength())
-            compose.onNodeWithContentDescription(compose.activity.getString(R.string.reset_all_settings)).performClick()
-            compose.onNodeWithText(compose.activity.getString(R.string.confirm)).performClick()
-            compose.waitForIdle()
-            assertEquals(30, manager.hapticStrength())
         } finally {
             previous.forEach(manager::setEnabled)
             manager.setHapticStrength(strength)

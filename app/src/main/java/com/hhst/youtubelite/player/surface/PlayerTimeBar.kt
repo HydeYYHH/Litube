@@ -22,14 +22,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 
 /**
- * 2 dp time bar with buffered + SponsorBlock marks.
- *
  * Position and buffered position arrive as [State]s and are read inside the
  * draw scope, so a 4 Hz playback tick only redraws the bar instead of
  * recomposing the caller's tree.
@@ -50,6 +49,7 @@ fun PlayerTimeBar(
     onPreview: (Long?) -> Unit = {},
     /** Drag released (gesture overlay hides even when the seek is a no-op). */
     onCommit: () -> Unit = {},
+    chapterStarts: List<Long> = emptyList(),
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
@@ -63,6 +63,12 @@ fun PlayerTimeBar(
             .semantics {
                 contentDescription = timeBarDescription
                 progressBarRangeInfo = ProgressBarRangeInfo(announcedFraction, 0f..1f)
+                // TalkBack and switch access adjust the bar through SetProgress; the
+                // seek lands directly, the drag preview stays a pointer-only path.
+                if (durationMs > 0) setProgress { target ->
+                    onSeek((target.coerceIn(0f, 1f) * durationMs).toLong())
+                    true
+                }
             }
             .pointerInput(durationMs) {
                 if (durationMs <= 0L) return@pointerInput
@@ -134,6 +140,10 @@ fun PlayerTimeBar(
                 topLeft = Offset(startX, y),
                 size = Size(width, thickness),
             )
+        }
+        if (durationMs > 0) chapterStarts.distinct().filter { it > 0 && it < durationMs }.forEach { start ->
+            val x = size.width * (start.toFloat() / durationMs)
+            drawRect(androidx.compose.ui.graphics.Color.Black, Offset(x - 1.dp.toPx(), y), Size(2.dp.toPx(), thickness))
         }
         val thumbR = if (dragging) 7.dp.toPx() else 5.dp.toPx()
         drawCircle(

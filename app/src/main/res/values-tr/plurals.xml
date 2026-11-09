@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">ve %1$d bağlantı daha</item>
+        <item quantity="other">ve %1$d bağlantı daha</item>
+    </plurals>
+</resources>

@@ -73,7 +73,8 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerLowest = DarkBackground,
     surfaceContainerLow = Color(0xFF212121),
     surfaceContainer = Color(0xFF212121),
-    surfaceContainerHigh = Color(0xFF212121),
+    // M3 dialog/menu fallback; explicit app overlays use AppStyle.Panel.
+    surfaceContainerHigh = DarkSurface,
     surfaceContainerHighest = DarkSurfaceVariant,
     inverseSurface = LightSurface,
     inverseOnSurface = LightOnSurface,
@@ -89,7 +90,7 @@ private val DarkColorScheme = darkColorScheme(
  */
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = YoutubeAppearance.dark ?: isSystemInDarkTheme(),
+    darkTheme: Boolean = AppAppearance.dark ?: isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -106,10 +107,10 @@ fun AppTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
+    com.hhst.youtubelite.ui.design.AppHapticFeedback { MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
-        shapes = YoutubeStyle.Shapes,
+        shapes = AppStyle.Shapes,
         content = content,
-    )
+    ) }
 }

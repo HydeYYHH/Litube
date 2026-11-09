@@ -22,7 +22,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
 
-/** File-backed MP4/fMP4 reads. Scanning retains metadata; muxing retains only the current sample. */
+/** File-backed MP4/fMP4 reads; scanning retains metadata, muxing retains only the current sample. */
 object MediaFileIo {
     data class Track(
         val id: Int,

@@ -18,7 +18,6 @@ data class SubtitleStyle(
     val horizontal: Float = 0f,
     val background: Background = Background.SEMI,
     val bold: Boolean = false,
-    /** Packed ARGB text color. */
     val colorArgb: Int = COLOR_WHITE,
 ) {
     enum class Background { NONE, SEMI, OPAQUE }
@@ -106,7 +105,7 @@ data class SubtitleStyle(
             return normalized.toLongOrNull(16)?.toInt()
         }
 
-        /** User-facing `#RRGGBB` (alpha dropped when opaque). */
+        /** User-facing `#RRGGBB` (alpha never shown). */
         fun formatColorHex(argb: Int): String {
             val rgb = argb and 0x00FFFFFF
             return "#%06X".format(rgb)

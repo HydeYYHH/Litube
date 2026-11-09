@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,8 +36,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.core.DownloadPrefs
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -59,6 +60,7 @@ fun SettingsDataScreen(
     onReloadPages: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var pendingImport by remember { mutableStateOf<SettingsBackupData?>(null) }
     var importDone by remember { mutableStateOf(false) }
     val fileOperations = remember { arrayOfNulls<DiagnosticOperation>(2) }
@@ -73,19 +75,41 @@ fun SettingsDataScreen(
             operation?.finish(DiagnosticOutcome.CANCELLED, "file_picker_cancelled")
             return@rememberLauncherForActivityResult
         }
-        val result = runCatching {
-            context.contentResolver.openOutputStream(uri)?.use {
-                it.write(SettingsBackup.export(manager, downloadPrefs).toByteArray())
-            } != null
+        scope.launch {
+            val written = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        it.write(SettingsBackup.export(manager, downloadPrefs).toByteArray())
+                    } != null
+                }.getOrDefault(false)
+            }
+            operation?.finish(if (written) DiagnosticOutcome.SUCCESS else DiagnosticOutcome.FAILURE,
+                if (written) "settings_saved" else "file_write_failed")
+            Toast.makeText(
+                context,
+                if (written) R.string.settings_export_done else R.string.settings_export_failed,
+                Toast.LENGTH_SHORT,
+            ).show()
         }
-        val written = result.getOrDefault(false)
-        operation?.finish(if (written) DiagnosticOutcome.SUCCESS else DiagnosticOutcome.FAILURE,
-            if (written) "settings_saved" else "file_write_failed", result.exceptionOrNull())
-        Toast.makeText(
-            context,
-            if (written) R.string.settings_export_done else R.string.settings_export_failed,
-            Toast.LENGTH_SHORT,
-        ).show()
+    }
+
+    /** Reads at most [maxChars]; null when oversized or unreadable. */
+    suspend fun readBoundedText(context: android.content.Context, uri: android.net.Uri,
+        maxChars: Int = 512 * 1024): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val out = StringBuilder()
+                val reader = java.io.InputStreamReader(stream, Charsets.UTF_8)
+                val buf = CharArray(8192)
+                while (true) {
+                    val n = reader.read(buf)
+                    if (n < 0) break
+                    out.append(buf, 0, n)
+                    if (out.length > maxChars) return@runCatching null
+                }
+                out.toString()
+            }
+        }.getOrNull()
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -96,18 +120,17 @@ fun SettingsDataScreen(
             operation?.finish(DiagnosticOutcome.CANCELLED, "file_picker_cancelled")
             return@rememberLauncherForActivityResult
         }
-        val result = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
-        }
-        val json = result.getOrNull()
-        val backup = json?.let { SettingsBackup.parse(it) }
-        operation?.finish(if (backup == null) DiagnosticOutcome.FAILURE else DiagnosticOutcome.SUCCESS,
-            if (backup == null) "settings_read_failed" else "settings_read", result.exceptionOrNull(),
-            mapOf("bytes" to json?.toByteArray()?.size))
-        if (backup == null) {
-            Toast.makeText(context, R.string.settings_import_failed, Toast.LENGTH_SHORT).show()
-        } else {
-            pendingImport = backup
+        scope.launch {
+            val json = readBoundedText(context, uri)
+            val backup = json?.let { SettingsBackup.parse(it) }
+            operation?.finish(if (backup == null) DiagnosticOutcome.FAILURE else DiagnosticOutcome.SUCCESS,
+                if (backup == null) "settings_read_failed" else "settings_read",
+                fields = mapOf("bytes" to (json?.length ?: -1)))
+            if (backup == null) {
+                Toast.makeText(context, R.string.settings_import_failed, Toast.LENGTH_SHORT).show()
+            } else {
+                pendingImport = backup
+            }
         }
     }
 
@@ -165,7 +188,7 @@ fun SettingsDataScreen(
         val scheme = MaterialTheme.colorScheme
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            containerColor = scheme.surface,
+            containerColor = com.hhst.youtubelite.ui.theme.AppStyle.Panel,
             titleContentColor = scheme.onSurface,
             textContentColor = scheme.onSurfaceVariant,
             title = { Text(stringResource(R.string.settings_import_confirm_title)) },

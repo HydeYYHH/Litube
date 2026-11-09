@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.downloader.engine
 
-/** Test double recording notification port traffic. Lives in the test source set. */
 class RecordingNotificationPort(
     var enabled: Boolean = true,
 ) : DownloadNotificationPort {

@@ -1,7 +1,7 @@
 package com.hhst.youtubelite.downloader.core
 
-import com.hhst.youtubelite.browser.PageKind
-import com.hhst.youtubelite.browser.UrlPolicy
+import com.hhst.youtubelite.core.PageKind
+import com.hhst.youtubelite.core.UrlPolicy
 import com.hhst.youtubelite.extractor.VideoId
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference

@@ -1,7 +1,8 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
-import com.google.gson.JsonParser
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -17,14 +18,14 @@ class DiagnosticArchiveTest {
         context = DiagnosticContext(videoId = "Wh9klmWAm5s", taskId = "task-1"),
         fields = mapOf("phase" to "awaiting_first_frame"))
     @Test fun archiveIsParseableSortedAndContainsLineProvenance() {
-        val target = temp.newFile("archive.zip"); val gson = Gson()
+        val target = temp.newFile("archive.zip")
         val first = row(1).copy(incidentId = "incident-1")
-        DiagnosticArchive.write(target, mapOf("a" to listOf(row(2), first, first.copy(recordKind = "incident_start")).joinToString("\n") { gson.toJson(it) },
-            "b" to gson.toJson(row(1, 999_999, "ejs"))), mapOf("build_id" to "fixture"), emptyMap())
+        DiagnosticArchive.write(target, mapOf("a" to listOf(row(2), first, first.copy(recordKind = "incident_start")).joinToString("\n") { DiagnosticJson.encode(it) },
+            "b" to DiagnosticJson.encode(row(1, 999_999, "ejs"))), mapOf("build_id" to "fixture"), emptyMap())
         ZipFile(target).use { zip ->
             for (name in listOf("summary.md", "timeline.jsonl", "context.json", "manifest.json", "incidents/incident-1.jsonl")) assertNotNull(zip.getEntry(name))
-            val lines = zip.getInputStream(zip.getEntry("timeline.jsonl")).bufferedReader().readLines().map { JsonParser.parseString(it).asJsonObject }
-            assertEquals(3, lines.size); assertEquals("ejs", lines.first().get("process").asString)
+            val lines = zip.getInputStream(zip.getEntry("timeline.jsonl")).bufferedReader().readLines().map { DiagnosticJson.json.parseToJsonElement(it) as JsonObject }
+            assertEquals(3, lines.size); assertEquals("ejs", lines.first()["process"]!!.jsonPrimitive.content)
             val summary = zip.getInputStream(zip.getEntry("summary.md")).bufferedReader().readText()
             assertTrue(summary.contains("Wh9klmWAm5s")); assertTrue(summary.contains("awaiting_first_frame"))
             assertTrue(summary.contains("timeline.jsonl:2")); assertTrue(summary.contains("incidents/incident-1.jsonl:"))
@@ -39,20 +40,20 @@ class DiagnosticArchiveTest {
             assertEquals(2, timeline.lines().count { it.isNotBlank() })
             assertFalse(timeline.contains("private-response-body")); assertFalse(timeline.contains("secret"))
             assertTrue(timeline.contains("a.b.method")); assertTrue(timeline.contains("source_line"))
-            val manifest = JsonParser.parseString(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()).asJsonObject
-            assertEquals(2, manifest.get("discarded_legacy_fields").asInt)
+            val manifest = DiagnosticJson.json.parseToJsonElement(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()) as JsonObject
+            assertEquals(2, manifest["discarded_legacy_fields"]!!.jsonPrimitive.int)
         }
     }
     @Test fun malformedAndOverlongRowsAreCountedAndV2IsRedactedAgain() {
-        val target = temp.newFile("unsafe.zip"); val gson = Gson()
+        val target = temp.newFile("unsafe.zip")
         val row = row(1).copy(fields = mapOf("cookie" to "credential", "url" to "https://host/path?sig=secret"),
             error = DiagnosticFailure("error-1", listOf(DiagnosticCause("java.io.IOException", null, "private-response-body", listOf("response text")))))
-        DiagnosticArchive.write(target, mapOf("a" to gson.toJson(row) + "\n{}\n" + "a".repeat(64_001)), emptyMap(), emptyMap())
+        DiagnosticArchive.write(target, mapOf("a" to DiagnosticJson.encode(row) + "\n{}\n" + "a".repeat(64_001)), emptyMap(), emptyMap())
         ZipFile(target).use { zip ->
             val timeline = zip.getInputStream(zip.getEntry("timeline.jsonl")).bufferedReader().readText()
             assertFalse(timeline.contains("credential")); assertFalse(timeline.contains("private-response-body")); assertFalse(timeline.contains("sig=secret"))
-            val manifest = JsonParser.parseString(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()).asJsonObject
-            assertEquals(2, manifest.get("invalid_rows").asInt)
+            val manifest = DiagnosticJson.json.parseToJsonElement(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText()) as JsonObject
+            assertEquals(2, manifest["invalid_rows"]!!.jsonPrimitive.int)
         }
     }
     @Test fun segmentsRotateAndActiveFilesSurviveOtherOwnersCleanup() {

@@ -22,10 +22,8 @@ import com.hhst.youtubelite.core.PipSupport
 import kotlin.math.roundToInt
 
 /**
- * Activity-window side effects for the player overlay.
- *
- * Brightness origin is captured on the first gesture and restored when the
- * player hides. Playback intents stay on [PlayerPlaybackActions].
+ * Activity-window side effects for the player overlay. Brightness origin is captured on the
+ * first gesture and restored when the player hides. Playback intents stay on [PlayerPlaybackActions].
  */
 class PlayerWindowHost(
     private val activity: Activity?,
@@ -46,6 +44,10 @@ class PlayerWindowHost(
     private var volumeLevel: Float? = null
     private var lastVolumeSet: Int? = null
     private var lastBrightnessSet: Float? = null
+    private var orientationBeforeGesture: Int? = null
+    private var wasFullscreen = false
+    private var orientationBeforeFullscreenEntry: Int? = null
+    private var entryConfigurationOrientation = android.content.res.Configuration.ORIENTATION_UNDEFINED
 
     override fun onBack() = back()
 
@@ -132,17 +134,44 @@ class PlayerWindowHost(
         window.attributes = lp
     }
 
-    fun applyImmersive(fullscreen: Boolean, videoWidth: Int = 0, videoHeight: Int = 0) {
+    fun applyImmersive(fullscreen: Boolean, videoWidth: Int = 0, videoHeight: Int = 0,
+        keepOrientation: Boolean = false, restoreEntryOrientation: Boolean = false) {
         val act = activity ?: return
-        if (fullscreen) {
-            act.requestedOrientation = if (videoHeight > videoWidth && videoHeight > 0) {
+        if (fullscreen && !wasFullscreen) {
+            orientationBeforeFullscreenEntry = act.requestedOrientation
+            entryConfigurationOrientation = act.resources.configuration.orientation
+        }
+        wasFullscreen = fullscreen
+        // Android owns the rotation itself; do not stack a custom rotation or a screenshot fade.
+        if (act.window.attributes.rotationAnimation != android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE) {
+            act.window.attributes = act.window.attributes.apply {
+                rotationAnimation = android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE
+            }
+        }
+        // Capture before button entry: a later swipe exit must not save SENSOR_LANDSCAPE
+        // as the orientation to restore on the next button exit.
+        if ((fullscreen || keepOrientation) && orientationBeforeGesture == null) orientationBeforeGesture = act.requestedOrientation
+        val orientation = if (keepOrientation) {
+            ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        } else if (fullscreen) {
+            if (videoHeight > videoWidth && videoHeight > 0) {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             } else {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
-        } else {
-            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else (if (restoreEntryOrientation) {
+            // An earlier upward exit may have kept a different direction from the
+            // original button session; downward exit restores this entry.
+            val entry = orientationBeforeFullscreenEntry
+            if (entry == ActivityInfo.SCREEN_ORIENTATION_LOCKED &&
+                entryConfigurationOrientation != act.resources.configuration.orientation) {
+                if (entryConfigurationOrientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else entry ?: orientationBeforeGesture ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else orientationBeforeGesture ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED).also {
+            orientationBeforeGesture = null
         }
+        if (act.requestedOrientation != orientation) act.requestedOrientation = orientation
         refreshSystemBars(fullscreen)
     }
 
@@ -160,7 +189,8 @@ class PlayerWindowHost(
 
 /** Focus events, unlike player state, also change when a sheet or chooser closes. */
 @Composable
-internal fun PlayerWindowEffects(activity: Activity?, host: PlayerWindowHost, fullscreen: Boolean, width: Int, height: Int) {
+internal fun PlayerWindowEffects(activity: Activity?, host: PlayerWindowHost, fullscreen: Boolean, width: Int, height: Int,
+    keepOrientation: Boolean = false, restoreEntryOrientation: Boolean = false) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentFullscreen = rememberUpdatedState(fullscreen)
     DisposableEffect(activity, lifecycleOwner, host) {
@@ -178,5 +208,8 @@ internal fun PlayerWindowEffects(activity: Activity?, host: PlayerWindowHost, fu
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-    LaunchedEffect(fullscreen, width, height, host) { host.applyImmersive(fullscreen, width, height) }
+    val portraitFullscreen = fullscreen && height > width && height > 0
+    LaunchedEffect(fullscreen, portraitFullscreen, keepOrientation, restoreEntryOrientation, host) {
+        host.applyImmersive(fullscreen, width, height, keepOrientation, restoreEntryOrientation)
+    }
 }

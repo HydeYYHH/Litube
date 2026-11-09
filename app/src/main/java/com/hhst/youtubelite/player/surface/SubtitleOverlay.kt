@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 
 /** Base cue look (material bodyMedium); [SubtitleStyle.textScale] multiplies it. */
 private const val BASE_FONT_SP = 14f
+private const val BASE_LINE_HEIGHT_SP = 20f
 
-/** Background alpha per [SubtitleStyle.Background] style. */
 private fun SubtitleStyle.Background.alpha(): Float = when (this) {
     SubtitleStyle.Background.NONE -> 0f
     SubtitleStyle.Background.SEMI -> 0.6f
@@ -26,10 +26,9 @@ private fun SubtitleStyle.Background.alpha(): Float = when (this) {
 }
 
 /**
- * Subtitle cue overlay: styled text, placed by the caller via
- * [SubtitleStyle.verticalBias] / [SubtitleStyle.horizontal].
- * Each cue line hugs its own background; the column is width-constrained by
- * the caller so long lines wrap instead of running off-screen.
+ * Placed by the caller via [SubtitleStyle.verticalBias] / [SubtitleStyle.horizontal].
+ * The caller width-constrains the column so long lines wrap instead of running
+ * off-screen; each cue line hugs its own background.
  */
 @Composable
 fun SubtitleOverlay(
@@ -50,6 +49,8 @@ fun SubtitleOverlay(
                 text = line,
                 color = textColor,
                 fontSize = fontSp.sp,
+                // Scale wrapped/newline text too; the inherited theme line height stays fixed.
+                lineHeight = (BASE_LINE_HEIGHT_SP * style.textScale).sp,
                 fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
                 textAlign = TextAlign.Center,
                 modifier = Modifier

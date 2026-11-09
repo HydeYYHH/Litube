@@ -2,14 +2,12 @@ package com.hhst.youtubelite.extractor
 
 import com.hhst.youtubelite.core.YoutubeThumbnail
 
-/** Parses bare 11-char ids and common watch, shorts, and short-link URLs. */
 object VideoId {
     private val fromUrl = Regex(
         """(?:v=|=v/|/v/|/u/\w/|embed/|watch\?v=|shorts/|live/|youtu\.be/)([a-zA-Z0-9_-]{11})""",
     )
     private val bare = Regex("""^[a-zA-Z0-9_-]{11}$""")
 
-    /** Returns the 11-char id, or null if [input] cannot be parsed. */
     fun parse(input: String?): String? {
         if (input.isNullOrBlank()) return null
         val trimmed = input.trim()
@@ -24,10 +22,7 @@ object VideoId {
     fun thumbnailUrl(videoId: String): String =
         "https://${YoutubeThumbnail.HOST}/vi/$videoId/hqdefault.jpg"
 
-    /**
-     * Share/start offset from `t=` / `start=` (query or `#t=`).
-     * Invalid values are ignored so history resume can still apply.
-     */
+    /** Invalid `t=`/`start=` values are ignored so history resume can still apply. */
     fun startPositionMs(url: String?): Long? {
         if (url.isNullOrBlank()) return null
         val raw = timeParam(url) ?: return null
@@ -53,10 +48,6 @@ object VideoId {
 
     private val hashTParam = Regex("""[#&]t=([^&]+)""")
 
-    /**
-     * `t=` forms: `90`, `90s`, `1m30s`, `1h2m3s`.
-     * Matches player-hook.js `parseTime` (seconds unit may omit the `s`).
-     */
     private fun parseYoutubeTimeSeconds(text: String): Long? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null

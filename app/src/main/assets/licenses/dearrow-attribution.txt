@@ -1,0 +1,15 @@
+This application uses the DeArrow community database and API
+(https://sponsor.ajay.app/, https://dearrow-thumb.ajay.app/) operated by
+Ajay Ramaswamy (https://dearrow.ajay.app/).
+
+DeArrow community data is used under the SponsorBlock database and API
+license terms: CC BY-NC-SA 4.0, unless explicit permission is granted.
+Required attribution (from the upstream attribution template):
+"Uses SponsorBlock data licensed used under CC BY-NC-SA 4.0 from
+https://sponsor.ajay.app/.". Automating submissions against the service
+is prohibited; this client only reads branding data and performs no
+submissions, votes or other writes.
+
+API documentation: https://wiki.sponsor.ajay.app/w/API_Docs/DeArrow
+SponsorBlock source code: https://github.com/ajayyy/SponsorBlock
+DeArrow source code: https://github.com/ajayyy/DeArrow

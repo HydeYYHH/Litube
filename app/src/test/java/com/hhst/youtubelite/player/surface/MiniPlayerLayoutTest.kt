@@ -7,6 +7,28 @@ import org.junit.Test
 
 class MiniPlayerLayoutTest {
 
+    @Test fun collapse_requiresHorizontalOverscrollBeyondEitherWall() {
+        assertEquals(MiniPlayerLayout.CollapsedSide.RIGHT,
+            MiniPlayerLayout.collapseSide(220f, 190f, 360, 62f, 5f, 32f))
+        assertEquals(MiniPlayerLayout.CollapsedSide.LEFT,
+            MiniPlayerLayout.collapseSide(-40f, 190f, 360, -52f, 5f, 32f))
+        assertEquals(null, MiniPlayerLayout.collapseSide(158f, 190f, 360, 0f, 80f, 32f))
+        assertEquals(null, MiniPlayerLayout.collapseSide(190f, 190f, 360, 32f, 0f, 32f))
+        assertEquals(null, MiniPlayerLayout.collapseSide(-40f, 190f, 360, -52f, 100f, 32f))
+        assertEquals(null, MiniPlayerLayout.collapseSide(0f, 190f, 0, 60f, 0f, 32f))
+    }
+
+    @Test fun collapsedPlacement_leavesOnlyPeekVisibleAndScalesWithWindowSize() {
+        for (width in listOf(190f, 320f, 420f)) {
+            val left = MiniPlayerLayout.collapsedTranslationX(MiniPlayerLayout.CollapsedSide.LEFT,
+                158f, width, 800, 24f) + 158f
+            val right = MiniPlayerLayout.collapsedTranslationX(MiniPlayerLayout.CollapsedSide.RIGHT,
+                158f, width, 800, 24f) + 158f
+            assertEquals(24f, left + width, 0f)
+            assertEquals(24f, 800 - right, 0f)
+        }
+    }
+
     @Test
     fun computeSpec_compactScreenUsesMinWidthAndBottomDock() {
         val spec = MiniPlayerLayout.computeSpec(
@@ -16,14 +38,51 @@ class MiniPlayerLayoutTest {
         )
         assertEquals(190, spec.widthDp)
         assertEquals(spec.widthDp * 9 / 16, spec.heightDp)
-        assertEquals(MiniPlayerLayout.OUTER_MARGIN_DP, spec.rightMarginDp)
-        assertTrue(spec.bottomMarginDp >= 56 + MiniPlayerLayout.OUTER_MARGIN_DP)
+        assertEquals(12, spec.rightMarginDp)
+        assertEquals(56 + spec.rightMarginDp, spec.bottomMarginDp)
     }
 
     @Test
-    fun snapX_picksNearestEdge() {
-        assertEquals(0f, MiniPlayerLayout.snapX(10f, 0, 100, 400), 0f)
-        assertEquals(300f, MiniPlayerLayout.snapX(200f, 0, 100, 400), 0f)
+    fun snapX_picksNearestInsetEdgeAndCorrectsOldFlushPlacement() {
+        // A right-docked 190dp window in a 360dp parent starts at 158dp.
+        assertEquals(-146f, MiniPlayerLayout.snapX(-158f, 158, 190, 360, 12f), 0f)
+        assertEquals(0f, MiniPlayerLayout.snapX(12f, 158, 190, 360, 12f), 0f)
+        assertEquals(-146f, MiniPlayerLayout.snapX(-100f, 158, 190, 360, 12f), 0f)
+        assertEquals(0f, MiniPlayerLayout.snapX(-40f, 158, 190, 360, 12f), 0f)
+    }
+
+    @Test
+    fun computeSpec_marginGrowsWithWindowWidthAndKeepsBottomInset() {
+        for ((width, margin) in listOf(320 to 12, 420 to 14, 600 to 20, 840 to 24, 1280 to 24)) {
+            val spec = MiniPlayerLayout.computeSpec(width, 80, MiniPlayerLayout.NO_WIDTH_OVERRIDE_DP)
+            assertEquals(margin, spec.rightMarginDp)
+            assertEquals(80 + margin, spec.bottomMarginDp)
+        }
+    }
+
+    @Test
+    fun computeSpec_resizeLeavesRoomForBothMarginsOnNarrowScreens() {
+        for ((screenWidth, requestedWidth) in listOf(320 to 420, 200 to MiniPlayerLayout.NO_WIDTH_OVERRIDE_DP)) {
+            val spec = MiniPlayerLayout.computeSpec(screenWidth, 0, requestedWidth)
+            assertEquals(screenWidth - 2 * spec.rightMarginDp, spec.widthDp)
+        }
+    }
+
+    @Test
+    fun clampTranslation_keepsMarginsOnBothAxes() {
+        assertEquals(-146f, MiniPlayerLayout.clampTranslation(-1000f, 158, 190, 360, 12f), 0f)
+        assertEquals(0f, MiniPlayerLayout.clampTranslation(1000f, 158, 190, 360, 12f), 0f)
+        // 24dp system top inset plus 12dp of breathing room.
+        assertEquals(-564f, MiniPlayerLayout.clampTranslation(-1000f, 600, 106, 800, 36f, 12f), 0f)
+        assertEquals(82f, MiniPlayerLayout.clampTranslation(1000f, 600, 106, 800, 36f, 12f), 0f)
+        assertEquals(-20f, MiniPlayerLayout.clampTranslation(-20f, 600, 106, 800, 36f, 12f), 0f)
+    }
+
+    @Test
+    fun snapX_tightWindowReducesMarginsSymmetrically() {
+        assertEquals(5f, MiniPlayerLayout.snapX(-100f, 0, 190, 200, 12f), 0f)
+        assertEquals(5f, MiniPlayerLayout.snapX(100f, 0, 190, 200, 12f), 0f)
+        assertEquals(0f, MiniPlayerLayout.snapX(100f, 0, 190, 180, 12f), 0f)
     }
 
     @Test

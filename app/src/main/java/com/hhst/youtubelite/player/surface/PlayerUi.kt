@@ -1,6 +1,7 @@
 package com.hhst.youtubelite.player.surface
 
 import androidx.compose.ui.graphics.Color
+import com.hhst.youtubelite.extractor.Chapter
 import java.util.Locale
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -17,6 +18,30 @@ import kotlin.math.roundToInt
  * Keep Android View / Compose state out of here so unit tests stay JVM-cheap.
  */
 object PlayerUi {
+
+    enum class PlayPauseAction(val icon: Int, val label: Int) {
+        Play(R.drawable.ic_play, R.string.action_play),
+        Pause(R.drawable.ic_pause, R.string.action_pause),
+        Replay(R.drawable.ic_replay, R.string.action_replay),
+        Loading(R.drawable.ic_loading, R.string.a11y_loading);
+
+        /** Filled transport glyphs for the player controls; menus keep the outline resources. */
+        val playerIcon: Int get() = when (this) {
+            Play -> R.drawable.ic_player_play
+            Pause -> R.drawable.ic_player_pause
+            Replay, Loading -> icon
+        }
+    }
+
+    /** Shared by the full player, mini-player and system PiP actions. */
+    fun playPauseAction(state: PlayerUiState): PlayPauseAction = when {
+        state.ended -> PlayPauseAction.Replay
+        state.error == null && state.notice == null && (!state.prepared || state.loading ||
+            (state.userWantsPlay && !state.firstFrameRendered && !state.hasRenderedVideoFrame && !state.casting &&
+                (state.videoWidth > 0 || state.videoItag != null || state.qualities.isNotEmpty()))) -> PlayPauseAction.Loading
+        state.isPlaying -> PlayPauseAction.Pause
+        else -> PlayPauseAction.Play
+    }
 
     val YtRed = Color(0xFFFF0000)
     val Icon = Color.White.copy(alpha = 0.92f)
@@ -58,8 +83,8 @@ object PlayerUi {
     const val HINT_TOP_PAD_DP = 4
     const val CAST_BANNER_CLEAR_DP = 44
     /** Bottom-end cards (sponsor skip, zoom reset) above the bottom HUD. */
-    const val SPONSOR_CARD_BOTTOM_DP = 64
     const val ZOOM_RESET_BOTTOM_DP = 80
+    const val TRACK_CHIP_GAP_DP = 8
 
     val SpeedChoices = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
 
@@ -117,13 +142,6 @@ object PlayerUi {
         else -> BackStep.BrowserBack
     }
 
-    /**
-     * Embedded offset from the window top. The overlay lives one level above
-     * the inset-padded WebView container, so the page player's slot is the
-     * system-bar inset plus its viewport-relative top — reported live by
-     * player-hook.js (masthead ≈ 48 dp before the first report lands).
-     * Fullscreen is flush.
-     */
     fun playerTopOffsetDp(
         fullscreen: Boolean,
         reportedTopDp: Int? = null,
@@ -133,7 +151,7 @@ object PlayerUi {
         return (insetTopDp + (reportedTopDp ?: EMBEDDED_TOP_MARGIN_DP)).coerceAtLeast(0)
     }
 
-    /** Seek / volume / brightness hint inset: 12% of the player width. */
+    /** Inset for the seek / volume / brightness hints. */
     fun gestureSideInsetDp(widthDp: Int, insetDp: Int = 0): Int =
         maxOf((widthDp.coerceAtLeast(0) * 12 / 100).coerceAtLeast(24), insetDp.coerceAtLeast(0))
 
@@ -144,7 +162,7 @@ object PlayerUi {
     fun hudSidePadDp(widthDp: Int, chromePadDp: Int = 0, insetDp: Int = 0): Int =
         (gestureSideInsetDp(widthDp, insetDp) - chromePadDp.coerceAtLeast(0)).coerceAtLeast(8)
 
-    /** Embedded height: JS-reported page-player height, else 16:9 of [widthDp]. */
+    /** [pageHeightDp] comes from the page's JS; absent it, fall back to 16:9. */
     fun embeddedHeightDp(pageHeightDp: Int?, widthDp: Int): Int {
         val reported = pageHeightDp ?: 0
         if (reported > 0) return reported
@@ -216,7 +234,6 @@ object PlayerUi {
         return if (declaredHeight > 0 && declaredHeight != videoHeight) decoded else declared
     }
 
-    /** Quality chip: the pin when set, else `Auto` plus [playingQuality]. */
     fun qualityButtonLabel(
         pinned: String?,
         active: String?,
@@ -228,7 +245,6 @@ object PlayerUi {
         return if (current != null) "$autoPrefix $current" else autoPrefix
     }
 
-    /** Human-readable language name; falls back to the raw code. */
     fun languageLabel(code: String): String {
         if (code.isBlank()) return code
         val name = Locale.forLanguageTag(code.replace('_', '-'))
@@ -240,6 +256,14 @@ object PlayerUi {
     fun progressFraction(positionMs: Long, durationMs: Long): Float {
         if (durationMs <= 0L) return 0f
         return (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+    }
+
+    fun chapterIndexAt(chapters: List<Chapter>, positionMs: Long): Int {
+        var index = -1
+        chapters.forEachIndexed { i, chapter ->
+            if (positionMs >= chapter.startSeconds * 1000L) index = i
+        }
+        return index
     }
 
     fun bufferedFraction(bufferedPositionMs: Long, durationMs: Long): Float =
@@ -302,29 +326,19 @@ object PlayerUi {
     fun lockVisible(fullscreen: Boolean, mini: Boolean, locked: Boolean, controlsVisible: Boolean): Boolean =
         fullscreen && !mini && (locked || controlsVisible)
 
-    /**
-     * Lock *state* icon: locked shows a closed lock, unlocked an open lock.
-     */
     fun lockIconRes(locked: Boolean): Int =
         if (locked) R.drawable.ic_lock else R.drawable.ic_unlock
 
     fun lockContentDescriptionRes(locked: Boolean): Int =
         if (locked) R.string.unlock_screen else R.string.lock_screen
 
-    /**
-     * Horizontal inset for fullscreen chrome. Never below [FULLSCREEN_SIDE_DP],
-     * and grows to cover display cutouts / gesture insets.
-     */
+    /** Grows beyond [FULLSCREEN_SIDE_DP] to cover display cutouts / gesture insets. */
     fun fullscreenSideDp(insetDp: Int): Int = maxOf(FULLSCREEN_SIDE_DP, insetDp.coerceAtLeast(0))
 
-    /** Sheet body: 75% of the window, clamped 200–520 dp. */
     fun sheetMaxHeightDp(screenHeightDp: Int): Int =
         (screenHeightDp.coerceAtLeast(0) * 3 / 4).coerceIn(200, 520)
 
-    /**
-     * PiP window aspect as numerator/denominator, clamped to Android's
-     * 1:2.39 … 2.39:1 range. Unknown size falls back to 16:9.
-     */
+    /** Clamped to Android's 1:2.39 … 2.39:1 PiP range; unknown size falls back to 16:9. */
     fun pipAspect(width: Int, height: Int): Pair<Int, Int> {
         if (width <= 0 || height <= 0) return 16 to 9
         val w = width.toLong()
@@ -362,10 +376,7 @@ object PlayerUi {
     }
 }
 
-/**
- * Surface resize matching [androidx.media3.ui.AspectRatioFrameLayout] modes:
- * Fit / Fill / Zoom / Fixed Width / Fixed Height.
- */
+/** Mirrors [androidx.media3.ui.AspectRatioFrameLayout] resize modes. */
 enum class ResizeMode {
     Fit,
     Fill,
@@ -374,7 +385,6 @@ enum class ResizeMode {
     FixedHeight,
     ;
 
-    /** androidx.media3.ui.AspectRatioFrameLayout resize-mode ints. */
     fun exoResizeMode(): Int = when (this) {
         Fit -> 0
         FixedWidth -> 1

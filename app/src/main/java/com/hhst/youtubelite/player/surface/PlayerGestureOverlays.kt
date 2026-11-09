@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -31,8 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -103,7 +106,6 @@ fun GestureOverlays(
     }
 }
 
-/** Glass pill wrapper shared by every gesture overlay. */
 @Composable
 private fun GesturePill(
     modifier: Modifier = Modifier,
@@ -135,7 +137,7 @@ private fun arrowPhase(forward: Boolean, animate: Boolean): Animatable<Float, An
     return phase
 }
 
-/** Two triangles illuminate in the seek direction, with no per-frame path allocation. */
+/** Paths prebuilt per density so the draw phase allocates nothing. */
 @Composable
 private fun DirectionalArrows(forward: Boolean, phase: State<Float>, animate: Boolean) {
     val density = LocalDensity.current
@@ -156,12 +158,12 @@ private fun DirectionalArrows(forward: Boolean, phase: State<Float>, animate: Bo
             val count = paths.size.toFloat()
             val distance = (phase.value * count - order + count) % count
             val alpha = if (animate) .25f + .75f * (1f - abs(distance - .5f)).coerceIn(0f, 1f) else 1f
-            drawPath(path, Color.White.copy(alpha = alpha))
+            drawPath(path, Color.White.copy(alpha = alpha), style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 2.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
     }
 }
 
-/** Side oval and a fresh ripple for each tap; arrows keep running across accumulated seeks. */
 @Composable
 private fun DoubleTapSeekOverlay(state: GestureUi.DoubleTapSeek, modifier: Modifier = Modifier) {
     val label = PlayerUi.offsetHint(state.accumMs)
@@ -198,7 +200,6 @@ private fun DoubleTapSeekOverlay(state: GestureUi.DoubleTapSeek, modifier: Modif
     }
 }
 
-/** Long-press speed banner: steady label and flowing arrows. */
 @Composable
 private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     val animate = animationsEnabled()
@@ -212,32 +213,18 @@ private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     }
 }
 
-/** Scrub / timebar drag: target time + signed delta. */
+/** Shows only the signed offset; the time bar carries the target position. */
 @Composable
 private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modifier) {
     val deltaLabel = PlayerUi.offsetHint(state.deltaMs)
     GesturePill(modifier = modifier, shape = RoundedCornerShape(16.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = PlayerUi.formatTime(state.targetMs),
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = deltaLabel,
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp,
-            )
-        }
+        Text(deltaLabel, Modifier.testTag("player-seek-offset"), color = Color.White, fontSize = 14.sp)
     }
 }
 
 /**
- * Volume/brightness: a vertical rail on the opposite edge from the
- * gesture (left for volume, right for brightness) so the hand does not
- * cover the feedback. Fill uses scaleY so the track does not relayout
- * on every percent tick.
+ * Volume/brightness rail sits on the opposite edge from the gesture so the hand does
+ * not cover the feedback; fill uses scaleY so ticks don't relayout the track.
  */
 @Composable
 private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = Modifier) {
@@ -290,68 +277,47 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
     }
 }
 
-/** Sponsor pre-skip countdown card: "N s" tap-to-skip body with a cancel chip. */
+/**
+ * Sponsor pre-skip countdown; tapping anywhere cancels. The 48 dp touch minimum wraps
+ * the box invisibly — [onVisualHeight] reports drawn height so subtitles clear visible bounds only.
+ */
 @Composable
 fun SponsorCountdownCard(
     seconds: Int,
-    onSkipNow: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    onVisualHeight: (Int) -> Unit = {},
 ) {
-    // Presence is gated by the caller (countdown != null): the composable
-    // simply leaves the tree when the card hides.
-    Row(
-        modifier = modifier
-            .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
-            .clickable(onClick = onSkipNow)
-            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.sponsor_skip_in, seconds),
-            color = Color.White,
-            fontSize = 13.sp,
-        )
-        Text(
-            text = stringResource(R.string.cancel),
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
+    // Caller gates presence; the tag sits on the touch box so tests read the full
+    // touch layout, not the centered visual.
+    val cancelLabel = stringResource(R.string.cancel)
+    Box(modifier.testTag("player-sponsor-countdown")
+        .clickable(onClickLabel = cancelLabel, onClick = onCancel)
+        .minimumInteractiveComponentSize(),
+        contentAlignment = Alignment.Center) {
+        Row(
             modifier = Modifier
-                .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
-                .clickable(onClick = onCancel)
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-        )
-    }
-}
-
-/** Manual chip: "Skip ▸" inside a suppressed segment, "Jump ▸" for a highlight point. */
-@Composable
-fun SponsorSkipChip(
-    highlight: Boolean,
-    onSkip: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .background(PlayerUi.HintBg, RoundedCornerShape(12.dp))
-            .clickable(onClick = onSkip)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = stringResource(if (highlight) R.string.jump else R.string.sponsor_skip_chip),
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_next),
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(14.dp),
-        )
+                .testTag("player-sponsor-visual")
+                .onSizeChanged { onVisualHeight(it.height) }
+                .background(PlayerUi.HintBg, RoundedCornerShape(10.dp))
+                .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.sponsor_skip_in, seconds),
+                color = Color.White,
+                fontSize = 13.sp,
+            )
+            Text(
+                text = cancelLabel,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+        }
     }
 }

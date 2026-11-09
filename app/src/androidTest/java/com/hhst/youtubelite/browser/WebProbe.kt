@@ -12,7 +12,6 @@ import org.json.JSONTokener
 import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 
-/** Evaluates page state and waits for bounded conditions. */
 internal class WebProbe(private val view: () -> WebView) {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 

@@ -44,7 +44,6 @@ import com.hhst.youtubelite.downloader.ui.DownloadPresentation
 import com.hhst.youtubelite.downloader.ui.DownloadRowAction
 import com.hhst.youtubelite.downloader.ui.DownloadUiMapper
 import com.hhst.youtubelite.downloader.ui.DownloadViewModel
-import com.hhst.youtubelite.downloader.webview.DownloadWebStatus
 import com.hhst.youtubelite.extractor.VideoId
 import com.hhst.youtubelite.player.QueueItem
 import kotlinx.coroutines.flow.first
@@ -171,7 +170,7 @@ class DownloadFaultInjectionTest {
     }
 
     @Test
-    fun listNotificationAndWeb_shareTheSameRoomState() = runTest {
+    fun listAndNotificationShareTheSameRoomState() = runTest {
         val h = SchedulerHarness(33)
         val vm = DownloadViewModel(h.wired)
         val result = vm.enqueue(request("a"), "s1")
@@ -180,31 +179,25 @@ class DownloadFaultInjectionTest {
         h.wired.reportAssetPublished(id, 0, AssetKind.VIDEO, uri)
         val listed = vm.observeDownloads().first().single()
         val video = vm.observeVideo(vid("a")).first()
-        val web = DownloadWebStatus.payload(video)
         val batch = h.wired.observeBatch(result.batchId).first()!!
         val notif = DownloadNotificationController(RecordingNotificationPort()).payload(batch)
         assertTrue(listed.watchPageDownloaded)
         assertEquals(listed.watchPageDownloaded, video.watchPageDownloaded)
-        assertEquals(true, web["watchPageDownloaded"])
-        assertEquals(DownloadWebStatus.COMPLETE, web["state"])
         assertTrue(notif.complete)
 
         h.wired.reportFileAvailability(id, 0, AssetKind.VIDEO, FileAvailability.MISSING)
         val listedMissing = vm.observeDownloads().first().single()
         val videoMissing = vm.observeVideo(vid("a")).first()
-        val webMissing = DownloadWebStatus.payload(videoMissing)
         val batchMissing = h.wired.observeBatch(result.batchId).first()!!
         val notifMissing = DownloadNotificationController(RecordingNotificationPort()).payload(batchMissing)
         assertTrue(listedMissing.fileMissing)
         assertFalse(listedMissing.watchPageDownloaded)
         assertFalse(videoMissing.watchPageDownloaded)
-        assertEquals(false, webMissing["watchPageDownloaded"])
-        assertEquals(DownloadWebStatus.FAILED, webMissing["state"])
         assertFalse(notifMissing.complete)
     }
 
     @Test
-    fun shareQueueAndWeb_useTheSameCoordinatorFingerprint() = runTest {
+    fun shareQueueAndPlaylistUseTheSameCoordinatorFingerprint() = runTest {
         val h = DownloadHarness()
         val parsed = DownloadShareParser.parse(
             Intent.ACTION_SEND,
@@ -228,15 +221,15 @@ class DownloadFaultInjectionTest {
             ),
         )
         val fromQueue = h.coordinator.enqueueBatch(queue, BatchSelection(setOf(0)), "queue-1")
-        val fromWeb = h.coordinator.enqueueBatch(
-            BatchSnapshot(BatchSource.PLAYLIST, "web", listOf(DownloadRequest(videoId = videoId, title = "Web"))),
+        val fromPlaylist = h.coordinator.enqueueBatch(
+            BatchSnapshot(BatchSource.PLAYLIST, "playlist", listOf(DownloadRequest(videoId = videoId, title = "Playlist"))),
             BatchSelection(setOf(0)),
-            "web-1",
+            "playlist-1",
         )
         assertEquals(1, fromShare.newCount)
         assertEquals(0, fromQueue.newCount)
         assertEquals(1, fromQueue.skippedCount)
-        assertEquals(0, fromWeb.newCount)
+        assertEquals(0, fromPlaylist.newCount)
         assertEquals(fromShare.created.single().taskId, fromQueue.existing.single().taskId)
     }
 
@@ -278,8 +271,8 @@ class DownloadFaultInjectionTest {
     )
 
     private class ReadyResolver : DownloadResolver {
-        override suspend fun resolve(taskId: String) = DownloadResolveOutcome.Ready(taskId, 0)
-        override fun sourcesOf(taskId: String) = listOf(
+        override suspend fun resolve(taskId: String, generation: Long) = DownloadResolveOutcome.Ready(taskId, generation)
+        override fun sourcesOf(taskId: String, generation: Long) = listOf(
             DownloadComponentSource(
                 assetKind = AssetKind.VIDEO,
                 componentKind = InputComponentKind.VIDEO,
@@ -301,6 +294,7 @@ class DownloadFaultInjectionTest {
         override fun cancelInFlight(taskId: String) = Unit
         override suspend fun downloadComponent(
             taskId: String,
+            generation: Long,
             component: InputComponent,
             source: DownloadComponentSource,
             dest: File,
@@ -314,6 +308,7 @@ class DownloadFaultInjectionTest {
         override fun cancelInFlight(taskId: String) = Unit
         override suspend fun downloadComponent(
             taskId: String,
+            generation: Long,
             component: InputComponent,
             source: DownloadComponentSource,
             dest: File,

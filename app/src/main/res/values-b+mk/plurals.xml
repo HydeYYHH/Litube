@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">и уште %1$d врска</item>
+        <item quantity="other">и уште %1$d врски</item>
+    </plurals>
+</resources>

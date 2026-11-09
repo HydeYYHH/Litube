@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">ir dar %1$d nuoroda</item>
+        <item quantity="few">ir dar %1$d nuorodos</item>
+        <item quantity="other">ir dar %1$d nuorodų</item>
+        <item quantity="many">ir dar %1$d nuorodos</item>
+    </plurals>
+</resources>

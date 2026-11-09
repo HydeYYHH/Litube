@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">і ще %1$d посилання</item>
+        <item quantity="few">і ще %1$d посилання</item>
+        <item quantity="many">і ще %1$d посилань</item>
+        <item quantity="other">і ще %1$d посилання</item>
+    </plurals>
+</resources>

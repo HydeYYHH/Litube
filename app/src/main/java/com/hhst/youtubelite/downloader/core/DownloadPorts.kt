@@ -1,14 +1,14 @@
 package com.hhst.youtubelite.downloader.core
 
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import java.io.File
 import java.util.UUID
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 
-/** Metadata, selection, and PoToken-aware resolve. */
 interface DownloadResolver {
-    suspend fun resolve(taskId: String): DownloadResolveOutcome
-    fun sourcesOf(taskId: String): List<DownloadComponentSource> = emptyList()
-    suspend fun recoverForbidden(taskId: String): Boolean = false
+    /** The caller owns this execution identity; implementations must never adopt a newer one. */
+    suspend fun resolve(taskId: String, generation: Long): DownloadResolveOutcome
+    fun sourcesOf(taskId: String, generation: Long): List<DownloadComponentSource> = emptyList()
+    suspend fun recoverForbidden(taskId: String, generation: Long): Boolean = false
 }
 
 sealed class DownloadResolveOutcome {
@@ -35,17 +35,17 @@ data class DownloadComponentSource(
     val cookiePolicyName: String? = null,
     val client: String? = null,
     val headers: Map<String, String> = emptyMap(),
-    @Transient val requestPlan: RequestPlan? = null,
+    @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
 /**
- * Byte-range HTTP. Pause/cancel must drop the current request while keeping
- * verified chunks.
+ * Byte-range HTTP. Pause/cancel must drop the current request while keeping verified chunks.
  */
 interface DownloadTransport {
     fun cancelInFlight(taskId: String)
     suspend fun downloadComponent(
         taskId: String,
+        generation: Long,
         component: InputComponent,
         source: DownloadComponentSource,
         dest: File,
@@ -81,8 +81,8 @@ sealed class MuxResult {
 }
 
 /**
- * Production implementation is WorkManager (API 26–33) / UIDT (API 34+) plus
- * a network-free FinalizeWorker. JVM tests may keep an in-process scheduler.
+ * Production is WorkManager (API 26–33) / UIDT (API 34+) plus a network-free FinalizeWorker;
+ * JVM tests may keep an in-process scheduler.
  */
 interface DownloadScheduler {
     suspend fun schedule(taskId: String)
@@ -107,10 +107,7 @@ data class PublishRequest(
     val source: File,
     val existingUri: String? = null,
     val existingPhase: PublishPhase = PublishPhase.PENDING,
-    /**
-     * Called as soon as the backend target exists, before any bytes are
-     * copied, so the target URI is durable and a crash cannot orphan it.
-     */
+    /** Called as soon as the backend target exists, before any bytes are copied, so a crash cannot orphan it. */
     val onTargetCreated: (suspend (String) -> Unit)? = null,
 )
 
@@ -150,7 +147,7 @@ object NoOpPublisher : DownloadPublisher {
 }
 
 object NoOpResolver : DownloadResolver {
-    override suspend fun resolve(taskId: String): DownloadResolveOutcome = DownloadResolveOutcome.Ignored
+    override suspend fun resolve(taskId: String, generation: Long): DownloadResolveOutcome = DownloadResolveOutcome.Ignored
 }
 
 object NoOpFinalizer : DownloadFinalizer {

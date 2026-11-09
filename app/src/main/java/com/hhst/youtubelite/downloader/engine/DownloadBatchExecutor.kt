@@ -11,6 +11,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 /**
@@ -25,15 +27,33 @@ class DownloadBatchExecutor(
     maxConcurrent: Int = DownloadSettings.MAX_CONCURRENT_ITEMS,
 ) {
     private val gate = Semaphore(maxConcurrent.coerceAtLeast(1))
+    private val runs = mutableMapOf<Pair<String, DownloadWorkKind>, BatchRun>()
 
-    suspend fun executeTransfer(batchId: String) {
+    suspend fun executeTransfer(batchId: String) = runExclusive(batchId, DownloadWorkKind.TRANSFER) {
         runOwned(batchId) { transferOne(it, batchId) }
         drain(batchId, drainable = ::drainableTransfer) { transferOne(it, batchId) }
     }
 
-    suspend fun executeFinalize(batchId: String) {
+    suspend fun executeFinalize(batchId: String) = runExclusive(batchId, DownloadWorkKind.FINALIZE) {
         runOwned(batchId) { finalizeOne(it) }
         drain(batchId, drainable = ::drainableFinalize) { finalizeOne(it) }
+    }
+
+    private suspend fun runExclusive(batchId: String, kind: DownloadWorkKind, block: suspend () -> Unit) {
+        val key = batchId to kind
+        val run = synchronized(runs) { runs.getOrPut(key, ::BatchRun).also { it.users++ } }
+        try {
+            run.mutex.withLock { block() }
+        } finally {
+            synchronized(runs) {
+                if (--run.users == 0) runs.remove(key)
+            }
+        }
+    }
+
+    private class BatchRun {
+        val mutex = Mutex()
+        var users = 0
     }
 
     private suspend fun runOwned(batchId: String, block: suspend (String) -> Unit) {
@@ -48,9 +68,8 @@ class DownloadBatchExecutor(
     }
 
     /**
-     * Late arrivals: a task queued (resume, retry, first transfer finishing)
-     * while this run was already in flight must be picked up here, because
-     * duplicate enqueues for the batch are collapsed to the running worker.
+     * Late arrivals (resume/retry/first transfer finishing while this run was in flight)
+     * must be picked up here: duplicate enqueues for the batch collapse to the running worker.
      */
     private suspend fun drain(
         batchId: String,
@@ -105,8 +124,7 @@ class DownloadBatchExecutor(
     private suspend fun finalizeOne(taskId: String) {
         val snap = repository.transact { snapshot(taskId) } ?: return
         if (!runnable(snap.task)) return
-        // Stage admission: a batch mate still in TRANSFER must never be
-        // finalized — its bytes are not on disk yet.
+        // Stage admission: a batch mate still in TRANSFER must never be finalized — bytes are not on disk yet.
         if (!needsFinalizeOnly(snap.task)) return
         engine.runFinalize(taskId)
     }

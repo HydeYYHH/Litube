@@ -16,7 +16,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.hhst.youtubelite.cast.protocol.CastV2Session
 import com.hhst.youtubelite.player.engine.CastSource
 
-/** Media3 adapter so controls, notification and queue use the same existing PlaybackApi. */
 @UnstableApi
 internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBasePlayer(Looper.getMainLooper()) {
     private var item: MediaItem? = null
@@ -26,6 +25,7 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
     private var state = STATE_IDLE
     private var playing = false
     private var wanted = false
+    private var pendingPlayWhenReady: Boolean? = null
     private var repeat = REPEAT_MODE_OFF
     private var parameters = PlaybackParameters.DEFAULT
     private var error: PlaybackException? = null
@@ -33,7 +33,7 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
     private var manifestUrl: String? = null
     private var ratePending = false
 
-    fun loading(url: String, source: CastSource, startMs: Long) {
+    fun loading(url: String, source: CastSource, startMs: Long, autoplay: Boolean = true) {
         this.source = source
         manifestUrl = url
         item = MediaItem.Builder().setMediaId(source.videoId).setUri(url).setMimeType(MimeTypes.APPLICATION_MPD)
@@ -42,7 +42,8 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
         durationMs = source.durationSec * 1000L
         sampledAt = SystemClock.elapsedRealtime()
         playing = false
-        wanted = true
+        wanted = autoplay
+        pendingPlayWhenReady = autoplay
         error = null
         ratePending = true
         state = STATE_BUFFERING
@@ -55,7 +56,13 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
         if (duration >= 0) durationMs = duration
         sampledAt = SystemClock.elapsedRealtime()
         playing = raw == "PLAYING"
-        wanted = raw == "PLAYING" || raw == "BUFFERING"
+        val observed = when (raw) {
+            "PLAYING" -> true
+            "PAUSED" -> false
+            else -> null
+        }
+        if (observed == pendingPlayWhenReady && observed != null) pendingPlayWhenReady = null
+        wanted = pendingPlayWhenReady ?: observed ?: wanted
         state = when (raw) {
             "PLAYING", "PAUSED" -> STATE_READY
             "BUFFERING" -> STATE_BUFFERING
@@ -72,6 +79,7 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
     }
 
     fun reset() {
+        pendingPlayWhenReady = null
         playing = false; wanted = false; item = null; source = null; manifestUrl = null
         state = STATE_IDLE; error = null
         invalidateState()
@@ -103,6 +111,7 @@ internal class CastRemotePlayer(private val session: CastV2Session) : SimpleBase
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
         wanted = playWhenReady
+        pendingPlayWhenReady = playWhenReady
         if (playWhenReady) {
             if (state == Player.STATE_ENDED) reload(0) else session.play()
         } else session.pause()

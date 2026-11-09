@@ -16,10 +16,6 @@ data class DownloadSingleSpec(
     val thumbnailUrl: String? = null,
 )
 
-/**
- * Maps queue / player surfaces onto [DownloadUi] arguments.
- * Native queue snapshots are capped at [DownloadLimits.NATIVE_QUEUE_CAP].
- */
 object DownloadEntries {
 
     fun queueSnapshot(items: List<QueueItem>, name: String = "Queue"): BatchSnapshot {

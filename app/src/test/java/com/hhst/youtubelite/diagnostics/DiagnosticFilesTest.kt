@@ -45,4 +45,30 @@ class DiagnosticFilesTest {
             assertTrue(snapshot.first.values.single().toByteArray().size <= 2 * 1024 * 1024)
         }
     }
+
+    @Test fun boundedSnapshotPrefersRecentFilesAndLeavesStoredEvidenceIntact() {
+        val old = temp.newFile("old.jsonl").apply { writeText("old\n"); setLastModified(1_000) }
+        val recent = temp.newFile("recent.jsonl").apply { writeText("recent\n"); setLastModified(2_000) }
+        DiagnosticFiles(temp.root).use { files ->
+            val snapshot = files.snapshot(maxBytes = 7) { false }
+            assertEquals(mapOf("recent.jsonl" to "recent"), snapshot.first)
+            assertEquals(1, snapshot.second)
+            assertEquals(4L, files.snapshotTruncatedBytes)
+            assertEquals("old\n", old.readText())
+            assertEquals("recent\n", recent.readText())
+        }
+    }
+
+    @Test fun boundedSnapshotOnlyKeepsCompleteUtf8RowsFromTheTail() {
+        val content = "older\n{\"body\":\"你好\"}\n{\"body\":\"recent\"}\n"
+        temp.newFile("events.jsonl").writeText(content)
+        DiagnosticFiles(temp.root).use { files ->
+            for (budget in listOf(20L, 24L, 28L)) {
+                val snapshot = files.snapshot(maxBytes = budget) { false }
+                assertEquals("{\"body\":\"recent\"}", snapshot.first.values.single())
+                assertEquals(1, snapshot.second)
+                assertTrue(files.snapshotTruncatedBytes > 0)
+            }
+        }
+    }
 }

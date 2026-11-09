@@ -14,13 +14,9 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Coroutine-backed async fill of a mutable [value].
- *
- * [work] runs on [scope]. Call [get] only for branches you need.
- *
- * Pass autostart `false` when the caller must finish registering this
- * promise (in-flight tables, [whenDone] listeners) before [work] can settle
- * and mutate those same structures.
+ * Pass autostart `false` when the caller must finish registering this promise
+ * (in-flight tables, [whenDone] listeners) before [work] can settle and mutate
+ * those same structures.
  */
 class Promise<T>(
     val value: T,
@@ -39,7 +35,6 @@ class Promise<T>(
     var done: Boolean = false
         private set
 
-    /** Milliseconds from construction to settlement; `-1` until done. */
     @Volatile
     var elapsedMs: Long = -1L
         private set
@@ -59,31 +54,27 @@ class Promise<T>(
                 work(this@Promise)
             } catch (t: Throwable) {
                 failure.compareAndSet(null, t)
-            } finally {
-                elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
-                val listeners: List<() -> Unit>
-                synchronized(doneLock) {
-                    done = true
-                    listeners = doneListeners.toList()
-                    doneListeners.clear()
-                }
-                // Awaiters observe settled flags before receiving the completion signal.
-                failure.get()?.let(deferred::completeExceptionally) ?: deferred.complete(value)
-                listeners.forEach { listener -> runCatching { listener() } }
             }
+        }.invokeOnCompletion { cause ->
+            if (cause != null) failure.compareAndSet(null, cause)
+            elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+            val listeners = synchronized(doneLock) {
+                done = true
+                doneListeners.toList().also { doneListeners.clear() }
+            }
+            // Awaiters observe settled flags before receiving the completion signal.
+            failure.get()?.let(deferred::completeExceptionally) ?: deferred.complete(value)
+            listeners.forEach { listener -> runCatching { listener() } }
         }
     }
 
-    /** Blocks until complete; rethrows if [work] failed. */
     fun get(): T = runBlocking {
         start()
         deferred.await()
     }
 
-    /** Suspends until complete; rethrows if [work] failed. */
     suspend fun await(): T { start(); return deferred.await() }
 
-    /** Like [get], with timeout. */
     fun get(timeout: Long, unit: TimeUnit): T = runBlocking {
         start()
         withTimeout(unit.toMillis(timeout).milliseconds) {
@@ -91,7 +82,6 @@ class Promise<T>(
         }
     }
 
-    /** Mutates [value] in place. */
     inline fun set(block: T.() -> Unit) {
         value.block()
     }

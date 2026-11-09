@@ -15,9 +15,9 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.hhst.youtubelite.MainActivity
+import com.hhst.youtubelite.watch.WatchActivity
+import com.hhst.youtubelite.player.PlaybackActivity
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.browser.PageOrigin
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -32,8 +32,17 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.koin.core.context.GlobalContext
+import org.junit.After
+import org.junit.Before
 
 class PipAudioOnlyAndroidTest {
+    @Before fun enterPhoneWindow() = com.hhst.youtubelite.core.PhoneWindow.enter()
+
+    @After fun exitPhoneWindow() {
+        com.hhst.youtubelite.core.PhoneWindow.exit()
+    }
+
+
     @Test fun headphoneActionClosesPipKeepsAudioAndNotificationAndRestoresVideo() {
         assumeTrue(Build.VERSION.SDK_INT >= 26)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -78,8 +87,9 @@ class PipAudioOnlyAndroidTest {
         val oldExtractor = extractorField.get(engine)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
-        var scenario: ActivityScenario<MainActivity>? = null
-        lateinit var host: MainActivity
+        var scenario: ActivityScenario<WatchActivity>? = null
+        lateinit var host: WatchActivity
+        var observedPauseActionTitles: List<String>? = null
         fun await(condition: () -> Boolean) {
             var ready = false
             val deadline = SystemClock.elapsedRealtime() + 15_000
@@ -90,13 +100,13 @@ class PipAudioOnlyAndroidTest {
             if (!ready) {
                 var detail = ""
                 instrumentation.runOnMainSync {
-                    detail = "PiP condition timed out: destroyed=${host.isDestroyed}, audioOnly=${model.audioOnlyBackground}, inPip=${host.isInPictureInPictureMode}, playerState=${player.playbackState}, wantsPlay=${player.playWhenReady}, suppression=${player.playbackSuppressionReason}, tracks=${player.currentTracks.groups.map { it.type to it.isSelected }}, ui=${model.uiState.value}, auto=${PipAutoEnter.lastRequestedAutoEnter}, paramError=${PipAutoEnter.lastPushError}, ${engine.snapshot.value}"
+                    detail = "PiP condition timed out: destroyed=${host.isDestroyed}, audioOnly=${model.audioOnlyBackground}, inPip=${host.isInPictureInPictureMode}, playerState=${player.playbackState}, wantsPlay=${player.playWhenReady}, suppression=${player.playbackSuppressionReason}, tracks=${player.currentTracks.groups.map { it.type to it.isSelected }}, pauseActionTitles=$observedPauseActionTitles, ui=${model.uiState.value}, auto=${PipAutoEnter.lastRequestedAutoEnter}, paramError=${PipAutoEnter.lastPushError}, ${engine.snapshot.value}"
                 }
                 fail(detail)
             }
         }
         fun selectedVideo() = player.currentTracks.groups.any { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
-        fun params() = MainActivity::class.java.getDeclaredMethod("pipParams").apply { isAccessible = true }.invoke(host) as PictureInPictureParams
+        fun params() = PlaybackActivity::class.java.getDeclaredMethod("pipParams").apply { isAccessible = true }.invoke(host) as PictureInPictureParams
         @Suppress("UNCHECKED_CAST")
         fun actions(): List<RemoteAction> = PictureInPictureParams::class.java.getMethod("getActions").invoke(params()) as List<RemoteAction>
         try {
@@ -104,11 +114,10 @@ class PipAudioOnlyAndroidTest {
             queue.clear()
             queue.setEnabled(true)
             queue.add(QueueItem("audioPip001", VideoId.watchUrl("audioPip001"), "First"))
-            extractorField.set(engine, Extractor(GlobalContext.get().get<HttpDownloader>(), fixtureCache, scope))
-            scenario = ActivityScenario.launch(Intent(Intent.ACTION_VIEW,
-                Uri.parse(VideoId.watchUrl("audioPip001")), app, MainActivity::class.java))
+            extractorField.set(engine, Extractor(fixtureCache, scope))
+            scenario = ActivityScenario.launch(WatchActivity.intent(app, "audioPip001"))
             scenario!!.onActivity { host = it }
-            instrumentation.runOnMainSync { model.playVideo(VideoId.watchUrl("audioPip001"), PageOrigin.HOST) }
+            instrumentation.runOnMainSync { model.openVideo("audioPip001") }
             await { player.isPlaying && model.uiState.value.isPlaying && selectedVideo() && engine.snapshot.value.audioTracks.size == 2 }
             assertEquals("hls:en:English original", engine.snapshot.value.audioTrackKey)
             await { !model.uiState.value.hasNext }
@@ -144,8 +153,21 @@ class PipAudioOnlyAndroidTest {
             actions().single { it.title == app.getString(R.string.action_next) }.actionIntent.send()
             await { engine.snapshot.value.videoId == "audioPip002" && player.isPlaying && model.uiState.value.isPlaying && selectedVideo() }
             prefs.setEnabled(PreferenceKeys.ENABLE_BACKGROUND_PLAY, false)
-            await { model.uiState.value.hasPrevious }
-            actions().single { it.title == app.getString(R.string.action_pause) }.actionIntent.send()
+            var pauseAction: RemoteAction? = null
+            await {
+                // Next can change readiness after an earlier isPlaying observation; capture the actual Pause action with its current playback state.
+                val currentActions = actions()
+                observedPauseActionTitles = currentActions.map { it.title.toString() }
+                val snapshot = engine.snapshot.value
+                val state = model.uiState.value
+                pauseAction = currentActions.singleOrNull { it.title == app.getString(R.string.action_pause) }
+                    .takeIf {
+                        snapshot.videoId == "audioPip002" && player.isPlaying && state.isPlaying &&
+                            selectedVideo() && state.hasPrevious && host.isInPictureInPictureMode
+                    }
+                pauseAction != null
+            }
+            checkNotNull(pauseAction).actionIntent.send()
             await { !player.isPlaying && !model.uiState.value.isPlaying }
             instrumentation.runOnMainSync { model.onSeek(0) }
             await { player.currentPosition < 1_000 }
@@ -180,7 +202,7 @@ class PipAudioOnlyAndroidTest {
             assertTrue("Media notification must survive", notifications.isNotEmpty())
             assertEquals("hls:en:English original", engine.snapshot.value.audioTrackKey)
             DeviceEvidence.captureScene("issue-331-audio-without-pip")
-            scenario = ActivityScenario.launch(Intent(app, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
+            scenario = ActivityScenario.launch(WatchActivity.intent(app, engine.snapshot.value.videoId!!))
             scenario!!.onActivity { host = it }
             await {
                 val surface = engine.javaClass.getDeclaredField("videoSurface").apply { isAccessible = true }.get(engine) as? SurfaceView
@@ -194,8 +216,7 @@ class PipAudioOnlyAndroidTest {
             instrumentation.runOnMainSync { assertTrue(player.currentPosition >= position) }
             assertSame(player, engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine))
             DeviceEvidence.captureScene("issue-331-video-restored")
-            // Closing playback must end the audio-only session, so reopening the
-            // app does not revive a video the user explicitly stopped.
+            // Closing playback must end the audio-only session, so reopening the app does not revive a video the user explicitly stopped.
             instrumentation.runOnMainSync { model.playAudioOnlyInBackground() }
             instrumentation.runOnMainSync { model.onMiniClose() }
             await { !model.audioOnlyBackground && !model.uiState.value.visible && !player.isPlaying }

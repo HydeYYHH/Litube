@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.widget.Toast
-import com.hhst.youtubelite.MainActivity
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.downloader.core.DownloadShareOnce
@@ -24,6 +23,7 @@ class DownloadShareActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as com.hhst.youtubelite.App).startMediaRuntime()
         pipHandle = PipAutoEnter.suppress()
         if (savedInstanceState == null) {
             handle(intent)
@@ -81,10 +81,8 @@ class DownloadShareActivity : Activity() {
             is DownloadShareTarget.Playlist -> {
                 PipAutoEnter.noteLegacyLaunch()
                 startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .setAction(Intent.ACTION_VIEW)
-                        .setData(Uri.parse(target.url))
-                        .putExtra(DownloadShareParser.EXTRA_PENDING_PLAYLIST, true)
+                    com.hhst.youtubelite.playlist.PlaylistActivity.intent(this, target.listId ?: return)
+                        .putExtra(com.hhst.youtubelite.playlist.PlaylistActivity.EXTRA_DOWNLOAD, true)
                         .addFlags(
                             Intent.FLAG_ACTIVITY_NEW_TASK or
                                 Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or

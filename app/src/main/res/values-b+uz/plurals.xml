@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">va yana %1$d ta havola</item>
+        <item quantity="other">va yana %1$d ta havola</item>
+    </plurals>
+</resources>

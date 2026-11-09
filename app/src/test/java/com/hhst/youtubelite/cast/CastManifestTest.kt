@@ -75,10 +75,7 @@ class CastManifestTest {
 
     @Test
     fun build_nonZeroStart_writesTOnFirstGroupOnly() {
-        // Non-uniform durations produce two <S> groups; the first segment's
-        // presentation time (non-zero tfdt) must land on the FIRST group — a
-        // missing t continues from the previous entry, so a t on the last
-        // group would corrupt the receiver's timeline mapping.
+        // t must land on the first group: an <S> without t continues the previous entry's timeline, so a misplaced t corrupts the receiver's mapping.
         val index = ChunkIndex(
             intArrayOf(100, 100, 120),
             longArrayOf(1000, 1100, 1200),
@@ -97,7 +94,6 @@ class CastManifestTest {
         assertTrue(mpd.contains("<S d=\"1000000\"/>"))
         assertFalse(mpd.contains("<S d=\"1000000\" t="))
     }
-
 
     private fun video() = Format(
         url = "https://example.com/v",

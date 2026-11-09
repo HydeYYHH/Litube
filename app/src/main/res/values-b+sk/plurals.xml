@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">a %1$d ďalší odkaz</item>
+        <item quantity="few">a %1$d ďalšie odkazy</item>
+        <item quantity="other">a %1$d ďalších odkazov</item>
+        <item quantity="many">a %1$d ďalšieho odkazu</item>
+    </plurals>
+</resources>

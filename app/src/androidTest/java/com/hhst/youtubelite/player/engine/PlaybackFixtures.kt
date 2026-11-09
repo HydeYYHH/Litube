@@ -12,6 +12,7 @@ internal fun streamCache(
     title: String? = null,
     durationSeconds: Long = 20,
     onInvalidate: (String) -> Unit = {},
+    onStreamRead: () -> Unit = {},
 ): Cache = object : Cache {
     override fun getMetadata(videoId: String) = Metadata().also { metadata ->
         metadata.id = videoId
@@ -21,7 +22,7 @@ internal fun streamCache(
     @Suppress("UNUSED_PARAMETER")
     override fun putMetadata(videoId: String, metadata: Metadata) = Unit
     @Suppress("UNUSED_PARAMETER")
-    override fun getStream(videoId: String) = stream
+    override fun getStream(videoId: String): Stream { onStreamRead(); return stream }
     @Suppress("UNUSED_PARAMETER")
     override fun putStream(videoId: String, stream: Stream) = Unit
     override fun invalidateStream(videoId: String) = onInvalidate(videoId)
@@ -33,7 +34,7 @@ internal fun streamCache(
 
 internal class MemoryJsonCache : JsonCache {
     val values = ConcurrentHashMap<String, Any>()
-    override fun <T> get(key: String, type: Class<T>): T? = values[key]?.let(type::cast)
+    override fun <T : Any> get(key: String, type: Class<T>): T? = values[key]?.let(type::cast)
     @Suppress("UNUSED_PARAMETER")
     override fun put(key: String, value: Any, ttlMs: Long) { values[key] = value }
     override fun invalidate(key: String) { values.remove(key) }

@@ -19,15 +19,13 @@ import java.security.interfaces.RSAPublicKey
 import java.util.Date
 import javax.net.ssl.SSLSocket
 
-/** Cast DeviceAuth: authenticate the hardware key and bind it to the provisional TLS peer.
- * Protocol/trust data: Chromium/OpenScreen, BSD; the general HTTPS trust store is never changed.
- */
+/** Authenticate the hardware key and bind it to the provisional TLS peer; never touches the general HTTPS trust store. */
 object CastDeviceAuth {
     const val NAMESPACE = "urn:x-cast:com.google.cast.tp.deviceauth"
-    /** Cast device certificates are short-lived by policy; anything longer is a proxy/emulator. */
+    /** Cast device certs are short-lived by policy; anything longer is a proxy/emulator. */
     private const val MAX_TLS_LIFETIME_MS = 4L * 24 * 60 * 60 * 1000
     private const val AUTH_TIMEOUT_MS = 7_000L
-    /** Issuance window of the bundled fallback CRL; its chain is validated as of this instant. */
+    /** Issuance window of the bundled fallback CRL; chain validated as of this instant. */
     private val FALLBACK_CRL_TIME = Date(1692255600000L) // 2023-08-17 UTC
     private val factory get() = CertificateFactory.getInstance("X.509")
     private fun cert(bytes: ByteArray) = factory.generateCertificate(bytes.inputStream()) as X509Certificate
@@ -39,7 +37,7 @@ object CastDeviceAuth {
         authenticateWithRoots(socket, input, output, roots, crlRoot)
     }
 
-    /** Injectable trust anchors for in-process tests; production always uses the bundled anchors. */
+    /** Injectable trust anchors for in-process tests; production uses the bundled anchors. */
     internal fun authenticateWithRoots(socket: SSLSocket, input: InputStream, output: OutputStream,
                                       trusted: List<X509Certificate>, revocationRoot: X509Certificate,
                                       now: () -> Date = { Date() }) {
@@ -77,7 +75,12 @@ object CastDeviceAuth {
         tlsPeer.checkValidity(now)
         require(tlsPeer.notAfter.time - now.time <= MAX_TLS_LIFETIME_MS) { "TLS certificate lifetime" }
         val fields = Proto.parse(response)
-        require(MessageDigest.isEqual(nonce, Proto.bytes(fields, 5))) { "DeviceAuth nonce mismatch" }
+        val responseNonce = Proto.bytes(fields, 5, byteArrayOf())
+        val digest = Proto.number(fields, 6, 0)
+        // Original Cast receivers omit the optional nonce and sign only the TLS certificate;
+        // they still need a trusted device chain and a signature bound to this TLS peer.
+        require(responseNonce.isNotEmpty() || digest == 0L) { "Missing DeviceAuth nonce for SHA256" }
+        require(responseNonce.isEmpty() || MessageDigest.isEqual(nonce, responseNonce)) { "DeviceAuth nonce mismatch" }
         require(Proto.number(fields, 4, 1) == 1L) { "Unsupported DeviceAuth signature" }
         val chain = listOf(cert(Proto.bytes(fields, 2))) +
             fields[3].orEmpty().map { cert(it as ByteArray) }
@@ -89,17 +92,16 @@ object CastDeviceAuth {
         // An audio-only receiver is not a video target; enforce the signed policy as well as mDNS ca.
         val audioPolicy = byteArrayOf(0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0xd6.toByte(), 0x79, 0x02, 0x05, 0x02)
         require(path.none { contains(it.getExtensionValue("2.5.29.32") ?: byteArrayOf(), audioPolicy) })
-        val algorithm = when (Proto.number(fields, 6, 0)) {
+        val algorithm = when (digest) {
             0L -> "SHA1withRSA" // Legacy Cast authentication, scoped to device signatures only.
             1L -> "SHA256withRSA"
             else -> error("Unsupported DeviceAuth digest")
         }
-        require(signature(algorithm, key, nonce + tlsPeer.encoded, Proto.bytes(fields, 1))) { "DeviceAuth signature" }
+        require(signature(algorithm, key, responseNonce + tlsPeer.encoded, Proto.bytes(fields, 1))) { "DeviceAuth signature" }
         val offered = (fields[7]?.firstOrNull() as? ByteArray)?.let {
             runCatching { verifiedCrl(it, revocationRoot, now, false) }.getOrNull()
         }
-        // Chromium's bundled, signed historical deny-list. This offline fallback does not prove
-        // current revocation freshness; a valid receiver-supplied CRL takes precedence.
+        // Offline fallback deny-list does not prove current freshness; a receiver-supplied CRL takes precedence.
         val crl = offered ?: verifiedCrl(decode(CastTrustData.FALLBACK_CRL), crlRoot, now, true)
         checkRevocation(path, crl)
     }
@@ -120,7 +122,8 @@ object CastDeviceAuth {
     private fun signature(algorithm: String, key: PublicKey, data: ByteArray, signed: ByteArray) =
         Signature.getInstance(algorithm).run { initVerify(key); update(data); verify(signed) }
 
-    private fun verifiedCrl(bundle: ByteArray, trusted: X509Certificate, now: Date, fallback: Boolean): Map<Int, List<Any>> {
+    /** Production-trust path used by the Android test. */
+    internal fun verifiedCrl(bundle: ByteArray, trusted: X509Certificate, now: Date, fallback: Boolean): Map<Int, List<Any>> {
         for (raw in Proto.parse(bundle)[1].orEmpty()) {
             val candidate = runCatching {
                 val entry = Proto.parse(raw as ByteArray)
@@ -205,9 +208,14 @@ internal object Proto {
         }
         return fields
     }
-    fun bytes(fields: Map<Int, List<Any>>, field: Int) = requireNotNull(fields[field]?.singleOrNull() as? ByteArray)
-    fun number(fields: Map<Int, List<Any>>, field: Int, default: Long? = null) =
-        fields[field]?.singleOrNull() as? Long ?: requireNotNull(default)
+    fun bytes(fields: Map<Int, List<Any>>, field: Int, default: ByteArray? = null): ByteArray {
+        val values = fields[field] ?: return requireNotNull(default) { "Missing DeviceAuth bytes field $field" }
+        return requireNotNull(values.singleOrNull() as? ByteArray) { "Invalid DeviceAuth bytes field $field" }
+    }
+    fun number(fields: Map<Int, List<Any>>, field: Int, default: Long? = null): Long {
+        val values = fields[field] ?: return requireNotNull(default) { "Missing DeviceAuth number field $field" }
+        return requireNotNull(values.singleOrNull() as? Long) { "Invalid DeviceAuth number field $field" }
+    }
     fun encode(vararg fields: Pair<Int, Any>): ByteArray {
         val out = ByteArrayOutputStream()
         fun varint(input: Long) {

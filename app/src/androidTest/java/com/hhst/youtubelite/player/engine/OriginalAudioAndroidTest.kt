@@ -8,7 +8,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.activity.ComponentActivity
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.gson.Gson
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.core.JsonCache
 import com.hhst.youtubelite.extension.ExtensionManager
@@ -25,7 +24,6 @@ import org.junit.Test
 import org.junit.Rule
 import org.koin.core.context.GlobalContext
 
-/** The production engine decodes a three-rendition HLS playlist whose DEFAULT is a dub. */
 class OriginalAudioAndroidTest {
     @get:Rule val activity = ActivityScenarioRule(ComponentActivity::class.java)
     @Test fun originalBeatsPlaylistDefaultAndManualDubDoesNotCarryToTheNextVideo() {
@@ -92,7 +90,7 @@ class OriginalAudioAndroidTest {
             keys.forEach { prefs.setEnabled(it, false) }
             instrumentation.runOnMainSync {
                 val http = OkHttpClient()
-                engine = PlaybackEngine(app, Extractor(GlobalContext.get().get<HttpDownloader>(), cache, scope),
+                engine = PlaybackEngine(app, Extractor(cache, scope),
                     MediaSourceResolver(PlayerDataSource.create(app, http)), GlobalContext.get().get<JsonCache>(), prefs,
                     SponsorBlockManager(http, prefs, scope))
                 player = engine.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(engine) as ExoPlayer
@@ -109,7 +107,7 @@ class OriginalAudioAndroidTest {
             awaitSelected("audioOne001", "Spanish dubbed")
             instrumentation.runOnMainSync { engine.play("audioTwo002") }
             awaitSelected("audioTwo002", "English original")
-            DeviceEvidence.writeJson("youtube-original-audio.json", Gson().toJson(observations))
+            DeviceEvidence.writeJson("youtube-original-audio.json", com.hhst.youtubelite.core.TestJson.any(observations))
         } finally {
             instrumentation.runOnMainSync { if (initialized) { engine.stop(); player.release() } }
             scope.cancel()

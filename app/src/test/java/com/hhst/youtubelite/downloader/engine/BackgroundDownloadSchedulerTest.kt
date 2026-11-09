@@ -40,9 +40,10 @@ internal class FakeUidtJobPort : UidtJobPort {
     val registered = mutableListOf<UidtJobRequest>()
     val active = mutableSetOf<Int>()
     val restoredIds = mutableSetOf<Int>()
+    var rejectRegistration = false
 
     override fun register(request: UidtJobRequest, legalUserInteraction: Boolean): UidtRegisterResult {
-        if (!legalUserInteraction) return UidtRegisterResult.RejectedNoUserInteraction
+        if (!legalUserInteraction || rejectRegistration) return UidtRegisterResult.RejectedNoUserInteraction
         if (request.jobId in restoredIds || request.jobId in active) {
             active += request.jobId
             return UidtRegisterResult.Restored(request.jobId)
@@ -89,6 +90,30 @@ internal class SchedulerHarness(
 }
 
 class BackgroundDownloadSchedulerTest {
+
+    @Test
+    fun rejectedUidtFallsBackToExecutableWork() = runTest {
+        val h = SchedulerHarness(sdk = 34)
+        h.uidt.rejectRegistration = true
+        val result = h.wired.enqueue(request("a"), "rejected")
+        val work = h.work.enqueued.single()
+        assertEquals(result.batchId, work.batchId)
+        assertEquals(DownloadWorkKind.TRANSFER, work.kind)
+        assertTrue(h.uidt.active.isEmpty())
+        val record = h.repo.transact { scheduleForTask(result.created.single().taskId) }
+        assertEquals("wm", record?.backend)
+    }
+
+    @Test
+    fun userResumeKeepsAnActiveWorkManagerBatch() = runTest {
+        val h = SchedulerHarness(sdk = 34, legal = false)
+        val result = h.wired.enqueue(request("a"), "existing")
+        h.scheduler.noteUserInitiated()
+        h.scheduler.schedule(result.created.single().taskId)
+        assertEquals(1, h.work.enqueued.size)
+        assertTrue(h.uidt.registered.isEmpty())
+        assertEquals("wm", h.scheduler.plans.last().backend)
+    }
 
     @Test
     fun api33_enqueue_usesLongRunningWmWithNetwork_finalizeHasNone() = runTest {

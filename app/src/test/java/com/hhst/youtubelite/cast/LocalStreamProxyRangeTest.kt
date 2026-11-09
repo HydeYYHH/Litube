@@ -5,6 +5,7 @@ package com.hhst.youtubelite.cast
 import android.content.ContextWrapper
 import fi.iki.elonen.NanoHTTPD
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,12 +16,6 @@ import java.io.ByteArrayInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Pure helpers of [LocalStreamProxy] (companion functions): RFC 7233 range
- * parsing and per-receiver chunk sizing. Also the state-ownership regression
- * for content-length backfill: a request snapshot taken under an old configure
- * must never mutate the table published by a newer configure.
- */
 class LocalStreamProxyRangeTest {
 
     private val unset: Long = -1L // C.LENGTH_UNSET as a long
@@ -140,6 +135,55 @@ class LocalStreamProxyRangeTest {
         } finally {
             proxy.stop()
         }
+    }
+
+    @Test
+    fun manifestRejectsAnUnrelatedHost() {
+        val proxy = newProxy()
+        proxy.start(NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+        try {
+            configureManifest(proxy, "video-one")
+            val client = OkHttpClient()
+            val url = proxy.proxyUrl("/manifest.mpd")
+            client.newCall(Request.Builder().url(url).build()).execute().use {
+                assertEquals(200, it.code)
+            }
+            for (host in listOf("example.com", "localhost:${proxy.listeningPort}", "127.0.0.1:1")) {
+                client.newCall(Request.Builder().url(url).header("Host", host).build()).execute().use {
+                    assertEquals(host, 403, it.code)
+                }
+            }
+        } finally {
+            proxy.stop()
+        }
+    }
+
+    @Test
+    fun manifestUsesAnOpaqueMarkerStableOnlyForTheCurrentVideo() {
+        val proxy = newProxy()
+        proxy.start(NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+        try {
+            val url = proxy.proxyUrl("/manifest.mpd")
+            fun marker(): String {
+                val xml = http(url, "GET").body.toString(Charsets.UTF_8)
+                assertFalse(xml.contains("video-one"))
+                assertFalse(xml.contains("766964656f2d6f6e65"))
+                return requireNotNull(Regex("<!-- vid:([a-z0-9-]+) -->").find(xml)).groupValues[1]
+            }
+            configureManifest(proxy, "video-one")
+            val first = marker()
+            configureManifest(proxy, "video-one")
+            assertEquals(first, marker())
+            configureManifest(proxy, "video-two")
+            assertFalse(first == marker())
+        } finally {
+            proxy.stop()
+        }
+    }
+
+    private fun configureManifest(proxy: LocalStreamProxy, id: String) {
+        proxy.configure("<?xml version=\"1.0\"?><MPD/>", "t", id,
+            null, null, null, null, null, null)
     }
 
     /** Constructor only: no start(), so no socket and no background threads. */

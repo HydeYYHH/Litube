@@ -1,0 +1,4 @@
+- Replace web-based browsing with native Android screens.
+- Switch to MediaServiceCore as the media engine.
+- Improve playback, live chat, casting and downloads.
+- Sign in again using a sign-in code. Settings from previous versions will not be retained.

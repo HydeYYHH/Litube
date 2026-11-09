@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.player.engine
 
-/** Resume-progress write rules and share-link start clamping. */
 internal object PlaybackProgress {
     const val SAFE_ZONE_MS = 5_000L
 
@@ -26,8 +25,17 @@ internal object PlaybackProgress {
     }
 
     /** Explicit share `t=` (including 0) beats [rememberedMs]; applied once per load. */
-    fun resolveStartMs(explicitStartMs: Long?, rememberedMs: Long, durationMs: Long): Long {
-        val raw = explicitStartMs ?: rememberedMs
+    fun resolveStartMs(explicitStartMs: Long?, rememberedMs: Long, durationMs: Long, remoteMs: Long? = null): Long {
+        val remote = remoteMs?.takeIf { it >= 0 }?.let {
+            if (durationMs > 0 && it >= durationMs - SAFE_ZONE_MS) 0L else it
+        }
+        val raw = explicitStartMs ?: remote ?: rememberedMs
         return clampStartMs(raw, durationMs)
+    }
+
+    fun cacheKey(videoId: String, owner: String): String {
+        val identity = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(owner.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
+        return "player:progress:$identity:$videoId"
     }
 }

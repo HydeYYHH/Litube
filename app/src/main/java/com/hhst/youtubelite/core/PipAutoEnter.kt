@@ -22,6 +22,9 @@ object PipAutoEnter {
     private val suppressCount = AtomicInteger(0)
     private val host = AtomicReferenceHolder()
 
+    /** In-app navigation handoffs still waiting for their destination; released per [suppressForNavigation]. */
+    private val handoffs = ArrayList<Activity>()
+
     @Volatile
     var legacySuppressUntil: Long = 0L
         private set
@@ -39,10 +42,41 @@ object PipAutoEnter {
     fun suppress(): Handle {
         suppressCount.incrementAndGet()
         noteLegacyLaunch()
-        // Push auto-enter off without forgetting lastEligible so restore can
-        // re-enable when ENABLE_PIP / player eligibility still wants it.
+        // Push auto-enter off without forgetting lastEligible, so restore can
+        // re-enable it if ENABLE_PIP / player eligibility still wants PiP.
         host.get()?.let { pushParams(it, autoEnter = false) }
         return Handle { restore() }
+    }
+
+    /**
+     * A short hold for an in-app navigation transition: auto-PiP stays off
+     * while the destination starts up. Released as soon as any other activity
+     * resumes (the destination owns the screen, not the source coming back),
+     * plus on the source's own resume or destroy (the returned [Handle]).
+     */
+    fun suppressForNavigation(owner: Activity): Handle {
+        synchronized(handoffs) { handoffs.add(owner) }
+        suppress()
+        return Handle { releaseNavigation(owner) }
+    }
+
+    private fun releaseNavigation(owner: Activity) {
+        val released = synchronized(handoffs) {
+            val before = handoffs.size
+            handoffs.removeAll { it === owner }
+            before - handoffs.size
+        }
+        repeat(released) { restore() }
+    }
+
+    /** The resumed activity now owns the foreground: drop every other handoff. */
+    fun onActivityResumed(resumed: Activity) {
+        val released = synchronized(handoffs) {
+            val before = handoffs.size
+            handoffs.removeAll { it !== resumed }
+            before - handoffs.size
+        }
+        repeat(released) { restore() }
     }
 
     fun restore() {
@@ -74,8 +108,8 @@ object PipAutoEnter {
         private set
 
     fun apply(activity: Activity, autoEnter: Boolean, aspect: Rational? = null, actions: List<RemoteAction>? = null) {
-        // While an overlay holds suppress, MainActivity.syncPipParams still
-        // calls apply(false). Keep lastEligible as the unsuppressed desire.
+        // While an overlay holds suppress, PlaybackActivity.syncPipParams still
+        // calls apply(false); keep lastEligible as the unsuppressed desire.
         if (!isSuppressed()) {
             lastEligible = autoEnter
         }
@@ -101,7 +135,6 @@ object PipAutoEnter {
         lastPushError = result.exceptionOrNull()?.let { it.javaClass.simpleName + ": " + it.message }
     }
 
-    /** Reads the host's live PictureInPictureParams.isAutoEnterEnabled (API 31+). */
     fun isAutoEnterEnabled(activity: Activity): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return runCatching {

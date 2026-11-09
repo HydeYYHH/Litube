@@ -3,10 +3,7 @@ package com.hhst.youtubelite.extractor
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import com.grack.nanojson.JsonParser as NanoJsonParser
-import com.google.gson.JsonParser
-import org.schabi.newpipe.extractor.downloader.Request
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
+import kotlinx.serialization.json.JsonObject
 
 /** One-way capture: never delays, replaces or fabricates browser responses. */
 class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
@@ -21,23 +18,23 @@ class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
             val text = message.data ?: return@addWebMessageListener
             if (text.length > 2 * 1024 * 1024) return@addWebMessageListener
             runCatching {
-                val json = JsonParser.parseString(text).asJsonObject
-                if (json.get("generation")?.asLong != document() || json.get("session")?.asString != sessions.captureStamp()) return@runCatching
-                json.getAsJsonObject("configuration")?.let {
+                val json = parseJson(text) as JsonObject
+                if (json.get("generation")?.asLongNum != document() || json.get("session")?.asText != sessions.captureStamp()) return@runCatching
+                json.objOrNull("configuration")?.let {
                     if (it.toString().length <= 256 * 1024) {
-                        sessions.acceptBrowserConfig(NanoJsonParser.`object`().from(it.toString()), document(), document)
+                        sessions.acceptBrowserConfig(it, document(), document)
                     }
                 }
-                if (json.get("session")?.asString != sessions.captureStamp()) return@runCatching
-                val request = json.get("request")?.asString ?: return@runCatching
-                val body = json.get("response")?.asString ?: return@runCatching
+                if (json.get("session")?.asText != sessions.captureStamp()) return@runCatching
+                val request = json.get("request")?.asText ?: return@runCatching
+                val body = json.get("response")?.asText ?: return@runCatching
                 if (body.toByteArray().size > 2 * 1024 * 1024) return@runCatching
-                val parsed = JsonParser.parseString(request).asJsonObject
-                val response = JsonParser.parseString(body).asJsonObject
-                val video = VideoId.parse(parsed.get("videoId")?.asString) ?: return@runCatching
-                if (response.getAsJsonObject("videoDetails")?.get("videoId")?.asString != video || response.getAsJsonObject("playabilityStatus")?.get("status")?.asString != "OK") return@runCatching
-                val client = parsed.getAsJsonObject("context")?.getAsJsonObject("client") ?: return@runCatching
-                if (client.get("clientName")?.asString != "WEB") return@runCatching
+                val parsed = parseJson(request) as JsonObject
+                val response = parseJson(body) as JsonObject
+                val video = VideoId.parse(parsed.get("videoId")?.asText) ?: return@runCatching
+                if (response.objOrNull("videoDetails")?.get("videoId")?.asText != video || response.objOrNull("playabilityStatus")?.get("status")?.asText != "OK") return@runCatching
+                val client = parsed.objOrNull("context")?.objOrNull("client") ?: return@runCatching
+                if (client.get("clientName")?.asText != "WEB") return@runCatching
                 val key = sessions.captureStamp() + ":" + request
                 synchronized(entries) {
                     entries[key] = Entry(sessions.captureStamp(), parsed.toString(), body, System.currentTimeMillis(), document(), document)
@@ -47,13 +44,13 @@ class BrowserPlayerResponses(private val sessions: YoutubeSessionProvider) {
         }
     }
 
-    fun get(request: Request, context: ExtractionContext): String? {
-        if (request.httpMethod() != "POST" || !request.url().startsWith("https://www.youtube.com/youtubei/v1/player")) return null
-        val body = request.dataToSend()?.toString(Charsets.UTF_8) ?: return null
-        val semantics = runCatching { JsonParser.parseString(body).asJsonObject.toString() }.getOrNull() ?: return null
+    fun get(url: String, method: String, body: String?, session: YoutubeWebSession): String? {
+        if (method != "POST" || !url.startsWith("https://www.youtube.com/youtubei/v1/player")) return null
+        if (body == null) return null
+        val semantics = runCatching { (parseJson(body) as JsonObject).toString() }.getOrNull() ?: return null
         val hint = sessions.captureStamp()
         return synchronized(entries) {
-            entries.values.firstOrNull { it.scope == hint && it.semantics == semantics && it.generation == it.document() && System.currentTimeMillis() - it.at < 120_000 && sessions.isCurrent(context.session) }?.body
+            entries.values.firstOrNull { it.scope == hint && it.semantics == semantics && it.generation == it.document() && System.currentTimeMillis() - it.at < 120_000 && sessions.isCurrent(session) }?.body
         }
     }
 }

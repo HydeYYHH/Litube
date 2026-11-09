@@ -23,7 +23,6 @@ import com.hhst.youtubelite.player.PlayerUiState
 import com.hhst.youtubelite.player.GestureUi
 import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.ui.theme.AppTheme
-import com.tencent.mmkv.MMKV
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -108,7 +107,7 @@ class PlayerInteractionAndroidTest {
     @Test fun landscapeMiniResizesAndRemembersBothDocks() {
         compose.activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         compose.waitForIdle()
-        val kv = MMKV.mmkvWithID("followup-landscape-mini")!!
+        val kv = com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "followup-landscape-mini")
         kv.clearAll()
         val store = MiniPlayerStore(kv)
         store.save(280, 0f, -50f)
@@ -146,11 +145,11 @@ class PlayerInteractionAndroidTest {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val assertRestart = InstrumentationRegistry.getArguments().getString("miniRestartStage") == "assert"
-        val kv = MMKV.mmkvWithID("followup-mini-process")!!
+        val kv = com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "followup-mini-process")
         val store = MiniPlayerStore(kv)
         val record = java.io.File(instrumentation.targetContext.filesDir, "followup-mini-position.json")
-        val expected = if (assertRestart) com.google.gson.Gson().fromJson(record.readText(), MiniPlayerStore.State::class.java)
-            else null
+        val expected = if (assertRestart) kotlinx.serialization.json.Json.decodeFromString(
+                MiniPlayerStore.State.serializer(), record.readText()) else null
         if (expected != null) assertEquals(expected, store.load())
         else { kv.clearAll(); store.save(250, -100f, -75f) }
         compose.setContent {
@@ -161,11 +160,11 @@ class PlayerInteractionAndroidTest {
         }
         compose.waitForIdle()
         if (expected != null) assertEquals(expected, store.load())
-        else record.writeText(com.google.gson.Gson().toJson(store.load()))
+        else record.writeText(kotlinx.serialization.json.Json.encodeToString(MiniPlayerStore.State.serializer(), store.load()))
     }
 
     @Test fun miniRestoreKeepsSurfaceAndSettledPositionAndCloseAnimates() {
-        val kv = MMKV.mmkvWithID("followup-mini-test")!!
+        val kv = com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "followup-mini-test")
         kv.clearAll()
         val store = MiniPlayerStore(kv)
         store.save(220, -110f, -125f)
@@ -234,7 +233,7 @@ class PlayerInteractionAndroidTest {
         compose.setContent {
             AppTheme(darkTheme = true, dynamicColor = false) {
                 PlayerSheetHost(sheet, PlayerUiState(videoId = "abcdefghijk", title = "Queue clip", author = "Channel"),
-                    callbacks, { sheet = null }, {})
+                    remember { mutableStateOf(0L) }, callbacks, { sheet = null }, {}, { sheet = it })
             }
         }
         compose.onNodeWithText(compose.activity.getString(R.string.add_to_queue)).performScrollTo().performClick()
@@ -262,7 +261,7 @@ class PlayerInteractionAndroidTest {
                 play()
             }
         }
-        val store = MiniPlayerStore(MMKV.mmkvWithID("followup-live-mini")!!)
+        val store = MiniPlayerStore(com.hhst.youtubelite.core.PreferenceStore.of(androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>(), "followup-live-mini"))
         var mini by mutableStateOf(false)
         var attached = 0
         var detached = 0

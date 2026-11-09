@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">болон өөр %1$d холбоос</item>
+        <item quantity="other">болон өөр %1$d холбоос</item>
+    </plurals>
+</resources>

@@ -74,11 +74,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
-/**
- * Emulator fault rows: notification shade, radio, MediaStore delete,
- * system font scale, TalkBack probe, process-death seed/assert, one live
- * live enqueue. TalkBack is recorded blocked when the package is absent.
- */
 @RunWith(AndroidJUnit4::class)
 class DownloadFaultAndroidTest {
 
@@ -539,6 +534,10 @@ class DownloadFaultAndroidTest {
     }
 
     private fun waitDownloadReady() {
+        // The media runtime is opt-in and starts with the first download entry
+        // point; start it explicitly rather than relying on cross-test ordering.
+        (ApplicationProvider.getApplicationContext<Context>() as com.hhst.youtubelite.App)
+            .startMediaRuntime()
         kotlinx.coroutines.runBlocking {
             kotlinx.coroutines.withTimeout(30_000) {
                 GlobalContext.get().get<DownloadStartupReconciler>().awaitInitialization()

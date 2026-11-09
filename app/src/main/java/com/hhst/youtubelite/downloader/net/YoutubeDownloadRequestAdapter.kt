@@ -4,7 +4,8 @@ import com.hhst.youtubelite.core.Constants
 import com.hhst.youtubelite.diagnostics.DiagnosticNetwork
 import com.hhst.youtubelite.downloader.core.DownloadSettings
 import com.hhst.youtubelite.extractor.Format
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
+import com.hhst.youtubelite.extractor.MediaRange
+import com.hhst.youtubelite.extractor.MediaRequestPlan
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -25,9 +26,7 @@ enum class DownloadCookiePolicy {
     NONE,
 }
 
-/**
- * Downloads retain the core plan without persisting its credentials or reconstructing its profile.
- */
+/** Retains the core plan without persisting its credentials or reconstructing its profile. */
 data class YoutubeDownloadRequestPlan(
     val method: DownloadHttpMethod,
     val url: String,
@@ -36,7 +35,7 @@ data class YoutubeDownloadRequestPlan(
     val cookiePolicy: DownloadCookiePolicy,
     val headers: Map<String, String>,
     val resourceIdentity: String,
-    @Transient val requestPlan: RequestPlan? = null,
+    @Transient val requestPlan: MediaRequestPlan? = null,
 )
 
 object YoutubeDownloadRequestAdapter {
@@ -45,10 +44,10 @@ object YoutubeDownloadRequestAdapter {
         val plan = format.requestPlan ?: return adaptUrl(videoId, format.url, format.itag)
         return YoutubeDownloadRequestPlan(DownloadHttpMethod.GET, format.url,
             when (plan.range) {
-                RequestPlan.Range.QUERY -> DownloadRangeMode.QUERY_PARAM
-                RequestPlan.Range.HEADER -> DownloadRangeMode.HTTP_HEADER
+                MediaRange.QUERY -> DownloadRangeMode.QUERY_PARAM
+                MediaRange.HEADER -> DownloadRangeMode.HTTP_HEADER
                 else -> DownloadRangeMode.NONE
-            }, plan.profile.clientName, DownloadCookiePolicy.NONE,
+            }, plan.client.clientName, DownloadCookiePolicy.NONE,
             plan.headers + mapOf("User-Agent" to plan.userAgent, "Accept-Encoding" to "identity"),
             DownloadResourceIdentity.of(videoId, format), requestPlan = plan)
     }
@@ -71,11 +70,24 @@ object YoutubeDownloadRequestAdapter {
  */
 object DownloadHttpClients {
     private const val MAX_REQUESTS = DownloadSettings.DEFAULT_CONNECTIONS
-    private const val MAX_REQUESTS_PER_HOST = 2
+    private val budgets = java.util.WeakHashMap<Dispatcher, DownloadConnectionLimiter>()
+
+    internal fun connectionLimiter(client: OkHttpClient): DownloadConnectionLimiter = synchronized(budgets) {
+        budgets.getOrPut(client.dispatcher) {
+            DownloadConnectionLimiter(client.dispatcher.maxRequests, client.dispatcher.maxRequestsPerHost)
+        }
+    }
+
+    fun setMaxConnections(client: OkHttpClient, value: Int) {
+        val n = value.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
+        client.dispatcher.maxRequests = n
+        client.dispatcher.maxRequestsPerHost = n
+        connectionLimiter(client).update(n, n)
+    }
 
     fun create(
         maxRequests: Int = MAX_REQUESTS,
-        maxRequestsPerHost: Int = MAX_REQUESTS_PER_HOST,
+        maxRequestsPerHost: Int = maxRequests,
     ): OkHttpClient {
         val connections = maxRequests.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
         val dispatcher = Dispatcher().apply {

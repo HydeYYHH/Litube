@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">și încă %1$d link</item>
+        <item quantity="few">și încă %1$d link-uri</item>
+        <item quantity="other">și încă %1$d de link-uri</item>
+    </plurals>
+</resources>

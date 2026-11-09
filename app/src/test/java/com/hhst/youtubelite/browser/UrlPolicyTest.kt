@@ -1,10 +1,16 @@
-package com.hhst.youtubelite.browser
+package com.hhst.youtubelite.core
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UrlPolicyTest {
+    @Test fun verificationOnlyCompletesOnAContentHost() {
+        assertTrue(UrlPolicy.isVerificationReturn("https://m.youtube.com/watch?v=abc"))
+        for (url in listOf("https://accounts.google.com/ServiceLogin", "https://ytimg.com/test.png",
+            "https://accounts.youtube.com/", "https://m.youtube.com/signin", "https://m.youtube.com/sorry/",
+            "https://m.youtube.com.evil.example/", "http://m.youtube.com/")) assertFalse(url, UrlPolicy.isVerificationReturn(url))
+    }
 
     @Test fun keepsTrafficChallengesInsideTheAppWithoutPageScripts() {
         assertTrue(UrlPolicy.canLoad("https://www.google.com/sorry/index?continue=https%3A%2F%2Fm.youtube.com"))

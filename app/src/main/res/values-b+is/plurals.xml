@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">og %1$d tengill í viðbót</item>
+        <item quantity="other">og %1$d tenglar í viðbót</item>
+    </plurals>
+</resources>

@@ -30,10 +30,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
-import com.hhst.youtubelite.ui.components.YoutubeTopAppBar as TopAppBar
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTopAppBar as TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -106,11 +108,17 @@ class GalleryActivity : ComponentActivity() {
         var busy by remember { mutableStateOf(false) }
         var scaledPage by remember { mutableStateOf<Pair<Int, Float>?>(null) }
         val zoomed = scaledPage?.let { it.first == pager.currentPage && it.second > 1f } == true
+        val actionColors = IconButtonDefaults.iconButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContainerColor = MaterialTheme.colorScheme.surface,
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+        )
         Scaffold(topBar = { TopAppBar(title = { Text("${pager.currentPage + 1} / ${urls.size}") },
             expandedHeight = settingsAppBarHeight(),
             navigationIcon = { IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), stringResource(R.string.navigate_back)) } },
             actions = {
-                IconButton(enabled = current != null && !busy && pendingSave == null, onClick = {
+                IconButton(colors = actionColors, enabled = current != null && !busy && pendingSave == null, onClick = {
                     val image = current ?: return@IconButton
                     pendingSave = image.file
                     runCatching { saveImage.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -122,7 +130,7 @@ class GalleryActivity : ComponentActivity() {
                         Toast.makeText(this@GalleryActivity, R.string.gallery_failed, Toast.LENGTH_SHORT).show()
                     }
                 }) { Icon(painterResource(R.drawable.ic_download), stringResource(R.string.gallery_save)) }
-                IconButton(enabled = current != null && !busy && pendingSave == null, onClick = {
+                IconButton(colors = actionColors, enabled = current != null && !busy && pendingSave == null, onClick = {
                     val image = current ?: return@IconButton
                     busy = true
                     scope.launch {

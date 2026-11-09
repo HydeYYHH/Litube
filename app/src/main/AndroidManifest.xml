@@ -5,6 +5,16 @@
     <!-- The optional sandbox is only loaded on API 26+; older systems use WebView. -->
     <uses-sdk tools:overrideLibrary="androidx.javascriptengine" />
     <uses-feature android:name="android.software.picture_in_picture" android:required="false" />
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -18,7 +28,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Voice search. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission
@@ -32,6 +41,7 @@
         android:name=".App"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
         android:fullBackupContent="@xml/backup_rules"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
@@ -40,24 +50,31 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.App"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic">
+        <!-- Device discovery and transport control require HTTP to local renderer addresses. -->
 
         <service android:name=".extractor.EjsRuntimeService"
             android:exported="false" android:process=":youtube_ejs" />
 
         <activity
-            android:name=".MainActivity"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
+            android:name=".home.HomeActivity"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:supportsPictureInPicture="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.App.Home"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Open watch links in-app. autoVerify=false is explicit: this
-                 app does not own the domains, so no App Link verification. -->
+        </activity>
+
+        <!-- Route external playback links before composing or loading the home feed. -->
+        <activity
+            android:name=".navigation.ContentLinkActivity"
+            android:exported="true"
+            android:theme="@style/Theme.App.Home">
+            <!-- autoVerify=false: this app does not own the domains, so no App Link verification. -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -69,15 +86,57 @@
                 <data android:host="music.youtube.com" />
                 <data android:host="youtu.be" />
             </intent-filter>
-            <!-- Share sheet "Open with". text/plain is intentionally broad:
-                 intent filters cannot match URL content, so non-link shares
-                 are rejected in code (MainActivity toasts "no link found"). -->
+            <!-- text/plain is intentionally broad: intent filters cannot match URL content;
+                 non-link shares are handled by the home screen. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".playlist.PlaylistActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.YouActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.HistoryActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".library.PlaylistsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".settings.SettingsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".settings.AdvancedActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".account.SignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".account.ChatWebSignInActivity" android:exported="false" android:theme="@style/Theme.App.Home" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".core.TrafficVerificationActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity android:name=".subscriptions.SubscriptionsActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+
+        <!-- Standalone shorts browse host; playback reuses the shared player ViewModel hooks. -->
+        <activity android:name=".shorts.ShortsActivity" android:exported="false" android:theme="@style/Theme.App.Shorts" android:windowSoftInputMode="adjustResize" />
+
+        <activity android:name=".explore.ExploreActivity" android:exported="false" android:theme="@style/Theme.App.Home" />
+        <activity
+            android:name=".search.SearchResultsActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.App.Home" />
+
+        <activity
+            android:name=".watch.WatchActivity"
+            android:windowSoftInputMode="adjustResize"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:exported="false"
+            android:theme="@style/Theme.App.Watch" />
+
+        <!-- Local channel page; it opens a typed request for every later destination. -->
+        <activity
+            android:name=".channel.ChannelActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.App.Home" />
+
+        <!-- Shared post detail host used by both the Home post card and channel Posts. -->
+        <activity
+            android:name=".post.PostDetailActivity"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false"
+            android:theme="@style/Theme.App.Home" />
 
         <activity
             android:name=".downloader.ui.DownloadShareActivity"

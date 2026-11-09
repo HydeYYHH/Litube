@@ -1,9 +1,5 @@
 package com.hhst.youtubelite.downloader.core
 
-/**
- * Download settings: the constants plus the optional prefs hook that
- * transport/finalizer/scheduler read.
- */
 object DownloadSettings {
     const val MAX_CONCURRENT_ITEMS = 2
     const val MIN_CONNECTIONS = 1

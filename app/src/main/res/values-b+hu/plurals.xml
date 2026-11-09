@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">és még %1$d link</item>
+        <item quantity="other">és %1$d további hivatkozás</item>
+    </plurals>
+</resources>

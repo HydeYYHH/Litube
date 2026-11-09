@@ -68,7 +68,6 @@ class DownloadFinalizeWorker(
         workerForegroundInfo(applicationContext, sdk, batchId, DownloadWorkKind.FINALIZE)
 }
 
-/** Shared worker foreground scaffold; only the notification id seed and FGS type differ. */
 private fun workerForegroundInfo(
     context: Context,
     sdk: Int,

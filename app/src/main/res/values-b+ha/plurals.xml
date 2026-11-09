@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">da ƙarin mahaɗi %1$d</item>
+        <item quantity="other">da ƙarin mahaɗai %1$d</item>
+    </plurals>
+</resources>

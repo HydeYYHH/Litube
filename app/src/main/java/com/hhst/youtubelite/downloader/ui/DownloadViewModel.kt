@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 /**
- * Thin facade over [DownloadCoordinator]. UI must not talk to Worker/Service/DB.
+ * Thin facade over [DownloadCoordinator]: UI must not talk to Worker/Service/DB.
  * Catalog preview and prefs live here so composables never call those either.
  */
 class DownloadViewModel(
@@ -124,13 +124,14 @@ class DownloadViewModel(
     }
 
     /**
-     * Final confirm only. Opening the sheet or changing preview options must
-     * not call this. A new [submissionId] is minted here so process-death
-     * restore cannot replay a submit.
+     * Final confirm only — opening the sheet or changing preview options must
+     * not call this. Mints a new [submissionId] so process-death restore cannot
+     * replay a submit.
      */
     suspend fun confirmSingle(request: DownloadRequest, persistPrefs: Boolean = true): EnqueueResult {
         if (persistPrefs) prefs.setLastConfig(request.config)
-        return coordinator.enqueue(request, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
+        haptics?.perform(HapticsController.Event.CONFIRM)
+        return coordinator.enqueue(request, UUID.randomUUID().toString())
     }
 
     suspend fun confirmBatch(
@@ -140,7 +141,8 @@ class DownloadViewModel(
     ): EnqueueResult {
         DownloadSnapshotGuard.validate(snapshot)?.let { throw IllegalArgumentException(it.message) }
         if (persistPrefs) prefs.setLastConfig(snapshot.config)
-        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString()).also { haptics?.perform(HapticsController.Event.CONFIRM) }
+        haptics?.perform(HapticsController.Event.CONFIRM)
+        return coordinator.enqueueBatch(snapshot, selection, UUID.randomUUID().toString())
     }
 
     fun pause(target: DownloadTarget) = viewModelScope.launch { coordinator.pause(target) }
@@ -179,7 +181,7 @@ class DownloadViewModel(
     fun setMaxConnections(value: Int) {
         val n = value.coerceIn(DownloadSettings.MIN_CONNECTIONS, DownloadSettings.MAX_CONNECTIONS)
         prefs.setMaxConnections(n)
-        downloadHttp?.dispatcher?.maxRequests = n
+        downloadHttp?.let { com.hhst.youtubelite.downloader.net.DownloadHttpClients.setMaxConnections(it, n) }
     }
 
     sealed class PreviewState {

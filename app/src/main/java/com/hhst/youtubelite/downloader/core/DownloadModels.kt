@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.downloader.core
 
+import kotlinx.serialization.Serializable
+
 /** Pipeline stage. Orthogonal to [DownloadStatus]. */
 enum class DownloadPhase {
     RESOLVE,
@@ -66,13 +68,13 @@ enum class PublishPhase {
     DELETED,
 }
 
-/** How a command selects work. */
 sealed interface DownloadTarget {
     data class Task(val taskId: String) : DownloadTarget
     data class Item(val itemId: String) : DownloadTarget
     data class Batch(val batchId: String) : DownloadTarget
 }
 
+@Serializable
 data class DownloadConfig(
     val videoQuality: String? = null,
     val audioOnly: Boolean = false,
@@ -83,7 +85,7 @@ data class DownloadConfig(
     val fileNameTemplate: String? = null,
     /** Subtitle/cover without a video or audio asset. */
     val attachmentsOnly: Boolean = false,
-    /** Catalog selection hints, excluded from [fingerprint]. */
+    /** Catalog selection hints; excluded from [fingerprint]. */
     val videoItagHint: Int? = null,
     val audioItagHint: Int? = null,
     val audioBitrate: Int? = null,
@@ -101,8 +103,7 @@ data class DownloadConfig(
     ).plus(listOfNotNull(audioBitrate?.takeIf { it > 0 }?.toString())).joinToString("|")
 }
 
-
-
+@Serializable
 data class DownloadRequest(
     val videoId: String,
     val title: String = "",
@@ -111,6 +112,7 @@ data class DownloadRequest(
     val config: DownloadConfig = DownloadConfig(),
 )
 
+@Serializable
 data class BatchSnapshot(
     val source: BatchSource,
     val name: String,
@@ -123,11 +125,13 @@ data class BatchSelection(
     val configOverrides: Map<Int, DownloadConfig> = emptyMap(),
 )
 
+@Serializable
 data class TaskRef(
     val taskId: String,
     val owned: Boolean,
 )
 
+@Serializable
 data class EnqueueResult(
     val newCount: Int,
     val skippedCount: Int,
@@ -214,7 +218,6 @@ data class InputComponent(
     val needsRedownload: Boolean = false,
 )
 
-/** Generation-guarded resolve payload written onto component/asset rows. */
 data class ResolvedComponentUpdate(
     val assetKind: AssetKind,
     val componentKind: InputComponentKind,

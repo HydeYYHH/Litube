@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">మరియు మరో %1$d లింక్</item>
+        <item quantity="other">మరియు మరో %1$d లింక్‌లు</item>
+    </plurals>
+</resources>

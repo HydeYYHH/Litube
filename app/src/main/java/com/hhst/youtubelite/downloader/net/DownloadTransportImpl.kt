@@ -16,9 +16,9 @@ import com.hhst.youtubelite.downloader.io.FileIntegrity
 import com.hhst.youtubelite.downloader.io.NetworkKind
 import com.hhst.youtubelite.downloader.io.NetworkMonitor
 import com.hhst.youtubelite.downloader.io.AssumeAvailableNetwork
+import com.hhst.youtubelite.extractor.MediaRequestPlan
+import com.hhst.youtubelite.extractor.PageResponse
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import org.schabi.newpipe.extractor.services.youtube.streams.StreamHttpException
-import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import okhttp3.Request
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -47,7 +47,7 @@ fun interface DownloadSleeper {
 }
 
 fun interface ForbiddenRecovery {
-    suspend fun recover(taskId: String, identity: String?): RecoveredSource?
+    suspend fun recover(taskId: String, generation: Long, identity: String?): RecoveredSource?
 }
 
 data class RecoveredSource(
@@ -56,9 +56,7 @@ data class RecoveredSource(
     val exhausted: Boolean,
 )
 
-/**
- * Independent OkHttp download client: own Call, dispatcher budget, working files.
- */
+/** Independent OkHttp download client: own Call, dispatcher budget, working files. */
 class DownloadTransportImpl(
     private val client: OkHttpClient,
     private val cookies: DownloadCookieSource = NoCookies,
@@ -75,13 +73,18 @@ class DownloadTransportImpl(
 ) : DownloadTransport {
 
     private val calls = ConcurrentHashMap<String, Call>()
+    private val connectionLimiter = DownloadHttpClients.connectionLimiter(client)
 
     override fun cancelInFlight(taskId: String) {
-        calls.remove(taskId)?.cancel()
+        calls[taskId]?.let { call ->
+            call.cancel()
+            connectionLimiter.cancelWaiting(call)
+        }
     }
 
     override suspend fun downloadComponent(
         taskId: String,
+        generation: Long,
         component: InputComponent,
         source: DownloadComponentSource,
         dest: File,
@@ -141,15 +144,16 @@ class DownloadTransportImpl(
                 -> return result
                 is TransferResult.Failed -> {
                     AppLog.event(AppLog.Category.DOWNLOADER, "transfer_retry_decision", mapOf("reason" to result.reason, "attempt" to retries, "identity_rounds" to identityRounds), context = diagnostic, level = DiagnosticLevel.WARN)
+                    val httpStatus = result.reason.removePrefix("http-").toIntOrNull()
                     when {
                         result.reason.startsWith("403") || result.reason in setOf("MEDIA_SESSION_CHANGED", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED") -> {
                             val recovered = if (identityRounds == 0) {
                                 identityRounds++
-                                forbidden?.recover(taskId, current.resourceIdentity)
+                                forbidden?.recover(taskId, generation, current.resourceIdentity)
                             } else {
                                 if (backupAttempted || fallback == null) return result
                                 backupAttempted = true
-                                fallback.recover(taskId, current.resourceIdentity)
+                                fallback.recover(taskId, generation, current.resourceIdentity)
                             }
                             if (recovered == null || recovered.exhausted) return result
                             val identityChanged =
@@ -157,10 +161,8 @@ class DownloadTransportImpl(
                             current = recovered.source
                             plan = DownloadRequestFactory.fromSource(current)
                             if (recovered.needsRedownload || identityChanged) {
-                                // The refreshed object is not proven to be the same
-                                // media: old chunks must never be spliced into it.
-                                // Refetch the new object in full, without reusing
-                                // any verified range from the old one.
+                                // Refreshed object is not proven same media: old chunks must never
+                                // be spliced into it.
                                 dest.delete()
                                 kept.clear()
                                 fullFallback = true
@@ -173,6 +175,10 @@ class DownloadTransportImpl(
                             if (retries > DownloadSettings.MAX_RETRIES) return result
                             sleeper.sleep(wait)
                         }
+                        // Retrying the same rejected URL cannot repair a permanent request error.
+                        // 403 has identity recovery above; 408/425 may succeed on a later read.
+                        httpStatus != null && httpStatus in 400..499 && httpStatus != 408 && httpStatus != 425 -> return result
+                        result.reason == "ENOSPC" -> return result
                         result.reason == "fallback-full" -> {
                             if (plan.requestPlan != null && fullFallback) return TransferResult.Failed("MEDIA_RANGE_IGNORED")
                             fullFallback = true
@@ -320,7 +326,6 @@ class DownloadTransportImpl(
         }
     }
 
-    @OptIn(InternalCoroutinesApi::class)
     @Media3OptIn(markerClass = [UnstableApi::class])
     private suspend fun executeAndWrite(
         taskId: String,
@@ -336,16 +341,42 @@ class DownloadTransportImpl(
         val diagnostic = coroutineContext[DiagnosticCoroutineContext]?.diagnostic ?: DiagnosticContext(taskId = taskId)
         val call = client.newCall(DiagnosticNetwork.tag(request, diagnostic))
         calls[taskId] = call
+        try {
+            return connectionLimiter.withConnection(call) {
+                executeAndWriteAdmitted(call, request, dest, requestedStart, requestedEnd, rangeMode,
+                    knownTotal, componentId, onProgress)
+            }
+        } catch (cancelled: CancellationException) {
+            coroutineContext.ensureActive()
+            if (call.isCanceled()) return WriteOutcome.Cancelled
+            throw cancelled
+        } finally {
+            calls.remove(taskId, call)
+        }
+    }
+
+    @OptIn(InternalCoroutinesApi::class)
+    @Media3OptIn(markerClass = [UnstableApi::class])
+    private suspend fun executeAndWriteAdmitted(
+        call: Call,
+        request: Request,
+        dest: File,
+        requestedStart: Long,
+        requestedEnd: Long,
+        rangeMode: DownloadRangeMode,
+        knownTotal: Long?,
+        componentId: String,
+        onProgress: suspend (DownloadChunk, Long?) -> Boolean,
+    ): WriteOutcome {
         val cancellation = coroutineContext[Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) {
             if (it != null) call.cancel()
         }
         val response = try {
             awaitCall(call)
         } catch (cancelled: CancellationException) {
-            cancellation?.dispose(); calls.remove(taskId, call); throw cancelled
+            cancellation?.dispose(); throw cancelled
         } catch (io: IOException) {
             cancellation?.dispose()
-            calls.remove(taskId, call)
             if (io.message == "MEDIA_SESSION_CHANGED") return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
             if (call.isCanceled() || !coroutineContext.isActive) return WriteOutcome.Cancelled
             if (isNetworkLoss(io)) throw io
@@ -431,7 +462,7 @@ class DownloadTransportImpl(
                         while (true) {
                             coroutineContext.ensureActive()
                             if (call.isCanceled()) {
-                                if (request.tag(RequestPlan::class.java)?.let { mediaRequests?.isCurrent(it) == false } == true) return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
+                                if (request.tag(MediaRequestPlan::class.java)?.let { mediaRequests?.isCurrent(it) == false } == true) return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
                                 return WriteOutcome.Cancelled
                             }
                             val n = input.read(buf)
@@ -453,9 +484,8 @@ class DownloadTransportImpl(
                     if (rangeMode == DownloadRangeMode.NONE && knownTotal != null &&
                         knownTotal > 0L && received != knownTotal
                     ) {
-                        // A non-ranged response must carry the whole trusted
-                        // object; short or overlong bodies must not read as
-                        // Completed. Deterministic → terminal.
+                        // Non-ranged response must carry the whole trusted object; short or
+                        // overlong bodies must not read as Completed. Deterministic → terminal.
                         return WriteOutcome.Failed("length-mismatch")
                     }
                     if (knownTotal != null && requestedStart == 0L && expectedCount == null && received == 0L) {
@@ -472,7 +502,7 @@ class DownloadTransportImpl(
                 throw cancelled
             } catch (io: IOException) {
                 if (io.message == "MEDIA_SESSION_CHANGED") return WriteOutcome.Failed("MEDIA_SESSION_CHANGED")
-                if (isCancelled(taskId, io) || !coroutineContext.isActive) return WriteOutcome.Cancelled
+                if (call.isCanceled() || !coroutineContext.isActive) return WriteOutcome.Cancelled
                 return WriteOutcome.Failed(
                     if (FileIntegrity.isNoSpace(io)) "ENOSPC" else (io.message ?: "io"),
                 )
@@ -480,7 +510,6 @@ class DownloadTransportImpl(
         } finally {
             cancellation?.dispose()
             response.close()
-            calls.remove(taskId, call)
         }
     }
 
@@ -522,7 +551,7 @@ class DownloadTransportImpl(
     private fun retryAfterMillis(response: Response): Long? {
         val raw = response.header("Retry-After")?.trim().orEmpty()
         if (raw.isEmpty()) return null
-        return StreamHttpException.parseRetryAfter(raw, System.currentTimeMillis())
+        return PageResponse.headerText(raw, System.currentTimeMillis()).takeIf { it > 0 }
     }
 
     private fun isCancelled(taskId: String, error: IOException): Boolean {

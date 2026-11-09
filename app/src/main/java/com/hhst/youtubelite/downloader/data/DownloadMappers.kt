@@ -1,6 +1,6 @@
 package com.hhst.youtubelite.downloader.data
 
-import com.google.gson.Gson
+import kotlinx.serialization.builtins.serializer
 import com.hhst.youtubelite.downloader.core.AssetKind
 import com.hhst.youtubelite.downloader.core.AssetSnapshot
 import com.hhst.youtubelite.downloader.core.BatchSource
@@ -28,23 +28,22 @@ import com.hhst.youtubelite.downloader.core.ScheduleRecord
 import com.hhst.youtubelite.downloader.core.TaskSnapshot
 
 internal object DownloadJson {
-    private val gson: Gson = Gson()
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-    fun config(json: String): DownloadConfig =
-        gson.fromJson(json, DownloadConfig::class.java) ?: DownloadConfig()
+    fun config(text: String): DownloadConfig =
+        json.decodeFromString(DownloadConfig.serializer(), text)
 
-    fun configJson(config: DownloadConfig): String = gson.toJson(config)
+    fun configJson(config: DownloadConfig): String = json.encodeToString(DownloadConfig.serializer(), config)
 
-    fun strings(json: String): List<String> {
-        val array = gson.fromJson(json, Array<String>::class.java) ?: emptyArray()
-        return array.toList()
-    }
+    private val stringsSerializer = kotlinx.serialization.builtins.ListSerializer(String.serializer())
 
-    fun stringsJson(list: List<String>): String = gson.toJson(list)
+    fun strings(text: String): List<String> = json.decodeFromString(stringsSerializer, text)
 
-    fun enqueue(json: String): EnqueueResult = gson.fromJson(json, EnqueueResult::class.java)
+    fun stringsJson(list: List<String>): String = json.encodeToString(stringsSerializer, list)
 
-    fun enqueueJson(result: EnqueueResult): String = gson.toJson(result)
+    fun enqueue(text: String): EnqueueResult = json.decodeFromString(EnqueueResult.serializer(), text)
+
+    fun enqueueJson(result: EnqueueResult): String = json.encodeToString(EnqueueResult.serializer(), result)
 }
 
 internal fun BatchEntity.toDomain() = DownloadBatch(

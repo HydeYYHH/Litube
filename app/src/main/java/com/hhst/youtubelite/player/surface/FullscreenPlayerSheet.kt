@@ -33,8 +33,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.hhst.youtubelite.R
-import com.hhst.youtubelite.ui.components.YoutubeSheetHandle
-import com.hhst.youtubelite.ui.theme.YoutubeStyle
+import com.hhst.youtubelite.ui.components.AppSheetHandle
+import com.hhst.youtubelite.ui.theme.AppStyle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -77,14 +77,14 @@ internal fun FullscreenPlayerSheet(onDismiss: () -> Unit, content: @Composable C
         modifier = Modifier.fillMaxSize(),
         scaffoldState = scaffold,
         sheetPeekHeight = 0.dp,
-        sheetContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        sheetShape = YoutubeStyle.SheetShape,
+        sheetContainerColor = AppStyle.Panel,
+        sheetShape = AppStyle.SheetShape,
         sheetContentColor = MaterialTheme.colorScheme.onSurface,
         sheetTonalElevation = 0.dp,
         sheetSwipeEnabled = !closing,
         containerColor = Color.Transparent,
         sheetDragHandle = {
-            YoutubeSheetHandle(Modifier.testTag("player-sheet-handle"))
+            AppSheetHandle(Modifier.testTag("player-sheet-handle"))
         },
         sheetContent = {
             Column(Modifier.fillMaxWidth().heightIn(max = maxHeight), content = content)

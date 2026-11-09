@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Exclude in-progress download state so Auto Backup cannot clobber Room rows
-  or temp files. MMKV (legacy download_history) stays included so a restored
-  legacy backup can still run the importer once.
+  or temp files, and media-auth so tokens never travel in a backup; AndroidKeyStore
+  keys are not backed up either, so restored ciphertext would be undecryptable.
   Paths: DownloadBackupExcludes
 -->
 <full-backup-content>
@@ -12,4 +12,6 @@
     <exclude domain="file" path="download" />
     <exclude domain="root" path="no_backup" />
     <exclude domain="root" path="no_backup/player" />
+    <exclude domain="sharedpref" path="media-auth.xml" />
+    <exclude domain="sharedpref" path="media-cache.xml" />
 </full-backup-content>

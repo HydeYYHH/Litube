@@ -3,14 +3,13 @@ package com.hhst.youtubelite.cast
 import com.hhst.youtubelite.diagnostics.*
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.ChunkIndex
-import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.MoreExecutors
 import com.hhst.youtubelite.cast.protocol.CastV2Discovery
 import com.hhst.youtubelite.cast.protocol.CastV2Session
@@ -22,19 +21,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import okhttp3.OkHttpClient
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
 data class CastDevice(
     val id: String,
     val name: String,
     val selected: Boolean,
-)
+    /** Route family shown in the merged picker; the VM routes taps by it. */
+    val kind: String = KIND_CHROMECAST,
+) {
+    companion object {
+        const val KIND_CHROMECAST = "chromecast"
+        const val KIND_DLNA = "dlna"
+    }
+}
 
 data class CastUiState(
     val available: Boolean = false,
@@ -43,23 +45,30 @@ data class CastUiState(
     val devices: List<CastDevice> = emptyList(),
     val linkUrl: String? = null,
     val linkConnected: Boolean = false,
+    val failure: CastFailureReport? = null,
 )
 
-/** Open-source Cast V2 sender with the existing LAN DASH proxy. */
 @UnstableApi
 class CastController(
     private val appContext: Context,
     private val http: OkHttpClient,
     private val mediaRequests: YoutubeMediaRequests? = null,
     private val sessionFactory: (String, Int, CastV2Session.Listener) -> CastV2Session =
-        { host, port, listener -> CastV2Session.forDefaultMediaReceiver(host, port, listener) },
+        { host, port, listener -> CastV2Session.forDefaultMediaReceiver(host, port, listener,
+            LocalCastNetwork.select(appContext.getSystemService(ConnectivityManager::class.java), host)) },
+    private val proxyFactory: (String) -> LocalStreamProxy = { host ->
+        LocalStreamProxy(appContext, http, advertisedHost = host, mediaRequests = mediaRequests)
+    },
 ) {
     private val main = Handler(Looper.getMainLooper())
-    private val io: ExecutorService = Executors.newCachedThreadPool { r -> Thread(r, "CastSidx").apply { isDaemon = true } }
+    // Fixed pool: cast-side fetches are few and user-scoped, so threads stay bounded.
+    private val io: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "CastSidx").apply { isDaemon = true } }
     private val listeningIo = MoreExecutors.listeningDecorator(io)
+    private val indices = CastIndexLoader<ChunkIndex>(listeningIo)
     private val _state = MutableStateFlow(CastUiState())
     val state: StateFlow<CastUiState> = _state.asStateFlow()
     @Volatile private var proxy: LocalStreamProxy? = null
+    private var proxyHost: String? = null
     private var castPlayer: CastRemotePlayer? = null
     private var currentSession: CastV2Session? = null
     private var discovery: CastV2Discovery? = null
@@ -112,6 +121,7 @@ class CastController(
     }
     fun selectDevice(id: String) {
         val endpoint = endpoints[id] ?: return
+        clearFailure()
         endSession()
         val generation = ++sessionGeneration
         val trace = CastDiagnosticTrace().also { diagnosticTrace = it }
@@ -132,16 +142,27 @@ class CastController(
             override fun onMediaStatus(raw: String?, position: Long, duration: Long, idleReason: String?) { main.post {
                 if (generation == sessionGeneration) castPlayer?.status(raw, position, duration, idleReason)
             } }
-            override fun onLaunchError(reason: String) { trace.error("receiver_launch_failed", null); failed() }
-            override fun onChannelError(reason: String) { trace.error("channel_failed", null); failed() }
+            override fun onLaunchError(reason: String) { trace.error("receiver_launch_failed", null); failed("launch", reason) }
+            override fun onChannelError(reason: String) { trace.error("channel_failed", null); failed("connection", reason) }
             override fun onLoadFailed(type: String) { main.post {
-                if (generation == sessionGeneration && !loadingUpgrade) finishSession(true, connected)
+                if (generation == sessionGeneration && !loadingUpgrade) {
+                    reportFailure("load", type)
+                    finishSession(true, connected)
+                }
             } }
             override fun onClosed() { main.post {
                 if (generation == sessionGeneration) finishSession(false, connected)
             } }
-            private fun failed() { main.post {
-                if (generation == sessionGeneration) finishSession(true, connected)
+            private fun reportFailure(stage: String, reason: String) {
+                val device = CastDevice(id, endpoint.name, true)
+                val report = CastFailureReport.create("Chromecast", device, trace.context.videoId, stage, IllegalStateException(reason))
+                _state.update { it.copy(failure = report) }
+            }
+            private fun failed(stage: String, reason: String) { main.post {
+                if (generation == sessionGeneration) {
+                    reportFailure(stage, reason)
+                    finishSession(true, connected)
+                }
             } }
         }
         session = sessionFactory(endpoint.host, endpoint.port, listener)
@@ -150,6 +171,7 @@ class CastController(
         publishRoutes()
         session.start()
     }
+    fun clearFailure() { _state.update { it.copy(failure = null) } }
     private fun finishSession(failed: Boolean, hadSession: Boolean) {
         val session = currentSession
         sessionGeneration++
@@ -165,17 +187,20 @@ class CastController(
     fun endSession() {
         if (currentSession != null) finishSession(false, _state.value.chromecastSession)
     }
-    fun startCasting(source: CastSource, positionMs: Long): Boolean {
+    fun startCasting(source: CastSource, positionMs: Long, autoplay: Boolean = true): Boolean {
         val player = castPlayer ?: return false
         val session = currentSession ?: return false
         chromecastActive = true
         applyDiscovery()
-        val p = (proxy ?: freshProxy()) ?: run { stopCasting(); return false }
+        val host = LocalStreamProxy.resolveBindHost(appContext, endpoints[selectedId]?.host)
+            ?: run { stopCasting(); return false }
+        val p = (proxy?.takeIf { proxyHost == host } ?: freshProxy()) ?: run { stopCasting(); return false }
         if (!configureProxy(p, source)) { stopCasting(); return false }
-        scheduleSidxUpgradeAndReceiverLoad(p, session, player, source, positionMs)
+        scheduleSidxUpgradeAndReceiverLoad(p, session, player, source, positionMs, autoplay)
         return true
     }
     fun stopCasting(): Long {
+        indices.cancel()
         val position = castPlayer?.currentPosition ?: 0L
         chromecastActive = false
         configureGen.incrementAndGet()
@@ -186,9 +211,8 @@ class CastController(
     }
 
     fun ensureProxy(source: CastSource): String? {
-        // A live cast session owns the proxy for its own video only; reconfiguring for another
-        // source would retarget the receiver's segment requests (garbled bytes / 403). Refuse
-        // link-cast during a session instead.
+        // A live cast session owns the proxy for its own video; reconfiguring for another
+        // source would retarget the receiver's segment requests (garbled bytes / 403).
         if (chromecastActive) {
             val p = proxy ?: return null
             return if (proxyConfiguredVideoId == source.videoId) p.proxyUrl("/player") else null
@@ -204,28 +228,48 @@ class CastController(
         _state.update { it.copy(linkConnected = p.isLinkPeerConnected(), linkUrl = p.proxyUrl("/player")) }
     }
 
+    /** DLNA renderers play one progressive file; there is no receiver-side remux, so separate
+     *  A/V tracks are refused (the VM picks a muxed source first; this is the last-line guard). */
+    fun dlnaStreamUrl(source: CastSource, receiverHost: String? = null): String? {
+        if (chromecastActive) return null
+        val video = source.video
+        if (video == null || video.url.isBlank() || video.videoOnly || video.audioOnly || source.audio != null) return null
+        val host = LocalStreamProxy.resolveBindHost(appContext, receiverHost) ?: return null
+        val p = proxy?.takeIf { proxyHost == host } ?: run {
+            stopProxy()
+            createProxy(receiverHost)
+        } ?: return null
+        return synchronized(configureLock) {
+            configureGen.incrementAndGet()
+            val generation = p.allocateGeneration()
+            applySource(p, null, source, generation)
+            p.proxyUrl("/stream/v?g=$generation")
+        }
+    }
+
     fun stopLink() = stopProxy()
 
     private fun stopProxy() {
         runCatching { proxy?.stop() }
         proxy = null
+        proxyHost = null
         proxyConfiguredVideoId = null
         _state.update { it.copy(linkUrl = null, linkConnected = false) }
     }
 
-    /** Fresh proxy per cast session. Stored on [proxy] so teardown and the sidx identity check see it. */
     private fun freshProxy(): LocalStreamProxy? {
         stopProxy()
         return createProxy()
     }
 
-    private fun createProxy(): LocalStreamProxy? {
-        val host = LocalStreamProxy.resolveBindHost(appContext) ?: return null
+    private fun createProxy(receiverHost: String? = endpoints[selectedId]?.host): LocalStreamProxy? {
+        val host = LocalStreamProxy.resolveBindHost(appContext, receiverHost) ?: return null
         return runCatching {
-            LocalStreamProxy(appContext, http, advertisedHost = host, mediaRequests = mediaRequests).also {
+            proxyFactory(host).also {
                 it.urlRefresher = urlRefresher
                 it.start()
                 proxy = it
+                proxyHost = host
             }
         }.onFailure {
             AppLog.event(AppLog.Category.CAST, "proxy_start_failed", failure = it, context = diagnosticTrace?.context)
@@ -251,10 +295,10 @@ class CastController(
         return true
     }
 
-    /** Single configure site: applies the manifest and stream metadata to [p]. */
+    /** Single configure site: all proxy stream configuration funnels through here. */
     private fun applySource(
         p: LocalStreamProxy,
-        manifestXml: String,
+        manifestXml: String?,
         source: CastSource,
         generation: Long,
     ) {
@@ -277,76 +321,28 @@ class CastController(
         proxyConfiguredVideoId = source.videoId
     }
 
-    /**
-     * Sidx wait → load → upgrade protocol. The default receiver
-     * cannot parse sidx, so a SegmentList manifest is required for segment
-     * addressing; SegmentBase loads immediately when sidx is slow so the TV
-     * still starts, then gets reloaded once SegmentList becomes available.
-     */
     private fun scheduleSidxUpgradeAndReceiverLoad(
         p: LocalStreamProxy,
         session: CastV2Session,
         player: CastRemotePlayer,
         source: CastSource,
         positionMs: Long,
+        autoplay: Boolean,
     ) {
         val gen = configureGen.get()
-        io.execute {
-            val vFuture = listeningIo.submit(Callable { p.fetchChunkIndex("v") })
-            val aFuture = listeningIo.submit(Callable { p.fetchChunkIndex("a") })
-            var sidxReady = false
-            try {
-                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
-                    Futures.getDone(vFuture); Futures.getDone(aFuture)
-                }, MoreExecutors.directExecutor()).get(SIDX_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                sidxReady = true
-            } catch (_: TimeoutException) {
-                Log.w(TAG, "sidx fetch timed out, loading SegmentBase first")
-            } catch (e: Exception) {
-                Log.w(TAG, "sidx fetch failed", e)
-            }
-
-            val vci = runCatching { Futures.getDone(vFuture) }.getOrNull()
-            val aci = runCatching { Futures.getDone(aFuture) }.getOrNull()
-            val firstLoadSegmentList = sidxReady && (vci != null || aci != null)
+        indices.load({ p.fetchChunkIndex("v") }, { p.fetchChunkIndex("a") }) { vci, aci, upgrade ->
             main.post {
                 if (this.proxy !== p || gen != configureGen.get()) return@post
-                if (firstLoadSegmentList) {
-                    upgradeToSegmentList(p, source, vci, aci, expectedGen = gen)
+                val updated = upgradeToSegmentList(p, source, vci, aci, expectedGen = gen)
+                if (!upgrade || updated) {
+                    val position = if (upgrade) player.currentPosition else positionMs
+                    val play = if (upgrade) player.playWhenReady else autoplay
+                    loadOnReceiver(session, player, p.proxyUrl("/manifest.mpd?g=${p.currentConfigId()}"), source, position, upgrade, play)
                 }
-                loadOnReceiver(session, player, p.proxyUrl("/manifest.mpd"), source, positionMs)
-            }
-
-            if (sidxReady) return@execute
-
-            // SegmentBase was loaded; keep waiting and reload with SegmentList.
-            try {
-                Futures.whenAllComplete(vFuture, aFuture).call(Callable {
-                    Futures.getDone(vFuture); Futures.getDone(aFuture)
-                }, MoreExecutors.directExecutor()).get(SIDX_RELOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            } catch (_: TimeoutException) {
-                Log.w(TAG, "sidx reload timed out, staying on SegmentBase")
-                return@execute
-            } catch (e: ExecutionException) {
-                Log.w(TAG, "sidx reload failed", e)
-                return@execute
-            }
-            val vReload = runCatching { Futures.getDone(vFuture) }.getOrNull()
-            val aReload = runCatching { Futures.getDone(aFuture) }.getOrNull()
-            if (this.proxy !== p || gen != configureGen.get()) return@execute
-            if (!upgradeToSegmentList(p, source, vReload, aReload, expectedGen = gen)) return@execute
-            main.post {
-                if (this.proxy !== p || gen != configureGen.get()) return@post
-                val reloadPos = runCatching { player.currentPosition }.getOrDefault(positionMs)
-                loadOnReceiver(
-                    session, player, p.proxyUrl("/manifest.mpd"), source, reloadPos,
-                    upgrade = true,
-                )
             }
         }
     }
 
-    /** Rebuilds the manifest with per-segment URLs and hot-swaps it in. */
     private fun upgradeToSegmentList(
         p: LocalStreamProxy,
         source: CastSource,
@@ -355,8 +351,7 @@ class CastController(
         expectedGen: Long,
     ): Boolean {
         if (vci == null && aci == null) return false
-        // Default receiver cannot parse sidx: every track that exists must
-        // have a SegmentList, otherwise the other half is silent.
+        // Default receiver cannot parse sidx: every existing track needs a SegmentList, else the other half is silent.
         if (source.video != null && !CastManifest.usableSegmentIndex(vci)) return false
         if (source.audio != null && !CastManifest.usableSegmentIndex(aci)) return false
         val generation = p.currentConfigId()
@@ -369,8 +364,7 @@ class CastController(
             audioIndex = aci,
             generation = generation,
         ) ?: return false
-        // Re-check under the lock: a main-thread configureProxy may have
-        // landed between the caller's gen check and this swap.
+        // Re-check under the lock: a main-thread configureProxy may have landed between the caller's gen check and this swap.
         synchronized(configureLock) {
             if (proxy !== p || expectedGen != configureGen.get()) return false
             applySource(p, manifest, source, generation)
@@ -381,24 +375,18 @@ class CastController(
     private fun loadOnReceiver(
         session: CastV2Session, player: CastRemotePlayer, manifestUrl: String,
         source: CastSource, positionMs: Long, upgrade: Boolean = false,
+        autoplay: Boolean = true,
     ) {
         if (currentSession !== session || !chromecastActive) return
         loadingUpgrade = upgrade && player.playbackState == Player.STATE_READY
-        player.loading(manifestUrl, source, positionMs)
-        session.load(manifestUrl, MimeTypes.APPLICATION_MPD, source.title, source.thumbnailUrl, positionMs.coerceAtLeast(0), source.author)
+        player.loading(manifestUrl, source, positionMs, autoplay)
+        session.load(manifestUrl, MimeTypes.APPLICATION_MPD, source.title, source.thumbnailUrl, positionMs.coerceAtLeast(0), source.author, autoplay)
     }
 
     private fun Format.ranges() = LocalStreamProxy.StreamRanges(
         indexStart = indexStart.toLong(),
         indexEnd = indexEnd.toLong(),
-        // Byte length is unknown (approxDurationMs is milliseconds); -1 keeps
-        // the proxy from emitting a bogus Content-Range total.
+        // Byte length is unknown (approxDurationMs is ms); -1 avoids a bogus Content-Range total.
         contentLength = -1L,
     )
-
-    companion object {
-        private const val TAG = "CastController"
-        private const val SIDX_FETCH_TIMEOUT_MS = 15_000L
-        private const val SIDX_RELOAD_TIMEOUT_MS = 15_000L
-    }
 }

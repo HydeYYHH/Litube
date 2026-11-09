@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import com.hhst.youtubelite.ui.components.YoutubeAlertDialog as AlertDialog
+import com.hhst.youtubelite.ui.components.AppAlertDialog as AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import com.hhst.youtubelite.ui.components.YoutubeTextButton as TextButton
+import com.hhst.youtubelite.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,11 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
+import com.hhst.youtubelite.cast.CastDevice
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.player.PlayerUiState
 import kotlinx.coroutines.delay
 
-/** Live Google Cast intro page. */
 private const val CAST_LEARN_URL = "https://support.google.com/googlecast/answer/6102923"
 
 @Composable
@@ -49,9 +50,8 @@ internal fun CastDialog(
     onDiscovery: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Discovery scanning is battery-hungry: run it only while this dialog is
-    // open, and keep the 1.5 s route re-poll for OEM ROMs that drop
-    // discovery callbacks (the first scan can take several seconds).
+    // Discovery scanning is battery-hungry: run it only while this dialog is open;
+    // the 1.5 s route re-poll covers OEM ROMs that drop discovery callbacks.
     DisposableEffect(Unit) {
         onDiscovery(true)
         onDispose { onDiscovery(false) }
@@ -64,7 +64,7 @@ internal fun CastDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = AppStyle.Panel,
         title = {
             Text(
                 text = stringResource(R.string.cast),
@@ -98,20 +98,12 @@ internal fun CastDialog(
                 )
                 if (state.castDevices.isEmpty()) {
                     Text(
-                        text = if (state.castAvailable) {
-                            stringResource(R.string.cast_no_devices_found)
-                        } else {
-                            stringResource(R.string.cast_unavailable)
-                        },
+                        text = stringResource(R.string.cast_searching),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = SettingsTokens.DetailSize.sp,
                     )
                     Text(
-                        text = if (state.castAvailable) {
-                            stringResource(R.string.cast_no_devices_hint)
-                        } else {
-                            stringResource(R.string.cast_unavailable_hint)
-                        },
+                        text = stringResource(R.string.cast_no_devices_hint),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 4.dp),
@@ -151,12 +143,20 @@ internal fun CastDialog(
                                 },
                                 modifier = Modifier.weight(1f),
                             )
+                            if (device.kind == CastDevice.KIND_DLNA) {
+                                // Brand tag, not translated prose: it names the protocol.
+                                Text(
+                                    text = "DLNA",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
-                // Link-cast is a separate mode from a Chromecast session: the
-                // proxy serves the receiver's manifest during one, so the link
-                // section (and with it the reconfigure path) is hidden here.
+                // Link-cast is a separate mode from a Chromecast session (the proxy
+                // serves the receiver's manifest), so the link section is hidden here.
                 if (!state.casting) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),

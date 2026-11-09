@@ -105,7 +105,11 @@ class AndroidUidtJobPort(
             .setEstimatedNetworkBytes(estimated, 0L)
             .setExtras(extras)
             .build()
-        val code = scheduler.schedule(job)
+        val code = try {
+            scheduler.schedule(job)
+        } catch (_: SecurityException) {
+            return UidtRegisterResult.RejectedNoUserInteraction
+        }
         return if (code == JobScheduler.RESULT_SUCCESS) {
             UidtRegisterResult.Created(request.jobId)
         } else {

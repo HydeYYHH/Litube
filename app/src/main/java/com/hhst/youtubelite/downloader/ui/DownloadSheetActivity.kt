@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.downloader.ui
 
+import com.hhst.youtubelite.ui.components.watchSheetHost
 import android.content.Context
 import androidx.compose.material3.ExperimentalMaterial3Api
 import android.content.Intent
@@ -27,6 +28,7 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.downloader.core.EnqueueResult
 import com.hhst.youtubelite.core.PipAutoEnter
 import com.hhst.youtubelite.ui.theme.AppTheme
+import com.hhst.youtubelite.ui.theme.NeutralControls
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,12 +38,15 @@ class DownloadSheetActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        (application as com.hhst.youtubelite.App).startMediaRuntime()
         enableEdgeToEdge()
         val videoId = intent.getStringExtra(DownloadUi.EXTRA_VIDEO_ID)
         val snapshotId = intent.getStringExtra(DownloadUi.EXTRA_SNAPSHOT_ID)
         val snapshot = snapshotId?.let { DownloadUiSessions.get(this, it) }
         setContent {
-            AppTheme {
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.hhst.youtubelite.ui.components.LocalSheetPlayerBottomFraction provides intent.getFloatExtra(EXTRA_PLAYER_BOTTOM, 0f),
+            ) { AppTheme { NeutralControls {
                 val vm = koinViewModel<DownloadViewModel>()
                 val snackbar = remember { SnackbarHostState() }
                 var result by remember { mutableStateOf<EnqueueResult?>(null) }
@@ -55,9 +60,8 @@ class DownloadSheetActivity : ComponentActivity() {
                     val r = result ?: return@LaunchedEffect
                     val snack = DownloadPresentation.snackbarFor(r)
                     val message = if (snack.kind == SnackbarKind.NO_NEW_TASKS) none else addedMessage
-                    // An action label makes the M3 default Indefinite, which would
-                    // hold this activity open until tapped; Short keeps the View
-                    // action available while still auto-dismissing.
+                    // An action label makes M3 default Indefinite, holding this activity open
+                    // until tapped; Short keeps the View action while auto-dismissing.
                     val outcome = snackbar.showSnackbar(
                         message,
                         actionLabel = viewLabel,
@@ -107,7 +111,7 @@ class DownloadSheetActivity : ComponentActivity() {
                             .padding(16.dp),
                     )
                 }
-            }
+            } } }
         }
     }
 
@@ -123,6 +127,12 @@ class DownloadSheetActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val EXTRA_PLAYER_BOTTOM = "sheetPlayerBottomFraction"
+        private fun Intent.withWatchGeometry(context: Context): Intent = apply {
+            context.watchSheetHost()?.let { host ->
+                putExtra(EXTRA_PLAYER_BOTTOM, host.sheetPlayerBottomPx.toFloat() / host.sheetWindowHeightPx.coerceAtLeast(1))
+            }
+        }
         fun singleIntent(
             context: Context,
             videoId: String,
@@ -134,9 +144,11 @@ class DownloadSheetActivity : ComponentActivity() {
             .putExtra(DownloadUi.EXTRA_TITLE, title)
             .putExtra(DownloadUi.EXTRA_AUTHOR, author)
             .putExtra(DownloadUi.EXTRA_THUMBNAIL, thumbnailUrl)
+            .withWatchGeometry(context)
 
         fun batchIntent(context: Context, snapshotId: String): Intent =
             Intent(context, DownloadSheetActivity::class.java)
                 .putExtra(DownloadUi.EXTRA_SNAPSHOT_ID, snapshotId)
+                .withWatchGeometry(context)
     }
 }

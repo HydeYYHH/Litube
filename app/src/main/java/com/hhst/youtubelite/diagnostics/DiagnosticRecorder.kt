@@ -1,10 +1,9 @@
 package com.hhst.youtubelite.diagnostics
 
-import com.google.gson.Gson
 import java.util.ArrayDeque
 import java.util.UUID
 
-/** Bounded, platform-independent flight recorder. The sink must enqueue, never perform IO. */
+/** Bounded, platform-independent flight recorder; the sink must enqueue, never perform IO. */
 internal class DiagnosticRecorder(
     private val process: String,
     private val pid: Int,
@@ -14,7 +13,6 @@ internal class DiagnosticRecorder(
     private val sink: (List<DiagnosticEvent>, Boolean) -> Unit,
     private val snapshotProviders: () -> Map<String, Map<String, Any?>> = { emptyMap() },
 ) {
-    private val gson = Gson()
     private data class Buffered(val record: DiagnosticEvent, val bytes: Int)
     private data class Aggregate(val first: DiagnosticEvent, var count: Long, var lastAt: Long, var last: DiagnosticEvent = first,
         val totals: MutableMap<String, Long> = linkedMapOf())
@@ -54,7 +52,7 @@ internal class DiagnosticRecorder(
                 causes = error.causes.map { it.copy(frames = emptyList()) }, stackReference = true))
             while (errors.size > 256) errors.remove(errors.first())
         }
-        if (gson.toJson(record).toByteArray(Charsets.UTF_8).size > MAX_RECORD_BYTES) {
+        if (DiagnosticJson.encode(record).toByteArray(Charsets.UTF_8).size > MAX_RECORD_BYTES) {
             truncated++
             record = record.copy(fields = mapOf("truncated" to true), error = record.error?.copy(
                 causes = record.error.causes.take(2).map { it.copy(frames = it.frames.take(12)) }))
@@ -80,7 +78,7 @@ internal class DiagnosticRecorder(
                 while (lastIncidents.size > 128) lastIncidents.remove(lastIncidents.keys.first())
             }
         }
-        val bytes = gson.toJson(record).toByteArray(Charsets.UTF_8).size
+        val bytes = DiagnosticJson.encode(record).toByteArray(Charsets.UTF_8).size
         ring.addLast(Buffered(record, bytes)); ringBytes += bytes
         trim(now)
         if (kind == "snapshot") {

@@ -19,21 +19,62 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.test.platform.app.InstrumentationRegistry
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.DeviceEvidence
 import com.hhst.youtubelite.player.PlayerUiState
+import com.hhst.youtubelite.player.GestureUi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import com.hhst.youtubelite.ui.theme.AppTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
-/** Exercise the real chrome and popup routing; no network or playback timing is involved. */
+/** Real chrome and popup routing; no network or playback timing. */
 class PlayerControlSizingAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<PlayerTestActivity>()
     private val calls = mutableMapOf<String, Int>()
     private fun actions() = proxyActions("ControlSizingActions") { name, _ ->
         calls[name] = (calls[name] ?: 0) + 1
+    }
+
+    @Test fun draggingFromThePlayButtonPreviewsSeekWithoutTogglingPlayback() {
+        val gesture = mutableStateOf<GestureUi?>(null)
+        var commits = 0
+        var toggles = 0
+        val callbacks = proxyActions("SeekChromeActions") { name, args ->
+            when (name) {
+                "onScrubPreview" -> gesture.value = GestureUi.Scrub(targetMs = 30_000L + (args!![0] as Long), deltaMs = args[0] as Long)
+                "onScrubCommit" -> commits++
+                "onPlayPause" -> toggles++
+                "onGestureEnd" -> gesture.value = null
+            }
+        }
+        compose.setContent { AppTheme {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                PlayerSurface(sample().copy(durationMs = 120_000L), remember { mutableStateOf(30_000L) },
+                    remember { mutableStateOf(30_000L) }, gesture, remember { mutableStateOf(null) },
+                    remember { mutableStateOf(emptyList()) }, callbacks, {}, {}, managedByHost = true,
+                    modifier = Modifier.size(390.dp, 260.dp).testTag("seek-frame"))
+            }
+        } }
+        val frame = compose.onNodeWithTag("seek-frame")
+        val center = compose.onNodeWithTag("player-center-controls").fetchSemanticsNode().boundsInRoot.center
+        val rect = frame.fetchSemanticsNode().boundsInRoot
+        val origin = center - rect.topLeft
+        val bar = compose.onNodeWithContentDescription(compose.activity.getString(R.string.player_time_bar))
+        val before = bar.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current
+        frame.performTouchInput {
+            down(origin)
+            moveTo(origin + Offset(40f, 0f), 32)
+            moveTo(origin + Offset(100f, 0f), 32)
+        }
+        compose.onNodeWithTag("player-topbar").assertIsDisplayed()
+        compose.onNodeWithTag("player-center-controls").assertDoesNotExist()
+        compose.onNodeWithTag("player-seek-offset").assertIsDisplayed()
+        assertTrue(bar.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current > before)
+        frame.performTouchInput { up() }
+        compose.runOnIdle { assertEquals(1, commits); assertEquals(0, toggles) }
     }
 
     private fun orient(orientation: Int) {
@@ -43,9 +84,6 @@ class PlayerControlSizingAndroidTest {
         compose.waitUntil(10_000) { compose.activity.resources.configuration.orientation == expected }
     }
 
-    private fun back() = InstrumentationRegistry.getInstrumentation()
-        .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-
     private fun button(node: SemanticsNodeInteraction, frame: Rect, density: Float, widthDp: Int = 48): Rect {
         node.assertIsDisplayed()
         val rect = node.fetchSemanticsNode().boundsInRoot
@@ -53,6 +91,60 @@ class PlayerControlSizingAndroidTest {
         assertTrue("Button outside video frame", rect.left >= frame.left - 1 && rect.right <= frame.right + 1 &&
             rect.top >= frame.top - 1 && rect.bottom <= frame.bottom + 1)
         return rect
+    }
+
+    @Test fun topActionsStayConsistentAcrossWidthsAndPlaybackModes() {
+        orient(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+        var width by mutableIntStateOf(320)
+        var fullscreen by mutableStateOf(false)
+        var casting by mutableStateOf(false)
+        var opened = 0
+        compose.setContent { AppTheme(darkTheme = true, dynamicColor = false) {
+            TopBar(
+                state = sample().copy(fullscreen = fullscreen, casting = casting),
+                positionState = remember { mutableStateOf(0L) },
+                onBack = {},
+                onMore = { opened++ },
+                onSubtitle = {},
+                modifier = Modifier.width(width.dp),
+            )
+        } }
+        for (nextWidth in listOf(320, 700)) {
+            for (isFullscreen in listOf(false, true)) {
+                for (isCasting in listOf(false, true)) {
+                    compose.runOnIdle { width = nextWidth; fullscreen = isFullscreen; casting = isCasting }
+                    compose.onAllNodes(hasAnyAncestor(hasTestTag("player-topbar")) and hasClickAction())
+                        .assertCountEquals(3)
+                    for (label in listOf(R.string.navigate_back, R.string.subtitles, R.string.more_options)) {
+                        compose.onNodeWithContentDescription(compose.activity.getString(label)).assertIsDisplayed()
+                    }
+                    compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performClick()
+                }
+            }
+        }
+        compose.runOnIdle { assertEquals(8, opened) }
+    }
+
+    @Test fun initialAndPreparedVideoStatesStayLoadingUntilTheirFirstFrame() {
+        var state by mutableStateOf(PlayerUiState(visible = true))
+        compose.setContent { AppTheme {
+            CenterControls(state, {}, modifier = Modifier.testTag("center-controls"))
+        } }
+        compose.onNodeWithTag("player-buffering").assertIsDisplayed()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_play)).assertDoesNotExist()
+        compose.runOnIdle {
+            state = state.copy(prepared = true, userWantsPlay = true, qualities = listOf("720p"))
+        }
+        compose.onNodeWithTag("player-buffering").assertIsDisplayed()
+        compose.runOnIdle { state = state.copy(firstFrameRendered = true, isPlaying = true) }
+        compose.onNodeWithTag("player-buffering").assertDoesNotExist()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_pause)).assertIsDisplayed()
+        compose.runOnIdle { state = state.copy(userWantsPlay = false, isPlaying = false) }
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_play)).assertIsDisplayed()
+        compose.runOnIdle { state = state.copy(firstFrameRendered = false, userWantsPlay = true,
+            isPlaying = true, qualities = emptyList()) }
+        compose.onNodeWithTag("player-buffering").assertDoesNotExist()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_pause)).assertIsDisplayed()
     }
 
     @Test fun embeddedControlsRemainReadableAndOverflowActionsStayReachable() {
@@ -90,35 +182,32 @@ class PlayerControlSizingAndroidTest {
             full.performTouchInput { click() }
             compose.runOnIdle { assertEquals(old + 1, calls["onFullscreenToggle"]) }
 
-            val quality = compose.onAllNodesWithText("Auto 1080p").fetchSemanticsNodes()
-            if (quality.isNotEmpty()) {
-                val q = compose.onNodeWithText("Auto 1080p")
-                val qRect = button(q, frame, density)
-                assertTrue("Quality and fullscreen targets overlap", qRect.right <= fullRect.left + 1)
-                q.performTouchInput { click() }
-            } else {
-                more.performTouchInput { click() }
-                compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
-                    .performScrollTo().performTouchInput { click() }
-            }
+            more.performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
+                .performScrollTo().performTouchInput { click() }
+            compose.onNodeWithTag("player-dialog-quality").assertIsDisplayed()
+            compose.onNodeWithText(compose.activity.getString(R.string.audio_track)).assertDoesNotExist()
+            val qualityBeforeDismiss = calls["onQuality"] ?: 0
+            compose.onNodeWithTag("player-dialog-scrim").performTouchInput { click(Offset(8f, 8f)) }
+            compose.onNodeWithTag("player-dialog-quality").assertDoesNotExist()
+            compose.runOnIdle { assertEquals(qualityBeforeDismiss, calls["onQuality"] ?: 0) }
+            more.performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.player_info_quality))
+                .performScrollTo().performTouchInput { click() }
             val oldQuality = calls["onQuality"] ?: 0
             compose.onNodeWithText("720p").assertIsDisplayed().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldQuality + 1, calls["onQuality"]) }
-            if (compose.onAllNodesWithText("1.0x").fetchSemanticsNodes().isNotEmpty()) {
-                compose.onNodeWithText("1.0x").performTouchInput { click() }
-            } else {
-                more.performTouchInput { click() }
-                compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed))
-                    .performScrollTo().performTouchInput { click() }
-            }
+            compose.onNodeWithTag("player-dialog-quality").assertDoesNotExist()
+            compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options))
+                .performTouchInput { click() }
+            compose.onNodeWithText(compose.activity.getString(R.string.info_playback_speed))
+                .performScrollTo().performTouchInput { click() }
+            compose.onNodeWithTag("player-dialog-speed").assertIsDisplayed()
             val oldSpeed = calls["onSpeed"] ?: 0
             compose.onNodeWithText("1.5x").performScrollTo().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldSpeed + 1, calls["onSpeed"]) }
-            more.performTouchInput { click() }
-            compose.onNodeWithText(compose.activity.getString(R.string.segments))
-                .performScrollTo().performTouchInput { click() }
-            compose.onNodeWithText(compose.activity.getString(R.string.no_segments)).assertIsDisplayed()
-            back()
+            // Chapters/segments live behind the chapter chip; with neither present the entry stays hidden.
+            compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
             compose.waitForIdle()
         }
         compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performTouchInput { click() }
@@ -147,13 +236,10 @@ class PlayerControlSizingAndroidTest {
         val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
         val time = compose.onNodeWithText("1:11:12").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText("2:22:24").assertIsDisplayed()
-        val speed = button(compose.onNodeWithText("1.0x"), frame, density)
-        val quality = button(compose.onNodeWithText("Auto 1080p"), frame, density)
         val full = button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
-        assertTrue("Time must have its own row when the controls no longer fit", time.bottom <= speed.top)
-        assertTrue("Bottom targets overlap", speed.right <= quality.left + 1 && quality.right <= full.left + 1)
+        assertTrue("Time and fullscreen targets overlap", time.right <= full.left + 1)
         val subtitle = compose.onNodeWithText("Readable subtitle").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue("Wrapped time row overlaps captions", subtitle.bottom <= time.top)
+        assertTrue("Captions overlap the info band", subtitle.bottom <= time.top)
         DeviceEvidence.captureScene("controls-tall-320-font20")
     }
 
@@ -230,21 +316,32 @@ class PlayerControlSizingAndroidTest {
             compose.runOnIdle { fontScale = scale }
             compose.waitForIdle()
             val frame = compose.onNodeWithTag("control-frame").fetchSemanticsNode().boundsInRoot
-            val rects = listOf(R.string.queue, R.string.segments, R.string.subtitles, R.string.more_options).map {
+            val rects = listOf(R.string.navigate_back, R.string.subtitles, R.string.more_options).map {
                 button(compose.onNodeWithContentDescription(compose.activity.getString(it)), frame, density,
                     widthDp = if (it == R.string.subtitles || it == R.string.more_options) 40 else 48)
             }
             rects.zipWithNext().forEach { (a, b) -> assertTrue("Top targets overlap", a.right <= b.left + 1) }
-            button(compose.onNodeWithText("Auto 1080p"), frame, density)
             button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
             compose.onNodeWithText("1:11:12").assertIsDisplayed()
-            Thread.sleep(200) // SurfaceView and vector redraw follow the platform frame clock.
+            Thread.sleep(200) // SurfaceView/vector redraw follow the platform frame clock.
             compose.waitForIdle()
             DeviceEvidence.captureScene("controls-fullscreen-font${(scale * 10).toInt()}")
         }
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.playback_end_next)).performScrollTo().performClick()
+        compose.onNodeWithTag("player-dialog-end-behavior").assertIsDisplayed()
+        val loopBeforeDismiss = calls["onLoopMode"] ?: 0
+        compose.onNodeWithTag("player-dialog-scrim").performTouchInput { click(Offset(8f, 8f)) }
+        compose.onNodeWithTag("player-dialog-end-behavior").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(loopBeforeDismiss, calls["onLoopMode"] ?: 0) }
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.more_options)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.cast)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.queue)).performScrollTo().performClick()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.playback_end_next)).assertIsDisplayed()
     }
 
     private fun sample() = PlayerUiState(visible = true, title = "Kimi no Na wa - Sparkle", author = "Calmato ASMR",
+        prepared = true, firstFrameRendered = true,
         durationMs = 8_544_000L, activeQuality = "1080p", videoWidth = 1920, videoHeight = 1080,
         qualities = listOf("1080p", "720p", "480p"))
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="zero">a %1$d dolen arall</item>
+        <item quantity="one">ac %1$d dolen arall</item>
+        <item quantity="two">a %1$d ddolen arall</item>
+        <item quantity="few">a %1$d dolen arall</item>
+        <item quantity="many">a %1$d dolen arall</item>
+        <item quantity="other">a %1$d dolen arall</item>
+    </plurals>
+</resources>

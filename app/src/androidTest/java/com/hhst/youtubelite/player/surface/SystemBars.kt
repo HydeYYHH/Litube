@@ -16,7 +16,7 @@ internal fun statusBarsHidden(activity: Activity): Boolean = if (Build.VERSION.S
 }
 
 /** Whether any system bar is visible; call from the UI thread (frame-sampling safe). */
-// The legacy flag read is the authoritative signal pre-30; ViewInsetsControllerCompat has no query.
+// Legacy flag read is the authoritative signal pre-30; ViewInsetsControllerCompat has no query.
 @Suppress("DEPRECATION")
 internal fun systemBarsVisible(decorView: View): Boolean = if (Build.VERSION.SDK_INT < 30) {
     val flags = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION

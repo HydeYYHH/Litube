@@ -5,8 +5,6 @@ import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-/** Test doubles for the WebView threading seams. Lives in the test source set. */
-
 /** Executing PoToken WebView work off [allowed] fails immediately; no hop. */
 class CheckingWebViewMainGate(
     private val allowed: Thread,

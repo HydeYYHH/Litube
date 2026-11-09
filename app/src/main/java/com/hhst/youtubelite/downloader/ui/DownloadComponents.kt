@@ -1,6 +1,10 @@
 package com.hhst.youtubelite.downloader.ui
 
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import com.hhst.youtubelite.ui.components.AppCheckbox
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -25,7 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.hhst.youtubelite.ui.components.YoutubeLinearProgressIndicator as LinearProgressIndicator
+import com.hhst.youtubelite.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.theme.AppStyle
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 import com.hhst.youtubelite.core.HapticsController
 import com.hhst.youtubelite.downloader.core.DownloadPhase
@@ -82,13 +88,13 @@ fun DownloadCapsuleButton(
         modifier = modifier
             .heightIn(min = DownloadTokens.MinTouch)
             .semantics { this.contentDescription = desc },
-        shape = RoundedCornerShape(DownloadTokens.Capsule),
+        shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            containerColor = MaterialTheme.colorScheme.onSurface,
+            contentColor = MaterialTheme.colorScheme.surface,
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
     ) {
         if (iconRes != 0) {
             Icon(
@@ -98,7 +104,7 @@ fun DownloadCapsuleButton(
             )
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, fontWeight = FontWeight.Normal, fontSize = SettingsTokens.BodySize.sp)
+        Text(text, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
 
@@ -107,6 +113,7 @@ fun DownloadFilterChip(
     selected: Boolean,
     label: String,
     compact: Boolean = false,
+    capsule: Boolean = false,
     onClick: () -> Unit,
 ) {
     val haptics: HapticsController = koinInject()
@@ -116,11 +123,12 @@ fun DownloadFilterChip(
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.heightIn(min = if (compact) 32.dp else 36.dp)
-            .background(if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+            .background(if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceVariant,
+                if (capsule) CircleShape else RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.labelLarge,
+            Text(label, fontSize = 14.sp, lineHeight = 20.sp,
                 color = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Normal)
+                fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -138,26 +146,33 @@ fun DownloadItemRow(
     item: DownloadItemUiState,
     onOpen: () -> Unit,
     onAction: (DownloadRowAction) -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
 ) {
     var moreExpanded by remember(item.itemId ?: item.taskId) { mutableStateOf(false) }
+    val haptic = com.hhst.youtubelite.ui.design.rememberHapticAction()
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = DownloadTokens.MinTouch)
-            .clickable(onClick = onOpen)
+            .combinedClickable(onClick = { if (selectionMode) haptic(); onOpen() }, onLongClick = onLongClick)
+            .semantics { if (selectionMode) this.selected = selected }
+            .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else androidx.compose.ui.graphics.Color.Transparent)
             .padding(horizontal = DownloadTokens.PageInset, vertical = 8.dp),
     ) {
         val stacked = maxWidth < 320.dp || LocalDensity.current.fontScale > 1.3f
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DownloadThumbnail(item.thumbnailUrl, Modifier.width(if (stacked) 80.dp else 120.dp))
-                Spacer(Modifier.width(12.dp))
+                DownloadThumbnail(item.thumbnailUrl, Modifier.width(if (stacked) 96.dp else 112.dp))
+                Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = item.title,
                         minLines = 1,
-                        maxLines = DownloadTokens.TITLE_MAX_LINES,
-                        overflow = TextOverflow.Ellipsis,
+                        modifier = overflowMarquee(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
                         fontWeight = FontWeight.Normal,
                         fontSize = SettingsTokens.BodySize.sp,
                         lineHeight = SettingsTokens.BodyLine.sp,
@@ -165,43 +180,20 @@ fun DownloadItemRow(
                     )
                     Text(
                         text = item.author.orEmpty(),
+                        modifier = overflowMarquee(),
                         minLines = 1,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Clip,
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (!stacked) DownloadRowDetails(item, stacked = false)
                 }
+                if (selectionMode) AppCheckbox(selected, { onOpen() })
                 val actions = DownloadPresentation.actionsFor(item)
-                val primary = actions.firstOrNull {
-                    it == DownloadRowAction.PAUSE ||
-                        it == DownloadRowAction.RESUME ||
-                        it == DownloadRowAction.RETRY ||
-                        it == DownloadRowAction.OPEN
-                }
-                val primaryLabel = primary?.let { actionLabel(it) }
                 val moreLabel = stringResource(R.string.download_more_actions)
-                // Reserve the primary action slot even when a transition has no action.
-                Box(Modifier.width(DownloadTokens.RowActionWidth).height(DownloadTokens.MinTouch)) {
-                    if (primary != null && primaryLabel != null) {
-                        IconButton(
-                            onClick = { onAction(primary) },
-                            modifier = Modifier
-                                .width(DownloadTokens.RowActionWidth).height(DownloadTokens.MinTouch)
-                                .semantics { contentDescription = primaryLabel },
-                        ) {
-                            Icon(
-                                painter = painterResource(actionIcon(primary)),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(DownloadTokens.Icon),
-                            )
-                        }
-                    }
-                }
-                Box {
+                if (!selectionMode) Box {
                     IconButton(
                         onClick = { moreExpanded = true },
                         modifier = Modifier
@@ -211,7 +203,7 @@ fun DownloadItemRow(
                         Icon(
                             painter = painterResource(R.drawable.ic_more),
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(DownloadTokens.Icon),
                         )
                     }
@@ -220,7 +212,7 @@ fun DownloadItemRow(
                         onDismissRequest = { moreExpanded = false },
                         modifier = Modifier.widthIn(min = 200.dp, max = 280.dp).heightIn(max = 360.dp),
                         shape = RoundedCornerShape(12.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = AppStyle.Panel,
                         shadowElevation = 4.dp,
                         tonalElevation = 0.dp,
                     ) {
@@ -269,27 +261,30 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
         // Preserve normal row height across status changes; stacked rows grow with their text.
         if (stacked && meta.isNotBlank()) Text(
             text = meta,
+            modifier = overflowMarquee(),
             minLines = 1,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            overflow = TextOverflow.Clip,
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
             lineHeight = 16.sp,
         )
         Text(
             text = if (stacked) phaseText else listOf(meta, phaseText).filter { it.isNotBlank() }.joinToString(" · "),
+            modifier = overflowMarquee(),
             minLines = 1,
-            maxLines = if (stacked) Int.MAX_VALUE else 1,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
             lineHeight = 16.sp,
         )
         if (!stacked || failure != null || !progressText.isNullOrBlank()) Text(
             text = failure ?: progressText.orEmpty(),
+            modifier = overflowMarquee(),
             minLines = 1,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            overflow = TextOverflow.Clip,
             fontSize = 12.sp,
             color = if (failure != null) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
@@ -316,7 +311,12 @@ private fun DownloadRowDetails(item: DownloadItemUiState, stacked: Boolean) {
 }
 
 @Composable
-private fun actionLabel(action: DownloadRowAction): String = stringResource(
+private fun overflowMarquee(): Modifier = if (com.hhst.youtubelite.ui.design.LocalMotionScale.current > 0f) {
+    Modifier.fillMaxWidth().basicMarquee(iterations = 3, initialDelayMillis = 1_500, velocity = 24.dp)
+} else Modifier.fillMaxWidth()
+
+@Composable
+internal fun actionLabel(action: DownloadRowAction): String = stringResource(
     when (action) {
         DownloadRowAction.PAUSE -> R.string.action_pause
         DownloadRowAction.RESUME -> R.string.download_resume
@@ -341,7 +341,7 @@ private fun failureCopy(reason: String): String = when {
     else -> reason
 }
 
-private fun actionIcon(action: DownloadRowAction): Int = when (action) {
+internal fun actionIcon(action: DownloadRowAction): Int = when (action) {
     DownloadRowAction.PAUSE -> R.drawable.ic_pause
     DownloadRowAction.RESUME -> R.drawable.ic_play
     DownloadRowAction.RETRY, DownloadRowAction.REDOWNLOAD -> R.drawable.ic_replay
