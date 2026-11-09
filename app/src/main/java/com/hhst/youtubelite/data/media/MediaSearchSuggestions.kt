@@ -29,10 +29,7 @@ internal fun mergeSearchRows(history: List<String>, remote: List<String>, query:
     return SearchRowSet(matching, rest)
 }
 
-/**
- * Live search-panel rows: local per-account history plus best-effort server suggestions.
- * Suggestion failures degrade to an empty remote list — the panel never errors over them.
- */
+/** Best-effort server suggestions; failures degrade to an empty remote list — the panel never errors over them. */
 class MediaSearchSuggestions(private val client: MediaClient, kv: PreferenceStore,
     private val privateBrowsing: () -> Boolean = { false },
     private val identity: () -> RequestContext = MediaSession::snapshot) {

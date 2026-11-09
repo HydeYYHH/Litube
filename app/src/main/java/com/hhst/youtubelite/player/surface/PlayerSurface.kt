@@ -78,15 +78,8 @@ private const val HINT_AUTO_HIDE_MS = 1_200L
 private const val SEEK_ARC_HIDE_MS = 500L
 
 /**
- * Player overlay: video + gestures + chrome.
- *
- * Embedded: JS-reported in-page box (fallback 48 dp masthead + 16:9).
- * Fullscreen: edge-to-edge. Mini-player is sized by the host.
- *
- * Playback position arrives as [positionState] / [bufferedPositionState]
- * (updated ~4 Hz) instead of fields on [state]: they are consumed only by the
- * time bar and the position text, so ticks never recompose the rest of the
- * surface (sheets, dialogs, menus, subtitle layout, gesture overlays).
+ * Position ticks arrive as [positionState] / [bufferedPositionState] (not fields on
+ * [state]) so ~4 Hz updates recompose only the time bar, not the whole surface.
  */
 @UnstableApi
 @Composable
@@ -123,12 +116,10 @@ fun PlayerSurface(
     }
     var topBarHeightPx by remember { mutableIntStateOf(0) }
     var bottomBarHeightPx by remember { mutableIntStateOf(0) }
-    // Distance from the player bottom to the visible track, measured from the
-    // laid-out chrome. The sponsor cards and the subtitle safe area all anchor
-    // to it instead of to a hardcoded bar height.
+    // Measured track anchor (not a hardcoded bar height) shared by sponsor cards
+    // and subtitle clearance.
     var trackClearancePx by remember { mutableIntStateOf(0) }
-    // Visual height of the visible skip card (the 48 dp touch box extends
-    // invisibly and must not push subtitles further up).
+    // Visible height only: the 48 dp touch box is invisible and must not push subtitles up.
     var skipCardPx by remember { mutableIntStateOf(0) }
     val zoom = remember { VideoZoom() }
     val miniHandle = LocalMiniPlayerHandle.current
@@ -141,8 +132,8 @@ fun PlayerSurface(
         }
     }
     val fillsHostWindow = managedByHost || state.fullscreen || pip || state.mini
-    // A host-managed surface (embedded/fullscreen interpolation, mini dock)
-    // resizes the same view; only system PiP swaps to a separate geometry.
+    // Host-managed surfaces resize the same view; only system PiP swaps to a
+    // separate geometry, so it alone gets its own key.
     val surfaceId = when {
         pip -> "pip"
         managedByHost -> "local"
@@ -167,8 +158,8 @@ fun PlayerSurface(
     val chromeLeft = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(leftInsetDp) else 0
     val chromeRight = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(rightInsetDp) else 0
     val hudTop = if (state.fullscreen && !pip) PlayerUi.fullscreenSideDp(topInsetDp) else 0
-    // Already inside the fullscreen chrome inset; only add enough to keep
-    // the countdown 12 dp from the safe edge, instead of the gesture rail's 12%.
+    // Already inside the fullscreen chrome inset; add only enough to keep the
+    // countdown 12 dp from the safe edge, not the gesture rail's 12%.
     val sponsorEnd = (maxOf(12, rightInsetDp) - chromeRight).coerceAtLeast(0)
     val sidePad = if (chromeLeft > 0 || chromeRight > 0) {
         Modifier.padding(start = chromeLeft.dp, end = chromeRight.dp)
@@ -185,23 +176,20 @@ fun PlayerSurface(
     }
     LaunchedEffect(state.mini) {
         if (state.mini) {
-            // Queue remains available in the mini player; MiniPlayerChrome has its
-            // own queue button. Other sheets, including More, stay closed so they
-            // do not cover the docked player.
+            // Queue survives in mini (MiniPlayerChrome has its own button);
+            // other sheets would cover the docked player.
             if (sheet != PlayerSheet.Queue) sheet = null
             dialog = null
             menu = null
         }
     }
     LaunchedEffect(state.fullscreen, state.casting, state.mini, state.videoId, pip) {
-        // pip (PiP) included: the PiP window has no controls to reset a
-        // leftover pinch-zoom, and its aspect is computed from raw videoSize.
+        // PiP included: it has no controls to reset a leftover pinch-zoom and
+        // its aspect is computed from raw videoSize.
         if (!state.fullscreen || state.casting || state.mini || pip) zoom.reset()
     }
-    // A new video starts clean even mid-fullscreen autoplay: no inherited
-    // pinch-zoom (the effect above only covers surface geometry swaps) and no
-    // dropdowns/dialogs left open over the autoplayed video. The queue sheet
-    // survives — the queue is what drives the advance.
+    // New video starts clean even mid-fullscreen autoplay (the effect above only
+    // covers geometry swaps); the queue sheet survives — it drives the advance.
     LaunchedEffect(state.videoId) {
         zoom.reset()
         if (sheet != PlayerSheet.Queue) sheet = null
@@ -209,8 +197,8 @@ fun PlayerSurface(
         menu = null
     }
 
-    // Boolean projection of the gesture state: the auto-hide timer keys on
-    // gesture activity, not on each pointer-rate gesture update.
+    // Boolean projection: the auto-hide timer keys on gesture presence, not on
+    // each pointer-rate gesture update.
     val gestureActive by remember { derivedStateOf { gestureState.value != null } }
     val seekGestureActive by remember { derivedStateOf { gestureState.value is GestureUi.Scrub } }
     val previewPosition = remember(positionState, gestureState) {
@@ -231,9 +219,8 @@ fun PlayerSurface(
             callbacks.onHideControls()
         }
     }
-    // Hint and DoubleTapSeek read their States inside the effects (snapshotFlow):
-    // reading them in composition would subscribe this whole surface to the
-    // pointer-rate writes.
+    // Read States inside snapshotFlow: reading them in composition would
+    // subscribe this whole surface to the pointer-rate writes.
     LaunchedEffect(Unit) {
         snapshotFlow { hintState.value }.collectLatest { hint ->
             if (hint != null) {
@@ -242,8 +229,8 @@ fun PlayerSurface(
             }
         }
     }
-    // Double-tap arcs are one-shot feedback; nothing
-    // else clears them, so they would stick without this timer.
+    // One-shot feedback: nothing else clears the arcs, so they would stick
+    // without this timer.
     LaunchedEffect(Unit) {
         snapshotFlow { gestureState.value }.collectLatest { gesture ->
             if (gesture is GestureUi.DoubleTapSeek) {
@@ -299,15 +286,12 @@ fun PlayerSurface(
                     },
             ) {
                 key(surfaceId) {
-                    // Attach and detach via DisposableEffect keyed on the view.
-                    // AndroidView factory/onRelease are not used: in a same-frame
-                    // swap the new factory runs before the old onRelease, so
-                    // releasing the player surface there would drop the new view.
-                    // onDispose only clears the player when this view is still
-                    // attached. The SurfaceView is created in composition (not in
-                    // a side effect) so the effect below can attach it within the
-                    // same frame the old geometry's view is disposed; a SurfaceView
-                    // has no external side effects until it is attached, so a
+                    // Attach/detach via DisposableEffect, not AndroidView
+                    // factory/onRelease: in a same-frame swap the new factory
+                    // runs before the old onRelease, so releasing there would
+                    // drop the new view. Creating the SurfaceView in composition
+                    // lets the effect attach it in the same frame the old view
+                    // is disposed; it has no side effects until attached, so a
                     // discarded speculative composition is harmless.
                     val context = LocalContext.current
                     val surface = remember { SurfaceView(context) }
@@ -335,8 +319,8 @@ fun PlayerSurface(
                             val w = state.videoWidth
                             val h = state.videoHeight
                             if (w > 0 && h > 0) {
-                                // Animate view geometry without reallocating the
-                                // decoder output buffer on every layout change.
+                                // Fixed buffer size: layout can animate without
+                                // reallocating the decoder output.
                                 surface.holder.setFixedSize(w, h)
                                 frame.setAspectRatio(w.toFloat() / h.toFloat())
                             }
@@ -344,8 +328,8 @@ fun PlayerSurface(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                // Covers travel with the picture too, rather than pinning an old
-                // entry frame over a translated/zoomed live Surface.
+                // Sits inside the transform layer so it travels with the picture
+                // instead of pinning an old frame over a translated/zoomed Surface.
                 if (!state.hasRenderedVideoFrame && !state.casting) {
                     Box(Modifier.fillMaxSize().background(Color.Black).testTag("player-frame-shutter"))
                 }
@@ -403,9 +387,6 @@ fun PlayerSurface(
                     ),
             ) {
                 val showChrome = (state.controlsVisible || seekGestureActive) && !state.locked && !pip
-                // Skip cards sit one gap above the track while the chrome shows
-                // and drop near the player edge when it hides; the shift
-                // animates with the chrome fade.
                 val trackClearanceDp = with(density) { trackClearancePx.toDp() }
                 val skipCardDp = with(density) { skipCardPx.toDp() }
                 val skipCardsVisible = !pip && !state.locked &&
@@ -415,10 +396,8 @@ fun PlayerSurface(
                     tween(250),
                     label = "chipBandBottom",
                 )
-                // Subtitles clear the visible bounds of the controls row and of
-                // any skip card, from measurements — not a flat reserve. The 48 dp
-                // touch minimum around each card extends invisibly and must not
-                // push captions further up.
+                // Subtitles clear measured bounds (controls row + visible skip
+                // cards), not a flat reserve; invisible touch boxes don't count.
                 val subtitleBottomClearDp = maxOf(
                     if (showChrome) trackClearanceDp.value + 6f else PlayerUi.SUBTITLE_CLEAR_DP.dp.value,
                     if (skipCardsVisible) chipBandBottom.value + skipCardDp.value + PlayerUi.TRACK_CHIP_GAP_DP else 0f,
@@ -466,9 +445,6 @@ fun PlayerSurface(
 
                 Box(Modifier.fillMaxSize().then(sidePad)) {
                     val countdown = state.sponsorCountdownSec
-                    // Skip cards and subtitles share the measured track anchor;
-                    // subtitles lift above the cards' visible bounds so neither
-                    // covers the other.
                     SubtitleCuesLayer(
                         cuesState = subtitleCuesState,
                         showChrome = showChrome,
@@ -636,19 +612,14 @@ internal fun PlayerTransitionFrame(frame: android.graphics.Bitmap, resizeMode: R
         ResizeMode.FixedWidth -> ContentScale.FillWidth
         ResizeMode.FixedHeight -> ContentScale.FillHeight
     }
-    // PixelCopy supplies the full video buffer, without the parent viewport's
-    // clipping. Apply the same resize policy as the live Surface, including
-    // letterbox coverage while the replacement output is not ready.
+    // PixelCopy returns the full buffer without the parent viewport's clipping;
+    // apply the live Surface's resize policy, incl. letterbox cover.
     androidx.compose.foundation.Image(frame.asImageBitmap(), contentDescription = null,
         contentScale = scale,
         modifier = Modifier.fillMaxSize().clipToBounds().background(Color.Black).testTag("player-handoff-frame"))
 }
 
-/**
- * Reads [cuesState] here instead of in [PlayerSurface]: cue swaps (1-4 Hz
- * while subtitles are on) then recompose only this layer, not the whole
- * surface tree.
- */
+/** Reads [cuesState] here so cue swaps (1-4 Hz) recompose only this layer, not the whole surface tree. */
 @Composable
 private fun SubtitleCuesLayer(
     cuesState: State<List<String>>,
@@ -701,7 +672,6 @@ private fun rememberGestureCallbacks(
 }
 }
 
-/** Unlocked: map gesture events onto playback/window callbacks. */
 private class ForwardingGestures(
     private val c: PlayerSurfaceCallbacks,
     private val fullscreen: Boolean,
@@ -747,9 +717,8 @@ private class VideoZoom {
     var widthPx by mutableFloatStateOf(0f)
     var heightPx by mutableFloatStateOf(0f)
 
-    // derivedStateOf: the reset chip reads this inside a large recompose
-    // scope; boolean-flip caching keeps pointer-rate scale/pan writes from
-    // recomposing the whole layer.
+    // derivedStateOf caches the boolean flip so pointer-rate scale/pan writes
+    // don't recompose the layer the reset chip reads in.
     val zoomed: Boolean by derivedStateOf { ZoomMath.isZoomed(scale, offsetX, offsetY) }
     fun reset() {
         scale = 1f

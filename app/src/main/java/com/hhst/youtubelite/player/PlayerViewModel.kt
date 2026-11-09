@@ -61,7 +61,6 @@ sealed interface GestureUi {
 
 enum class MediaKind { NONE, WATCH, SHORTS }
 
-/** Player-facing UI state: engine snapshot + surface-only flags. */
 data class PlayerUiState(
     val diagnostics: PlaybackDiagnostics = PlaybackDiagnostics(),
     val visible: Boolean = false,
@@ -143,16 +142,11 @@ data class PlayerUiState(
 )
 
 /**
- * Thin reducer between the surface and [PlaybackApi].
- *
- * The engine is the single source of truth for playback; this class keeps
- * UI-only state (visibility, fullscreen, controls, hints) and forwards intents.
- * Queue navigation and end-of-playback auto-advance live here.
+ * Thin reducer between the surface and [PlaybackApi]: the engine is the single
+ * source of truth for playback; UI-only state lives here, intents forward down.
  *
  * Registered as a Koin single (process scope): background play, MediaSession
- * keys and queue auto-advance must outlive the activity, so [onCleared] never
- * runs and nothing here is torn down on activity death.
- *
+ * keys and queue auto-advance must outlive the activity, so [onCleared] never runs.
  */
 class PlayerViewModel(
     private val engine: PlaybackApi,
@@ -165,24 +159,20 @@ class PlayerViewModel(
     private val appContext: Context? = null,
     private val haptics: HapticsController? = null,
     private val nextVideo: (suspend (String) -> String?)? = null,
-    /** Session-owned watch reporting; armed with endpoints from playback responses. */
     private val reporting: com.hhst.youtubelite.data.media.PlaybackWatchReporting? = null,
-    /** Session identity changes; queue ownership and navigation context follow it. */
     private val identityChanges: Flow<Long> = com.hhst.youtubelite.data.media.MediaSession.changes.map { it.generation },
 ) : ViewModel(), PlayerPlaybackActions {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    // Position lives outside [PlayerUiState]: the ~4 Hz snapshot tick must
-    // not recompose the whole surface tree, only the time readouts that
-    // observe these States. (PlayerSurface receives them as parameters.)
+    // Position lives outside [PlayerUiState] so the ~4 Hz snapshot tick
+    // recomposes only the time readouts, not the whole surface tree.
     private val _positionState = mutableLongStateOf(0L)
     private val _bufferedPositionState = mutableLongStateOf(0L)
 
     // Transient overlays live outside [PlayerUiState] for the same reason:
-    // pointer-rate gesture updates (~60-120 Hz) and subtitle cue swaps
-    // (1-4 Hz) must recompose only the leaf overlay that renders them.
+    // ~60-120 Hz gesture updates recompose only the leaf overlay.
     private val _gestureState = mutableStateOf<GestureUi?>(null)
     private val _hintState = mutableStateOf<String?>(null)
     private val _subtitleCuesState = mutableStateOf<List<String>>(emptyList())
@@ -197,12 +187,12 @@ class PlayerViewModel(
     val subtitleCuesState: State<List<String>> get() = _subtitleCuesState
 
 
-    /** Cast failure hint, resolved lazily (context may be null in tests). */
+    /** Resolved lazily; context may be null in tests. */
     private val hintCastFailed: String by lazy {
         appContext?.getString(R.string.cast_failed) ?: "Cast failed"
     }
 
-    /** Unavailable-subtitle hint, resolved lazily (context may be null in tests). */
+    /** Resolved lazily; context may be null in tests. */
     private val hintSubtitleUnavailable: String by lazy {
         appContext?.getString(R.string.subtitle_unavailable) ?: "Subtitle unavailable"
     }
@@ -232,10 +222,9 @@ class PlayerViewModel(
     private var lastNavPrev: Boolean? = null
 
     /**
-     * Set when the user stops casting and kept until the next session starts:
-     * a session-end echo arriving late (weak network) must never resume local
-     * playback behind the user's back, and any later receiver-side disconnect
-     * implies a fresh session, which clears the flag in [onCastSessionStarted].
+     * Set when the user stops casting, held until the next session starts: a
+     * late session-end echo must never resume local playback behind the user's
+     * back; a fresh session clears it in [onCastSessionStarted].
      */
     private var userCastStop = false
 
@@ -314,19 +303,16 @@ class PlayerViewModel(
                 val previousGeneration = identityGeneration
                 val previousOwner = queue.currentOwner()
                 queue.activate()
-                // StateFlow skips structurally equal states, so an owner swap
-                // between identical queues publishes nothing: republish the
-                // owner attribution here or drag commits would validate against
-                // a stale owner.
+                // StateFlow skips structurally equal states: republish the owner
+                // here or drag commits validate against a stale owner.
                 _uiState.update { state -> state.copy(queueOwner = queue.currentOwner()) }
                 identityGeneration = generation
                 if (previousGeneration == null) return@collect
                 // A missing access token can recover without a new transport
                 // generation, but still move the queue from device to account.
                 if (previousGeneration == generation && previousOwner == queue.currentOwner()) return@collect
-                // The previous identity owned the browsing context: its playlist,
-                // back trail and related prefetch die with it. The current video
-                // keeps playing; every later action uses the new identity.
+                // The previous identity's playlist, back trail and prefetch die
+                // with it; the current video keeps playing under the new identity.
                 playlistActive = false
                 playlistItems = emptyList()
                 sessionTrail.clear()
@@ -384,8 +370,8 @@ class PlayerViewModel(
                 onHint(hintCastFailed)
             }
         }
-        // Receiver error: engine already detached (and resumed local unless
-        // a recast was in flight). End whichever route is active.
+        // Already detached (and resumed local unless a recast was in flight);
+        // end whichever route is active.
         engine.onCastError = {
             if (!userCastStop) teardownCasting()
         }
@@ -394,9 +380,8 @@ class PlayerViewModel(
             override fun backupUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?) = engine.backupCastUrl(token, videoId, itag, failedProfile)
         }
         PlaybackCommandRouter.handler = commandHandler
-        // Link banner: poll receiver/browser liveness only while a link is live.
-        // 5 s keeps the connected banner snappy against the proxy's 30 s
-        // liveness window without busy-polling an idle session.
+        // Poll link liveness only while a link is live: 5 s stays snappy
+        // against the proxy's 30 s window without busy-polling an idle session.
         viewModelScope.launch {
             while (true) {
                 if (cast.state.value.linkUrl == null) {
@@ -459,11 +444,9 @@ class PlayerViewModel(
                 hasNext = nav.next,
                 hasPrevious = nav.previous,
                 sponsorSegments = s.sponsorSegments,
-                // Controls are forced on only when the screen ENTERS the
-                // error/ended state (the retry/replay affordances must show);
-                // afterwards the user's hide toggle must stick instead of
-                // being re-asserted by every snapshot that still carries
-                // error/ended.
+                // Force controls on only when the screen ENTERS error/ended
+                // (retry/replay must show); afterwards the user's hide toggle
+                // must stick instead of being re-asserted by every snapshot.
                 controlsVisible = if ((s.error != null || s.notice != null || s.ended) && !(it.error != null || it.notice != null || it.ended)) {
                     true
                 } else {
@@ -620,9 +603,9 @@ class PlayerViewModel(
     }
 
     /**
-     * A swipe cancelled back to the short it started on. Only the short the
-     * engine still owns resumes; a newer target that already claimed playback
-     * keeps it. A short the user had paused stays paused.
+     * A swipe cancelled back to its origin short: only the short the engine
+     * still owns resumes; a newer target keeps playback, a user-paused short
+     * stays paused.
      */
     fun resumeShortsAfterSwipe(videoId: String) {
         if (!inShorts) return
@@ -789,9 +772,7 @@ class PlayerViewModel(
         _hintState.value = null
     }
 
-    /**
-     * Scrub preview: the bubble tracks the finger; the seek lands on commit.
-     */
+    /** Preview only: the bubble tracks the finger; the seek lands on commit. */
     override fun onScrubPreview(offsetMs: Long) {
         val anchor = scrubAnchorMs
             ?: _positionState.longValue.also { scrubAnchorMs = it }
@@ -864,10 +845,7 @@ class PlayerViewModel(
 
     override fun onQuality(label: String?) { haptics?.perform(HapticsController.Event.SELECTION); engine.setQuality(label) }
 
-    /**
-     * Subtitle menu: no "off" row. Tapping the active language
-     * turns captions off; any other pick enables and switches.
-     */
+    /** No "off" row: tapping the active language turns captions off; other picks enable and switch. */
     override fun onSubtitle(trackKey: String?) {
         haptics?.perform(HapticsController.Event.SELECTION)
         if (trackKey == null) return
@@ -916,11 +894,10 @@ class PlayerViewModel(
     }
 
     /**
-     * The single navigation decision shared by the surface buttons, the
-     * media notification, PiP actions and headset keys. Queue and playlist
-     * navigate inside their own context only — a stale persisted queue never
-     * hijacks a video outside it — and Shorts switch within their own
-     * sequence, so they expose no watch navigation.
+     * The single navigation decision shared by surface buttons, the media
+     * notification, PiP actions and headset keys. Queue and playlist navigate
+     * only inside their own context (no stale-queue hijack); Shorts expose
+     * no watch navigation.
      */
     private fun nextTarget(id: String?): QueueItem? {
         if (id == null) return null
@@ -1429,10 +1406,9 @@ class PlayerViewModel(
     }
 
     /**
-     * Session established: push the current video onto the receiver.
-     * Control delegation only attaches on a
-     * successful load — a failed load resumes local playback instead of
-     * delegating to a dead receiver.
+     * Session established: push the current video onto the receiver. Control
+     * delegation attaches only on a successful load — a failed load resumes
+     * local playback instead of delegating to a dead receiver.
      */
     private fun onCastSessionStarted() {
         // A fresh session re-arms the session-end echo: the user is casting
@@ -1524,10 +1500,9 @@ class PlayerViewModel(
         }
     }
 
-    // Weak on purpose: this VM is a process-scoped singleton and the view
-    // belongs to an activity window. Normal attach/detach pairs it, but a
-    // missed dispose must not pin the activity in memory. The engine holds
-    // the surface until the next attach/detach — stop() does not clear it —
+    // Weak on purpose: this VM is a process-scoped singleton; a missed
+    // dispose must not pin the activity's view in memory. The engine holds
+    // the surface until the next attach/detach (stop() does not clear it),
     // so only the normal dispose path releases a dead activity's view.
     private var attachedSurface: WeakReference<SurfaceView>? = null
 

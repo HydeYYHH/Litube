@@ -685,9 +685,8 @@ class CommentsViewModel(
         val restoreTarget = savedState.get<Int>(KEY_LOADED) ?: 0
         _state.update { it.copy(content = CommentsContent.Loading, refreshing = false) }
         loadJob = viewModelScope.launch {
-            // The first page publishes as soon as it lands; restoring deeper
-            // pages after a recreation walks forward one page at a time, each
-            // published as it arrives, never blocking the first paint.
+            // The first page publishes immediately; restore then walks forward one
+            // page at a time, each published as it arrives, never blocking the first paint.
             if (!fetchPage(null, requestedSort, requestGeneration, firstPage = true)) return@launch
             while (requestGeneration == generation) {
                 val ready = _state.value.content as? CommentsContent.Ready ?: break
@@ -794,7 +793,6 @@ class CommentsViewModel(
         if (_state.value.content == CommentsContent.Loading) firstLoadCancelled = true
     }
 
-    /** The panel opened for an existing model: restarts a cancelled first read. */
     fun ensureLoaded() {
         if (authorizationRefreshFailed && loadJob?.isActive != true) {
             refreshAuthorization()

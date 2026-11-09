@@ -266,7 +266,6 @@ object CommentsLayout {
     fun titleLine(panelWidth: Float, docked: Boolean = false): Float =
         if (docked || panelWidth >= WideTitleWidth) TitleLineWide else TitleLineNarrow
 
-    /** Bottom-sheet top: below the pinned player, clamped so the sheet stays usable. */
     fun sheetTop(topBar: Float, playerHeight: Float, windowHeight: Float): Float =
         minOf(topBar + playerHeight, (windowHeight - MinPanelHeight).coerceAtLeast(0f))
 }

@@ -3,7 +3,8 @@ name: Android
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, v4]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -19,8 +20,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: true
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -32,7 +31,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Unit tests, Lint and application builds
         run: >-
-          bash gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug :app:lintVitalRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
+          bash gradlew :app:testDebugUnitTest :app:lintDebug :app:lintVitalRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
           --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
           "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
       - name: Build debug-signed R8 verification APKs

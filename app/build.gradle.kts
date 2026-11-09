@@ -16,9 +16,8 @@ plugins {
 
 // File-content providers make the fingerprint respond to source changes with configuration caching.
 val diagnosticDigest = MessageDigest.getInstance("SHA-256")
-listOf(fileTree("src/main"), fileTree("../external/mediaservicecore/common/src/main"),
-    fileTree("../media-core/src/main"),
-    files("build.gradle.kts", "proguard-rules.pro", "proguard-r8-verification.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts", "../media-core/build.gradle.kts").asFileTree)
+listOf(fileTree("src/main"),
+    files("build.gradle.kts", "proguard-rules.pro", "proguard-r8-verification.pro", "../gradle/libs.versions.toml", "../settings.gradle.kts").asFileTree)
     .flatMap { it.files }.sortedBy { it.invariantSeparatorsPath }.forEach { source ->
         diagnosticDigest.update(source.relativeTo(rootDir).invariantSeparatorsPath.toByteArray())
         diagnosticDigest.update(providers.fileContents(layout.projectDirectory.file(source.relativeTo(projectDir).path)).asBytes.get())
@@ -34,9 +33,9 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 400
-        versionName = "4.0.0-preview01"
+        versionName = "4.0.0"
         buildConfigField("String", "DIAGNOSTIC_BUILD_ID", "\"$diagnosticBuildId\"")
-        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};kotlinx-serialization=${libs.versions.kotlinxSerialization.get()};UPnPCast=${libs.versions.upnpcast.get()};MSC=external/mediaservicecore\"")
+        buildConfigField("String", "DIAGNOSTIC_DEPENDENCIES", "\"Media3=${libs.versions.media3.get()};OkHttp=${libs.versions.okhttp.get()};kotlinx-serialization=${libs.versions.kotlinxSerialization.get()};UPnPCast=${libs.versions.upnpcast.get()};MSC=${libs.versions.msc.get()}\"")
         testInstrumentationRunner = "com.hhst.youtubelite.ContentTestRunner"
     }
 
@@ -175,7 +174,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":media-core"))
+    implementation(libs.msc)
     implementation(libs.guava)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

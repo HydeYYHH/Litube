@@ -4,11 +4,11 @@ import com.hhst.youtubelite.home.domain.FeedMenuEndpoint
 import java.util.Base64
 
 /**
- * TV's shared recommendation context menu. Observed from signed-in Home get_panel requests:
+ * TV's shared recommendation context menu (observed from signed-in Home get_panel):
  * field 175 { video_id: 1, menu_type: 4 = 158, source: 8 { type: 1 = 2, browse_id: 2 } }.
  * The recommendation source is required: omitting it returns a save/share-only menu.
- * This is a menu READ, never a synthesized feedback token. Only use on recommendation feeds;
- * search, subscriptions, history and user collections must retain their own server capabilities.
+ * Menu READ only — never a synthesized feedback token. Use only on recommendation feeds;
+ * search, subscriptions, history and user collections must keep their own server capabilities.
  */
 internal fun recommendationMenuEndpoint(videoId: String): FeedMenuEndpoint? {
     if (!videoId.matches(Regex("[A-Za-z0-9_-]{11}"))) return null

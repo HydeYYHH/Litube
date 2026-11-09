@@ -303,9 +303,8 @@ sealed interface ChannelAction {
 
 
 object ChannelLayout {
-    // Anchors from docs/visual/channel-sampling: @blenderguru at 390/600/840/1280 (header,
-    // videos grid and identity probes). Values are CSS px, rendered as dp; inference points
-    // are marked in the measurement doc.
+    // Anchors from docs/visual/channel-sampling: measured at 390/600/840/1280 CSS px
+    // (rendered as dp); inference points are marked in the measurement doc.
     const val ToolbarHeight = 48f
     const val PageInset = 16f
     const val ListRowInset = 12f

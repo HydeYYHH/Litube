@@ -360,8 +360,8 @@ class WatchScreenAndroidTest {
     }
 
     /**
-     * performClick re-resolves text in the merged tree and misses the per-link virtual
-     * nodes, so scroll the description into view and tap the link's own layout bounds.
+     * performClick re-resolves text in the merged tree and misses per-link virtual
+     * nodes; scroll the description into view and tap the link's own bounds.
      */
     private fun clickDescriptionLink(label: String) {
         compose.onNodeWithTag("watch-scroll").performScrollToNode(hasTestTag("watch-description"))
@@ -435,8 +435,8 @@ class WatchScreenAndroidTest {
     }
 
     @Test fun watchPageIsNativeAndStartsNoNetworkOrLegacyRuntime() {
-        // A previous suite class may have started the media runtime in this shared process; the contract is
-        // that opening this page does not start it, and first-visit traffic stays zero when genuinely cold.
+        // A previous suite class may have started the media runtime in this shared process;
+        // the contract: opening this page never starts it, and traffic stays zero when cold.
         val runtimeStartedBefore = (ApplicationProvider.getApplicationContext<Context>() as App).mediaRuntimeStarted
         val sent = TrafficStats.getUidTxBytes(Process.myUid())
         val received = TrafficStats.getUidRxBytes(Process.myUid())

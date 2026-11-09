@@ -1,9 +1,7 @@
 /*
- * sidx parsing logic adapted from media3's FragmentedMp4Extractor.parseSidx
- * (Apache 2.0 licensed). Parses the ISO 14496-12 SegmentIndex (sidx) box to
- * obtain per-segment byte ranges and durations, which are used to build a
- * DASH SegmentList so the Chromecast receiver fetches individual segments
- * instead of downloading the entire stream as a single byte-range request.
+ * sidx parsing adapted from media3's FragmentedMp4Extractor.parseSidx (Apache 2.0).
+ * Builds a DASH SegmentList so the Chromecast receiver fetches per-segment byte
+ * ranges instead of the entire stream as one byte-range request.
  */
 
 package com.hhst.youtubelite.cast
@@ -22,10 +20,9 @@ object SidxParser {
     private const val TYPE_SIDX = 0x73696478
 
     /**
-     * @param sidxData raw index-range bytes; other boxes (e.g. a moov tail) may precede
-     *   the sidx box, which is scanned for at four-byte boundaries
-     * @param dataStartOffset absolute stream offset of `sidxData[0]` (the itag's indexStart)
-     * @return null if no sidx box can be located or the data is malformed
+     * [sidxData] may carry other boxes before the sidx (scanned at four-byte
+     * boundaries); [dataStartOffset] is the absolute offset of its first byte.
+     * Null when no sidx box is found or the data is malformed.
      */
     fun parse(sidxData: ByteArray, dataStartOffset: Long): ChunkIndex? {
         return try {
@@ -122,11 +119,7 @@ object SidxParser {
         }
     }
 
-    /**
-     * Scans `data` for an ISO 14496-12 sidx box header (type `sidx`).
-     *
-     * @return offset of the box size field, or `-1` if not found
-     */
+    /** Offset of the box size field (not the type), or -1 if not found. */
     private fun findSidxBoxOffset(data: ByteArray): Int {
         if (data.size < HEADER_SIZE) return -1
         var position = 0

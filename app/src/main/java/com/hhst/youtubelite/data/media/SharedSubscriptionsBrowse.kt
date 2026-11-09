@@ -4,7 +4,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.RequestContext
 import com.liskovsoft.youtubeapi.videoinfo.V2.SubscriptionsBrowse
 import kotlinx.coroutines.CompletableDeferred
 
-/** A one-response handoff between the independent feed and directory initial reads. */
+/** One-response handoff between the independent feed and directory initial reads. */
 internal class SharedSubscriptionsBrowse(private val now: () -> Long) {
     enum class Consumer { Feed, Directory }
     private data class Key(val account: String?, val token: String?, val behalf: String?, val generation: Long,
@@ -29,7 +29,7 @@ internal class SharedSubscriptionsBrowse(private val now: () -> Long) {
             }
             owner = existing == null
             request = existing ?: Pending(key, consumer)
-            // Each response can serve each consumer only once. A refresh of either
+            // Each response can serve each consumer only once; a refresh of either
             // consumer always reads again once its original pair has been served.
             pending = if (owner) request else null
         }

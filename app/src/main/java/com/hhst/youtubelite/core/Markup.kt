@@ -11,11 +11,9 @@ object Markup {
     fun html(value: String): String = xml(value).replace("'", "&#39;")
 
     /**
-     * Quoted JavaScript string literal, including the surrounding quotes.
-     * `<` is escaped as `\u003C`: the only current call site embeds the
-     * result inside a `<script>` block, and a raw `</script>` (or `<!--`)
-     * inside the literal would terminate the element there. `/` after `<`
-     * is covered by that escape.
+     * Quoted JavaScript string literal. `<` is escaped as a JS Unicode escape because
+     * the only call site embeds the result in a `<script>` block: a raw `</script>`
+     * (or `<!--`) there would terminate the element; `/` after `<` is covered too.
      */
     fun jsString(value: String): String = buildString(value.length + 2) {
         append('"')

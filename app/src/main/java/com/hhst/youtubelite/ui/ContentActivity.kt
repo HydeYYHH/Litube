@@ -27,8 +27,7 @@ abstract class ContentActivity : NativeActivity() {
 
     override fun onStart() {
         val installMini = !ContentRepositories.fixtures(intent) || playbackTest()
-        // A retained browse composition resumes from super.onStart(). Publish
-        // the handoff before its lifecycle collectors can create the mini.
+        // Publish the handoff before retained lifecycle collectors can create the mini.
         if (installMini) {
             miniWindowReady = false
             miniEntryBounds = com.hhst.youtubelite.navigation.WatchTransition.takeMiniEntryBounds()
@@ -52,8 +51,8 @@ abstract class ContentActivity : NativeActivity() {
                     decor.viewTreeObserver.removeOnPreDrawListener(this)
                     if (miniPreDraw === this) miniPreDraw = null
                 } else {
-                    // A retained Compose host can defer its internal layout
-                    // until dispatchDraw, which this gate is withholding.
+                    // A retained Compose host can defer layout until dispatchDraw,
+                    // which this gate is withholding.
                     miniComposition?.getChildAt(0)?.requestLayout()
                     decor.postInvalidateOnAnimation()
                 }
@@ -86,15 +85,15 @@ abstract class ContentActivity : NativeActivity() {
             private val clip = android.graphics.Path()
             private val position = IntArray(2)
             override fun dispatchDraw(canvas: android.graphics.Canvas) {
-                // Omit the mini from browse snapshots without changing view
-                // visibility: hiding a SurfaceView destroys its video output.
+                // Omit the mini from browse snapshots without changing view visibility:
+                // hiding a SurfaceView destroys its video output.
                 if (com.hhst.youtubelite.navigation.WatchTransition.capturingBackdrop) return
                 super.dispatchDraw(canvas)
                 val cover = com.hhst.youtubelite.navigation.WatchTransition.miniRestoreFrame(this@ContentActivity) ?: return
                 val state = PlaybackSession.player.value?.uiState?.value
                 if (state?.visible != true || state.videoId != cover.frame.videoId || PlaybackSession.inPip.value) return
-                // openVideo leaves mini mode before the new window is drawn.
-                // Paint its last picture without retaining/reattaching a decoder.
+                // openVideo leaves mini mode before the new window is drawn;
+                // paint its last picture without retaining a decoder.
                 getLocationInWindow(position)
                 val saved = canvas.save()
                 canvas.translate(-position[0].toFloat(), -position[1].toFloat())
@@ -129,8 +128,8 @@ abstract class ContentActivity : NativeActivity() {
                     SideEffect {
                         if (cover != null && (!state.visible || state.videoId != cover.frame.videoId || pip))
                             com.hhst.youtubelite.navigation.WatchTransition.clearMiniRestore(this@ContentActivity)
-                        // This picture belongs to the native overlay's display
-                        // list, so Compose invalidation alone cannot redraw it.
+                        // This picture is on the native overlay's display list;
+                        // Compose invalidation alone cannot redraw it.
                         if (cover != null || previousCover[0] != null)
                             (miniComposition?.parent as? android.view.View)?.invalidate()
                         previousCover[0] = cover
@@ -172,17 +171,16 @@ abstract class ContentActivity : NativeActivity() {
     }
 
     override fun onResume() {
-        // A quick Back can resume the browse page before it ever stops, so
-        // there is no onStart to receive this handoff.
+        // A quick Back can resume browse before it ever stops, so there is no onStart for this handoff.
         if (!ContentRepositories.fixtures(intent) || playbackTest()) {
-            // A cancelled entrance can return before this source ever stops.
-            // Keep the static picture until the returning mini is laid out.
+            // A cancelled entrance can return before this source stops; keep the
+            // static picture until the returning mini is laid out.
             com.hhst.youtubelite.navigation.WatchTransition.miniRestoreFrame(this)?.let { cover ->
                 val player = PlaybackSession.player.value
                 val originalSurface = cover.frame.source.get()
                 if (player?.uiState?.value?.mini == true && originalSurface != null && player.hasRenderedFrame(originalSurface)) {
-                    // The target was cancelled before it took playback; the
-                    // original mini already has its live picture underneath.
+                    // Target cancelled before taking playback; the original mini
+                    // already has its live picture underneath.
                     com.hhst.youtubelite.navigation.WatchTransition.clearMiniRestore(this)
                 } else {
                     resumedDuringMiniRestore = true
@@ -200,8 +198,7 @@ abstract class ContentActivity : NativeActivity() {
         super.onResume()
         com.hhst.youtubelite.navigation.WatchTransition.browseResumed(this)
         if (!ContentRepositories.fixtures(intent) || playbackTest()) {
-            // Entering PiP can itself resume the browse page underneath it.
-            // The pinned activity still owns playback until it exits PiP.
+            // Entering PiP can itself resume browse; the pinned activity still owns playback until it exits PiP.
             if (!PlaybackSession.inPip.value) PlaybackSession.player.value?.onBrowseOpened()
         }
     }

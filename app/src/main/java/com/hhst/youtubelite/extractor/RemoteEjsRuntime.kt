@@ -89,8 +89,8 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         remote?.let { return it }
         val startup = context.withTimeLimit(5_000)
         try {
-            // Android can briefly retain the old ServiceRecord after a deliberate termination.
-            // Retry only that startup race, with a fresh connection and the same deadline.
+            // Android can briefly retain the old ServiceRecord after a deliberate
+            // termination; retry only that race with the same deadline.
             repeat(3) { attempt ->
                 val connected = SettableFuture.create<Messenger>()
                 val candidate = object : ServiceConnection {
@@ -177,8 +177,8 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
         connection?.let { runCatching { app.unbindService(it) } }
         connection = null
         remote = null
-        // Remove AUTO_CREATE before termination; otherwise a concurrent new binding can
-        // attach to the dying service record or trigger an unwanted automatic restart.
+        // Remove AUTO_CREATE before termination; otherwise a concurrent binding can
+        // attach to the dying service record or trigger an unwanted restart.
         val pid = servicePid
         servicePid = 0
         if (pid > 0 && pid != Process.myPid()) {
@@ -191,7 +191,7 @@ internal class RemoteEjsRuntime(private val app: Context, private val userAgent:
     }
 }
 
-/** No credentials/HTTP/session cache are initialized in this process. The host sends public EJS code via FD. */
+/** No credentials/HTTP/session cache in this process; the host sends public EJS code via FD. */
 class EjsRuntimeService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     private val diagnosticWorker = Executors.newSingleThreadExecutor()

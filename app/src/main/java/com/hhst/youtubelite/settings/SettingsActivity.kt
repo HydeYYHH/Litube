@@ -34,7 +34,6 @@ import com.hhst.youtubelite.settings.presentation.SettingsScreen
 import com.hhst.youtubelite.ui.about.AboutActivity
 import org.koin.android.ext.android.inject
 
-/** Application settings and system preference entry points. */
 class SettingsActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private val extensionManager: ExtensionManager by inject()
 

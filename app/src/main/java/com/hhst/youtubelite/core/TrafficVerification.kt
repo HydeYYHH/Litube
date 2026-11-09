@@ -4,9 +4,9 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.RequestError
 import com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure
 
 /**
- * A `/sorry` traffic challenge the server served instead of content. [challengeUrl]
- * is the redirect target the media core captured; solving it in a browser may lift
- * the block, so completion grants exactly one retry of the original read.
+ * A `/sorry` traffic challenge the server served instead of content. Solving
+ * [challengeUrl] in a browser may lift the block, so completion grants exactly
+ * one retry of the original read.
  */
 data class VerificationRequired(val challengeUrl: String)
 

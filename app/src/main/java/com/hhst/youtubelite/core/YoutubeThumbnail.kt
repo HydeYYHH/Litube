@@ -209,7 +209,6 @@ object YoutubeThumbnail {
         return (result as? SuccessResult)?.image?.toBitmap()?.apply { density = Bitmap.DENSITY_NONE }
     }
 
-    /** Reads at most [max] bytes; null when the stream exceeds the cap. */
     internal fun readBounded(stream: InputStream, max: Int): ByteArray? {
         val out = ByteArrayOutputStream(minOf(max, 64 * 1024))
         val buf = ByteArray(8192)

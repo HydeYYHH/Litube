@@ -85,7 +85,7 @@ data class DownloadConfig(
     val fileNameTemplate: String? = null,
     /** Subtitle/cover without a video or audio asset. */
     val attachmentsOnly: Boolean = false,
-    /** Catalog selection hints, excluded from [fingerprint]. */
+    /** Catalog selection hints; excluded from [fingerprint]. */
     val videoItagHint: Int? = null,
     val audioItagHint: Int? = null,
     val audioBitrate: Int? = null,
@@ -102,8 +102,6 @@ data class DownloadConfig(
         if (attachmentsOnly) "1" else "0",
     ).plus(listOfNotNull(audioBitrate?.takeIf { it > 0 }?.toString())).joinToString("|")
 }
-
-
 
 @Serializable
 data class DownloadRequest(

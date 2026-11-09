@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">და კიდევ %1$d ბმული</item>
+        <item quantity="other">და კიდევ %1$d ბმული</item>
+    </plurals>
+</resources>

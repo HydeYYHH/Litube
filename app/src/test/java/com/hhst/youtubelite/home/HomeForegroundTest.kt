@@ -96,7 +96,7 @@ class HomeForegroundTest {
         loadFeed(vm)
         advanceUntilIdle()
         assertTrue(vm.uiState.value.content is HomeContent.Empty)
-        vm.onForeground() // adopts the current signal
+        vm.onForeground()
         advanceUntilIdle()
         assertEquals(1, loads)
         signal += 1
@@ -133,7 +133,7 @@ class HomeForegroundTest {
         loadFeed(vm)
         advanceUntilIdle()
         assertEquals(1, loads)
-        vm.onForeground() // adopts the current signal
+        vm.onForeground()
         advanceUntilIdle()
         gated = true
         signal += 1

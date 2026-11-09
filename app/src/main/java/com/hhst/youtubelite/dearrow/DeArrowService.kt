@@ -32,22 +32,13 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * DeArrow display decoration: community-submitted titles and thumbnails.
- *
- * Branding queries use `https://sponsor.ajay.app/api/branding/<prefix>` where `<prefix>` is the
- * first 4 hex characters of the video ID's SHA-256 — the plain video ID is never sent to that
- * endpoint; the response is a bucket of candidates and the caller must strict-match the requested
- * ID. Thumbnail bitmaps come from `https://dearrow-thumb.ajay.app`, whose URL does carry the
- * full video ID — the settings copy must not claim the hash prefix makes these requests
- * anonymous. No Google cookies, OAuth tokens or visitor headers are attached to third-party
- * requests.
- *
- * Attribution: community data under the SponsorBlock database/API license (CC BY-NC-SA 4.0);
- * see `assets/licenses/dearrow-attribution.txt`.
- *
- * Canonical titles and thumbnails are never mutated: replacement values only decorate display,
- * and both toggles are read before and after every suspension so a mid-flight switch-off cannot
- * re-apply stale content.
+ * DeArrow display decoration. Branding queries send only the first 4 hex chars of the
+ * video ID's SHA-256 (never the plain ID) and must strict-match the bucket response;
+ * thumbnail URLs do carry the full ID, so settings copy must not claim anonymity.
+ * No Google cookies/OAuth/visitor headers on third-party requests. Attribution:
+ * CC BY-NC-SA 4.0, see `assets/licenses/dearrow-attribution.txt`. Canonical titles and
+ * thumbnails are never mutated; both toggles are re-read around every suspension so a
+ * mid-flight switch-off cannot re-apply stale content.
  */
 class DeArrowService(
     private val http: OkHttpClient,
@@ -95,9 +86,8 @@ class DeArrowService(
     private val requests = Semaphore(2)
 
     /**
-     * Decoration for [videoId], merging concurrent callers onto one bucket
-     * fetch. Returns a Branding whose fields may be null (keep original), or
-     * null when disabled, still unknown, or the fetch failed. Never throws.
+     * Decoration for [videoId], merging concurrent callers onto one bucket fetch.
+     * Null fields mean keep original; null result when disabled/unknown/failed. Never throws.
      */
     suspend fun branding(videoId: String): Branding? {
         if (videoId.isBlank() || inactive()) return null
@@ -210,10 +200,9 @@ class DeArrowService(
         64 + (branding?.videoId?.length ?: 0) + (branding?.title?.length ?: 0)
 
     /**
-     * Strict full-ID match inside the returned bucket, then the trust rule:
-     * candidates are ordered by quality, and only the first entry may be
-     * used — when it asks to keep the original (or is unverified), lower
-     * ranked alternatives are never promoted.
+     * Strict full-ID match inside the bucket, then the first-entry trust rule: only the
+     * top-ranked candidate may be used — when it asks to keep the original (or is
+     * unverified), lower-ranked alternatives are never promoted.
      */
     internal fun parse(videoId: String, body: String?): Branding {
         if (body.isNullOrBlank()) return Branding(videoId, null, null)

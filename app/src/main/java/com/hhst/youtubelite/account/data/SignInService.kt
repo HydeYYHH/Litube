@@ -16,7 +16,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.loadSignInCredentials
 import com.liskovsoft.youtubeapi.videoinfo.V2.pollSignIn
 import java.util.UUID
 
-/** Device-code sign-in steps; the credentials themselves are only ever entered in the browser. */
+/** Device-code sign-in steps; credentials themselves are only ever entered in the browser. */
 interface SignInService {
     suspend fun loadCode(): SignInCode
     suspend fun poll(code: SignInCode): AccessToken

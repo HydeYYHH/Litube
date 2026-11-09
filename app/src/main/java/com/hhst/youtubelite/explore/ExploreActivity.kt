@@ -272,9 +272,8 @@ class ExploreViewModel(private val repository: ExploreRepository, private val sc
     }
 
     /**
-     * One coalesced directory read per channel (concurrency is capped inside the
-     * directory); a real-missing channel keeps its null and the card's stable
-     * placeholder, never a perpetual loading state.
+     * One coalesced directory read per channel; a real-missing channel keeps its
+     * null and the card's stable placeholder, never a perpetual loading state.
      */
     private fun fillMissingAvatars(items: List<com.hhst.youtubelite.home.domain.FeedItem.Video>) {
         val directory = avatars ?: return

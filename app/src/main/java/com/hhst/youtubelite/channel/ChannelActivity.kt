@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.channel
 
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.design.labelResource
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -167,7 +170,7 @@ class ChannelActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         com.hhst.youtubelite.ui.MediaActionKind.OpenWith -> com.hhst.youtubelite.ui.design.AppIcon.OpenWith
                         com.hhst.youtubelite.ui.MediaActionKind.Share -> com.hhst.youtubelite.ui.design.AppIcon.Share
                         com.hhst.youtubelite.ui.MediaActionKind.CopyLink -> null
-                    }, label = kind.label, tag = "media-action-${kind.name}",
+                    }, label = stringResource(kind.labelResource), tag = "media-action-${kind.name}",
                         iconResource = if (kind == com.hhst.youtubelite.ui.MediaActionKind.CopyLink) com.hhst.youtubelite.R.drawable.ic_copy else null)
                 }
                 com.hhst.youtubelite.ui.design.MenuBottomSheet(items,

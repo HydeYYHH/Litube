@@ -25,7 +25,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** Pull-to-refresh anchoring and single-dispatch behavior; geometry only, no goldens. */
 @SdkSuppress(minSdkVersion = 35, maxSdkVersion = 35)
 class HomeRefreshAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()

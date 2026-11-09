@@ -58,7 +58,7 @@ class PipReturnAndroidTest {
                 fixture.await { fixture.activity.isInPictureInPictureMode && PlaybackSession.inPip.value }
                 DeviceEvidence.shell("input keyevent KEYCODE_HOME")
                 fixture.await { !browse.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
-                // AppTask.moveToFront exercises the same task return as selecting LiTube's card in Recents, without launcher-specific coordinates.
+                // AppTask.moveToFront exercises the same task return as selecting the app card in Recents, without launcher-specific coordinates.
                 val tasks = fixture.app.getSystemService(ActivityManager::class.java).appTasks
                 @Suppress("DEPRECATION")
                 val task = tasks.single { it.taskInfo.id == browse.taskId }
@@ -72,9 +72,9 @@ class PipReturnAndroidTest {
                 try {
                     task.moveToFront()
                     fixture.instrumentation.runOnMainSync { browse.window.decorView.invalidate() }
-                    // A two-window system transition must not require every Compose root (including
-                    // the paused PiP host) to idle; require a resumed Home draw and its measured
-                    // content before checking the browse tree; an absent root cannot pass.
+                    // A two-window system transition must not require every Compose root (incl.
+                    // the paused PiP host) to idle; require a resumed Home draw and its
+                    // measured content before checking the browse tree; absent root cannot pass.
                     fixture.await("Returned Home did not draw its empty browse content") {
                         val roots = composeRoots(browse.window.decorView)
                         val nodes = roots.flatMap { semantics(it.semanticsOwner.rootSemanticsNode) }

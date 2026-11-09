@@ -15,7 +15,6 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Public-API recovery contracts for playlist membership and library saves. */
 class MediaSaveRecoveryPublicApiTest {
     private val context = RequestContext("primary", "access", generation = 7)
     private fun response(request: Request, body: String) = Response.Builder().request(request)

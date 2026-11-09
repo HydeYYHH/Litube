@@ -98,7 +98,7 @@ class LibrarySourceIsolationTest {
         assertTrue(calls.any { it.contains("\"playlistId\":\"WL\"") && it.contains("srv-video") })
         assertEquals(listOf("seed"), local.history().entries.map { it.videoId })
         assertTrue(local.playlist(LocalLibraryStore.WATCH_LATER)!!.entries.isEmpty())
-        // "WL" resolves to the server list, not the device one (the parse shape is irrelevant here).
+        // "WL" resolves to the server list, not the device one (parse shape is irrelevant here).
         runCatching { playlist.playlist("WL") }
         assertTrue(calls.last().contains("WL"))
     }

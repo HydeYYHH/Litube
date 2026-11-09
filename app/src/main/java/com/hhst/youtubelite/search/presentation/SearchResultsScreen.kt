@@ -1,4 +1,5 @@
 package com.hhst.youtubelite.search.presentation
+import com.hhst.youtubelite.ui.design.labelResource
 import com.hhst.youtubelite.ui.design.CollapsingAppBar
 import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -186,8 +187,8 @@ fun SearchResultsScreen(
             )
             (state.overlay as? SearchOverlay.ItemMenu)?.let { menu ->
                 // Production rows mirror the card's real capabilities: feedback rows appear
-                // only once its own (inline or get_panel) tokens were resolved for this
-                // session; fixture menus keep the full typed row set.
+                // only once its own tokens were resolved for this session; fixture
+                // menus keep the full typed row set.
                 val page = (state.content as? SearchContent.Results)?.page
                 val target = page?.results?.firstOrNull { it.id == menu.videoId }
                     ?: page?.shorts?.firstOrNull { it.id == menu.videoId }
@@ -201,14 +202,14 @@ fun SearchResultsScreen(
                 } else SearchVideoMenuAction.entries
                 MenuBottomSheet(
                     items = menuActions.map {
-                        MenuSheetItem(it.icon(), it.label, "search-menu-${it.name}")
+                        MenuSheetItem(it.icon(), stringResource(it.labelResource), "search-menu-${it.name}")
                     },
                     onDismiss = { onAction(SearchAction.CloseItemMenu) },
                     onSelect = { index ->
                         onAction(SearchAction.MenuAction(menuActions[index]))
                     },
                     tag = "search-video-menu",
-                    paneTitle = "Video actions",
+                    paneTitle = stringResource(R.string.ui_video_actions),
                     header = if (state.menuLoading || state.menuFailed) ({
                         Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
                             if (state.menuLoading) Box(Modifier.testTag("search-menu-loading")) { LoadingSpinner() }
@@ -259,7 +260,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                         tag = "search-filter-type",
                         selected = filters.type,
                         options = SearchResultType.entries.filterNot { LocalHideShorts.current && it == SearchResultType.Shorts },
-                        labelOf = { it.label },
+                        labelOf = { stringResource(it.labelResource) },
                         minWidth = SearchResultsLayout.FilterTypeMinWidth,
                         chipHeight = chipHeight,
                         onSelect = { onAction(SearchAction.SelectResultType(it)) },
@@ -268,7 +269,7 @@ private fun SearchFilterBar(filters: SearchFilters, onAction: (SearchAction) -> 
                         tag = "search-filter-date",
                         selected = filters.uploaded,
                         options = SearchUploadDate.entries,
-                        labelOf = { it.label },
+                        labelOf = { stringResource(it.labelResource) },
                         minWidth = SearchResultsLayout.FilterDateMinWidth,
                         chipHeight = chipHeight,
                         onSelect = { onAction(SearchAction.SelectUploadDate(it)) },
@@ -336,7 +337,7 @@ private fun SearchNavigationBar(signedIn: Boolean, onAction: (SearchAction) -> U
                         SearchDestination.Subscriptions -> AppIcon.Subscriptions
                         SearchDestination.You -> AppIcon.You
                     })
-                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
+                    AppText(stringResource(destination.labelResource), size = 11, line = 14, maxLines = 1)
                 }
             }
         }
@@ -452,8 +453,8 @@ private fun ResultText(result: SearchResult, modifier: Modifier, onAction: (Sear
         AppText(rememberDeArrowTitle(result.id, result.title), Modifier.fillMaxWidth().testTag("search-title-${result.id}"),
             size = 14, line = 18, weight = FontWeight.Normal, maxLines = 2, exactLineHeight = 17.5.sp)
         Spacer(Modifier.height(3.dp))
-        // Only non-empty fields join: a missing view count or date must not
-        // leave orphan separators ("ROSÉ • •"). All fields blank renders nothing.
+        // Only non-empty fields join: a missing view count or date must not leave
+        // orphan separators ("ROSÉ • •"). All fields blank renders nothing.
         val byline = listOf(result.channel, result.views, result.age).filter(String::isNotBlank)
         Row(Modifier.fillMaxWidth().testTag("search-byline-${result.id}")) {
             byline.forEachIndexed { index, part ->
@@ -561,13 +562,14 @@ private fun SearchMessage(tag: String, content: @Composable ColumnScope.() -> Un
 @Composable
 private fun SearchNoResults(query: String, type: SearchResultType) {
     SearchMessage("search-empty") {
-        AppText("No results found", size = 20, line = 28, weight = FontWeight.Bold)
-        val noun = when (type) {
-            SearchResultType.Playlists -> "playlists"
-            SearchResultType.Shorts -> "shorts"
-            else -> "videos"
+        AppText(stringResource(R.string.ui_no_results_found), size = 20, line = 28, weight = FontWeight.Bold)
+        val message = when (type) {
+            SearchResultType.Playlists -> R.string.ui_search_no_playlists
+            SearchResultType.Shorts -> R.string.ui_search_no_shorts
+            SearchResultType.Channels -> R.string.ui_search_no_channels
+            SearchResultType.All -> R.string.ui_search_no_videos
         }
-        AppText("Your search for \"$query\" did not match any $noun.", Modifier.padding(top = 8.dp),
+        AppText(stringResource(message, query), Modifier.padding(top = 8.dp),
             size = 14, line = 20, color = DesignTokens.Secondary, align = TextAlign.Center)
     }
 }
@@ -575,12 +577,12 @@ private fun SearchNoResults(query: String, type: SearchResultType) {
 @Composable
 private fun SearchFailed(onAction: (SearchAction) -> Unit) {
     SearchMessage("search-error") {
-        AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
-        AppText("Please try again.", Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
+        AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
+        AppText(stringResource(R.string.ui_please_try_again), Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
         Box(Modifier.clip(CircleShape).background(DesignTokens.Surface)
             .clickable(role = Role.Button) { onAction(SearchAction.Retry) }
             .padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-            AppText("Retry", weight = FontWeight.Medium)
+            AppText(stringResource(R.string.retry), weight = FontWeight.Medium)
         }
     }
 }

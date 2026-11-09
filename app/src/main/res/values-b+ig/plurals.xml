@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="other">na %1$d njikọ ndị ọzọ</item>
+    </plurals>
+</resources>

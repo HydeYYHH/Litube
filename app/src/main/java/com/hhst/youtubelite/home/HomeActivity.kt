@@ -83,7 +83,7 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
         deferUntilReturn = savedInstanceState == null && intent.getBooleanExtra(EXTRA_DEFER_HOME, false)
         if (!deferUntilReturn) initializeHome(savedInstanceState)
         // Register once per Activity, including a synthetic parent whose Home
-        // ViewModel is deliberately created only after its playback child exits.
+        // ViewModel is created only after its playback child exits.
         lifecycleScope.launch {
             val model = homeReady.await()
             val fixtures = com.hhst.youtubelite.data.media.ContentRepositories.fixtures(intent)
@@ -94,8 +94,8 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
         }
     }
 
-    // A synthetic parent installs this composition once on return. LaunchedEffect
-    // owns and cancels its collectors; subsequent resumes cannot register another.
+    // A synthetic parent installs this composition once on return; LaunchedEffect
+    // owns/cancels its collectors, so subsequent resumes cannot register another.
     @android.annotation.SuppressLint("RepeatOnLifecycleWrongUsage")
     private fun initializeHome(savedInstanceState: Bundle?) {
         if (::homeViewModel.isInitialized) return
@@ -118,7 +118,7 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         {}
                     } else {
                         // Browsing time pays for the tap: capture the session and warm the head
-                        // bytes playback reads, so the first frame does not wait on the network.
+                        // bytes playback reads so the first frame does not wait on the network.
                         { id ->
                             prewarmVideo(id)
                         }
@@ -139,8 +139,8 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
                                 val prefs = org.koin.java.KoinJavaComponent.getKoin().get<com.hhst.youtubelite.extension.ExtensionManager>()
                                 if (prefs.isEnabled(com.hhst.youtubelite.extension.PreferenceKeys.DATA_SAVER)) return@collectLatest
                                 try {
-                                    // Prepare the list while home settles; media bytes still wait
-                                    // for the idle window. Navigation can claim the same read.
+                                    // Prepare the list while home settles; media bytes still wait for the
+                                    // idle window. Navigation can claim the same read.
                                     val mediaAt = android.os.SystemClock.elapsedRealtime() + 1_500
                                     val page = sources.shortsEntry.prepare() ?: return@collectLatest
                                     kotlinx.coroutines.delay((mediaAt - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0))
@@ -237,7 +237,7 @@ class HomeActivity : com.hhst.youtubelite.ui.ContentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // A synthetic parent can briefly gain focus during startActivities. Only a
+        // A synthetic parent can briefly gain focus during startActivities; only a
         // return from its playback child should initialize the home feed.
         deferUntilReturn = false
     }

@@ -83,7 +83,6 @@ sealed interface HomeContent {
         val refreshFailed: Boolean = false,
         /** A user-visible refresh (pull, chip or identity change) may show the anchored indicator. */
         val userRefresh: Boolean = false,
-        /** Consecutive pages that added no cards; automatic paging pauses after three. */
         val emptyAutoLoads: Int = 0) : HomeContent {
         val automaticPagingPaused: Boolean get() = emptyAutoLoads >= 3
     }

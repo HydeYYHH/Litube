@@ -18,7 +18,7 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** The watch read runs the page and player-details requests in parallel on one captured session, so first paint pays the slower call, not their sum. */
+/** Page and player-details run in parallel on one session; first paint pays the slower call, not their sum. */
 class MediaWatchRepositoryTest {
     @Test fun aCancelledWatchInterruptsBothReads() = interruptedPair(false)
     @Test fun aFailedPageInterruptsItsPendingDetailsRead() = interruptedPair(true)
@@ -46,7 +46,7 @@ class MediaWatchRepositoryTest {
         val routes: Map<String, Pair<Int, String>>,
         val calls: MutableList<String>,
         val visitors: MutableList<String?>,
-        /** Holds every request until a second one is in flight; proves the reads overlap. */
+        /** Holds every request until a second is in flight; proves the reads overlap. */
         val rendezvous: Boolean = false,
     ) : Interceptor {
         var maxInFlight = 0
@@ -102,7 +102,7 @@ class MediaWatchRepositoryTest {
     @Test fun theWatchPageCombinesBothReadsOnTheOneSession() = runBlocking {
         val (repository, calls, visitors, _) = routedClient(mapOf("/next" to (200 to nextPage), "/player" to (200 to playerDetails)))
         val page = repository.watch("bunny")
-        // The page read owns the identity fields; details only fill the gaps.
+        // The page read owns identity fields; details only fill the gaps.
         assertEquals("Big Buck Bunny", page.video.title)
         assertEquals("Blender", page.video.channel)
         assertEquals("https://i.ytimg.com/thumb.jpg", page.video.artwork)

@@ -48,7 +48,6 @@ class ExtensionManagerTest {
         }
     }
 
-
     @Test
     fun setEnabled_persistsAndRoundTrips() {
         val key = PreferenceKeys.ENABLE_HIDE_SHORTS

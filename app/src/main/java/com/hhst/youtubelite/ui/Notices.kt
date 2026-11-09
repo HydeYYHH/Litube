@@ -12,13 +12,14 @@ import com.hhst.youtubelite.ui.theme.appDialogContext
 fun Activity.renderNotice(notice: AppNotice) {
     when (notice) {
         AppNotice.SignIn -> SignInFlow.open(this)
-        is AppNotice.Message -> showMessage(notice.text)
+        is AppNotice.LocalizedMessage -> showMessage(getString(notice.resource, *notice.arguments.toTypedArray()))
+        is AppNotice.Message -> showMessage(noticeText(notice.text))
         is AppNotice.Failure -> showFailureReport(notice)
     }
 }
 
 private fun Activity.showFailureReport(notice: AppNotice.Failure) {
-    showMessage(notice.text)
+    showMessage(noticeText(notice.text, failure = true))
     AlertDialog.Builder(appDialogContext())
         .setMessage(notice.report.text)
         .setPositiveButton(R.string.copy_all) { target, _ ->

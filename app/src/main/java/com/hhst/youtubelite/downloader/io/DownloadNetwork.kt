@@ -12,9 +12,8 @@ enum class NetworkKind {
 }
 
 /**
- * Wi-Fi-only is opt-in. Default allows the current network.
- * Network loss is reported as [NetworkKind.NONE] so transport can wait without
- * consuming retry budget.
+ * Wi-Fi-only is opt-in; default allows the current network. Network loss is
+ * [NetworkKind.NONE] so transport can wait without consuming retry budget.
  */
 object DownloadNetworkPolicy {
     fun canTransfer(wifiOnly: Boolean, kind: NetworkKind): Boolean {

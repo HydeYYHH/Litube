@@ -7,7 +7,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Bounds DNS/connect/TLS/headers without imposing a duration limit on the media body. */
+/** Bounds DNS/connect/TLS/headers without a duration limit on the media body. */
 internal object MediaOpenTimeout {
     private val timer = ScheduledThreadPoolExecutor(1) { task ->
         Thread(task, "media-open-timeout").apply { isDaemon = true }

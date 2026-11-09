@@ -11,10 +11,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * Stable queue owner: this device, or one signed-in account (plus its
- * delegated channel when present). Derived from session identity fields only —
- * never from rotating access tokens — so a stored queue survives restarts and
- * token refreshes under the same owner.
+ * Stable queue owner: this device or one signed-in account (plus its delegated channel).
+ * Derived from session identity fields only — never rotating access tokens — so a stored
+ * queue survives restarts and token refreshes under the same owner.
  */
 data class QueueOwner private constructor(val id: String) {
     companion object {
@@ -49,11 +48,10 @@ data class QueueState(
  * Queue persistence + navigation. Backed by [JsonCache] with a long (but finite)
  * TTL — `Long.MAX_VALUE` would overflow `now + ttl` and expire immediately.
  *
- * Storage is partitioned by [QueueOwner]: activating an owner swaps the
- * published state without touching any other owner's stored queue, and the
- * current media keeps playing across the swap. Mutators take an optional owner
- * token captured before async work; a token from a previous owner is dropped
- * instead of applied, so a late write can never land in the newly active queue.
+ * Storage is partitioned by [QueueOwner]: activating an owner swaps the published
+ * state without touching other owners' queues, and current media keeps playing across
+ * the swap. Mutators take an optional owner token captured before async work; a stale
+ * token drops the write so a late write can never land in the newly active queue.
  */
 class QueueRepository(
     private val cache: JsonCache,
@@ -90,7 +88,6 @@ class QueueRepository(
         }
     }
 
-    /** Appends [item]; a video already queued is left untouched. */
     fun add(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item)?.let {
             it.copy(title = it.title.ifBlank { it.videoId })
@@ -105,10 +102,9 @@ class QueueRepository(
     }
 
     /**
-     * "Play next": insert [item] directly after the playing entry, or move it
-     * there when it is already queued. The playing item itself is never moved;
-     * with no playing entry in the list the target lands at the head, which is
-     * where [nextStrict] resumes an unknown current. The plain [add] path keeps
+     * "Play next": insert after the playing entry, or move it there when already queued;
+     * the playing item itself is never moved. With no playing entry the target lands at
+     * the head, which is where [nextStrict] resumes an unknown current. [add] keeps
      * its append semantics.
      */
     fun addNext(item: QueueItem, owner: QueueOwner? = null) {
@@ -158,7 +154,6 @@ class QueueRepository(
         }
     }
 
-    /** New videos append; the list is capped so a long session cannot grow without bound. */
     fun upsertPlaying(item: QueueItem, owner: QueueOwner? = null) {
         val clean = sanitize(item) ?: return
         guarded(owner) {
@@ -196,9 +191,8 @@ class QueueRepository(
     }
 
     /**
-     * Next item WITHOUT wrapping; null at the tail and when the current video
-     * is not queued. Both manual and automatic queue navigation stop at the
-     * tail — there is no whole-queue loop mode.
+     * Without wrapping: null at the tail and when the current video is not queued.
+     * Navigation stops at the tail — there is no whole-queue loop mode.
      */
     fun nextStrict(currentVideoId: String?): QueueItem? {
         val items = _state.value.items
@@ -208,7 +202,6 @@ class QueueRepository(
         return items.getOrNull(idx + 1)
     }
 
-    /** Previous item; null at head (no wrap). */
     fun previous(currentVideoId: String?): QueueItem? {
         val items = _state.value.items
         val idx = items.indexOfFirst { it.videoId == currentVideoId }
@@ -220,11 +213,7 @@ class QueueRepository(
         return candidates.randomOrNull()
     }
 
-    /**
-     * Runs [block] under the lock. A stale [owner] token captured before async
-     * work (a drag commit, a delayed add) drops the write: operations started
-     * under one owner must never land in the newly active owner's queue.
-     */
+    /** Drops writes from a stale [owner] token so a late write can never land in the newly active queue. */
     private fun <T> guarded(owner: QueueOwner?, block: () -> T): T? = synchronized(lock) {
         if (owner != null && owner != active) {
             AppLog.event(AppLog.Category.PLAYER, "queue_write_dropped",
@@ -237,9 +226,8 @@ class QueueRepository(
     private fun loadState(owner: QueueOwner): QueueState {
         var itemsJson = cache.get(itemsKey(owner), String::class.java)
         var enabledStr = cache.get(enabledKey(owner), String::class.java)
-        // One-time fallback: the pre-identity global queue belongs to this
-        // device — it is never offered to account owners. The fallback stops
-        // once the first per-owner save has written both new keys.
+        // One-time fallback: the pre-identity global queue belongs to this device —
+        // never to account owners. Stops once the first per-owner save writes both keys.
         if (owner == QueueOwner.DEVICE) {
             if (itemsJson == null) itemsJson = cache.get(LEGACY_ITEMS, String::class.java)
             if (enabledStr == null) enabledStr = cache.get(LEGACY_ENABLED, String::class.java)
@@ -249,10 +237,8 @@ class QueueRepository(
             emptyList()
         } else {
             runCatching {
-                // Null entries and null fields were tolerated by the previous
-                // parser: nulls decode as nulls (dropped below) and explicit
-                // nulls coerce to defaults, while any other malformed row still
-                // fails the whole read like it did before.
+                // Previous parser tolerated nulls: they decode as nulls (dropped below)
+                // or coerce to defaults; any other malformed row still fails the read.
                 val json = kotlinx.serialization.json.Json {
                     ignoreUnknownKeys = true; coerceInputValues = true }
                 val array = json.parseToJsonElement(itemsJson)

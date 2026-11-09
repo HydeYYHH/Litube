@@ -29,8 +29,6 @@ import com.hhst.youtubelite.R
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 
 /**
- * 2 dp time bar with buffered + SponsorBlock marks.
- *
  * Position and buffered position arrive as [State]s and are read inside the
  * draw scope, so a 4 Hz playback tick only redraws the bar instead of
  * recomposing the caller's tree.

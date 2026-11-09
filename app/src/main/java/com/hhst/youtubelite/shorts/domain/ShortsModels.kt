@@ -16,7 +16,6 @@ data class ShortItem(
 
 data class ShortsPage(val items: List<ShortItem>, val nextKey: String? = null)
 
-/** Fills fields the feed left blank; ids and non-blank feed values win. */
 fun ShortItem.fillFrom(detail: ShortItem): ShortItem = if (id != detail.id) this else copy(
     title = title.ifBlank { detail.title },
     author = author.ifBlank { detail.author },

@@ -50,9 +50,8 @@ internal fun CastDialog(
     onDiscovery: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Discovery scanning is battery-hungry: run it only while this dialog is
-    // open, and keep the 1.5 s route re-poll for OEM ROMs that drop
-    // discovery callbacks (the first scan can take several seconds).
+    // Discovery scanning is battery-hungry: run it only while this dialog is open;
+    // the 1.5 s route re-poll covers OEM ROMs that drop discovery callbacks.
     DisposableEffect(Unit) {
         onDiscovery(true)
         onDispose { onDiscovery(false) }
@@ -156,9 +155,8 @@ internal fun CastDialog(
                         }
                     }
                 }
-                // Link-cast is a separate mode from a Chromecast session: the
-                // proxy serves the receiver's manifest during one, so the link
-                // section (and with it the reconfigure path) is hidden here.
+                // Link-cast is a separate mode from a Chromecast session (the proxy
+                // serves the receiver's manifest), so the link section is hidden here.
                 if (!state.casting) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),

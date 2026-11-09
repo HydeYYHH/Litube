@@ -178,7 +178,7 @@ class MediaSessionTest {
                 HttpReply(200, """{"access_token":"fresh-access","expires_in":3600}""", emptyMap())
         }
         MediaSession.tokenFactory = { initial, client -> AccountToken(initial, client, refreshHttp) }
-        MediaSession.completeSignIn(client(), token(expires = 0), accounts()) // already expired
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
         val context = MediaSession.snapshot()
         val fresh = MediaSession.freshContext()
         assertEquals("fresh-access", fresh.accessToken)
@@ -585,7 +585,7 @@ class MediaSessionTest {
                 HttpReply(200, """{"access_token":"fresh-access","expires_in":3600}""", emptyMap())
         }
         MediaSession.tokenFactory = { initial, refreshClient -> AccountToken(initial, refreshClient, refreshHttp) }
-        MediaSession.completeSignIn(client(), token(expires = 0), accounts()) // already expired
+        MediaSession.completeSignIn(client(), token(expires = 0), accounts())
         MediaSession.setAnonymousMode(true)
         val fresh = MediaSession.freshContext()
         assertNull(fresh.accessToken)

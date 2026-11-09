@@ -32,7 +32,7 @@ fun <T> SelectField(
     tag: String,
     selected: T,
     options: List<T>,
-    labelOf: (T) -> String,
+    labelOf: @Composable (T) -> String,
     minWidth: Float,
     chipHeight: Dp,
     onSelect: (T) -> Unit,
@@ -40,8 +40,10 @@ fun <T> SelectField(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val style = DesignTokens.text(14, 20)
-    val width = remember(options, style, density) {
-        val labelWidth = options.maxOf { measurer.measure(labelOf(it), style).size.width / density.density }
+    val labels = options.map { labelOf(it) }
+    val selectedLabel = labelOf(selected)
+    val width = remember(labels, style, density, minWidth) {
+        val labelWidth = labels.maxOf { measurer.measure(it, style).size.width / density.density }
         maxOf(minWidth, labelWidth + 46f)
     }
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -59,20 +61,20 @@ fun <T> SelectField(
                     RoundedCornerShape(8.dp),
                 )
                 .clickable(role = Role.Button) { expanded = true }
-                .semantics { contentDescription = labelOf(selected) }
+                .semantics { contentDescription = selectedLabel }
                 .padding(start = 11.dp, end = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AppText(
-                labelOf(selected), Modifier.weight(1f).testTag("$tag-label"), size = 14,
+                selectedLabel, Modifier.weight(1f).testTag("$tag-label"), size = 14,
                 line = 20, maxLines = 1,
             )
             AppIcon(AppIcon.ChevronDown, Modifier.size(24.dp).testTag("$tag-icon"))
         }
-        if (expanded) DisposableEffect(context, options, selected, palette) {
+        if (expanded) DisposableEffect(context, options, labels, selected, palette) {
             val pickerContext = context.appDialogContext(darkTheme = dark)
             val scale = pickerContext.resources.displayMetrics.density
-            val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, options.map(labelOf)) {
+            val adapter = object : ArrayAdapter<String>(pickerContext, android.R.layout.simple_list_item_single_choice, labels) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
                     (super.getView(position, convertView, parent) as CheckedTextView).apply {
                         textSize = 20f

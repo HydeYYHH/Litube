@@ -133,7 +133,6 @@ class ChannelScreenAndroidTest {
         compose.onNodeWithTag("channel-thumb-bunny").performClick()
         host.onActivity { assertEquals(ChannelNavigationRequest.Watch("bunny"), it.lastNavigationRequest) }
         awaitNode("watch-screen")
-        // Send the system Back key across activity hosts.
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("channel-home-list")
     }

@@ -48,7 +48,7 @@ class WatchScreenshotAndroidTest {
         state = WatchUiState(videoId = "bunny", content = content),
         onAction = onAction,
         onBack = {},
-        // The real player needs a live PlayerViewModel; page geometry depends only on the slot's bounds, so tests substitute a black box.
+        // Real player needs a live PlayerViewModel; page geometry depends only on the slot's bounds, so tests substitute a black box.
         playerSlot = { slot -> Box(slot.background(Color.Black)) },
     )
 
@@ -204,7 +204,7 @@ class WatchScreenshotAndroidTest {
         assertEquals(0f, player.left, 0.5f)
         assertEquals(0f, player.top, 0.5f)
         assertEquals(844f, player.width, 0.5f)
-        // The wide-short player scrolls with the content, so the window clips its tall box.
+        // Wide-short player scrolls with content, so the window clips its tall box.
         assertEquals(342f, player.bottom, 0.5f)
         scrollToCard("watch-thumb-harbour")
         scrollToCard("watch-thumb-studio")
@@ -497,7 +497,7 @@ class WatchScreenshotAndroidTest {
         val changed = expectedPixels.indices.filter { i -> listOf(0, 8, 16).any { shift ->
             abs((expectedPixels[i] shr shift and 255) - (actualPixels[i] shr shift and 255)) > 2
         } }
-        // Report the diff region so an intentional geometry change is distinguishable from unrelated drift.
+        // Report the diff region so intentional geometry change is distinguishable from unrelated drift.
         val changedArea = changed.fold(null as IntArray?) { area, i ->
             val x = i % expected.width; val y = i / expected.width
             if (area == null) intArrayOf(x, y, x, y)

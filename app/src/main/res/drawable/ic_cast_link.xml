@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Globe glyph — used for the link-cast / browser session row in the cast
-  dialog and the player link banner. Represents a browser opening the share
-  link on the local network, distinct from the Chromecast glyph
-  (ic_cast / ic_cast_connected).-->
+  Globe glyph for the link-cast / browser session row: a browser opening the
+  share link on the local network, distinct from Chromecast (ic_cast / ic_cast_connected).
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="960"
     android:viewportHeight="960"
     android:tint="?attr/colorOnSurfaceVariant">
-    <!-- Scale the 960-unit glyph to ~73% canvas span, matching the visual
-         weight of the other player icons (thin Material Symbols family). -->
+    <!-- Scale the 960-unit glyph to ~73% canvas span to match the visual
+         weight of the other thin-stroke player icons. -->
     <group
         android:scaleX="0.88"
         android:scaleY="0.88"

@@ -40,7 +40,7 @@ class ChannelReferenceAndroidTest {
     private fun String.lineAfter(prefix: String): String =
         lines().firstOrNull { it.contains(prefix) }?.substringAfter(prefix)?.trim() ?: ""
 
-    /** Same mappings every other screen used: density is chosen so CSS px = target width. */
+    /** Density chosen so CSS px = target width. */
     private fun applyViewport(title: String, widthCs: Int, heightCs: Int) {
         when (widthCs) {
             390, 411, 320 -> { DeviceEvidence.shell("wm density 480"); DeviceEvidence.shell("wm size ${widthCs * 3}x${heightCs * 3}") }
@@ -160,9 +160,8 @@ class ChannelReferenceAndroidTest {
             "[...document.querySelectorAll('a[href*=\"/watch\"]')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).length > 3"
 
         /**
-         * Focused header collection: the generic census misses name, handle and description
-         * because they are not `ytm-*` elements; this records visible header text leaves and
-         * banner/avatar images so typography can be pinned.
+         * Focused header collection: the generic census misses name/handle/description because
+         * they are not `ytm-*`; this records visible header text leaves and banner/avatar images.
          */
         val IDENTITY_COLLECT = """
             const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -208,7 +207,7 @@ class ChannelReferenceAndroidTest {
               if (expander) out.expander = {rect: R(expander), style: S(expander),
                 text: (expander.innerText || '').slice(0, 300),
                 scrollHeight: expander.scrollHeight, clientHeight: expander.clientHeight};
-              // The channel name is a nested element; match its exact text anywhere in the header.
+              // Channel name is nested; match its exact text anywhere in the header.
               const nameText = (document.querySelector('[class*=pageHeaderRendererHost]') ?
                 (document.querySelector('ytm-page-header-channels-entrypoint-renderer') ?
                   (document.querySelector('ytm-page-header-channels-entrypoint-renderer').innerText || '') : '') : '');
@@ -273,7 +272,7 @@ class ChannelReferenceAndroidTest {
             out.tabbar = [...document.querySelectorAll('ytm-tab-renderer, ytm-profile-tabs, [class*=tab-bar], [id*=tab]')].filter(vis).slice(0, 6)
               .map(e => ({tag: e.tagName, cls: String(e.className).slice(0, 90), rect: R(e), style: S(e),
                 childRects: [...e.children].filter(vis).slice(0, 12).map(c => ({cls: String(c.className).slice(0, 60), rect: R(c)}))}));
-            // A first-viewport-only page snapshot of reachable vertical anchors.
+            // First-viewport-only page snapshot of reachable vertical anchors.
             out.pageTop = [...document.querySelectorAll('ytm-browse > *, [class*=tab-content] > *')].filter(vis).slice(0, 4)
               .map(e => ({tag: e.tagName, cls: String(e.className).slice(0, 90), rect: R(e)}));
             // First-visit census: every visible custom element plus every button/anchor,
@@ -309,7 +308,7 @@ class ChannelReferenceAndroidTest {
             });
             out.gridHost = [...document.querySelectorAll('ytm-browse, ytm-section-list-renderer, [class*=grid], [class*=rich-grid]')].filter(vis).slice(0, 6)
               .map(e => ({tag: e.tagName, cls: String(e.className).slice(0, 100), rect: R(e), style: S(e)}));
-            // A first-viewport-only page snapshot of reachable vertical anchors.
+            // First-viewport-only page snapshot of reachable vertical anchors.
             out.pageTop = [...document.querySelectorAll('ytm-browse > *, [class*=tab-content] > *')].filter(vis).slice(0, 4)
               .map(e => ({tag: e.tagName, cls: String(e.className).slice(0, 90), rect: R(e)}));
             const wanted = /channel|banner|tab|avatar|chip|media-item|video-with-context|compact-video|subscribe|profile|header|shelf|grid|metadata|headline|thumbnail/;

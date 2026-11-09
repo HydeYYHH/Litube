@@ -9,8 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.hhst.youtubelite.R
 
-// Same bundled family the content surfaces use: one font source for the app,
-// while every page keeps its own sizes and line heights.
+// Same bundled family the content surfaces use: one font source; pages keep their own sizes/line heights.
 private val AppFont = FontFamily(
     Font(R.font.roboto_regular, FontWeight.Normal), Font(R.font.roboto_medium, FontWeight.Medium),
     Font(R.font.roboto_bold, FontWeight.Bold), Font(R.font.roboto_bold, FontWeight.Black),

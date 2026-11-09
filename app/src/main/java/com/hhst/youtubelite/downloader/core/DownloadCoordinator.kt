@@ -377,9 +377,9 @@ class DownloadCoordinator(
     }
 
     /**
-     * Interrupted RUNNING work becomes waiting-system. Does not schedule: a
-     * still-alive system job is a restore path, and a missing job after
-     * force-stop must wait for a later user action.
+     * Interrupted RUNNING → waiting-system; does not schedule. A still-alive
+     * system job is a restore path; a missing job after force-stop waits for
+     * a later user action.
      */
     suspend fun onProcessRestore() {
         repository.transact {

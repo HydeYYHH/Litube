@@ -23,7 +23,7 @@ internal data class DesiredStateAttempt<T>(val reply: ActionReply, val value: T)
 internal data class DesiredStateRead<T>(val state: String?, val value: T)
 internal enum class DesiredStateRecoveryMode { RetryStateSet, ConfirmOnly }
 
-/** Recovery for explicit desired states. Adapters own fresh capability and state interpretation. */
+/** Recovery for explicit desired states; adapters own fresh capability/state interpretation. */
 internal class DesiredStateWriteRecovery(private val client: MediaClient) {
     private class Target {
         val mutexes = mutableMapOf<Long, Mutex>()
@@ -133,13 +133,12 @@ internal class DesiredStateWriteRecovery(private val client: MediaClient) {
                 }
                 val observed = observation.value
                 if (observation.ok && observed != null) {
-                    // Publish capabilities only after this bounded read has completed.
-                    // A timed-out worker can still finish parsing, but cannot replace them.
+                    // Publish capabilities only after this bounded read completes; a timed-out worker cannot replace them.
                     synchronized(ownersLock) { ensureOwner(owner); onObserved(observed.value) }
                     if (observed.state == expected) return confirm(owner, session, observed.value, onConfirmed)
                 }
             }
-            // Unknown is not unchanged. Append adapters use ConfirmOnly even after an old state.
+            // Unknown is not unchanged; append adapters use ConfirmOnly even after an old state.
             if (observation.value?.state == null && (lastWriteError == null || !retryUnknownState)) break
         }
         currentCoroutineContext().ensureActive()

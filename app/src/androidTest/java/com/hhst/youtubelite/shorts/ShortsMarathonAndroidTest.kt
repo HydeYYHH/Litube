@@ -59,7 +59,6 @@ class ShortsMarathonAndroidTest {
         assertTrue("Shorts feed never became ready; state=${state()?.content?.javaClass?.simpleName}", false)
     }
 
-    /** First currentItemId that differs from [previous], or null when nothing settles in time. */
     private fun awaitCurrentItem(previous: String?, timeoutMs: Long = 15_000): String? {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

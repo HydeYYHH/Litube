@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 
-/** Verifies host refresh delivery without changing stored credentials. */
+/** Host refresh delivery without changing stored credentials. */
 @RunWith(AndroidJUnit4::class)
 class AccountChangesAndroidTest {
 

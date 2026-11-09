@@ -31,7 +31,6 @@ import org.koin.android.ext.android.inject
 
 import com.hhst.youtubelite.R
 
-/** Lifecycle and system controls for the retained playback engine. */
 abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private val prefs: ExtensionManager by inject()
     protected val playerViewModel: PlayerViewModel by inject()
@@ -49,9 +48,8 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private var playerHeight = 0
 
     /**
-     * Instrumentation: hold player PiP eligibility without a live stream so
-     * API 31+ [PictureInPictureParams.setAutoEnterEnabled] can be asserted
-     * against real DownloadActivity / sheet / share overlays.
+     * Instrumentation hook: holds PiP eligibility without a live stream so API 31+
+     * [PictureInPictureParams.setAutoEnterEnabled] can be asserted against real overlays.
      */
     fun setPlayerPipEligible(eligible: Boolean) {
         pipEligibilityLocked = eligible
@@ -109,8 +107,8 @@ abstract class PlaybackActivity : com.hhst.youtubelite.ui.NativeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PlaybackSession.register(playerViewModel)
-        // Session-owned progress reporting: the loop samples this playback for as long as
-        // the process keeps it, not just while an activity is started.
+        // Session-owned progress reporting: the loop samples this playback as long
+        // as the process keeps it, not just while an activity is started.
         val reportingPlayer = playerViewModel
         org.koin.java.KoinJavaComponent.getKoin()
             .get<com.hhst.youtubelite.data.media.PlaybackWatchReporting>().attach {

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.account.presentation
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -88,9 +90,9 @@ fun AccountSwitchSheet(
                 .background(DesignTokens.Panel)
                 .verticalScroll(rememberScrollState())
                 .testTag("account-switch")
-                .semantics { paneTitle = "Switch account" },
+                .appPaneTitle(R.string.ui_switch_account),
         ) {
-            AppText("Switch account", size = 16, line = 22, weight = FontWeight.Medium,
+            AppText(stringResource(R.string.ui_switch_account), size = 16, line = 22, weight = FontWeight.Medium,
                 modifier = Modifier.padding(start = MenuSheetLayout.RowStart.dp, top = 16.dp, bottom = 8.dp))
             Row(
                 Modifier.fillMaxWidth().heightIn(min = MenuSheetLayout.RowHeight.dp)
@@ -106,8 +108,8 @@ fun AccountSwitchSheet(
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    AppText("On this device", size = 14, line = 20, weight = FontWeight.Medium, maxLines = 1)
-                    AppText("Browse anonymously; the account stays signed in", size = 12, line = 16,
+                    AppText(stringResource(R.string.ui_on_this_device), size = 14, line = 20, weight = FontWeight.Medium, maxLines = 1)
+                    AppText(stringResource(R.string.ui_browse_anonymously_the_account_stays_signed_in), size = 12, line = 16,
                         color = DesignTokens.Secondary, maxLines = 1)
                 }
                 if (deviceSelected) {
@@ -147,7 +149,7 @@ fun AccountSwitchSheet(
             ) {
                 AppIcon(AppIcon.Add, color = DesignTokens.Ink, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(MenuSheetLayout.IconGap.dp))
-                AppText("Add account", size = 14, line = 20)
+                AppText(stringResource(R.string.ui_add_account), size = 14, line = 20)
             }
             Spacer(Modifier.height(8.dp))
         }

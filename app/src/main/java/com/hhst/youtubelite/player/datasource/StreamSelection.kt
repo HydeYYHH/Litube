@@ -4,18 +4,13 @@ import com.hhst.youtubelite.extractor.Format
 
 object StreamSelection {
 
-    /**
-     * Picks a video format matching [preferredQuality] (e.g. "1080p", "720p60");
-     * Falls back to the nearest lower height, then the smallest step up.
-     * A null/invalid preference selects the highest available quality.
-     */
+    /** Nearest lower height to [preferredQuality], then smallest step up; null/invalid selects the highest. */
     fun selectVideo(formats: List<Format>, preferredQuality: String?): Format? {
         val best = filterBest(formats)
         return selectVideoQuality(best, preferredQuality, { it.height }, { it.fps })
             ?: best.firstOrNull() // Missing dimensions alone do not make a stream unplayable.
     }
 
-    /** Shared by extracted formats and supported player tracks, including Shorts. */
     internal fun <T> selectVideoQuality(
         candidates: List<T>, preferredQuality: String?, height: (T) -> Int, fps: (T) -> Int,
     ): T? {
@@ -41,11 +36,6 @@ object StreamSelection {
     fun selectAudio(formats: List<Format>, preferredKey: String? = null): Format? =
         audioCandidates(formats, preferredKey).maxByOrNull { it.bitrate }
 
-    /**
-     * Dedupes per `height#fps`, preferring poToken, then codec
-     * (avc > vp9 > h265 > av01), then fps and bitrate; sorted by height desc,
-     * then fps desc.
-     */
     fun filterBest(formats: List<Format>): List<Format> {
         if (formats.isEmpty()) return emptyList()
         val best = LinkedHashMap<String, Format>()
@@ -73,12 +63,10 @@ object StreamSelection {
     }
 
     /**
-     * Playback-stable pool: decodable formats first, poToken first, then
-     * anything except ANDROID_VR. ANDROID_VR without pot 403s mid-stream;
-     * keep it only as an explicit last resort. Nothing hardware-decodable
-     * means nothing playable: return empty so the caller fails fast into its
-     * re-extract / client-exclusion recovery instead of handing ExoPlayer a
-     * rep it cannot decode (which would burn another recovery round).
+     * Playback-stable pool: decodable first, poToken first, then anything except
+     * ANDROID_VR (pot-less ANDROID_VR 403s mid-stream — last resort only). Empty
+     * when nothing is hardware-decodable so the caller fails fast into re-extract /
+     * client exclusion instead of handing ExoPlayer an undecodable rep.
      */
     fun preferPlayable(formats: List<Format>, allowAndroidVr: Boolean = false): List<Format> {
         val decodable = formats.filter(CodecCapabilities::isDecodable)
@@ -98,15 +86,13 @@ object StreamSelection {
 
     fun isAndroidVr(format: Format): Boolean = streamingClient(format.url) == "ANDROID_VR"
 
-    /** Muxed (video+audio in one progressive itag); the muxed fallback's pool predicate. */
     fun isMuxed(format: Format): Boolean = !format.videoOnly && !format.audioOnly
 
     /**
-     * True when the format's minting client serves adaptive URLs without the
-     * ~64 s read window that pot-less IOS/ANDROID/WEB URLs are throttled by.
-     * As of 2026-08 VISIONOS is the only such client left (see the extractor
-     * fork's client notes); ANDROID carries only the window-exempt muxed itag
-     * 18, not adaptive formats.
+     * True when the format's minting client serves adaptive URLs without the ~64 s
+     * read window pot-less IOS/ANDROID/WEB URLs are throttled by. As of 2026-08
+     * VISIONOS is the only such client; ANDROID carries only the window-exempt
+     * muxed itag 18.
      */
     fun isWindowExempt(format: Format): Boolean =
         streamingClient(format.url) == "VISIONOS" || hasPoToken(format)
@@ -127,10 +113,9 @@ object StreamSelection {
         val lower = codec?.lowercase() ?: return 0
         return when {
             lower.startsWith("avc") || lower.startsWith("h264") -> 4
-            // VP9 arrives as "vp9" or in RFC 6381 form ("vp09.00.10.08" —
-            // no "vp9" substring), so both spellings must rank 3.
+            // VP9 arrives as "vp9" or RFC 6381 ("vp09.00.10.08" — no "vp9" substring).
             lower.startsWith("vp9") || lower.startsWith("vp09") || lower.contains("vp8") -> 3
-            // HEVC arrives as h265/hevc or in RFC 6381 form ("hev1.1.6.L93").
+            // HEVC arrives as h265/hevc or RFC 6381 ("hev1.1.6.L93").
             lower.contains("h265") || lower.contains("hevc") ||
                 lower.startsWith("hvc1") || lower.startsWith("hev1") -> 2
             lower.contains("av01") || lower.contains("av1") -> 1

@@ -10,9 +10,8 @@ import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.SubtitleSelection
 
 /**
- * Download stream picks. Playback [StreamSelection] still chooses unbounded
- * highest quality; this layer caps default height at 1080p and refuses gated
- * mux combos and silent language fallbacks.
+ * Download stream picks: unlike playback's unbounded [StreamSelection], this layer
+ * caps default height at 1080p and refuses gated mux combos and silent language fallbacks.
  */
 object DownloadSelector {
     const val DEFAULT_MAX_HEIGHT = 1080
@@ -161,10 +160,7 @@ object DownloadSelector {
         )
     }
 
-    /**
-     * Highest enabled height ≤ cap. Same height prefers AVC via [StreamSelection.filterBest].
-     * Explicit [qualityLabel] is a cap so retries keep the stored quality string.
-     */
+    /** [qualityLabel] is a cap, not a preference, so retries keep the stored quality string. */
     private fun pickCappedVideo(formats: List<Format>, capHeight: Int, qualityLabel: String?): Format? {
         val best = StreamSelection.filterBest(formats).filter { it.height <= capHeight }
         if (best.isEmpty()) return null

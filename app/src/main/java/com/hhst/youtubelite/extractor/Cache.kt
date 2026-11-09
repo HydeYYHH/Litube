@@ -13,7 +13,6 @@ internal object CacheTtl {
     val CHAPTERS_MS: Long = TimeUnit.HOURS.toMillis(6)
 }
 
-/** Stream URLs expire sooner (~2 min) than metadata and chapters (~6 h). */
 interface Cache {
     fun getMetadata(videoId: String): Metadata?
     fun putMetadata(videoId: String, metadata: Metadata)
@@ -59,11 +58,9 @@ class DiskCache(
     fun getMetadataWithExpiry(videoId: String): Pair<Metadata, Long>? =
         withExpiry(METADATA_KEY + videoId, Metadata::class.java, CacheTtl.METADATA_MS)
 
-    /** [Stream] plus its absolute expiry, for TTL-inheriting promotion into mem. */
     fun getStreamWithExpiry(videoId: String): Pair<Stream, Long>? =
         withExpiry(STREAM_KEY + videoId, Stream::class.java, CacheTtl.STREAM_MS)
 
-    /** [ChapterList] plus its absolute expiry, for TTL-inheriting promotion into mem. */
     fun getChaptersWithExpiry(videoId: String): Pair<ChapterList, Long>? =
         withExpiry(CHAPTERS_KEY + videoId, ChapterList::class.java, CacheTtl.CHAPTERS_MS)
 

@@ -3,10 +3,9 @@ package com.hhst.youtubelite.player
 import com.hhst.youtubelite.player.surface.AutoFullscreen
 
 /**
- * Sensor and manual-entry history for the process-owned player presentation.
- * The caller supplies the current window for each decision and applies the
- * result. Like its caller, it is confined to the main thread; it neither
- * stores UI state nor changes a window itself.
+ * Sensor and manual-entry history for the player presentation; the caller supplies the
+ * current window per decision and applies the result. Main-thread confined: stores no
+ * UI state and never changes a window itself.
  */
 internal class FullscreenState {
     private var autoEntered = false

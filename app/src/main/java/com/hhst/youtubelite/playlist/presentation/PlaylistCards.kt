@@ -80,7 +80,7 @@ fun PlaylistSearchList(
                         Column(Modifier.weight(1f).padding(top = 5.dp)) {
                             PlaylistTitle(playlist, Modifier.fillMaxWidth().clickable(onClick = open))
                             Spacer(Modifier.height(3.dp))
-                            AppText("${playlist.owner} · Playlist", size = 12, line = 14, color = DesignTokens.Secondary,
+                            AppText(stringResource(R.string.ui_playlist_owner, playlist.owner), size = 12, line = 14, color = DesignTokens.Secondary,
                                 modifier = Modifier.clickable { onOwner(playlist.channelId) }, maxLines = 1)
                         }
                         AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, playlist.title), diameter = menuSize,
@@ -102,7 +102,7 @@ fun PlaylistSearchList(
                                 Column(Modifier.weight(1f).heightIn(min = 43.dp).clickable(onClick = open)) {
                                     PlaylistTitle(playlist, Modifier.fillMaxWidth())
                                     Spacer(Modifier.height(3.dp))
-                                    AppText("${playlist.owner} · Playlist", size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
+                                    AppText(stringResource(R.string.ui_playlist_owner, playlist.owner), size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
                                 }
                             }
                             Box(Modifier.matchParentSize().wrapContentSize(Alignment.TopEnd, unbounded = true).padding(end = menuInset)) {
@@ -135,7 +135,7 @@ fun ChannelPlaylistRow(playlist: PlaylistSummary, onOpen: () -> Unit, onMenu: ()
             Column(Modifier.weight(1f).padding(top = 8.dp).clickable(role = Role.Button, onClick = onOpen)) {
                 PlaylistTitle(playlist, Modifier.fillMaxWidth(), maxLines = if (menuSize == 48f) 3 else 2)
                 Spacer(Modifier.height(3.dp))
-                AppText("${playlist.owner} · Playlist", size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
+                AppText(stringResource(R.string.ui_playlist_owner, playlist.owner), size = 12, line = 14, color = DesignTokens.Secondary, maxLines = 1)
             }
             AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, playlist.title), diameter = menuSize.dp, onClick = onMenu)
         }
@@ -144,7 +144,7 @@ fun ChannelPlaylistRow(playlist: PlaylistSummary, onOpen: () -> Unit, onMenu: ()
 
 @Composable
 fun PlaylistShareSheet(onDismiss: () -> Unit, onShare: () -> Unit) {
-    MenuBottomSheet(listOf(MenuSheetItem(AppIcon.Share, "Share", "playlist-menu-share")),
-        onDismiss, { onShare() }, tag = "playlist-share-menu", paneTitle = "Playlist actions",
+    MenuBottomSheet(listOf(MenuSheetItem(AppIcon.Share, stringResource(R.string.share), "playlist-menu-share")),
+        onDismiss, { onShare() }, tag = "playlist-share-menu", paneTitle = stringResource(R.string.ui_playlist_actions),
         rowStart = 12.dp, iconGap = 12.dp)
 }

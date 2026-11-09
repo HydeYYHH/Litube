@@ -90,7 +90,7 @@ class PlaybackSessionStopAndroidTest {
                 val prepared = fixture.engine.mediaPrepareCount
                 instrumentation.runOnMainSync {
                     val wrapper = routingPlayer(service)
-                    wrapper.stop() // The router posts; hide and show occur before that post runs.
+                    wrapper.stop() // The router posts; hide and show run before that post.
                     service.hide()
                     service.show("Current playback", null, null)
                     assertSame("Showing the bound session must keep its wrapper", wrapper, routingPlayer(service))
@@ -103,7 +103,7 @@ class PlaybackSessionStopAndroidTest {
                     assertTrue(fixture.model.uiState.value.visible)
                     assertEquals(prepared, fixture.engine.mediaPrepareCount)
                 }
-                // The same long-lived session still accepts a newly received valid STOP.
+                // Same long-lived session still accepts a newly received valid STOP.
                 withController(service) { controller ->
                     instrumentation.runOnMainSync { controller.stop() }
                     fixture.await { fixture.engine.snapshot.value.videoId == null && !fixture.model.uiState.value.visible }
@@ -250,7 +250,7 @@ class PlaybackSessionStopAndroidTest {
     }
 
     @Test fun endingAPendingCastSessionRejectsItsLateConnectedCallback() {
-        // Hold a loopback TCP endpoint open so the real channel cannot fail its handshake before the test drives the captured controller listener.
+        // Loopback endpoint open so the real channel cannot fail its handshake before the test drives the listener.
         ServerSocket(0).use { endpoint ->
             lateinit var callback: CastV2Session.Listener
             val started = AtomicInteger()
@@ -270,7 +270,7 @@ class PlaybackSessionStopAndroidTest {
                     cast.onSessionStarted = { started.incrementAndGet() }
                     cast.selectDevice("pending")
                     assertFalse(cast.state.value.chromecastSession)
-                    // The explicit Stop transaction invokes both operations even while chromecastSession is false (covered by the VM test).
+                    // Explicit Stop invokes both operations even while chromecastSession is false (covered by the VM test).
                     cast.stopCasting()
                     cast.endSession()
                     callback.onConnected()

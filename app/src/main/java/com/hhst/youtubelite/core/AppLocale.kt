@@ -7,12 +7,11 @@ import android.os.LocaleList
 import androidx.core.os.LocaleListCompat
 
 /**
- * The app language. API 33+ delegates to the system's per-app locales (persisted by the
- * OS); older versions wrap every activity context with the persisted BCP-47 tag. An
- * empty tag always means "follow the system".
+ * API 33+ delegates to the system's per-app locales; older versions wrap activity contexts
+ * with the persisted BCP-47 tag. An empty tag always means "follow the system".
  */
 object AppLocale {
-    /** Selectable app languages; tags must exist as packaged resource locales (see localeFilters). */
+    /** Tags must exist as packaged resource locales (see localeFilters). */
     val OPTIONS: List<Pair<String, String>> = listOf(
         "" to "System default",
         "en" to "English",
@@ -69,7 +68,7 @@ object AppLocale {
             context.getSystemService(LocaleManager::class.java)?.applicationLocales?.toLanguageTags().orEmpty()
         } else AppSettings.language(context)
 
-    /** Applies the persisted tag. Returns true when the system-level path was used. */
+    /** Applies the persisted tag; true when the system-level path was used. */
     fun apply(context: Context, tag: String): Boolean {
         AppSettings.setLanguage(context, tag)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -94,11 +93,11 @@ object AppLocale {
     }
 }
 
-/** Boot-time synchronous reads for values needed before dependency injection is up. */
+/** Boot-time synchronous reads for values needed before DI is up. */
 internal object AppSettings {
     private const val KEY_LANGUAGE = "preferences:app_language"
 
-    /** Reads the same prefs file the extension settings store writes; safe before Koin starts. */
+    /** Same prefs file the extension settings store writes; safe before Koin starts. */
     fun language(context: Context): String =
         PreferenceStore.app(context).readString(KEY_LANGUAGE).orEmpty()
 

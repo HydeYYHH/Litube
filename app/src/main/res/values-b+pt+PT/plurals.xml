@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">e mais %1$d ligação</item>
+        <item quantity="many">e mais %1$d ligações</item>
+        <item quantity="other">e mais %1$d ligações</item>
+    </plurals>
+</resources>

@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Sheet state owned by [SaveSheetController]; null when the sheet is closed. */
 data class SaveSheetState(
     val videoId: String,
     val newPlaylist: Boolean = false,

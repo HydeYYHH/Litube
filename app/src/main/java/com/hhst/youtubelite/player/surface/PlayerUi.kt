@@ -84,7 +84,6 @@ object PlayerUi {
     const val CAST_BANNER_CLEAR_DP = 44
     /** Bottom-end cards (sponsor skip, zoom reset) above the bottom HUD. */
     const val ZOOM_RESET_BOTTOM_DP = 80
-    /** Gap between the visible track and a chip sitting above it. */
     const val TRACK_CHIP_GAP_DP = 8
 
     val SpeedChoices = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f)
@@ -143,7 +142,6 @@ object PlayerUi {
         else -> BackStep.BrowserBack
     }
 
-    /** Embedded surface offset including the system bar inset. */
     fun playerTopOffsetDp(
         fullscreen: Boolean,
         reportedTopDp: Int? = null,
@@ -153,7 +151,7 @@ object PlayerUi {
         return (insetTopDp + (reportedTopDp ?: EMBEDDED_TOP_MARGIN_DP)).coerceAtLeast(0)
     }
 
-    /** Seek / volume / brightness hint inset: 12% of the player width. */
+    /** Inset for the seek / volume / brightness hints. */
     fun gestureSideInsetDp(widthDp: Int, insetDp: Int = 0): Int =
         maxOf((widthDp.coerceAtLeast(0) * 12 / 100).coerceAtLeast(24), insetDp.coerceAtLeast(0))
 
@@ -164,7 +162,7 @@ object PlayerUi {
     fun hudSidePadDp(widthDp: Int, chromePadDp: Int = 0, insetDp: Int = 0): Int =
         (gestureSideInsetDp(widthDp, insetDp) - chromePadDp.coerceAtLeast(0)).coerceAtLeast(8)
 
-    /** Embedded height: JS-reported page-player height, else 16:9 of [widthDp]. */
+    /** [pageHeightDp] comes from the page's JS; absent it, fall back to 16:9. */
     fun embeddedHeightDp(pageHeightDp: Int?, widthDp: Int): Int {
         val reported = pageHeightDp ?: 0
         if (reported > 0) return reported
@@ -236,7 +234,6 @@ object PlayerUi {
         return if (declaredHeight > 0 && declaredHeight != videoHeight) decoded else declared
     }
 
-    /** Quality chip: the pin when set, else `Auto` plus [playingQuality]. */
     fun qualityButtonLabel(
         pinned: String?,
         active: String?,
@@ -248,7 +245,6 @@ object PlayerUi {
         return if (current != null) "$autoPrefix $current" else autoPrefix
     }
 
-    /** Human-readable language name; falls back to the raw code. */
     fun languageLabel(code: String): String {
         if (code.isBlank()) return code
         val name = Locale.forLanguageTag(code.replace('_', '-'))
@@ -262,7 +258,6 @@ object PlayerUi {
         return (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
     }
 
-    /** Index of the chapter holding [positionMs]; -1 before the first chapter. */
     fun chapterIndexAt(chapters: List<Chapter>, positionMs: Long): Int {
         var index = -1
         chapters.forEachIndexed { i, chapter ->
@@ -337,20 +332,13 @@ object PlayerUi {
     fun lockContentDescriptionRes(locked: Boolean): Int =
         if (locked) R.string.unlock_screen else R.string.lock_screen
 
-    /**
-     * Horizontal inset for fullscreen chrome. Never below [FULLSCREEN_SIDE_DP],
-     * and grows to cover display cutouts / gesture insets.
-     */
+    /** Grows beyond [FULLSCREEN_SIDE_DP] to cover display cutouts / gesture insets. */
     fun fullscreenSideDp(insetDp: Int): Int = maxOf(FULLSCREEN_SIDE_DP, insetDp.coerceAtLeast(0))
 
-    /** Sheet body: 75% of the window, clamped 200–520 dp. */
     fun sheetMaxHeightDp(screenHeightDp: Int): Int =
         (screenHeightDp.coerceAtLeast(0) * 3 / 4).coerceIn(200, 520)
 
-    /**
-     * PiP window aspect as numerator/denominator, clamped to Android's
-     * 1:2.39 … 2.39:1 range. Unknown size falls back to 16:9.
-     */
+    /** Clamped to Android's 1:2.39 … 2.39:1 PiP range; unknown size falls back to 16:9. */
     fun pipAspect(width: Int, height: Int): Pair<Int, Int> {
         if (width <= 0 || height <= 0) return 16 to 9
         val w = width.toLong()
@@ -388,10 +376,7 @@ object PlayerUi {
     }
 }
 
-/**
- * Surface resize matching [androidx.media3.ui.AspectRatioFrameLayout] modes:
- * Fit / Fill / Zoom / Fixed Width / Fixed Height.
- */
+/** Mirrors [androidx.media3.ui.AspectRatioFrameLayout] resize modes. */
 enum class ResizeMode {
     Fit,
     Fill,
@@ -400,7 +385,6 @@ enum class ResizeMode {
     FixedHeight,
     ;
 
-    /** androidx.media3.ui.AspectRatioFrameLayout resize-mode ints. */
     fun exoResizeMode(): Int = when (this) {
         Fit -> 0
         FixedWidth -> 1

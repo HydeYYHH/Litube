@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.subscriptions.presentation
 
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -203,7 +204,7 @@ private fun SubscriptionsChipStrip(selected: SubscriptionsChip, chips: List<Subs
                 .background(if (chip == selected) DesignTokens.Ink else DesignTokens.Surface)
                 .clickable(role = Role.Tab) { onAction(SubscriptionsAction.SelectChip(chip)) }
                 .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-                AppText(chip.label, size = 14, line = 20, weight = FontWeight.Medium,
+                AppText(stringResource(chip.labelResource), size = 14, line = 20, weight = FontWeight.Medium,
                     color = if (chip == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
@@ -304,8 +305,8 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
                         content.page.nextKey == null ->
                             Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    AppText("No videos", size = 20, line = 28, weight = FontWeight.Bold)
-                                    AppText("New videos from your subscriptions will show up here.",
+                                    AppText(stringResource(R.string.ui_no_videos), size = 20, line = 28, weight = FontWeight.Bold)
+                                    AppText(stringResource(R.string.ui_new_videos_from_your_subscriptions_will_show_up_here),
                                         Modifier.padding(top = 8.dp), color = DesignTokens.Secondary)
                                 }
                             }
@@ -315,7 +316,7 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
                             Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center,
                         ) {
                             AppText(
-                                "Load more",
+                                stringResource(R.string.load_more),
                                 Modifier.clip(RoundedCornerShape(8.dp))
                                     .clickable { onAction(SubscriptionsAction.LoadNext) }.padding(12.dp)
                                     .testTag("subscriptions-load-more"),
@@ -323,7 +324,7 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
                             )
                         }
                         else -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                            AppText("Looking for matching videos…", color = DesignTokens.Secondary)
+                            AppText(stringResource(R.string.ui_looking_for_matching_videos), color = DesignTokens.Secondary)
                         }
                     }
                 }
@@ -342,8 +343,8 @@ private fun SubscriptionsFeed(content: SubscriptionsContent.Feed, width: Float, 
 @Composable
 private fun RetryAppend(retry: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        AppText("Something went wrong. Tap to retry.", Modifier.weight(1f), color = DesignTokens.Secondary)
-        PillButton("Retry", retry)
+        AppText(stringResource(R.string.ui_something_went_wrong_tap_to_retry), Modifier.weight(1f), color = DesignTokens.Secondary)
+        PillButton(stringResource(R.string.retry), retry)
     }
 }
 
@@ -422,9 +423,9 @@ internal fun SubscriptionsVideoCard(item: FeedItem.Video, compact: Boolean, onAc
 internal fun SubscriptionsError(onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("subscriptions-error").padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
-        AppText("Please try again.", Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
-        PillButton("Retry", onRetry)
+        AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
+        AppText(stringResource(R.string.ui_please_try_again), Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
+        PillButton(stringResource(R.string.retry), onRetry)
     }
 }
 
@@ -442,17 +443,17 @@ private fun ChannelsOverlay(channels: SubscriptionsChannels, listState: LazyList
                 }
                 SubscriptionsChannels.Failed -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    AppText("Couldn't load channels", size = 20, line = 28, weight = FontWeight.Bold)
-                    AppText("Your subscriptions feed is still available.", Modifier.padding(top = 8.dp, bottom = 20.dp),
+                    AppText(stringResource(R.string.ui_couldn_t_load_channels), size = 20, line = 28, weight = FontWeight.Bold)
+                    AppText(stringResource(R.string.ui_your_subscriptions_feed_is_still_available), Modifier.padding(top = 8.dp, bottom = 20.dp),
                         color = DesignTokens.Secondary)
-                    PillButton("Retry", retryable@{ onAction(SubscriptionsAction.RetryChannels) })
+                    PillButton(stringResource(R.string.retry), retryable@{ onAction(SubscriptionsAction.RetryChannels) })
                 }
                 is SubscriptionsChannels.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("channels-list"), state = listState,
                     contentPadding = PaddingValues(top = 13.dp, bottom = 24.dp)) {
                     if (channels.channels.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
-                                AppText("No channels yet", color = DesignTokens.Secondary)
+                                AppText(stringResource(R.string.ui_no_channels_yet), color = DesignTokens.Secondary)
                             }
                         }
                     }

@@ -117,9 +117,8 @@ class MscWatchCommentsReplayAndroidTest {
     }
 
     private fun fullModelHash(model: Any): String {
-        // Public models are data classes. MenuEndpoint alone deliberately redacts its toString.
-        // WatchQueue endpoints, PageAction/ActionEndpoint and all Comment capability keys are
-        // included by their data-class toString; related MenuEndpoint fields need this supplement.
+        // Public models hash by data-class toString, but MenuEndpoint alone redacts
+        // toString; related MenuEndpoint fields need this supplement.
         val menus = if (model is WatchPage) JSONArray(model.related.map { item ->
             item.menuEndpoint?.let { JSONArray(listOf(it.panelId, it.params)) } ?: JSONObject.NULL
         }).toString() else "[]"

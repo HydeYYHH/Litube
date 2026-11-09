@@ -113,9 +113,9 @@ class AboutActivity : ComponentActivity() {
                     withContext(Dispatchers.IO) {
                         val repositories = get<com.hhst.youtubelite.data.media.ContentRepositories>(
                             com.hhst.youtubelite.data.media.ContentRepositories::class.java)
-                        // Cache owners, cleared individually. The playback SimpleCache,
-                        // downloads, local library, account and queue data are deliberately
-                        // not touched: SimpleCache may be in use and the rest is user data.
+                        // Cache owners cleared individually; playback SimpleCache, downloads,
+                        // local library, account and queue data are deliberately not
+                        // touched: SimpleCache may be in use and the rest is user data.
                         com.hhst.youtubelite.core.YoutubeThumbnail.clearMemory()
                         get<com.hhst.youtubelite.dearrow.DeArrowService>(com.hhst.youtubelite.dearrow.DeArrowService::class.java).clear()
                         repositories.avatars.clear()

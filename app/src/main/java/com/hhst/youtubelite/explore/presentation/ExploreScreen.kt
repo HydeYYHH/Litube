@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.explore.presentation
 
+import com.hhst.youtubelite.ui.design.labelResource
 import com.hhst.youtubelite.ui.design.CollapsingAppBar
 import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -75,7 +76,7 @@ fun ExploreScreen(state: ExploreUiState, onAction: (ExploreAction) -> Unit, onBa
             CollapsingAppBar(appBar) {
 Row(Modifier.fillMaxWidth().heightIn(min = DesignTokens.TopBarHeight).testTag("explore-topbar"), verticalAlignment = Alignment.CenterVertically) {
                 AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), diameter = 48.dp) { onBack() }
-                AppText("Explore", Modifier.padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold)
+                AppText(stringResource(R.string.a11y_explore), Modifier.padding(end = 16.dp), size = 20, line = 28, weight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
 
@@ -175,14 +176,13 @@ private fun CategoryChips(selected: ExploreCategory, onAction: (ExploreAction) -
                 .selectable(category == selected, role = Role.Tab) { onAction(ExploreAction.SelectCategory(category)) }
                 .testTag("explore-chip-${category.name}")
                 .padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-                AppText(category.label, size = 14, line = 20, weight = FontWeight.Medium,
+                AppText(stringResource(category.labelResource), size = 14, line = 20, weight = FontWeight.Medium,
                     color = if (category == selected) DesignTokens.Background else DesignTokens.Ink)
             }
         }
     }
 }
 
-/** Server shelves render as titled horizontal carousels with a shared page tail below. */
 @Composable
 private fun SectionedContainer(category: ExploreCategory, content: ExploreContent.Ready, width: Float,
     columnState: LazyListState, shelfState: (Int) -> LazyListState, onAction: (ExploreAction) -> Unit) {
@@ -205,7 +205,7 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
             }
             item(key = "section-$index", contentType = "section-header") {
                 Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 16.dp, bottom = 8.dp).testTag("explore-section-${index}-title")) {
-                    AppText(section.title ?: "Explore", size = 18, line = 24, weight = FontWeight.Bold)
+                    AppText(section.title ?: stringResource(R.string.a11y_explore), size = 18, line = 24, weight = FontWeight.Bold)
                 }
             }
             item(key = "carousel-$index", contentType = "carousel") {
@@ -238,7 +238,6 @@ private fun SectionedContainer(category: ExploreCategory, content: ExploreConten
     }
 }
 
-/** The shelf's trailing tile: idle triggers the append once visible, failed offers retry. */
 @Composable
 private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, paused: Boolean,
     modifier: Modifier, onAction: (ExploreAction) -> Unit) {
@@ -248,7 +247,7 @@ private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, paused:
             AppendState.Failed -> Box(Modifier.clip(RoundedCornerShape(8.dp)).background(DesignTokens.Surface)
                 .clickable(role = Role.Button) { onAction(ExploreAction.LoadShelf(index)) }
                 .testTag("explore-shelf-$index-retry").padding(horizontal = 16.dp, vertical = 10.dp)) {
-                AppText("Retry", size = 12, line = 16, weight = FontWeight.Medium)
+                AppText(stringResource(R.string.retry), size = 12, line = 16, weight = FontWeight.Medium)
             }
             AppendState.Idle -> {
                 if (paused) Box(Modifier.testTag("explore-shelf-$index-load-more")) {
@@ -262,7 +261,6 @@ private fun ShelfTail(index: Int, append: AppendState, nextKey: String?, paused:
     }
 }
 
-/** The page tail below the content: idle triggers the append once visible, failed offers retry. */
 @Composable
 private fun PageTail(append: AppendState, nextKey: String?, paused: Boolean, onAction: (ExploreAction) -> Unit) {
     if (nextKey == null && append == AppendState.Idle) return
@@ -271,7 +269,7 @@ private fun PageTail(append: AppendState, nextKey: String?, paused: Boolean, onA
             AppendState.Loading -> CircularProgressIndicator(Modifier.size(24.dp).testTag("explore-tail-loading"),
                 color = DesignTokens.Secondary, strokeWidth = 2.dp)
             AppendState.Failed -> Box(Modifier.testTag("explore-tail-retry")) {
-                PillButton("Retry") { onAction(ExploreAction.LoadMore) }
+                PillButton(stringResource(R.string.retry)) { onAction(ExploreAction.LoadMore) }
             }
             AppendState.Idle -> if (paused) Box(Modifier.testTag("explore-load-more")) {
                 PillButton(stringResource(R.string.load_more)) { onAction(ExploreAction.LoadMore) }
@@ -339,7 +337,6 @@ private fun ExploreVideoCard(item: FeedItem.Video, compact: Boolean, onAction: (
             }
             .semantics { contentDescription = listOf(item.title, badge).filter(String::isNotBlank).joinToString(", ") }) {
             VideoArtwork(item.id, item.artwork, Modifier.fillMaxSize())
-            // No empty pills: the badge only renders with a duration or a live stream.
             if (badge.isNotBlank()) {
                 Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
                     .background(if (item.live) DesignTokens.Red else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))

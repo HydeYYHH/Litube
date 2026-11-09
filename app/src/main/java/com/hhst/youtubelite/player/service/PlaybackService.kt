@@ -37,13 +37,9 @@ import kotlinx.coroutines.cancel
 import androidx.core.graphics.scale
 
 /**
- * Media playback notification / foreground service.
- *
- * The session wraps the active player (local [ExoPlayer], or the cast
- * receiver while delegating) in a forwarding player so next/previous from the
- * notification, headset keys and AVRCP route through [PlaybackCommandRouter]
- * into the app's queue semantics — the wrapped player holds a single
- * MediaItem, where seekToNext/Previous would be no-ops.
+ * Forwards transport through [PlaybackCommandRouter] so notification/headset/AVRCP
+ * next/previous use the app queue — the wrapped player holds a single MediaItem,
+ * where seekToNext/Previous would be no-ops.
  */
 @UnstableApi
 class PlaybackService : Service() {
@@ -81,12 +77,9 @@ class PlaybackService : Service() {
     private var destroyed = false
 
     /**
-     * Set between [hide] and the next [show]. stopSelf() only reaches
-     * onDestroy after the main queue drains, so a thumbnail post enqueued
-     * before hide() could otherwise resurrect the notification in between.
-     * Unlike [destroyed] this is cleared by show(): the controller unbinds in
-     * onStopped, but a re-bind racing the old instance's teardown must still
-     * accept fresh state.
+     * Set between [hide] and the next [show]: stopSelf() reaches onDestroy only after
+     * the main queue drains, so a queued thumbnail post could resurrect the notification.
+     * Cleared by show() (unlike [destroyed]) so a re-bind racing old teardown accepts fresh state.
      */
     @Volatile
     private var hidden = false
@@ -104,8 +97,8 @@ class PlaybackService : Service() {
         return binder
     }
 
-    // Android can retain the published Binder in native code after onDestroy.
-    // A nested class avoids an implicit outer reference that would retain the service.
+    // Android can retain the published Binder in native code after onDestroy;
+    // a nested class avoids an implicit outer reference that would retain the service.
     class LocalBinder internal constructor(service: PlaybackService) : Binder() {
         private val service = WeakReference(service)
 
@@ -143,17 +136,16 @@ class PlaybackService : Service() {
                 ACTION_PLAY_PAUSE -> dispatchCommand(command = PlaybackCommandRouter::playPause)
                 ACTION_PREVIOUS -> dispatchCommand(command = PlaybackCommandRouter::previous)
                 ACTION_NEXT -> dispatchCommand(command = PlaybackCommandRouter::next)
-                // Swiping the (paused) notification away ends playback — the
-                // delete intent only fires while not ongoing.
+                // Delete intent fires only while not ongoing: swiping the paused
+                // notification away is the user's stop signal.
                 ACTION_CANCELLED -> {
                     PlaybackCommandRouter.pause()
                     hide()
                     return START_NOT_STICKY
                 }
             }
-            // No refresh() here: the command's state change lands through the
-            // engine's onIsPlayingChanged → refresh, which reads the real
-            // post-command state (a refresh here would re-post the old one).
+            // No refresh() here: onIsPlayingChanged → refresh reads the real
+            // post-command state; a refresh here would re-post the old one.
         }
         return START_NOT_STICKY
     }
@@ -166,8 +158,7 @@ class PlaybackService : Service() {
 
     /**
      * Session player that routes the app-level transport (queue next/previous,
-     * play/pause/stop while casting) instead of driving the wrapped local player,
-     * whose single MediaItem makes seekToNext/Previous no-ops.
+     * play/pause/stop while casting) instead of driving the wrapped local player.
      */
     private inner class QueueRoutingPlayer(wrapped: Player) : ForwardingPlayer(wrapped) {
         private fun dispatch(command: (() -> Boolean) -> Unit) {
@@ -183,8 +174,7 @@ class PlaybackService : Service() {
         override fun seekToPreviousMediaItem() = dispatch(PlaybackCommandRouter::previous)
 
         // Headset/system media controls derive their buttons from this set;
-        // a single-item ExoPlayer does not advertise next/previous, so the
-        // app queue must add those commands when it can navigate.
+        // single-item ExoPlayer omits next/previous, so the app queue must add them.
         override fun getAvailableCommands(): Player.Commands =
             PlaybackQueueCommands.apply(super.getAvailableCommands(), queueHasNext, queueHasPrevious)
 
@@ -204,10 +194,7 @@ class PlaybackService : Service() {
         }
     }
 
-    /**
-     * Binds the engine's player into the session. Idempotent; called from the
-     * engine on every playback start before [show].
-     */
+    /** Idempotent; called from the engine on every playback start before [show]. */
     fun attach(player: Player) {
         if (destroyed) return
         if (this.player === player && session != null) return
@@ -216,8 +203,8 @@ class PlaybackService : Service() {
         session?.release()
         commandListeners.clear()
         routingPlayer = QueueRoutingPlayer(player)
-        // Tapping the system media card (QS / volume dialog) must open the app,
-        // not no-op — the notification's contentIntent does not cover it.
+        // System media card (QS / volume dialog) taps must open the app —
+        // the notification's contentIntent does not cover them.
         val sessionActivity = PendingIntent.getActivity(
             this, 0,
             Intent(this, WatchActivity::class.java).apply {
@@ -244,8 +231,7 @@ class PlaybackService : Service() {
         hidden = false
         lastTitle = title
         lastAuthor = author
-        // A new video without a thumbnail must not keep the previous one's
-        // art on the notification.
+        // A new video without a thumbnail must not keep the previous one's art.
         if (thumbnailUrl == null && lastArt != null) recycleArt()
         // The wrapped player reflects the cast receiver while delegating.
         val playing = lastShowAsPlaying || (routingPlayer ?: player)?.isPlaying == true
@@ -259,9 +245,8 @@ class PlaybackService : Service() {
     }
 
     fun refresh(showAsPlaying: Boolean? = null) {
-        // hidden: between hide() and onDestroy a queued notification action
-        // can still deliver to onStartCommand — re-posting the cancelled
-        // notification here would resurrect it for one main-loop turn.
+        // hidden: a queued notification action can still deliver between hide()
+        // and onDestroy — re-posting here would resurrect the cancelled one.
         if (destroyed || hidden) return
         if (session == null) return
         if (showAsPlaying != null) lastShowAsPlaying = showAsPlaying
@@ -276,7 +261,7 @@ class PlaybackService : Service() {
 
     fun hide() {
         // Reject late thumbnail posts now (see [hidden]); removeCallbacks in
-        // onDestroy may run after the queued post has already fired.
+        // onDestroy may run after a queued post has already fired.
         hidden = true
         commandEpoch++
         artworkRequests.cancel()
@@ -287,9 +272,8 @@ class PlaybackService : Service() {
     }
 
     /**
-     * Notification tap returns to the media's own context: Shorts audio
-     * reopens the Shorts feed at the current short, everything else opens
-     * Watch. A Short must never be restored as a regular watch playback.
+     * Notification tap returns to the media's own context: Shorts audio reopens
+     * the Shorts feed; a Short must never be restored as regular watch playback.
      */
     private fun resumeIntent(): Intent {
         val shorts = runCatching {
@@ -323,10 +307,9 @@ class PlaybackService : Service() {
             .setContentIntent(contentIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
-            // Swipe-dismiss while playing would orphan the audio with no
-            // controls; paused, the notification is the user's "I'm done"
-            // handle (official-app behavior): dismissible, and dismissing
-            // stops playback via the delete intent.
+            // Swipe-dismiss while playing would orphan the audio; paused, the
+            // notification is the user's dismissible "I'm done" handle
+            // (official-app behavior) — dismissing stops playback.
             .setOngoing(isPlaying)
             .setDeleteIntent(
                 PendingIntent.getService(
@@ -406,9 +389,8 @@ class PlaybackService : Service() {
             }
         } catch (e: Exception) {
             // A failed startForeground leaves a started-but-not-foreground
-            // service on a collision course with the system's
-            // ForegroundServiceDidNotStartInTime check: exit now instead of
-            // only logging the failure.
+            // service that trips ForegroundServiceDidNotStartInTime: exit
+            // now instead of only logging.
             AppLog.event(AppLog.Category.APP, "foreground_service_failed", mapOf("service" to "playback"), e)
             stopSelf()
         }
@@ -440,8 +422,8 @@ class PlaybackService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Playing: genuine background play, keep the session across the
-        // recents swipe. Paused/idle: the swipe is a done signal — tear the
-        // notification and service down (official-app behavior).
+        // recents swipe. Paused/idle: the swipe is a done signal — tear
+        // down (official-app behavior).
         if (session != null) {
             val p = routingPlayer ?: player
             if (p?.isPlaying == true) return

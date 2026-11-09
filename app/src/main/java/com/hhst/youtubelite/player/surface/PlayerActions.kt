@@ -4,8 +4,8 @@ import com.hhst.youtubelite.player.QueueItem
 import com.hhst.youtubelite.player.QueueOwner
 
 /**
- * Playback intents handled by [player.PlayerViewModel].
- * Window/activity side effects live on [PlayerWindowActions].
+ * Playback intents handled by [player.PlayerViewModel]; window/activity side
+ * effects live on [PlayerWindowActions].
  */
 interface PlayerPlaybackActions {
     fun onPlayPause()
@@ -36,7 +36,7 @@ interface PlayerPlaybackActions {
     fun onAudioTrack(trackKey: String?)
     /** May trigger a bounded audio-catalog supplement. */
     fun onAudioMenuOpened() {}
-    /** Subtitle appearance changed (applies live and persists). */
+    /** Applies live and persists. */
     fun onSubtitleStyle(style: SubtitleStyle)
     fun onQueueItem(url: String)
     fun onResize(mode: ResizeMode)
@@ -44,9 +44,8 @@ interface PlayerPlaybackActions {
     fun onQueueClear()
     fun onQueueRemove(videoId: String)
     /**
-     * Queue sheet drag-reorder commit. [owner] is the queue owner captured at
-     * drag start; a commit from a switched identity is dropped, never applied
-     * to the newly active queue.
+     * [owner] is the queue owner captured at drag start; a commit from a
+     * switched identity is dropped, never applied to the newly active queue.
      */
     fun onQueueMove(fromIndex: Int, toIndex: Int, owner: QueueOwner? = null)
     /** Page media-menu "Add to queue". */
@@ -68,16 +67,15 @@ interface PlayerPlaybackActions {
     /** Manual skip via the chip while inside a suppressed segment. */
     fun onSponsorChipSkip()
     /**
-     * Cast dialog opened/closed: gates Cast device discovery scanning, which
-     * is too battery-hungry to leave running outside the dialog. No-op by
-     * default so implementors that do not own cast discovery stay unaffected.
+     * Gates cast device discovery scanning, too battery-hungry to leave
+     * running outside the dialog. No-op by default so implementors that do
+     * not own cast discovery stay unaffected.
      */
     fun onCastDiscovery(enabled: Boolean) {}
     /** Finger up: gesture overlays (edge sliders) clear. */
     fun onGestureEnd()
 }
 
-/** Activity-window side effects: back, brightness, volume, PiP, share. */
 interface PlayerWindowActions {
     fun onBack()
     fun onBrightness(delta: Float)

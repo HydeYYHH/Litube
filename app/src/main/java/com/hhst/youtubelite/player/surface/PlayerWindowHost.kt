@@ -22,10 +22,8 @@ import com.hhst.youtubelite.core.PipSupport
 import kotlin.math.roundToInt
 
 /**
- * Activity-window side effects for the player overlay.
- *
- * Brightness origin is captured on the first gesture and restored when the
- * player hides. Playback intents stay on [PlayerPlaybackActions].
+ * Activity-window side effects for the player overlay. Brightness origin is captured on the
+ * first gesture and restored when the player hides. Playback intents stay on [PlayerPlaybackActions].
  */
 class PlayerWindowHost(
     private val activity: Activity?,
@@ -150,8 +148,8 @@ class PlayerWindowHost(
                 rotationAnimation = android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE
             }
         }
-        // Capture before button entry too: a later swipe exit must not save
-        // SENSOR_LANDSCAPE as the orientation to restore on the next button exit.
+        // Capture before button entry: a later swipe exit must not save SENSOR_LANDSCAPE
+        // as the orientation to restore on the next button exit.
         if ((fullscreen || keepOrientation) && orientationBeforeGesture == null) orientationBeforeGesture = act.requestedOrientation
         val orientation = if (keepOrientation) {
             ActivityInfo.SCREEN_ORIENTATION_LOCKED
@@ -162,8 +160,8 @@ class PlayerWindowHost(
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
         } else (if (restoreEntryOrientation) {
-            // An earlier upward exit may have kept a different direction from
-            // the original button session. Downward exit restores this entry.
+            // An earlier upward exit may have kept a different direction from the
+            // original button session; downward exit restores this entry.
             val entry = orientationBeforeFullscreenEntry
             if (entry == ActivityInfo.SCREEN_ORIENTATION_LOCKED &&
                 entryConfigurationOrientation != act.resources.configuration.orientation) {

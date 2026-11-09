@@ -34,8 +34,8 @@ class ExternalRouteAndroidTest {
             fixture.await { fixture.engine.snapshot.value.positionMs >= 11_000 }
             val prepares = fixture.engine.mediaPrepareCount
             repeat(2) {
-                // Re-enter from the live host. Another ActivityScenario would clear its
-                // task, then close a playing PiP window rather than exercise navigation.
+                // Re-enter from the live host; another ActivityScenario would clear its
+                // task and close a playing PiP rather than exercise navigation.
                 fixture.launch(source = fixture.activity)
                 fixture.await { fixture.engine.snapshot.value.videoId == fixture.id }
                 fixture.await { fixture.engine.snapshot.value.positionMs >= 11_000 && fixture.engine.snapshot.value.isPlaying }

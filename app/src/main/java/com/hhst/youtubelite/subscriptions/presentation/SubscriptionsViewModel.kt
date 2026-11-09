@@ -59,7 +59,7 @@ class SubscriptionsViewModel(
     val navigationRequests: kotlinx.coroutines.flow.Flow<SubscriptionsNavigationRequest> = navigation.receiveAsFlow()
     private val notices = kotlinx.coroutines.channels.Channel<AppNotice>(Channel.BUFFERED)
     val actionNotices: kotlinx.coroutines.flow.Flow<AppNotice> = notices.receiveAsFlow()
-    /** Live save flow for the item menu; null in fixture builds, where typed exits stay the seam. */
+    /** Live save flow for the item menu; null in fixture builds where typed exits stay the seam. */
     val saveSheet = saveRepository?.let {
         com.hhst.youtubelite.saves.presentation.SaveSheetController(it, viewModelScope) { notice -> notices.trySend(notice) }
     }
@@ -111,7 +111,7 @@ class SubscriptionsViewModel(
         loadJob?.cancel()
         pageJob?.cancel()
         channelsJob?.cancel()
-        // The previous session's deferred menu reads and feedback writes must not survive.
+        // Deferred menu reads and feedback writes from the previous session must not survive.
         menuJob?.cancel()
         feedbackJob?.cancel(); feedbackJob = null
         saveSheet?.resetSession()
@@ -230,7 +230,7 @@ class SubscriptionsViewModel(
             is SubscriptionsOverlay.Menu -> "menu"
         }
         savedState["menuItem"] = (next as? SubscriptionsOverlay.Menu)?.videoId
-        // The deferred-menu header state only exists while a menu is open.
+        // Deferred-menu header state only exists while a menu is open.
         _uiState.update {
             it.copy(overlay = next,
                 menuLoading = it.menuLoading && next is SubscriptionsOverlay.Menu,
@@ -263,13 +263,9 @@ class SubscriptionsViewModel(
         }
     }
 
-    /**
-     * Appends one directory page. A repeated channel id updates its unread state
-     * in place instead of duplicating the row; the updated-first order stays
-     * stable within each group.
-     */
+    /** Repeated channel id updates unread in place instead of duplicating; updated-first stays stable per group. */
     private fun loadMoreChannels() {
-        // A quiet refresh still paints the old directory, but its cursor belongs to that old read.
+        // Quiet refresh still paints the old directory, but its cursor belongs to that old read.
         if (channelsJob?.isActive == true) return
         val ready = _uiState.value.channels as? SubscriptionsChannels.Ready ?: return
         val cursor = ready.nextKey ?: return
@@ -296,7 +292,7 @@ class SubscriptionsViewModel(
         }
     }
 
-    /** Merges [page] into [loaded]: unread flags OR-merge per channel id, updated channels lead. */
+    /** Unread flags OR-merge per channel id; updated channels lead. */
     private fun readyChannels(loaded: List<SubscribedChannel>, page: ChannelDirectoryPage): SubscriptionsChannels.Ready {
         val byId = LinkedHashMap<String, SubscribedChannel>(loaded.size + page.channels.size)
         loaded.forEach { byId[it.channelId] = it }
@@ -305,8 +301,8 @@ class SubscriptionsViewModel(
             byId[next.channelId] = if (previous == null) next
             else previous.copy(hasNewContent = previous.hasNewContent || next.hasNewContent)
         }
-        // Keep the consumed marker hidden while an in-flight/stale directory still
-        // reports it. Once the server clears it, a subsequent new update can badge again.
+        // Keep the consumed marker hidden while an in-flight/stale directory still reports it;
+        // once the server clears it, a subsequent new update can badge again.
         page.channels.groupBy { it.channelId }.forEach { (id, entries) ->
             if (entries.none { it.hasNewContent }) readChannels.remove(id)
         }
@@ -346,8 +342,7 @@ class SubscriptionsViewModel(
     }
 
     /**
-     * The host reports the verification screen finished with RESULT_OK. The feed
-     * retries once with the current identity — never automatically on another
+     * Retries once with the current identity after RESULT_OK — never automatically on another
      * failure, so no request loop can form.
      */
     fun verificationCompleted(challengeUrl: String? = _uiState.value.verification?.challengeUrl) {
@@ -404,22 +399,20 @@ class SubscriptionsViewModel(
     }
 
     /**
-     * Keeps reading when a filter emptied the current page. Automatic continuation stops at
-     * [MAX_EMPTY_AUTO_LOADS]; past that the screen offers an explicit Load more, and a manual
-     * load (the default budget) always fetches exactly one page per tap.
+     * Keeps reading when a filter emptied the page. Automatic stops at [MAX_EMPTY_AUTO_LOADS];
+     * past that the screen offers Load more; a manual load always fetches one page per tap.
      */
     private fun continuePastEmptyPage(autoLoads: Int) {
         val feed = _uiState.value.content as? SubscriptionsContent.Feed ?: return
         if (feed.page.items.isEmpty() && feed.page.nextKey != null) loadNext(autoLoads = autoLoads + 1, automatic = true)
     }
 
-
     private fun menuItem(videoId: String): com.hhst.youtubelite.home.domain.FeedItem.Video? =
         (_uiState.value.content as? SubscriptionsContent.Feed)?.page?.items?.firstOrNull { it.id == videoId }
 
     /**
-     * Reads the open card's own get_panel endpoint so its feedback rows carry real tokens.
-     * Cards with inline tokens return unchanged; nothing is preloaded for unopened menus.
+     * Reads the open card's get_panel so feedback rows carry real tokens; cards with inline
+     * tokens return unchanged; nothing is preloaded for unopened menus.
      */
     private fun loadMenu(videoId: String) {
         val video = menuItem(videoId) ?: return
@@ -461,7 +454,6 @@ class SubscriptionsViewModel(
         }
     }
 
-    /** Sends the card's classified feedback token and removes the card from the current feed. */
     private fun sendFeedback(videoId: String, action: FeedMenuAction) {
         if (feedbackJob?.isActive == true) return
         val video = menuItem(videoId)?.takeIf { sessionKey != null && it.feedbackGeneration == sessionKey } ?: return
@@ -501,7 +493,7 @@ class SubscriptionsViewModel(
 
     companion object {
         private const val QUERY_KEY = "subscriptions_query"
-        /** How many extra pages an empty filtered feed may fetch on its own before it asks. */
+        /** Extra pages an empty filtered feed may auto-fetch before it asks. */
         private const val MAX_EMPTY_AUTO_LOADS = 3
     }
 }

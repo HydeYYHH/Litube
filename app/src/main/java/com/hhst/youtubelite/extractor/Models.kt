@@ -52,10 +52,9 @@ data class Format(
     @Transient val requestPlan: MediaRequestPlan? = null,
 ) {
     /**
-     * Usable sidx/index range for synthetic DASH. `>= 0` alone treats a missing
-     * (0-defaulted) range as valid and would wrap a muxed itag in a broken
-     * `indexRange="0-0"`; `indexEnd > indexStart` also rejects a 1-byte index,
-     * which the host does not emit.
+     * Usable sidx range for synthetic DASH. `>= 0` alone would accept a missing
+     * (0-defaulted) range and emit a broken `indexRange="0-0"`; `indexEnd > indexStart`
+     * also rejects the 1-byte index the host does not emit.
      */
     val hasDashRanges: Boolean
         get() = initStart >= 0 && initEnd >= initStart && indexEnd > indexStart

@@ -14,22 +14,15 @@ import java.util.ArrayDeque
 import java.util.HashSet
 
 /**
- * mDNS discovery of Google Cast receivers (`_googlecast._tcp`) via the platform [NsdManager].
- * Play Services is not used, so the Cast v2 stack stays self-contained. API mirrors other
- * platform discovery: start/stop, device callbacks on the MAIN thread, results stream in
- * incrementally.
- *
- * **Resolve serialization:** [NsdManager.resolveService] allows only one in-flight resolve per
- * listener on many Android versions (concurrent calls fail with FAILURE_ALREADY_ACTIVE), so
- * found services queue up and resolve strictly one at a time.
- *
- * Devices are deduped by host IP: rediscovery after a stop/start or a TXT update must not
- * produce duplicate picker rows.
+ * mDNS discovery of Google Cast receivers via [NsdManager]; Play Services is not used so the
+ * stack stays self-contained. [NsdManager.resolveService] allows only one in-flight resolve per
+ * listener on many Android versions, so found services resolve strictly one at a time.
+ * Devices are deduped by host IP to avoid duplicate picker rows after stop/start or TXT updates.
  */
 class CastV2Discovery(context: Context) {
 
     fun interface Listener {
-        /** A Cast receiver was found and resolved (main thread). `port` is the CASTV2 TLS port. */
+        /** Found and resolved on the main thread; `port` is the CASTV2 TLS port. */
         fun onDeviceFound(name: String, host: String, port: Int)
     }
 
@@ -50,7 +43,7 @@ class CastV2Discovery(context: Context) {
     @Volatile
     private var listener: Listener? = null
 
-    /** Begin discovery. Results stream to the listener until [stop]. Safe to call once per round. */
+    /** Begin discovery until [stop]; safe to call once per round. */
     fun start(listener: Listener) {
         if (discoveryListener != null) stop()
         val startedGeneration = ++generation
@@ -110,13 +103,13 @@ class CastV2Discovery(context: Context) {
         try {
             manager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discovered)
         } catch (e: Exception) {
-            // SecurityException without local-network access; also covers rare binder failures.
+            // SecurityException without local-network access; also rare binder failures.
             AppLog.event(AppLog.Category.CAST, "discovery_failed", failure = e)
             discoveryListener = null
         }
     }
 
-    /** Stop discovery (picker dismissed). Idempotent; silences any late callbacks. */
+    /** Idempotent; silences any late callbacks. */
     fun stop() {
         ++generation
         listener = null
@@ -177,8 +170,7 @@ class CastV2Discovery(context: Context) {
                                 reportResolved(serviceInfo, serviceGeneration)
                             }
                         } finally {
-                            // A listener exception must not strand the in-flight latch and stall
-                            // every later resolve.
+                            // A listener exception must not strand the in-flight latch and stall later resolves.
                             resolveNext(serviceGeneration)
                         }
                     }
@@ -201,8 +193,8 @@ class CastV2Discovery(context: Context) {
         }
         val port = if (serviceInfo.port > 0) serviceInfo.port else DEFAULT_CAST_PORT
         val name = friendlyName(serviceInfo)
-        // Audio-only receivers are dropped here: they advertise Cast and even accept a LOAD, but
-        // cannot render the video DASH. Dropping in discovery keeps the Listener contract untouched.
+        // Audio-only receivers advertise Cast and accept LOAD but cannot render video DASH;
+        // dropping in discovery keeps the Listener contract untouched.
         if (!hasVideoOut(attribute(serviceInfo, TXT_CAPABILITIES))) {
             AppLog.detail(AppLog.Category.CAST, "device_filtered", mapOf("reason" to "audio_only"))
             return
@@ -220,19 +212,19 @@ class CastV2Discovery(context: Context) {
     companion object {
         private const val SERVICE_TYPE = "_googlecast._tcp"
 
-        /** TXT record key carrying the user-visible friendly name ("Living Room TV"). */
+        /** TXT record key for the user-visible friendly name. */
         private const val TXT_FRIENDLY_NAME = "fn"
 
-        /** TXT record key carrying the decimal capabilities bitmask; bit 0 = VIDEO_OUT. */
+        /** TXT record key for the decimal capabilities bitmask; bit 0 = VIDEO_OUT. */
         private const val TXT_CAPABILITIES = "ca"
 
-        /** `ca` bit 0: the device can render video. Audio-only receivers (soundbars) lack it. */
+        /** `ca` bit 0: can render video; audio-only receivers lack it. */
         private const val CAPABILITY_VIDEO_OUT = 1L
 
         /** CASTV2 default; used only if a resolve somehow reports no port. */
         private const val DEFAULT_CAST_PORT = 8009
 
-        /** TXT "fn" is the user-visible name ("Living Room TV"); the service name is a device-id fallback. */
+        /** TXT "fn" is the user-visible name; the service name is a device-id fallback. */
         private fun friendlyName(serviceInfo: NsdServiceInfo): String {
             val friendly = attribute(serviceInfo, TXT_FRIENDLY_NAME)
             if (friendly != null && friendly.isNotEmpty()) {
@@ -241,7 +233,6 @@ class CastV2Discovery(context: Context) {
             return serviceInfo.serviceName
         }
 
-        /** Raw TXT attribute value; null when absent (or the platform throws on the lookup). */
         private fun attribute(serviceInfo: NsdServiceInfo, key: String): ByteArray? =
             try {
                 serviceInfo.attributes?.get(key)
@@ -249,11 +240,8 @@ class CastV2Discovery(context: Context) {
                 null
             }
 
-        /**
-         * Does the `ca` TXT capabilities bitmask claim VIDEO_OUT (bit 0)? Fails open: a missing
-         * or unparseable `ca` counts as video-capable - hiding a real TV whose TXT record could
-         * not be read is far worse than listing a soundbar.
-         */
+        /** Fails open: a missing or unparseable `ca` counts as video-capable — hiding a real TV
+         * whose TXT record could not be read is worse than listing a soundbar. */
         internal fun hasVideoOut(caValue: ByteArray?): Boolean {
             if (caValue == null || caValue.isEmpty()) {
                 return true

@@ -17,13 +17,11 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 
 /**
- * Startup-performance driver: adds only intent markers to the production diagnostics
- * stream; all phase numbers come from existing playback telemetry, extraction operations
- * and network traces. Orchestration (force-stop per cold rep, process reuse) lives in the
- * shell. `startupScenario` labels the cache condition: cold/warm/replay/next.
- * `startupSecond` pins a different video for the second in-process launch; without it the
- * second launch replays the same video after an explicit engine stop, because engine.play
- * short-circuits an already prepared item.
+ * Startup-performance driver: adds only intent markers; phase numbers come from existing
+ * telemetry. Orchestration (force-stop per rep, process reuse) lives in the shell.
+ * `startupScenario` labels the cache condition (cold/warm/replay/next); `startupSecond`
+ * pins a different video for the second launch — without it the second launch replays the
+ * same video, because engine.play short-circuits an already prepared item.
  */
 class StartupPerfAndroidTest {
     @Test fun startupPhasesUnderExplicitCacheConditions() = runBlocking(Dispatchers.IO) {

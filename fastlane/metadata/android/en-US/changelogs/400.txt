@@ -1,0 +1,3 @@
+- Replace web-based browsing with native Android screens.
+- Switch to MediaServiceCore as the media engine.
+- Improve playback, live chat, casting and downloads.

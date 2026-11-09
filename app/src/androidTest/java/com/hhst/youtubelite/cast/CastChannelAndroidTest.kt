@@ -40,7 +40,7 @@ class CastChannelAndroidTest {
         val blocked = object : OutputStream() {
             override fun write(value: Int) {
                 entered.countDown()
-                while (!socket.isClosed && !release.await(10, TimeUnit.MILLISECONDS)) { /* wait for abort */ }
+                while (!socket.isClosed && !release.await(10, TimeUnit.MILLISECONDS)) { }
                 throw IOException("blocked output closed")
             }
         }

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Per-host progress for writes whose menu has already closed. Each job removes only its own token. */
+/** Per-host progress for writes whose menu has already closed; each job removes only its own token. */
 class WriteFeedback {
     private val active = MutableStateFlow<Set<Any>>(emptySet())
     val pending = active.asStateFlow()

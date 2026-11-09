@@ -105,7 +105,7 @@ data class SubtitleStyle(
             return normalized.toLongOrNull(16)?.toInt()
         }
 
-        /** User-facing `#RRGGBB` (alpha dropped when opaque). */
+        /** User-facing `#RRGGBB` (alpha never shown). */
         fun formatColorHex(argb: Int): String {
             val rgb = argb and 0x00FFFFFF
             return "#%06X".format(rgb)

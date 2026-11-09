@@ -97,7 +97,7 @@ class MediaSaveRepository(private val client: MediaClient, private val local: Lo
         return false
     }
 
-    /** A missing option or flag is unknown, rather than evidence that the video is absent. */
+    /** A missing option or flag is unknown, not evidence the video is absent. */
     private fun membership(playlistId: String, videoId: String, context: RequestContext, http: HttpClient): ReadResult<DesiredStateRead<Unit>> {
         val result = loadPlaylistChoices(videoId, context, http)
         if (!result.ok) return ReadResult(error = result.error)

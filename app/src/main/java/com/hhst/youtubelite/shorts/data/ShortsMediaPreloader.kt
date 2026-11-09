@@ -47,17 +47,9 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * Warms the shared playback cache with the head of the next short so a swipe
- * lands on buffered bytes instead of a cold fetch.
- *
- * Only real media is prefetched: init + index plus a small head of the audio
- * and video renditions the resolver would pick, read through the same
- * [PlayerDataSource] factories as playback so request plans, cache keys and
- * the shared SimpleCache all match what the player later reads. Both
- * transports are covered: DASH formats are sliced by their init/index tables,
- * and when only HLS remains the master playlist is read through the same
- * manifest source before the startup variant's media playlist and first
- * segment heads are warmed. Prefetch is not viewing: nothing here touches
- * history or watch reporting.
+ * lands on buffered bytes instead of a cold fetch. Reads go through the same
+ * [PlayerDataSource] factories as playback so request plans and cache keys match;
+ * prefetch is not viewing — nothing here touches history or watch reporting.
  */
 class ShortsMediaPreloader(
     private val context: Context,
@@ -76,7 +68,6 @@ class ShortsMediaPreloader(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > MAX_WARMED
     }
 
-    /** Starts (or re-targets) the single background prefetch for [videoId]. */
     override fun preload(videoId: String?) {
         val id = videoId?.let(VideoId::parse) ?: run { cancel(); return }
         synchronized(lock) {
@@ -91,7 +82,6 @@ class ShortsMediaPreloader(
         }
     }
 
-    /** Preserves preparation of the selected item while releasing a superseded target. */
     override fun select(videoId: String) {
         synchronized(lock) {
             // Keep matching work until the engine claims it. PlaybackClaim then makes
@@ -103,7 +93,6 @@ class ShortsMediaPreloader(
         }
     }
 
-    /** Stops prefetch on identity changes, privacy switches and leaving Shorts. */
     override fun cancel() {
         synchronized(lock) {
             if (job?.isActive == true) AppLog.detail(
@@ -115,11 +104,7 @@ class ShortsMediaPreloader(
         }
     }
 
-    /**
-     * Bytes this session's prefetch wrote for [videoId]; 0 when it never
-     * warmed. First-frame telemetry uses this to tell a prefetch hit from a
-     * cold start.
-     */
+    /** Bytes this session's prefetch wrote for [videoId]; telemetry uses it to tell a prefetch hit from a cold start. */
     fun prefetchedBytes(videoId: String): Long = synchronized(lock) { warmed[videoId] ?: 0L }
 
     private suspend fun run(videoId: String, demand: PlaybackDemand?) {
@@ -169,10 +154,7 @@ class ShortsMediaPreloader(
         }
     }
 
-    /**
-     * Warming stopped because foreground playback claimed the video. Distinct from cancellation:
-     * only the speculative byte reads end, the resolved stream is handed over intact.
-     */
+    /** Foreground playback claimed the video: speculative reads end, the resolved stream is handed over intact — distinct from cancellation. */
     private class WarmingYield : CancellationException("Playback owns the pipe")
 
     private fun skip(videoId: String, reason: String, extra: Map<String, Any> = emptyMap()) {
@@ -193,18 +175,15 @@ class ShortsMediaPreloader(
     }
 
     /**
-     * Warms the head of the next short over HLS: master playlist through the
-     * manifest source (so the read lands in the same in-memory manifest cache
-     * playback hits), then the startup variant's media playlist and the first
-     * segment heads through the media source, whose spans key exactly as
-     * playback's `hls:v1:` keys.
+     * Warms the next short's HLS head through playback's own manifest/media
+     * sources so reads land in the caches playback hits and spans key exactly
+     * as playback's `hls:v1:` keys.
      */
     private suspend fun cacheHlsHead(videoId: String, stream: Stream, session: Long, demand: PlaybackDemand?, checkActive: () -> Unit): Long {
         val plan = stream.hlsRequestPlan ?: run { skip(videoId, "no_hls_plan"); return 0 }
         val masterUrl = stream.hlsUrl ?: run { skip(videoId, "no_hls_url"); return 0 }
         val parser = HlsPlaylistParser()
-        // Playlists are not optional: an unparsed playlist warms nothing. They get a wider bound
-        // than the media bytes, which start their own clock once the playlist is in hand.
+        // An unparsed playlist warms nothing; media bytes start their own clock once the playlist is in hand.
         val playlistDeadline = SystemClock.elapsedRealtime() + PLAYLIST_TIME_MS
         val master = try {
             networkPermit.withPermit {
@@ -272,12 +251,7 @@ class ShortsMediaPreloader(
         }
     }
 
-    /**
-     * Mirrors the resolver's adaptive pick: highest-bitrate original/default
-     * audio plus the startup video rendition. Remote-DASH manifest streams
-     * and plan-less formats are skipped — their requests cannot be replayed
-     * against the byte cache reliably.
-     */
+    /** Mirrors the resolver's adaptive pick; plan-less and remote-DASH formats are skipped — their requests cannot be replayed against the byte cache reliably. */
     private fun pickFormats(stream: Stream, demand: PlaybackDemand?): List<Format> {
         val candidates = stream.formats.filter { it.requestPlan != null }
         if (candidates.none { it.hasDashRanges }) return emptyList()
@@ -308,7 +282,6 @@ class ShortsMediaPreloader(
         return listOfNotNull(audio, video).distinctBy { it.url }
     }
 
-    /** Reads up to [budget] head bytes of [format] into the shared cache; returns bytes written. */
     private fun head(videoId: String, format: Format, budget: Long, deadline: Long, checkActive: () -> Unit): Long {
         val plan = format.requestPlan ?: return 0
         val total = plan.resourceLength.takeIf { it > 0 }
@@ -324,12 +297,7 @@ class ShortsMediaPreloader(
         return cacheHead(videoId, source, format.url, 0, length, deadline, checkActive)
     }
 
-    /**
-     * Reads up to [budget] head bytes of [segment] into the shared cache;
-     * returns bytes written. Byterange segments are skipped unless the offset
-     * is explicit: a span written at the wrong offset would serve playback
-     * wrong bytes under the same cache key.
-     */
+    /** Byterange segments are skipped unless the offset is explicit: a wrong-offset span would serve playback wrong bytes under the same cache key. */
     private fun segmentHead(videoId: String, source: CacheDataSource, baseUri: String, segment: HlsMediaPlaylist.Segment, budget: Long, deadline: Long, checkActive: () -> Unit): Long {
         val ranged = segment.byteRangeLength >= 0
         if (ranged && segment.byteRangeOffset < 0) return 0
@@ -369,11 +337,7 @@ class ShortsMediaPreloader(
 
     private class WarmingDeadline : java.io.IOException("Prefetch budget exhausted")
 
-    /**
-     * Reads a playlist document, bounded in size and in time. The time bound matters: a media
-     * playlist can be a few hundred kilobytes, which at a slow link's rate is several seconds of
-     * speculative reading — enough to run past the tap it was meant to prepare for.
-     */
+    /** Time-bounded as well as size-bounded: a few-hundred-KB playlist on a slow link is seconds of speculative reading that could outlast the tap. */
     private fun readPlaylist(source: DataSource, url: String, deadline: Long, checkActive: () -> Unit): ByteArray {
         try {
             checkActive()
@@ -394,7 +358,6 @@ class ShortsMediaPreloader(
         }
     }
 
-    /** Init + index plus roughly [HEAD_SECONDS] of media, capped per format. */
     private fun headBytes(format: Format): Long {
         val head = (maxOf(format.initEnd, format.indexEnd) + 1).coerceAtLeast(0).toLong()
         val media = if (format.bitrate > 0) format.bitrate.toLong() / 8 * HEAD_SECONDS else DEFAULT_MEDIA_BYTES
@@ -402,20 +365,9 @@ class ShortsMediaPreloader(
     }
 
     companion object {
-        /**
-         * Initial prefetch budget: enough for the first frames, not two seconds of media at any
-         * quality. Measured on a ~1 MB/s proxied link, a 4 MiB budget kept the warm running for
-         * 11 s, so a tap almost always landed while it was still in flight and shared the pipe
-         * with playback. The head only has to cover the first rendered frames.
-         */
+        /** Sized to cover the first rendered frames, not a fixed slice of media at any quality. */
         const val HEAD_SECONDS = 2
-        /**
-         * Time-bounded warming. A byte budget cannot be right for every link: 4 MiB is two seconds
-         * at 2 MB/s and half a minute at 150 KB/s, and the second case never finishes before the
-         * user taps. The budget is therefore how long warming may own the pipe, so the same rule
-         * covers a fast link (reads more, helps the next swipe) and a slow one (reads less, still
-         * covers the first frames).
-         */
+        /** Warming is time-bounded: a byte budget cannot fit every link speed, so the budget is how long warming may own the pipe. */
         const val WARM_TIME_MS = 2000L
         /** Playlist documents are not optional, so they get a wider bound than the media bytes. */
         const val PLAYLIST_TIME_MS = 4000L
@@ -428,10 +380,7 @@ class ShortsMediaPreloader(
         const val HLS_MAX_SEGMENTS = 2
         const val MAX_WARMED = 8
 
-        /**
-         * Mirrors the resolver's startup pick over HLS variants: the largest
-         * rendition at or under [maxHeight], tie-broken by bitrate.
-         */
+        /** Mirrors the resolver's startup pick over HLS variants. */
         internal fun pickHlsVariant(
             variants: List<HlsMultivariantPlaylist.Variant>,
             maxHeight: Int,

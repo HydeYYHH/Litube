@@ -35,7 +35,7 @@ class FixtureWatchRepository(
             val artwork: String,
         )
 
-        /** Known home/search ids keep their list metadata; anything else falls back to the default sample. */
+        /** Known home/search ids keep list metadata; anything else uses the default sample. */
         private val entries = mapOf(
             "bunny" to Entry("Big Buck Bunny | A short film by the Blender Foundation",
                 "Blender", "@Blender", "blender", "12M views", "2 years ago", "bunny"),
@@ -126,9 +126,8 @@ class FixtureWatchRepository(
         )
 
         /**
-         * Description used by [WatchScenario.Description] for interaction tests:
-         * chapter timestamps (including an invalid one), a same-video link with a
-         * start time, another video, and one external page.
+         * Description for [WatchScenario.Description]: chapter timestamps (incl. an
+         * invalid one), a same-video link with start time, another video, an external page.
          */
         val linkedSampleDescription = """
             Chapters: 0:42 setup, 12:34 the middle act, 1:02:03 credits.

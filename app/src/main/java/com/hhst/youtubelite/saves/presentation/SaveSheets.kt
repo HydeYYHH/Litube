@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.saves.presentation
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,13 +78,13 @@ fun SaveToPlaylistSheet(
         val items = ArrayList<MenuSheetItem>()
         val choices = live.choices
         when {
-            live.failed -> items.add(MenuSheetItem(AppIcon.Refresh, "Couldn't load playlists. Tap to retry", "save-menu-retry"))
-            choices == null -> items.add(MenuSheetItem(AppIcon.Refresh, "Loading…", "save-menu-loading"))
+            live.failed -> items.add(MenuSheetItem(AppIcon.Refresh, stringResource(R.string.ui_couldn_t_load_playlists_tap_to_retry), "save-menu-retry"))
+            choices == null -> items.add(MenuSheetItem(AppIcon.Refresh, stringResource(R.string.ui_loading), "save-menu-loading"))
             else -> {
                 choices.forEach {
                     items.add(MenuSheetItem(if (it.contains) AppIcon.Check else AppIcon.Playlist, it.title, "save-menu-playlist-${it.id}"))
                 }
-                items.add(MenuSheetItem(AppIcon.Add, "New playlist", "save-menu-new-playlist"))
+                items.add(MenuSheetItem(AppIcon.Add, stringResource(R.string.ui_new_playlist), "save-menu-new-playlist"))
             }
         }
         MenuBottomSheet(
@@ -98,7 +100,7 @@ fun SaveToPlaylistSheet(
                 }
             },
             tag = "save-to-playlist",
-            paneTitle = "Save to playlist",
+            paneTitle = stringResource(R.string.save_to_playlist),
             dismissEnabled = !live.pending,
             actionsEnabled = !live.pending,
             header = {
@@ -116,18 +118,18 @@ fun SaveToPlaylistSheet(
     }
     MenuBottomSheet(
         items = buildList {
-            add(MenuSheetItem(AppIcon.Clock, "Watch later", "save-menu-watch-later"))
+            add(MenuSheetItem(AppIcon.Clock, stringResource(R.string.ui_watch_later), "save-menu-watch-later"))
             playlists.forEach {
                 add(MenuSheetItem(AppIcon.Playlist, it.title, "save-menu-playlist-${it.id}"))
             }
-            add(MenuSheetItem(AppIcon.Add, "New playlist", "save-menu-new-playlist"))
+            add(MenuSheetItem(AppIcon.Add, stringResource(R.string.ui_new_playlist), "save-menu-new-playlist"))
         },
         onDismiss = onDismiss,
         onSelect = { index ->
             if (index < destinations.size) onSelect(destinations[index]) else onNewPlaylist()
         },
         tag = "save-to-playlist",
-        paneTitle = "Save to playlist",
+        paneTitle = stringResource(R.string.save_to_playlist),
 
     )
 }
@@ -166,18 +168,18 @@ fun NewPlaylistSheet(
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Panel)
                 .verticalScroll(rememberScrollState())
-                .testTag("new-playlist-sheet").semantics { paneTitle = "New playlist" },
+                .testTag("new-playlist-sheet").appPaneTitle(R.string.ui_new_playlist),
         ) {
             AppText(
-                "Private",
+                stringResource(R.string.ui_private),
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
                 size = 12, line = 18, color = DesignTokens.Secondary,
             )
             SheetField(
                 value = draft.title,
-                placeholder = "Title",
+                placeholder = stringResource(R.string.player_info_title),
                 tag = "new-playlist-title",
-                description = "Playlist title",
+                description = stringResource(R.string.ui_playlist_title),
                 focus = focus,
                 onValue = { if (!pending) onDraftChange(draft.copy(title = it)) },
                 readOnly = pending,
@@ -185,9 +187,9 @@ fun NewPlaylistSheet(
             )
             SheetField(
                 value = draft.description,
-                placeholder = "Description (optional)",
+                placeholder = stringResource(R.string.ui_description_optional),
                 tag = "new-playlist-description",
-                description = "Playlist description",
+                description = stringResource(R.string.ui_playlist_description),
                 onValue = { if (!pending) onDraftChange(draft.copy(description = it)) },
                 readOnly = pending,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
@@ -197,10 +199,10 @@ fun NewPlaylistSheet(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SheetAction("Cancel", "new-playlist-cancel", enabled = !pending, onClick = onDismiss)
+                SheetAction(stringResource(R.string.cancel), "new-playlist-cancel", enabled = !pending, onClick = onDismiss)
                 Spacer(Modifier.width(8.dp))
                 SheetAction(
-                    "Create", "new-playlist-create",
+                    stringResource(R.string.ui_create), "new-playlist-create",
                     enabled = draft.title.isNotBlank() && !pending,
                     pending = pending,
                     onClick = onSubmit,

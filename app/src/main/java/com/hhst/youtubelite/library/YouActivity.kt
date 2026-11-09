@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.library
 
+import com.hhst.youtubelite.ui.design.labelResource
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.observeAccountChanges
 
 import android.content.Context
@@ -36,7 +39,6 @@ import com.hhst.youtubelite.account.SignInFlow
 import com.hhst.youtubelite.account.domain.AccountMenuAction
 import com.hhst.youtubelite.account.presentation.AccountMenuHeader
 import com.hhst.youtubelite.account.presentation.accountMenuActions
-import com.hhst.youtubelite.account.presentation.accountMenuItems
 import com.hhst.youtubelite.channel.ChannelActivity
 import com.hhst.youtubelite.library.data.FixtureLibraryRepository
 import com.hhst.youtubelite.library.data.LibraryScenario
@@ -209,20 +211,23 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         items = actions.map { action ->
                             com.hhst.youtubelite.ui.design.MenuSheetItem(null,
                                 if (action == AccountMenuAction.SwitchAccount &&
-                                    (fixtures || com.hhst.youtubelite.data.media.MediaSession.accounts().none { !it.disabled })) "Sign in" else action.label,
+                                    (fixtures || com.hhst.youtubelite.data.media.MediaSession.accounts().none { !it.disabled })) stringResource(R.string.ui_sign_in) else stringResource(action.labelResource),
                                 tag = "account-action-${action.tag}")
                         },
                         onDismiss = { youViewModel.onAction(LibraryAction.CloseOverlay) },
                         onSelect = { youViewModel.onAction(LibraryAction.AccountSelected(actions[it])) },
-                        tag = "account-menu", paneTitle = "Menu",
+                        tag = "account-menu", paneTitle = stringResource(R.string.ui_menu),
                     )
                 } else {
                     MenuBottomSheet(
-                        items = accountMenuItems,
+                        items = accountMenuActions.map { action ->
+                            com.hhst.youtubelite.ui.design.MenuSheetItem(null, stringResource(action.labelResource),
+                                tag = "account-action-${action.tag}")
+                        },
                         onDismiss = { youViewModel.onAction(LibraryAction.CloseOverlay) },
                         onSelect = { index -> youViewModel.onAction(LibraryAction.AccountSelected(accountMenuActions[index])) },
                         tag = "account-menu",
-                        paneTitle = "Account menu",
+                        paneTitle = stringResource(R.string.ui_account_menu),
                         header = {
                             AccountMenuHeader(account) {
                                 youViewModel.onAction(LibraryAction.AccountSelected(AccountMenuAction.ViewChannel))
@@ -234,13 +239,13 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
             if (state.overlay is LibraryOverlay.Menu) {
                 com.hhst.youtubelite.ui.design.MenuBottomSheet(
                     items = com.hhst.youtubelite.library.domain.HistoryMenuAction.entries.map { action ->
-                        com.hhst.youtubelite.ui.design.MenuSheetItem(action.icon(), action.label)
+                        com.hhst.youtubelite.ui.design.MenuSheetItem(action.icon(), stringResource(action.labelResource))
                     },
                     onDismiss = { youViewModel.onAction(LibraryAction.CloseOverlay) },
                     onSelect = { index ->
                         youViewModel.onAction(LibraryAction.MenuSelected(com.hhst.youtubelite.library.domain.HistoryMenuAction.entries[index]))
                     },
-                    paneTitle = "History actions",
+                    paneTitle = stringResource(R.string.ui_history_actions),
                 )
             }
             if (showSwitchSheet) {
@@ -283,8 +288,8 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
             if (confirmSignOut) {
                 com.hhst.youtubelite.ui.components.AppAlertDialog(
                     onDismissRequest = { confirmSignOut = false },
-                    title = { com.hhst.youtubelite.ui.design.AppText("Sign out?") },
-                    text = { com.hhst.youtubelite.ui.design.AppText("This removes the account from this device. Downloads and settings are kept.") },
+                    title = { com.hhst.youtubelite.ui.design.AppText(stringResource(R.string.ui_sign_out)) },
+                    text = { com.hhst.youtubelite.ui.design.AppText(stringResource(R.string.ui_this_removes_the_account_from_this_device_downloads_and_settings_are_k)) },
                     confirmButton = {
                         com.hhst.youtubelite.ui.components.AppTextButton(onClick = {
                             confirmSignOut = false
@@ -294,12 +299,12 @@ class YouActivity : com.hhst.youtubelite.ui.ContentActivity() {
                                 youViewModel.updateSession(session.signedIn, session.generation)
                             }
                         }, modifier = Modifier.testTag("account-signout-confirm")) {
-                            com.hhst.youtubelite.ui.design.AppText("Sign out", color = com.hhst.youtubelite.ui.theme.AppStyle.Action)
+                            com.hhst.youtubelite.ui.design.AppText(stringResource(R.string.ui_sign_out_2), color = com.hhst.youtubelite.ui.theme.AppStyle.Action)
                         }
                     },
                     dismissButton = {
                         com.hhst.youtubelite.ui.components.AppTextButton(onClick = { confirmSignOut = false }) {
-                            com.hhst.youtubelite.ui.design.AppText("Cancel")
+                            com.hhst.youtubelite.ui.design.AppText(stringResource(R.string.cancel))
                         }
                     })
             }

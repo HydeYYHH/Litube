@@ -64,8 +64,7 @@ fun PlayerAnchorDropdown(
 ) {
     when (menu) {
         PlayerAnchorMenu.Subtitles -> {
-            // Languages only — no "off" row. Tapping the active language
-            // turns captions off. Style sits under the list.
+            // No "off" row: tapping the active language turns captions off. Style sits under the list.
             OptionDropdown(
                 rows = if (state.subtitleTracks.isEmpty()) {
                     listOf(OptionRow(null, stringResource(R.string.no_subtitles), enabled = false))
@@ -208,15 +207,11 @@ internal fun SegmentPreviewDialog(
     )
 }
 
-/** Below this count every label is measured; above it, only the longest few. */
 private const val MEASURE_SAMPLE_CAP = 48
 
-/** How many longest-by-character-count labels are measured for huge lists. */
 private const val MEASURE_SAMPLE = 24
 
-/** Measured label widths, memoized across menus (bounded LRU) so reopening a
- *  menu — or a 4 Hz recomposition while one is open — never re-measures text
- *  on the main thread. */
+/** Measured label widths memoized (bounded LRU) so reopening or 4 Hz recomposition never re-measures text on the main thread. */
 private val labelWidthCache = object : LinkedHashMap<String, Int>(64, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>): Boolean =
         size > 128
@@ -231,11 +226,9 @@ private fun popupMenuWidth(labels: List<String>): Dp {
     val measurer = rememberTextMeasurer()
     val style = TextStyle(fontSize = SettingsTokens.BodySize.sp, fontWeight = FontWeight.Normal)
     val contentPx = remember(labels) {
-        // Measuring every label janks first paint on videos with 100+
-        // chapters. Within one text style, character count is a safe proxy
-        // for rendered width, so for huge lists only the longest few labels
-        // need real measurement — the max over that sample bounds the menu
-        // width with the same practical result.
+        // Measuring every label janks first paint on videos with 100+ chapters; within
+        // one text style, character count is a safe proxy for width, so sampling the
+        // longest few bounds the menu width with the same practical result.
         val candidates = if (labels.size <= MEASURE_SAMPLE_CAP) {
             labels
         } else {
@@ -284,7 +277,6 @@ private fun ListPopup(
     }
 }
 
-/** Place the popup under the parent, or above it when the bottom would clip. */
 private object BelowAnchorPositionProvider : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,

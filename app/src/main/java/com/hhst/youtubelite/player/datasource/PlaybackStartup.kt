@@ -31,8 +31,8 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable
 import java.io.InputStream
 
 /**
- * First-chunk policy shared by the HLS variant order and the track selection. Both must name the
- * same variant: Media3 loads the first listed variant's playlist before it selects tracks, so a
+ * First-chunk policy shared by HLS variant order and track selection. Both must name the same
+ * variant: Media3 loads the first listed variant's playlist before selecting tracks, so a
  * different initial pick costs one more serial playlist read.
  */
 internal object PlaybackStartup {
@@ -67,10 +67,9 @@ internal object PlaybackStartup {
             override fun addEventListener(handler: Handler, listener: BandwidthMeter.EventListener) = Unit
             override fun removeEventListener(listener: BandwidthMeter.EventListener) = Unit
         }
-        // Standalone selection with explicit parameters: the context-free
-        // selector constructor is the supported path here, and a null context
-        // inside the selector is never dereferenced unless parameters fall
-        // back to context-derived defaults.
+        // Standalone selection with explicit parameters: the context-free selector
+        // constructor is the supported path; a null context is never dereferenced
+        // unless parameters fall back to context-derived defaults.
         @Suppress("DEPRECATION")
         val selector = DefaultTrackSelector(parameters, AdaptiveTrackSelection.Factory())
         selector.init(TrackSelector.InvalidationListener { }, meter)
@@ -87,9 +86,8 @@ internal object PlaybackStartup {
     }
 
     /**
-     * Fallback for callers without a decoder-capability selector: the highest bitrate the
-     * estimate affords, else the cheapest, within the most common video MIME type. Production HLS
-     * uses [selectFormat] to also respect renderer support and track selection parameters.
+     * Fallback without a decoder-capability selector: highest bitrate the estimate affords,
+     * else cheapest, within the most common video MIME type. Production HLS uses [selectFormat].
      */
     fun startFormat(formats: List<Format>, estimate: Long): Format? {
         val video = formats.filter { it.bitrate > 0 && it.height > 0 }

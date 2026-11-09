@@ -10,11 +10,11 @@ import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
 /**
- * Wire codec for the one protobuf message CASTV2 uses ([CastMessage]), plus the stream framing
- * (a 4-byte big-endian length prefix before each encoded message). Implemented directly: a
- * protobuf runtime is unnecessary for a single seven-field message. The decoder skips unknown
- * fields so receiver-side additions cannot break parsing. Malformed or truncated input throws
- * [IOException]; callers treat that as a failed channel, not a crash.
+ * Wire codec for the one protobuf message CASTV2 uses ([CastMessage]) plus stream framing
+ * (4-byte big-endian length prefix per message). Implemented directly: a protobuf runtime
+ * is unnecessary for a single seven-field message. Unknown fields are skipped so
+ * receiver-side additions cannot break parsing; malformed/truncated input throws
+ * [IOException].
  */
 object CastMessageCodec {
 

@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.ui.design.labelResource
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
@@ -81,7 +83,7 @@ fun MainNavigationBar(tag: String, signedIn: Boolean, avatarAsset: String?, sele
                         MainTab.Subscriptions -> AppIcon.Subscriptions
                         MainTab.You -> AppIcon.You
                     })
-                    AppText(tab.label, size = 11, line = 14, maxLines = 1)
+                    AppText(stringResource(tab.labelResource), size = 11, line = 14, maxLines = 1)
                 }
             }
         }

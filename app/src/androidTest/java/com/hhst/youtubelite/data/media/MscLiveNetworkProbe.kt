@@ -22,12 +22,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Opt-in read-only live-network measurements, anonymous unless explicitly enabled. One
- * active sample per probe; concurrent lanes use separate probes sharing MediaClient's
- * real worker pool. The supplied base keeps its pool, dispatcher, timeouts and
+ * active sample per probe. The supplied base keeps its pool, dispatcher, timeouts and
  * diagnostics, but HTTP caching is disabled so a logical call cannot masquerade as a
- * round trip. Reports contain endpoint categories, counts and timings only, never
- * request/response text, URLs, headers, credentials, visitor/account IDs or exception
- * messages.
+ * round trip. Reports contain endpoint categories, counts and timings only — never
+ * URLs, headers, credentials, visitor/account IDs or exception messages.
  */
 class MscLiveNetworkProbe(
     base: OkHttpClient,

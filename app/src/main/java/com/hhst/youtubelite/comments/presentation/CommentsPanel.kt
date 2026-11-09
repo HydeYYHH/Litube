@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.comments.presentation
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.Image
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -95,7 +97,7 @@ fun CommentsPanel(
         val next = state.target to state.sort
         if (listIdentity != next) {
             listIdentity = next
-            // A new ordering starts at its first comment; reopening the same list keeps its place.
+            // A new ordering starts at its first comment; reopening keeps its place.
             listState.scrollToItem(0)
         }
     }
@@ -106,7 +108,7 @@ fun CommentsPanel(
             com.hhst.youtubelite.ui.design.PanelTransition(fromBottom = false, onDismiss = onClose,
                 backEnabled = state.overlay == CommentsOverlay.None) { panelMotion, close ->
             Row(Modifier.fillMaxSize().testTag("comments-rail")) {
-                // The rail is docked: the page to its left remains interactive, as sampled.
+                // Docked rail: the page to its left remains interactive, as sampled.
                 Spacer(Modifier.weight(1f).fillMaxHeight())
                 CommentsSurface(
                     state = state,
@@ -122,7 +124,7 @@ fun CommentsPanel(
             }
             }
         } else {
-            // The page rounds the fractional 16:9 player; the sheet must start on the same pixel.
+            // Page rounds the fractional 16:9 player; the sheet must start on the same pixel.
             val top = sheetTopOverride ?: CommentsLayout.sheetTop(
                 topBar = WatchLayout.TopBarHeight,
                 playerHeight = WatchLayout.playerHeight(width, height),
@@ -153,7 +155,7 @@ fun CommentsPanel(
                 onDragStopped = { motion.settle(it) },
             )
             Box(Modifier.fillMaxSize()) {
-                // The sheet has no tinted scrim in the sample; the exposed page area still dismisses.
+                // No tinted scrim in the sample; the exposed page area still dismisses.
                 Box(
                     Modifier.fillMaxSize()
                         .clickable(
@@ -223,11 +225,11 @@ private fun CommentsSurface(
         Column(
             Modifier.fillMaxSize().background(DesignTokens.Panel, shape)
                 .focusRequester(focus).focusable()
-                .semantics { paneTitle = "Comments" }
+                .appPaneTitle(R.string.comments_title)
                 .testTag("comments-panel"),
         ) {
             if (compact) HandleStrip(headerModifier) else Spacer(Modifier.height(CommentsLayout.HeaderTopGap.dp))
-            // The modal sheet owns the gesture and the semantics above the panel.
+            // Modal sheet owns the gesture and the semantics above the panel.
             Box(Modifier.weight(1f).fillMaxWidth().then(if (modal) Modifier.clearAndSetSemantics {} else Modifier)) {
                 Column(Modifier.fillMaxSize()) {
                     Box {
@@ -289,14 +291,14 @@ private fun CommentsSurface(
                                 CommentMenuAction.Report -> AppIcon.Report
                                 CommentMenuAction.Edit, CommentMenuAction.Delete -> null
                             },
-                            label = action.label,
+                            label = stringResource(action.labelResource),
                             tag = "comment-menu-${action.name.lowercase()}",
                         )
                     },
                     onDismiss = { onAction(CommentAction.CloseMenu) },
                     onSelect = { index -> if (index in actions.indices) onAction(CommentAction.MenuAction(actions[index])) },
                     tag = "comments-menu",
-                    paneTitle = "Comment actions",
+                    paneTitle = stringResource(R.string.ui_comment_actions),
                 )
             }
             is CommentsOverlay.Composer, is CommentsOverlay.DeleteConfirm -> Unit
@@ -305,7 +307,7 @@ private fun CommentsSurface(
     }
 }
 
-/** No fixture comment is owned, so the default menu keeps the sampled Reply/Report pair; tests and previews supply owned threads to exercise Edit/Delete. */
+/** Default menu keeps the sampled Reply/Report pair; tests/previews supply owned threads for Edit/Delete. */
 private fun menuActions(state: CommentsUiState): List<CommentMenuAction> {
     val ready = state.content as? CommentsContent.Ready
     return (when (val overlay = state.overlay) {
@@ -360,7 +362,7 @@ private fun CommentComposerSheet(
                 .heightIn(max = (maxHeight - editorBottom).coerceAtLeast(0.dp))
                 .verticalScroll(rememberScrollState())
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Panel)
-                .testTag("comment-composer").semantics { paneTitle = "Comment editor" },
+                .testTag("comment-composer").appPaneTitle(R.string.ui_comment_editor),
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
@@ -385,7 +387,7 @@ private fun CommentComposerSheet(
                     decorationBox = { inner ->
                         Box {
                             if (draft.isEmpty()) AppText(
-                                if (reply) "Add a reply..." else "Add a comment...",
+                                if (reply) stringResource(R.string.ui_add_a_reply) else stringResource(R.string.ui_add_a_comment),
                                 size = 14, line = 20, color = DesignTokens.Secondary,
                             )
                             inner()
@@ -431,15 +433,15 @@ private fun DeleteCommentSheet(ownComment: Boolean, pending: Boolean, onCancel: 
                 .heightIn(max = (maxHeight - MenuSheetLayout.BottomInset.dp).coerceAtLeast(0.dp))
                 .verticalScroll(rememberScrollState())
                 .clip(RoundedCornerShape(MenuSheetLayout.Corner.dp)).background(DesignTokens.Panel)
-                .testTag("comment-delete-sheet").semantics { paneTitle = "Delete confirmation" },
+                .testTag("comment-delete-sheet").appPaneTitle(R.string.ui_delete_confirmation),
         ) {
             AppText(
-                if (ownComment) "Delete comment?" else "Delete reply?",
+                if (ownComment) stringResource(R.string.ui_delete_comment) else stringResource(R.string.ui_delete_reply),
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
                 size = 18, line = 26, weight = FontWeight.Bold,
             )
             AppText(
-                "This action cannot be undone.",
+                stringResource(R.string.ui_this_action_cannot_be_undone),
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 size = 14, line = 20, color = DesignTokens.Secondary,
             )
@@ -558,7 +560,7 @@ private fun SortMenu(selected: CommentSort, onSelect: (CommentSort) -> Unit, mod
         modifier.width(200.dp).messageCardShadow().background(DesignTokens.Panel, RoundedCornerShape(12.dp))
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp).testTag("comments-sort-menu")
-            .semantics { paneTitle = "Sort comments" },
+            .appPaneTitle(R.string.a11y_sort_comments),
     ) {
         SortMenuRow(topCommentsText, selected == CommentSort.Top, "comments-sort-top") { onSelect(CommentSort.Top) }
         SortMenuRow(newestFirstText, selected == CommentSort.Newest, "comments-sort-newest") { onSelect(CommentSort.Newest) }
@@ -599,9 +601,9 @@ private fun ColumnScope.CommentsBody(state: CommentsUiState, listState: LazyList
                     CircularProgressIndicator(Modifier.size(20.dp).testTag("comments-loading"),
                         color = DesignTokens.Secondary, strokeWidth = 2.dp)
                 }
-                CommentsContent.Failed -> MessageBlock("Something went wrong while loading comments.", messageMinHeight, onRetry = { onAction(CommentAction.Retry) })
-                CommentsContent.Empty -> MessageBlock("No comments yet.", messageMinHeight)
-                CommentsContent.Disabled -> MessageBlock("Comments are turned off.", messageMinHeight)
+                CommentsContent.Failed -> MessageBlock(stringResource(R.string.ui_something_went_wrong_while_loading_comments), messageMinHeight, onRetry = { onAction(CommentAction.Retry) })
+                CommentsContent.Empty -> MessageBlock(stringResource(R.string.ui_no_comments_yet), messageMinHeight)
+                CommentsContent.Disabled -> MessageBlock(stringResource(R.string.ui_comments_are_turned_off), messageMinHeight)
                 is CommentsContent.Ready -> Unit
             }
         }
@@ -653,7 +655,7 @@ private fun Simplebox(onAction: (CommentAction) -> Unit) {
                     .padding(start = CommentsLayout.InputTextInset.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                AppText("Add a comment...", size = 14, line = 20, color = DesignTokens.Secondary)
+                AppText(stringResource(R.string.ui_add_a_comment), size = 14, line = 20, color = DesignTokens.Secondary)
             }
         }
         Divider()
@@ -689,13 +691,12 @@ private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, li
                     item(key = "reply-status:${thread.id}", contentType = "reply-status") {
                         Column(Modifier.fillMaxWidth().padding(start = CommentsLayout.ReplyToggleStart.dp, end = 20.dp)
                             .then(if (thread.replies.isEmpty()) Modifier.testTag("comment-${thread.id}-replies") else Modifier)) {
-                            if (thread.repliesLoading && thread.replies.isEmpty()) AppText("Loading replies…", size = 12, line = 18)
-                            if (thread.repliesFailed) AppText("Couldn't load replies. Tap below to retry.", size = 12, line = 18)
+                            if (thread.repliesLoading && thread.replies.isEmpty()) AppText(stringResource(R.string.ui_loading_replies), size = 12, line = 18)
+                            if (thread.repliesFailed) AppText(stringResource(R.string.ui_couldn_t_load_replies_tap_below_to_retry), size = 12, line = 18)
                         }
                     }
                 }
-                // Replies are individual lazy items: opening a long thread must
-                // only measure and load avatars for the visible reply rows.
+                // Replies are individual lazy items so a long thread only measures visible reply rows.
                 items(thread.replies.size, key = { "reply:${thread.id}:${thread.replies[it].id}" }, contentType = { "reply" }) { index ->
                     Column(Modifier.fillMaxWidth().padding(start = CommentsLayout.ReplyToggleStart.dp, end = 20.dp)
                         .then(if (index == 0) Modifier.testTag("comment-${thread.id}-replies") else Modifier)) {
@@ -707,9 +708,8 @@ private fun ThreadList(content: CommentsContent.Ready, expanded: Set<String>, li
                 item(key = "reply-footer:${thread.id}", contentType = "reply-footer") {
                     ExpandedRepliesFooter(thread) { action ->
                         if (action is CommentAction.ToggleReplies && !thread.repliesFailed) {
-                            // The footer disappears on collapse. Anchor the
-                            // surviving thread first so the reader keeps its
-                            // context instead of jumping to the next comment.
+                            // Footer disappears on collapse; anchor the surviving thread first
+                            // so the reader keeps context instead of jumping to the next comment.
                             scrollScope.launch {
                                 listState.scrollToItem(threadIndex)
                                 currentAction(action)
@@ -810,7 +810,7 @@ private fun ThreadContent(thread: CommentThread, videoId: String?, pending: Comm
             CommentActions(
                 likes = thread.likes,
                 replyCount = thread.replyCount,
-                description = "comment by ${thread.author.handle}",
+                description = stringResource(R.string.ui_comment_by_1_s , thread.author.handle),
                 tagPrefix = "comment-${thread.id}",
                 commentId = thread.id, rating = thread.rating, pending = pending, enabled = !busy,
                 onLike = { onAction(CommentAction.LikeThread(thread.id)) },
@@ -838,7 +838,7 @@ private fun ReplyContent(threadId: String, reply: CommentReply, videoId: String?
             CommentActions(
                 likes = reply.likes,
                 replyCount = null,
-                description = "reply by ${reply.author.handle}",
+                description = stringResource(R.string.ui_reply_by_1_s , reply.author.handle),
                 tagPrefix = "reply-${reply.id}",
                 commentId = reply.id, rating = reply.rating, pending = pending, enabled = !busy,
                 onLike = { onAction(CommentAction.LikeReply(threadId, reply.id)) },
@@ -897,16 +897,16 @@ private fun CommentActions(
 ) {
     Row(Modifier.fillMaxWidth().height(CommentsLayout.ActionRowHeight.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).offset(x = (-6).dp).horizontalScroll(rememberScrollState())) {
-            CountedAction(AppIcon.Like, likes, "Like $description", "$tagPrefix-like", onLike,
+            CountedAction(AppIcon.Like, likes, stringResource(R.string.ui_like_1_s , description), "$tagPrefix-like", onLike,
                 enabled, rating == VideoRating.Like, (pending as? CommentNavigationRequest.LikeComment)?.commentId == commentId)
             Spacer(Modifier.width(7.dp))
-            PlainAction(AppIcon.Dislike, "Dislike $description", "$tagPrefix-dislike", onDislike,
+            PlainAction(AppIcon.Dislike, stringResource(R.string.ui_dislike_1_s , description), "$tagPrefix-dislike", onDislike,
                 enabled, rating == VideoRating.Dislike, (pending as? CommentNavigationRequest.DislikeComment)?.commentId == commentId)
             Spacer(Modifier.width(7.dp))
             if (replyCount != null) {
-                CountedAction(AppIcon.Comment, replyCount.toString(), "Reply to $description", "$tagPrefix-reply", onReply, enabled)
+                CountedAction(AppIcon.Comment, replyCount.toString(), stringResource(R.string.ui_reply_to_1_s , description), "$tagPrefix-reply", onReply, enabled)
             } else {
-                PlainAction(AppIcon.Comment, "Reply to $description", "$tagPrefix-reply", onReply, enabled)
+                PlainAction(AppIcon.Comment, stringResource(R.string.ui_reply_to_1_s , description), "$tagPrefix-reply", onReply, enabled)
             }
         }
         Box(

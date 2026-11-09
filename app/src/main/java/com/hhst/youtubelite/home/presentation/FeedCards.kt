@@ -71,7 +71,7 @@ private fun Artwork(asset: String, modifier: Modifier = Modifier) {
 private fun Avatar(asset: String, author: String, channelId: String, onAction: (HomeAction) -> Unit, size: Dp = 36.dp, modifier: Modifier = Modifier) {
     Box(modifier.size(size).clip(CircleShape).clickable(role = Role.Button) {
         onAction(HomeAction.Navigate(HomeNavigationRequest.Channel(channelId)))
-    }.testTag("channel-$channelId").semanticsLabel("Go to channel $author")) {
+    }.testTag("channel-$channelId").semanticsLabel(stringResource(R.string.a11y_go_to_channel , author))) {
         Artwork(asset, Modifier.fillMaxSize())
     }
 }
@@ -130,7 +130,7 @@ private fun MixCard(item: FeedItem.Mix, compact: Boolean, live: Boolean, onActio
                 Row(Modifier.align(Alignment.BottomEnd).padding(8.dp).height(24.dp).background(Color(item.palette.badgeColor), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     AppIcon(AppIcon.Mix, Modifier.size(12.dp), Color.White)
-                    AppText("Mix", size = 12, line = 16, color = Color.White)
+                    AppText(stringResource(R.string.ui_mix), size = 12, line = 16, color = Color.White)
                 }
             }
         }
@@ -157,7 +157,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean
         .padding(top = if (windowWidth < 528f) 12.dp else 0.dp).testTag("shorts-shelf")) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             ShortsLogo(Modifier.offset(y = (-1.667).dp))
-            AppText("Shorts", Modifier.padding(start = 12.dp).weight(1f), size = 18, line = 26, weight = FontWeight.Bold)
+            AppText(stringResource(R.string.ui_shorts), Modifier.padding(start = 12.dp).weight(1f), size = 18, line = 26, weight = FontWeight.Bold)
             if (!live) AppIconButton(AppIcon.More, stringResource(R.string.a11y_shorts_options), diameter = 40.dp) { onAction(HomeAction.OpenMenu(item.id, FeedMenuKind.Shorts)) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -170,7 +170,7 @@ private fun ShortsShelf(item: FeedItem.Shorts, windowWidth: Float, live: Boolean
                         }.semanticsLabel(video.title)) {
                             VideoArtwork(video.id, video.artwork, Modifier.fillMaxSize())
                             Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.7f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
-                            if (video.isNew) AppText("New", Modifier.padding(5.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
+                            if (video.isNew) AppText(stringResource(R.string.ui_new), Modifier.padding(5.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
                                 size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
                             if (!live) AppIconButton(AppIcon.More, stringResource(R.string.a11y_more_actions_for, video.title), modifier = Modifier.align(Alignment.TopEnd), diameter = 40.dp, color = Color.White) { onAction(HomeAction.OpenMenu(video.id, FeedMenuKind.Short)) }
                             AppText(rememberDeArrowTitle(video.id, video.title), Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 12.dp),

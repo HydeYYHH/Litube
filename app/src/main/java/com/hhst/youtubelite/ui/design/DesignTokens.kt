@@ -29,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -163,6 +164,12 @@ fun Modifier.appDescription(@StringRes id: Int, vararg args: Any): Modifier {
 }
 
 @Composable
+fun Modifier.appPaneTitle(@StringRes id: Int, vararg args: Any): Modifier {
+    val title = stringResource(id, *args)
+    return semantics { paneTitle = title }
+}
+
+@Composable
 fun AppIcon(icon: AppIcon, modifier: Modifier = Modifier, color: Color = DesignTokens.Ink) {
     val paths = remember(icon) { icon.paths.map { raw ->
         val path = PathParser().parsePathString(raw).toPath().asAndroidPath()
@@ -228,7 +235,7 @@ fun LitubeBrand(modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         LitubeMark(Modifier.size(28.dp))
         Spacer(Modifier.width(3.dp))
-        AppText("Litube", size = 22, line = 28, weight = FontWeight.Black)
+        AppText(stringResource(R.string.app_name), size = 22, line = 28, weight = FontWeight.Black)
     }
     }
 }

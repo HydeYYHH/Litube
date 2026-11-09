@@ -56,7 +56,7 @@ internal class DownloadConnectionLimiter(total: Int, perHost: Int) {
         }
     }
 
-    // Called under lock. Skip saturated hosts so one host cannot block another.
+    // Called under lock; skip saturated hosts so one host cannot block another.
     private fun admit() {
         while (active < totalLimit) {
             val next = waiting.firstOrNull { (hosts[it.call.request().url.host] ?: 0) < hostLimit } ?: break

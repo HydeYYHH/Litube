@@ -1,10 +1,9 @@
 package com.hhst.youtubelite.data.media
 
 /**
- * The library storage follows the session identity: the device store answers when the
- * app runs anonymous (the whole-app "On this device" switch) or signed out; a signed-in
- * session reads the account. Switching identity never moves data between the storages —
- * there is no merge or upload.
+ * Library storage follows the session identity: the device store answers when anonymous or
+ * signed out; a signed-in session reads the account. Switching never moves data between
+ * storages — there is no merge or upload.
  */
 internal fun useDeviceLibrary(local: LocalLibraryStore?): Boolean =
     local != null && !MediaSession.signedIn()

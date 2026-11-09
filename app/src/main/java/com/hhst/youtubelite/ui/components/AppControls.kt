@@ -195,7 +195,7 @@ fun AppSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?,
     }
 }
 
-/** Thin track and round thumb. Gestures and accessibility remain on the platform control. */
+/** Gestures and accessibility remain on the platform control. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier,

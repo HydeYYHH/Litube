@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.account
 
+import com.hhst.youtubelite.ui.noticeText
+import androidx.compose.ui.res.stringResource
 import android.content.Intent
 import android.os.Bundle
 import com.hhst.youtubelite.R
@@ -88,12 +90,12 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
             BackHandler { finish() }
             Column(Modifier.fillMaxSize().background(com.hhst.youtubelite.ui.design.DesignTokens.Background)
                 .windowInsetsPadding(WindowInsets.safeDrawing).testTag("signin-screen")) {
-                AppTopAppBar(title = { AppText("Sign in", size = 18, line = 24, weight = FontWeight.Medium) })
+                AppTopAppBar(title = { AppText(stringResource(R.string.ui_sign_in), size = 18, line = 24, weight = FontWeight.Medium) })
                 Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), contentAlignment = Alignment.TopCenter) {
                     when (val current = state) {
-                        SignInUiState.Loading -> StatusBlock("Contacting YouTube…", tag = "signin-loading")
-                        SignInUiState.Completing -> StatusBlock("Finishing sign-in…", tag = "signin-completing")
-                        SignInUiState.Success -> StatusBlock("Signed in", tag = "signin-success", spinner = false)
+                        SignInUiState.Loading -> StatusBlock(stringResource(R.string.ui_contacting_youtube), tag = "signin-loading")
+                        SignInUiState.Completing -> StatusBlock(stringResource(R.string.ui_finishing_sign_in), tag = "signin-completing")
+                        SignInUiState.Success -> StatusBlock(stringResource(R.string.ui_signed_in), tag = "signin-success", spinner = false)
                         is SignInUiState.Error -> ErrorBlock(current.message) { model.onAction(SignInAction.Retry) }
                         is SignInUiState.Ready -> ReadyBlock(current)
                     }
@@ -118,10 +120,10 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private fun ErrorBlock(message: String, onRetry: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(top = 96.dp).testTag("signin-error"),
             horizontalAlignment = Alignment.CenterHorizontally) {
-            AppText(message, size = 15, line = 22, color = DesignTokens.Ink)
+            AppText(noticeText(message), size = 15, line = 22, color = DesignTokens.Ink)
             Spacer(Modifier.height(16.dp))
             AppTextButton(onClick = onRetry, modifier = Modifier.testTag("signin-retry")) {
-                AppText("Try again", size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
+                AppText(stringResource(R.string.ui_try_again), size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
             }
         }
     }
@@ -130,18 +132,18 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
     private fun ReadyBlock(state: SignInUiState.Ready) {
         val clipboard = LocalClipboardManager.current
         Column(Modifier.fillMaxWidth().testTag("signin-ready")) {
-            AppText("Sign in with your Google account", size = 20, line = 26, weight = FontWeight.Medium)
+            AppText(stringResource(R.string.ui_sign_in_with_your_google_account), size = 20, line = 26, weight = FontWeight.Medium)
             Spacer(Modifier.height(24.dp))
-            StepRow(1, "Open ${state.verificationUrl.toUri().host ?: state.verificationUrl} on your phone or computer")
+            StepRow(1, stringResource(R.string.ui_open_1_s_on_your_phone_or_computer , state.verificationUrl.toUri().host ?: state.verificationUrl))
             Spacer(Modifier.height(8.dp))
             Button(onClick = { openBrowser(state.verificationUrl) },
                 shape = CircleShape, colors = ButtonDefaults.buttonColors(containerColor = AppStyle.Action),
                 modifier = Modifier.testTag("signin-open")) {
-                AppText("Open in browser", size = 14, line = 20, weight = FontWeight.Medium,
+                AppText(stringResource(R.string.ui_open_in_browser), size = 14, line = 20, weight = FontWeight.Medium,
                     color = androidx.compose.ui.graphics.Color.White)
             }
             Spacer(Modifier.height(24.dp))
-            StepRow(2, "Enter this code")
+            StepRow(2, stringResource(R.string.ui_enter_this_code))
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth().background(DesignTokens.Surface, RoundedCornerShape(12.dp)).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -149,14 +151,14 @@ class SignInActivity : com.hhst.youtubelite.ui.NativeActivity() {
                     modifier = Modifier.testTag("signin-code"))
                 AppTextButton(onClick = { clipboard.setText(AnnotatedString(state.userCode)) },
                     modifier = Modifier.testTag("signin-copy")) {
-                    AppText("Copy code", size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
+                    AppText(stringResource(R.string.ui_copy_code), size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
                 }
             }
             Spacer(Modifier.height(24.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = AppStyle.Action, strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
-                StepRow(3, "This page continues on its own once you confirm.")
+                StepRow(3, stringResource(R.string.ui_this_page_continues_on_its_own_once_you_confirm))
             }
         }
     }

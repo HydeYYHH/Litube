@@ -95,7 +95,6 @@ private val ScrimBottom = Brush.verticalGradient(
     listOf(Color.Transparent, PlayerUi.Scrim),
 )
 
-/** Chrome button. Default hit target is 48 dp; pass [modifier] size to override. */
 @Composable
 fun PlayerIconButton(
     icon: Int,
@@ -250,7 +249,6 @@ fun TopBar(
     }
 }
 
-/** Center prev / play-pause / next. Hidden with the rest of the chrome when locked or auto-hidden; the play slot becomes a spinner while loading. */
 @Composable
 fun CenterControls(
     state: PlayerUiState,
@@ -313,18 +311,11 @@ fun CenterControls(
 }
 
 /**
- * Bottom: 2 dp time bar (drawn just above the controls row), then the info
- * band — position / duration and the current-chapter entry — with fullscreen
- * at the end. Speed and quality live in the More sheet; the settings anchor
- * menus surface from the fullscreen slot when opened there.
- *
  * Position/buffered arrive as [State]s and are consumed only by the time bar
  * and [PositionText], so 4 Hz playback ticks never recompose this bar.
- *
- * [onTrackAnchor] reports the px distance from this bar's bottom edge up to
- * the visible track center, so overlay chips and subtitles anchor to the
- * measured track instead of a guessed constant (the controls row grows with
- * font scale and wrapping).
+ * [onTrackAnchor] reports the px distance from this bar's bottom edge to the
+ * visible track center so overlays anchor to the measured track, not a guessed
+ * constant (the controls row grows with font scale and wrapping).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -355,11 +346,10 @@ fun BottomBar(
             onSeek = onSeek,
             onPreview = { target -> callbacks?.onTimeBarPreview(target) },
             onCommit = { callbacks?.onTimeBarCommit() },
-            // Keep the 48 dp seek target while sharing its lower half with the
-            // controls row. The visible track sits at the canvas middle, i.e.
-            // the bottom edge of the halved slot. onGloballyPositioned is
-            // listed before the layout modifier so it observes the halved
-            // slot; after it, size.height would be the full 48 dp canvas.
+            // Shares the 48 dp slot's lower half with the controls row; the visible
+            // track sits at the halved slot's bottom edge. onGloballyPositioned must
+            // precede the layout modifier — after it, size.height would be the full
+            // 48 dp canvas.
             modifier = Modifier.onGloballyPositioned { coords ->
                 trackMeasurements[1] = coords.positionInParent().y.roundToInt() + coords.size.height
                 reportTrackAnchor()
@@ -384,9 +374,8 @@ fun BottomBar(
                         isLive = state.isLive,
                         textSizeSp = sizing.textSp,
                     )
-                    // The chapter entry is part of the always-shown bottom readout
-                    // (time + current chapter); compact mode only drops the
-                    // secondary action buttons, never this chip.
+                    // Part of the always-shown bottom readout; compact mode drops only
+                    // the secondary action buttons, never this chip.
                     ChapterEntryChip(
                         chapters = chapters,
                         hasSegments = hasSegments,
@@ -413,7 +402,7 @@ fun BottomBar(
     }
 }
 
-/** Position / duration text, isolated so position ticks stay inside this leaf. */
+/** Isolated so position ticks stay inside this leaf. */
 @Composable
 private fun PositionText(
     positionState: State<Long>,
@@ -447,7 +436,6 @@ private fun PositionText(
     }
 }
 
-/** 100 dp edge fades used behind top/bottom chrome. */
 @Composable
 fun ControlScrims(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize()) {
@@ -468,10 +456,7 @@ fun ControlScrims(modifier: Modifier = Modifier) {
     }
 }
 
-/** One-shot hint: top-center, 12 sp. The last non-null text is kept so the
- *  exit fade does not collapse the pill before it animates out. Reads
- *  [hintState] here (not in the caller) so hint writes recompose only this
- *  overlay. */
+/** Keeps the last non-null text so the exit fade doesn't collapse the pill; reads [hintState] here so hint writes recompose only this overlay. */
 @Composable
 fun HintOverlay(hintState: State<String?>, enabled: Boolean, modifier: Modifier = Modifier) {
     val hint = if (enabled) hintState.value else null
@@ -532,10 +517,9 @@ fun CastStatusBanners(
                 )
             }
         }
-        // The link banner appears only while a receiver/browser is actually
-        // connected (30 s liveness window in the proxy) — not merely because
-        // the cast dialog once opened. A Chromecast session is a separate
-        // mode: its proxy serves the receiver, so no link banner then.
+        // The link banner needs an actually connected receiver/browser (30 s liveness
+        // window in the proxy), not merely an opened cast dialog; a Chromecast session
+        // is a separate mode whose proxy serves the receiver, so no banner then.
         if (linkUrl != null && linkConnected && !casting) {
             Row(
                 modifier = Modifier
@@ -568,7 +552,6 @@ fun CastStatusBanners(
     }
 }
 
-/** Playback failure: keep chrome usable, offer a one-tap retry. */
 @Composable
 fun ErrorOverlay(
     message: String,
@@ -630,10 +613,8 @@ fun LockAffordance(
 }
 
 /**
- * Compact in-app mini-player chrome.
- *
- * Background tap toggles chrome; the center restore button returns to watch.
- * Drag / pinch intercept movement before the controls, while ordinary taps reach buttons.
+ * Compact in-app mini-player chrome: background tap toggles chrome, the center
+ * restore button returns to watch; drags/pinches are claimed before child controls.
  */
 @Composable
 fun MiniPlayerChrome(

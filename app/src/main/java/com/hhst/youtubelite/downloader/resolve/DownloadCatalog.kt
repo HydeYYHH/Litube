@@ -8,7 +8,7 @@ import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.Subtitle
 import com.hhst.youtubelite.player.datasource.StreamSelection
 
-/** Extractor snapshot the download layer selects from. Playback models are unchanged. */
+/** Extractor snapshot the download layer selects from; playback models unchanged. */
 @kotlinx.serialization.Serializable
 data class DownloadCatalog(
     val videoId: String,
@@ -54,9 +54,8 @@ sealed class DownloadSelection {
 }
 
 /**
- * [subtitleFailure]/[coverFailure] keep an unavailable attachment from
- * blocking the media assets: video/audio still resolve, the missing sidecar
- * is reported failed on its own asset row.
+ * [subtitleFailure]/[coverFailure] keep an unavailable attachment from blocking
+ * media assets: video/audio still resolve; the missing sidecar fails on its own row.
  */
 data class DownloadPlan(
     val video: DownloadMediaChoice? = null,

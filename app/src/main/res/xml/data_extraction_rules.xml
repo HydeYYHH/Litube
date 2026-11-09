@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cloud backup and device transfer exclude the download database, temp dir,
-  the playback/PoToken cache and the sealed credential store (media-auth).
+  Excludes the download database, temp dir, playback/PoToken cache and sealed
+  credential store (media-auth) from cloud backup and device transfer.
   See DownloadBackupExcludes.
 -->
 <data-extraction-rules>

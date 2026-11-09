@@ -41,7 +41,7 @@ class MscLiveSignInAndroidTest {
         val service = MediaSignInService(GlobalContext.get().get<OkHttpClient>(), store)
         try {
             val code = service.loadCode()
-            // The device_code and all client/token credentials stay inside the real service.
+            // Device_code and all client/token credentials stay inside the real service.
             report.put("state", "awaiting_authorization").put("userCode", code.userCode)
                 .put("verificationUrl", code.verificationUrl).put("expiresAtMs", code.expiresAtMs)
             publish()

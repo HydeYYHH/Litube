@@ -83,9 +83,8 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         is LibraryNavigationRequest.Search -> launchNavigation(SearchResultsActivity.intent(this@PlaylistsActivity, request.query))
                         LibraryNavigationRequest.VoiceSearch -> if (!fixtures) openVoiceSearch()
                         LibraryNavigationRequest.SignIn -> com.hhst.youtubelite.account.SignInFlow.open(this@PlaylistsActivity)
-                        // The shared library request type carries entries the collection screen
-                        // never emits (videos, menus, tabs, account, settings, history). No
-                        // `else`: a new request type must fail to compile here.
+                        // Shared library request type carries entries the collection screen never emits.
+                        // No `else`: a new request type must fail to compile here.
                         is LibraryNavigationRequest.Watch, is LibraryNavigationRequest.Channel,
                         LibraryNavigationRequest.OpenHistory, LibraryNavigationRequest.OpenPlaylists,
                         LibraryNavigationRequest.OpenQueue, LibraryNavigationRequest.OpenDownloads,
@@ -138,8 +137,8 @@ class PlaylistsActivity : com.hhst.youtubelite.ui.ContentActivity() {
     companion object {
         const val EXTRA_SCENARIO = "playlists_scenario"
 
-        // The default scenario is never attached: parse(null) already yields Content,
-        // and a scenario extra would trip the fixture-scene heuristic on normal navigation.
+        // Default scenario is never attached: parse(null) already yields Content, and a
+        // scenario extra would trip the fixture-scene heuristic on normal navigation.
         fun intent(context: Context, scenario: LibraryScenario? = null) =
             Intent(context, PlaylistsActivity::class.java)
                 .apply { if (scenario != null && scenario != LibraryScenario.Content) putExtra(EXTRA_SCENARIO, scenario.argument) }

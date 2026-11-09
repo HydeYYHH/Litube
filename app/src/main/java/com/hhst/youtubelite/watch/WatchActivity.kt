@@ -810,10 +810,9 @@ class WatchActivity : com.hhst.youtubelite.player.PlaybackActivity(), com.hhst.y
     }
 
     /**
-     * Routes a description link: same-video links (with or without a timestamp)
-     * seek the existing player instead of rebuilding the page, YouTube links go
-     * through the app's content-link boundary, and anything else gets an explicit
-     * external browser open. [com.hhst.youtubelite.navigation.ContentLink.parse]
+     * Routes a description link: same-video links seek the existing player instead of
+     * rebuilding the page, YouTube links go through the app's content-link boundary,
+     * anything else opens an external browser. [com.hhst.youtubelite.navigation.ContentLink.parse]
      * already rejected lookalike hosts, credentials, and non-https schemes.
      */
     private fun openDescriptionLink(url: String) {

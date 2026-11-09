@@ -11,9 +11,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Call-site API. Queue toolbar, player overflow, web injection,
- * extension nav, and system share all open confirm sheets or the manager
- * through these methods — never Worker, Service, or DAO.
+ * Call-site API: queue toolbar, player overflow, web injection, extension nav and
+ * system share open confirm sheets or the manager through these methods — never
+ * Worker, Service, or DAO.
  */
 object DownloadUi {
     const val EXTRA_BATCH_ID = DownloadActions.EXTRA_BATCH_ID

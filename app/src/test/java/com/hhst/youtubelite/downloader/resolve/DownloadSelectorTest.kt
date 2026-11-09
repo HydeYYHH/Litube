@@ -277,7 +277,7 @@ class DownloadSelectorTest {
         assertEquals(136, hinted.plan.video!!.format.itag)
         assertEquals(720, hinted.plan.video!!.format.height)
 
-        // A confirm-sheet itag is exact: a missing itag fails with a reselect reason rather than silently dropping the tier.
+        // A confirm-sheet itag is exact: a missing itag fails with a reselect reason, not a silent tier drop.
         val missing = DownloadSelector.select(
             catalog(formats),
             DownloadConfig(videoQuality = "1080p", videoItagHint = 999),

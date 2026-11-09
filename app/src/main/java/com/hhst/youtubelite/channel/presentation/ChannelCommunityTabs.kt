@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.channel.presentation
 
+import com.hhst.youtubelite.ui.design.labelResource
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -105,9 +108,9 @@ fun ChannelShortsTab(
             Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-shorts-append"), contentAlignment = Alignment.Center) {
                 when (append) {
                     com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                        AppText("Loading…", color = DesignTokens.Secondary)
+                        AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                     com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                        AppText("Couldn't load more shorts. Tap to retry.",
+                        AppText(stringResource(R.string.ui_couldn_t_load_more_shorts_tap_to_retry),
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadShortsNext) }.padding(8.dp),
                             color = DesignTokens.Secondary)
                     else -> Unit
@@ -139,7 +142,7 @@ private fun ShortCard(
         )
         if (!production) AppIconButton(
             AppIcon.More,
-            "More actions for ${short.title}",
+            stringResource(R.string.a11y_more_actions_for , short.title),
             modifier = Modifier.align(Alignment.TopEnd).testTag("channel-short-menu-${short.id}"),
             diameter = 40.dp,
             color = Color.White,
@@ -214,9 +217,9 @@ fun ChannelLiveTab(
             Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-live-append"), contentAlignment = Alignment.Center) {
                 when (append) {
                     com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                        AppText("Loading…", color = DesignTokens.Secondary)
+                        AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                     com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                        AppText("Couldn't load more streams. Tap to retry.",
+                        AppText(stringResource(R.string.ui_couldn_t_load_more_streams_tap_to_retry),
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadLiveNext) }.padding(8.dp),
                             color = DesignTokens.Secondary)
                     else -> Unit
@@ -276,7 +279,7 @@ private fun LiveThumbnail(video: ChannelLiveVideo, modifier: Modifier) {
                     .background(DesignTokens.Red, RoundedCornerShape(3.dp))
                     .padding(horizontal = 5.dp, vertical = 1.dp),
             ) {
-                AppText("LIVE", size = 12, line = 16, weight = FontWeight.Medium, color = Color.White)
+                AppText(stringResource(R.string.player_live), size = 12, line = 16, weight = FontWeight.Medium, color = Color.White)
             }
         } else {
             Box(
@@ -332,9 +335,9 @@ fun ChannelPostsTab(
             Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-posts-append"), contentAlignment = Alignment.Center) {
                 when (append) {
                     com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                        AppText("Loading…", color = DesignTokens.Secondary)
+                        AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                     com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                        AppText("Couldn't load more posts. Tap to retry.",
+                        AppText(stringResource(R.string.ui_couldn_t_load_more_posts_tap_to_retry),
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadPostsNext) }.padding(8.dp),
                             color = DesignTokens.Secondary)
                     else -> Unit
@@ -378,7 +381,7 @@ private fun PostCard(
             }
             Box(Modifier.size(width = 44.dp, height = 43.dp)) {
                 if (!production) AppIconButton(
-                    AppIcon.More, "Post actions",
+                    AppIcon.More, stringResource(R.string.a11y_post_actions),
                     modifier = Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)
                         .testTag("channel-post-menu-${post.identity.postId}"),
                 ) { onAction(ChannelAction.OpenPostMenu(post.identity)) }
@@ -406,7 +409,7 @@ private fun PostCard(
                 ) {
                     AppText("...", size = 16, line = 22, color = DesignTokens.Secondary)
                     AppText(
-                        "Read more",
+                        stringResource(R.string.ui_read_more),
                         size = 16, line = 22, weight = FontWeight.Medium,
                         color = DesignTokens.Secondary,
                     )
@@ -419,7 +422,7 @@ private fun PostCard(
                 horizontalArrangement = Arrangement.End,
             ) {
                 AppText(
-                    "Show less",
+                    stringResource(R.string.ui_show_less),
                     Modifier.clickable(role = Role.Button) {
                         onAction(ChannelAction.TogglePostExpanded(post.identity))
                     }.testTag("channel-post-show-less-${post.identity.postId}"),
@@ -453,7 +456,7 @@ private fun PostCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AppIconButton(
-                AppIcon.Like, "Like post", modifier = Modifier.testTag("channel-post-like-${post.identity.postId}").semantics { selected = rating == VideoRating.Like },
+                AppIcon.Like, stringResource(R.string.a11y_like_post), modifier = Modifier.testTag("channel-post-like-${post.identity.postId}").semantics { selected = rating == VideoRating.Like },
                 diameter = 40.dp,
                 enabled = pending == null, pending = pending == PostDetailAction.Like,
                 background = if (rating == VideoRating.Like) DesignTokens.Red.copy(alpha = 0.12f) else Color.Transparent,
@@ -461,7 +464,7 @@ private fun PostCard(
             ) { rate(true) }
             AppText(interaction?.post?.likes ?: post.likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
             AppIconButton(
-                AppIcon.Dislike, "Dislike post",
+                AppIcon.Dislike, stringResource(R.string.a11y_dislike_post),
                 modifier = Modifier.testTag("channel-post-dislike-${post.identity.postId}").semantics { selected = rating == VideoRating.Dislike },
                 diameter = 40.dp,
                 enabled = pending == null, pending = pending == PostDetailAction.Dislike,
@@ -506,7 +509,7 @@ private fun ChannelSortChips(
                     contentAlignment = Alignment.Center,
                 ) {
                     AppText(
-                        option.label, size = 14, line = 20, weight = FontWeight.Medium,
+                        stringResource(option.labelResource), size = 14, line = 20, weight = FontWeight.Medium,
                         color = if (option == selected) DesignTokens.Background else DesignTokens.Ink,
                     )
                 }
@@ -515,7 +518,7 @@ private fun ChannelSortChips(
         // No server sort lane exists for shorts/live: say so instead of implying a global order.
         if (selected != ChannelSortOption.Latest) {
             AppText(
-                "Sorted within loaded items only",
+                stringResource(R.string.ui_sorted_within_loaded_items_only),
                 Modifier.padding(start = 16.dp, top = 6.dp)
                     .testTag("channel-${tab.name.lowercase()}-sort-scope"),
                 size = 12, line = 16, color = DesignTokens.Secondary,
@@ -548,18 +551,18 @@ private fun SectionStatus(
             )
             ChannelSection.Empty -> AppText(
                 when (tab) {
-                    ChannelTab.Shorts -> "No Shorts yet"
-                    ChannelTab.Live -> "No live streams yet"
-                    else -> "No posts yet"
+                    ChannelTab.Shorts -> stringResource(R.string.ui_no_shorts_yet)
+                    ChannelTab.Live -> stringResource(R.string.ui_no_live_streams_yet)
+                    else -> stringResource(R.string.ui_no_posts_yet)
                 },
                 size = 16, line = 22, color = DesignTokens.Secondary,
             )
             ChannelSection.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 AppText(
                     when (tab) {
-                        ChannelTab.Shorts -> "Shorts could not be loaded."
-                        ChannelTab.Live -> "Live streams could not be loaded."
-                        else -> "Posts could not be loaded."
+                        ChannelTab.Shorts -> stringResource(R.string.ui_shorts_could_not_be_loaded)
+                        ChannelTab.Live -> stringResource(R.string.ui_live_streams_could_not_be_loaded)
+                        else -> stringResource(R.string.ui_posts_could_not_be_loaded)
                     },
                     size = 16, line = 22, color = DesignTokens.Secondary,
                 )
@@ -570,7 +573,7 @@ private fun SectionStatus(
                         .padding(horizontal = 20.dp).testTag("channel-$key-retry"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
+                    AppText(stringResource(R.string.retry), size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
                 }
             }
             is ChannelSection.Ready -> Unit
@@ -588,23 +591,23 @@ fun ChannelCommunityMenuSheets(
             items = ChannelShortMenuAction.entries.map {
                 MenuSheetItem(
                     icon = if (it == ChannelShortMenuAction.NotInterested) AppIcon.Block else AppIcon.Feedback,
-                    label = it.label,
+                    label = stringResource(it.labelResource),
                     tag = "channel-short-menu-${it.name.lowercase()}",
                 )
             },
             onDismiss = { onAction(ChannelAction.CloseOverlay) },
             onSelect = { index -> onAction(ChannelAction.SelectShortMenu(ChannelShortMenuAction.entries[index])) },
             tag = "channel-short-menu",
-            paneTitle = "Short actions",
+            paneTitle = stringResource(R.string.ui_short_actions),
         )
         is ChannelOverlay.PostMenu -> MenuBottomSheet(
             items = PostMenuAction.entries.map {
-                MenuSheetItem(icon = AppIcon.Report, label = it.label, tag = "channel-post-menu-${it.name.lowercase()}")
+                MenuSheetItem(icon = AppIcon.Report, label = stringResource(it.labelResource), tag = "channel-post-menu-${it.name.lowercase()}")
             },
             onDismiss = { onAction(ChannelAction.CloseOverlay) },
             onSelect = { index -> onAction(ChannelAction.SelectPostMenu(PostMenuAction.entries[index])) },
             tag = "channel-post-menu-sheet",
-            paneTitle = "Post actions",
+            paneTitle = stringResource(R.string.a11y_post_actions),
         )
         else -> Unit
     }

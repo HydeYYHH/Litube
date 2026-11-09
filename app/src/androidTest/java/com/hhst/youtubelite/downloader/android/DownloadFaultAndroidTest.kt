@@ -535,8 +535,7 @@ class DownloadFaultAndroidTest {
 
     private fun waitDownloadReady() {
         // The media runtime is opt-in and starts with the first download entry
-        // point. Tests in this class may run before any such activity, so start
-        // it explicitly instead of relying on cross-test ordering.
+        // point; start it explicitly rather than relying on cross-test ordering.
         (ApplicationProvider.getApplicationContext<Context>() as com.hhst.youtubelite.App)
             .startMediaRuntime()
         kotlinx.coroutines.runBlocking {

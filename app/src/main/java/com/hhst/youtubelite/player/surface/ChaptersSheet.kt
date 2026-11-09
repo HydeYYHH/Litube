@@ -49,13 +49,6 @@ import com.hhst.youtubelite.extractor.Chapter
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager
 import com.hhst.youtubelite.ui.theme.SettingsTokens
 
-/**
- * Current-chapter entry in the bottom info band, next to the position text:
- * chapter title (or the localized Chapters label when the video has only
- * skippable segments), a small chevron, and a light translucent background.
- * Hidden when the video has neither chapters nor skippable segments so the
- * entry never dead-ends.
- */
 @Composable
 fun ChapterEntryChip(
     chapters: List<Chapter>,
@@ -66,8 +59,7 @@ fun ChapterEntryChip(
     textSizeSp: Int = PlayerUi.CHROME_TEXT_SP,
 ) {
     if (chapters.isEmpty() && !hasSegments) return
-    // 4 Hz ticks recompute the index; the chip recomposes only when the
-    // resolved label actually changes.
+    // 4 Hz ticks recompute the index; the chip recomposes only when the label changes.
     val label by remember(chapters, positionState) {
         derivedStateOf {
             val index = PlayerUi.chapterIndexAt(chapters, positionState.value)
@@ -107,12 +99,6 @@ fun ChapterEntryChip(
     }
 }
 
-/**
- * Chapters sheet body: real chapters first, then a clearly separated
- * skippable-segments section (SponsorBlock ranges are not chapters).
- * Lives inside [PlayerModalSheet], which supplies the 16 dp top corners.
- * [onSeek] receives the target and the row label (for the jump hint).
- */
 @Composable
 fun ChaptersSheet(
     chapters: List<Chapter>,
@@ -159,7 +145,7 @@ fun ChaptersSheet(
         )
     }
     val listState = rememberLazyListState()
-    // Locate the current chapter once on open; later scrolls are the user's.
+    // Locate once on open; later scrolls are the user's.
     LaunchedEffect(Unit) {
         val index = PlayerUi.chapterIndexAt(chapters, positionState.value)
         if (index > 0) listState.scrollToItem(index)

@@ -35,7 +35,7 @@ class YoutubeWebSession(
     private val configuration: JsonObject = configuration
     val webClientVersion: String?
 
-    /** The web player requests content-bound streaming poTokens for this session. */
+    /** Web player requests content-bound streaming poTokens for this session. */
     val videoBoundGvs: Boolean
 
     init {

@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.ui.design
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.Animatable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
@@ -84,7 +85,7 @@ fun MenuBottomSheet(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     tag: String = "video-menu",
-    paneTitle: String = "Video actions",
+    paneTitle: String = stringResource(R.string.ui_video_actions),
     sheetWidth: Dp? = null,
     bottomPadding: Dp = MenuSheetLayout.BottomInset.dp,
     rowStart: Dp = MenuSheetLayout.RowStart.dp,
@@ -96,6 +97,7 @@ fun MenuBottomSheet(
     fillWatchHeight: Boolean = true,
 ) {
     val density = LocalDensity.current.density
+    val closeMenuLabel = stringResource(R.string.a11y_close_menu)
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(0f) }
     var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
@@ -152,7 +154,7 @@ fun MenuBottomSheet(
                 .background(DesignTokens.Panel)
                 .testTag(tag).semantics {
                     this.paneTitle = paneTitle
-                    customActions = listOf(CustomAccessibilityAction("Close menu") { if (dismissEnabled) { finish(); true } else false })
+                    customActions = listOf(CustomAccessibilityAction(closeMenuLabel) { if (dismissEnabled) { finish(); true } else false })
                 },
         ) {
             Box(

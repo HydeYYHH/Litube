@@ -28,7 +28,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Voice search. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission
@@ -75,8 +74,7 @@
             android:name=".navigation.ContentLinkActivity"
             android:exported="true"
             android:theme="@style/Theme.App.Home">
-            <!-- Open watch links in-app. autoVerify=false is explicit: this
-                 app does not own the domains, so no App Link verification. -->
+            <!-- autoVerify=false: this app does not own the domains, so no App Link verification. -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -88,9 +86,8 @@
                 <data android:host="music.youtube.com" />
                 <data android:host="youtu.be" />
             </intent-filter>
-            <!-- Share sheet "Open with". text/plain is intentionally broad:
-                 intent filters cannot match URL content, so non-link shares
-                 are handled by the home screen when no content link is present. -->
+            <!-- text/plain is intentionally broad: intent filters cannot match URL content;
+                 non-link shares are handled by the home screen. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

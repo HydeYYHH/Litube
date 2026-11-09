@@ -8,7 +8,7 @@ data class SearchPage(val query: String, val results: List<SearchResult>,
 
 data class SearchChannel(val id: String, val name: String, val handle: String, val subscribers: String, val artwork: String)
 
-/** Complete partial renderers without rolling back resolved fields or menu capabilities. */
+/** Completes partial renderers without rolling back resolved fields or menu capabilities. */
 fun SearchResult.withMissingDisplayFrom(other: SearchResult): SearchResult = copy(
     title = title.ifBlank { other.title }, channel = channel.ifBlank { other.channel },
     channelId = channelId.ifBlank { other.channelId }, views = views.ifBlank { other.views },
@@ -73,18 +73,17 @@ sealed interface SearchOverlay {
 }
 
 interface SearchRepository {
-    /** Optional display metadata for cards whose search renderer omitted fields. */
+    /** Display metadata for cards whose search renderer omitted fields. */
     suspend fun metadata(result: SearchResult): SearchResult = result
     suspend fun next(query: String, filters: SearchFilters, cursor: String): SearchPage = SearchPage(query, emptyList())
     suspend fun search(query: String, filters: SearchFilters = SearchFilters()): SearchPage
 
     /**
-     * Resolves the menu's feedback capabilities for one card, reading its own get_panel endpoint
-     * when it carries one; results without an endpoint return unchanged (inline tokens already set).
+     * Resolves menu feedback capabilities for one card, reading its own get_panel endpoint when
+     * present; results without an endpoint return unchanged (inline tokens already set).
      */
     suspend fun menu(result: SearchResult): SearchResult = result
 
-    /** Sends the card's feedback token for a menu operation the server classified semantically. */
     suspend fun feedback(result: SearchResult, action: SearchVideoMenuAction) {}
 }
 
@@ -108,14 +107,14 @@ data class SearchUiState(
     val filtersOpen: Boolean = false,
     /** Production mode: account writes run in the ViewModel and the feedback-only menu rows hide. */
     val live: Boolean = false,
-    /** Set while the open result menu's deferred get_panel read is in flight. */
+    /** Deferred get_panel read in flight for the open result menu. */
     val menuLoading: Boolean = false,
-    /** Set when that read failed; the sheet offers one retry row. */
+    /** That read failed; the sheet offers one retry row. */
     val menuFailed: Boolean = false,
     /** Confirmed subscription state per channel, applied only after the server confirms. */
     val subscriptions: Map<String, Boolean> = emptyMap(),
     val subscriptionsPending: Set<String> = emptySet(),
-    /** Set when a read came back as a `/sorry` traffic challenge; loaded rows stay visible. */
+    /** Read returned a `/sorry` traffic challenge; loaded rows stay visible. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
 ) {
     val searchOpen: Boolean get() = overlay == SearchOverlay.Search

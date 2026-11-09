@@ -13,9 +13,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Layer-2 acceptance for the DLNA route on the real UPnPCast stack. Renderers are not
- * part of CI; these tests pin the graceful no-renderer behavior. End-to-end playback
- * to a TV is a manual acceptance item.
+ * Layer-2 acceptance for the DLNA route on the real UPnPCast stack. Renderers are
+ * not part of CI; these tests pin the graceful no-renderer behavior. End-to-end
+ * playback to a TV is a manual acceptance item.
  */
 @RunWith(AndroidJUnit4::class)
 class DlnaRouteAndroidTest {

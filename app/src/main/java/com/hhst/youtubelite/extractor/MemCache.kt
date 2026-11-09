@@ -3,11 +3,8 @@ package com.hhst.youtubelite.extractor
 import android.util.LruCache
 
 /**
- * In-memory LRU [Cache] for player-facing Innertube results.
- *
- * Entries carry an absolute expiry; writes through the [Cache] interface use
- * the shared [CacheTtl], while [LayeredCache] promotions inherit the disk
- * entry's remaining lifetime (see there for why).
+ * In-memory LRU [Cache]: interface writes use the shared [CacheTtl];
+ * [LayeredCache] promotions inherit the disk entry's remaining lifetime.
  */
 class MemCache(
     maxEntries: Int = DEFAULT_MAX,
@@ -24,7 +21,6 @@ class MemCache(
         putMetadata(videoId, metadata, System.currentTimeMillis() + CacheTtl.METADATA_MS)
     }
 
-    /** Promotion entry point: [expiresAt] is inherited, not restarted. */
     fun putMetadata(videoId: String, metadata: Metadata, expiresAt: Long) {
         synchronized(meta) { meta.put(videoId, Boxed(metadata, expiresAt)) }
     }
@@ -36,7 +32,6 @@ class MemCache(
         putStream(videoId, stream, System.currentTimeMillis() + CacheTtl.STREAM_MS)
     }
 
-    /** Promotion entry point: [expiresAt] is inherited, not restarted. */
     fun putStream(videoId: String, stream: Stream, expiresAt: Long) {
         synchronized(streams) { streams.put(videoId, Boxed(stream, expiresAt)) }
     }
@@ -52,7 +47,6 @@ class MemCache(
         putChapters(videoId, chapters, System.currentTimeMillis() + CacheTtl.CHAPTERS_MS)
     }
 
-    /** Promotion entry point: [expiresAt] is inherited, not restarted. */
     fun putChapters(videoId: String, chapters: ChapterList, expiresAt: Long) {
         synchronized(chapterLists) { chapterLists.put(videoId, Boxed(chapters, expiresAt)) }
     }

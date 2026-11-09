@@ -1,14 +1,10 @@
 package com.hhst.youtubelite.player.surface
 
 /**
- * Auto-fullscreen rules, kept separate from the sensor listener.
- *
- * Enter: watch is visible, system auto-rotate is on, the phone is physically
- * landscape, and nothing (mini / PiP / cast / lock / a fresh manual exit)
- * is holding us in the embedded player.
- *
- * Exit: only the auto-entered session leaves on physical portrait — a tap or
- * swipe into fullscreen stays until the user leaves it.
+ * Enter: watch visible, system auto-rotate on, physical landscape, and nothing
+ * (mini / PiP / cast / lock / a fresh manual exit) holds the embedded player.
+ * Exit: only the auto-entered session leaves on physical portrait — manual
+ * fullscreen stays until the user leaves it.
  */
 object AutoFullscreen {
 

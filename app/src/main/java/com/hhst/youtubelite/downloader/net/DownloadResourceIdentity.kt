@@ -5,11 +5,9 @@ import java.security.MessageDigest
 import com.hhst.youtubelite.extractor.Format
 
 /**
- * Stable media-object identity for a download component.
- *
- * Expired googlevideo URLs (`expire`, `sig`, `pot`, `rn`, `range`) are not
- * identity. Playback's SimpleCache key (`yt:v2:…` under the `player/` dir) is
- * also not a download identity.
+ * Stable media-object identity for a download component. Expired googlevideo URL
+ * params (`expire`, `sig`, `pot`, `rn`, `range`) are not identity, and playback's
+ * SimpleCache key (`yt:v2:…` under `player/`) is not a download identity.
  */
 object DownloadResourceIdentity {
     const val PREFIX = "dl:"

@@ -77,9 +77,8 @@ sealed interface PlayerAnchorMenu {
 }
 
 /**
- * Typed dropdown row: [value] is handed back by the menu on pick (null for
- * "Auto"/default rows), [label] is displayed, and [enabled] = false renders a
- * non-clickable row.
+ * Typed dropdown row: [value] is handed back on pick (null for "Auto"/default);
+ * [label] is displayed; [enabled] = false renders a non-clickable row.
  */
 internal class OptionRow<T>(
     val value: T?,
@@ -212,8 +211,7 @@ internal fun PlayerModalSheet(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        // Keep the sheet's anchor constraints at window size. Sizing its outer
-        // modifier would make Material calculate an expanded anchor at zero.
+        // Keep anchor constraints at window size: sizing the outer modifier would make Material calculate an expanded anchor at zero.
         Column((if (expanded) Modifier.fillMaxHeight(.94f) else Modifier)
             .fillMaxWidth().watchSheetHeight().navigationBarsPadding()) {
             AppSheetHandle()
@@ -363,9 +361,8 @@ private fun MoreDivider() {
 }
 
 /**
- * Subpage of [PlayerSheet.More]: one header (back + title + close) and a
- * radio list. It replaces the More rows in the same sheet instance, so there
- * is never a popup stacked over an open sheet. System back returns to More.
+ * Subpage of [PlayerSheet.More]: one header (back + title + close) and a radio list.
+ * Replaces More rows in the same sheet instance so no popup stacks over an open sheet.
  */
 @Composable
 private fun <T> OptionSheet(

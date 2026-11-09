@@ -75,12 +75,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import org.koin.compose.koinInject
 
-/** Fullscreen swipe: the window travels 40% of its height for a full pass. */
 private const val SWIPE_TRAVEL_FRACTION = 0.4f
 
 private const val MINI_ENTRY_DURATION_MS = 320
 private const val WATCH_ENTRY_DURATION_MS = 300
-// Material emphasized's two segments move decisively, then settle without overshoot.
+// Material emphasized: decisive move, then settle without overshoot.
 private val WindowEntryEasing = com.hhst.youtubelite.ui.design.AppMotion.Spatial
 
 internal val LocalMiniPlayerHandle = compositionLocalOf<MiniPlayerHandle?> { null }
@@ -101,7 +100,7 @@ private class WindowMotionClock(val durationMs: Int, val easing: Easing) {
 
 class FullscreenSwipeHandle {
     var drag: (Float) -> Unit = {}
-    /** Positive downward travel of the content container, independent of player swipes. */
+    /** Content-container pull; independent of player swipes. */
     var dragContentPull: (Float) -> Unit = {}
     var horizontal: Float = 0f
     var pictureScale by mutableFloatStateOf(1f)
@@ -110,9 +109,9 @@ class FullscreenSwipeHandle {
     internal var pictureAspectRatio = 16f / 9f
     internal var pictureResizeMode = ResizeMode.Fit
     var end: (Boolean) -> Unit = {}
-    /** Finger released mid-swipe: distance and vertical velocity (px/s, y-down). True when this host consumed it. */
+    /** Distance + velocity (px/s, y-down); true when this host consumed the release. */
     var release: (Float, Float) -> Boolean = { _, _ -> false }
-    /** Content below the player uses the same animation but preserves orientation. */
+    /** Same release contract for content pull; preserves orientation. */
     var releaseContentPull: (Float, Float) -> Boolean = { _, _ -> false }
 }
 
@@ -130,10 +129,6 @@ internal class MiniPlayerHandle {
     var dismiss: () -> Unit = {}
 }
 
-/**
- * In-app mini-player window: dock, pinch-resize, drag, snap, persist,
- * a drop target accepts an explicit drag release.
- */
 @Composable
 fun MiniPlayerWindow(
     screenWidthDp: Int,
@@ -152,29 +147,29 @@ fun MiniPlayerWindow(
     embeddedLeftDp: Int = 0,
     embeddedWidthDp: Int = screenWidthDp,
     topInsetDp: Int = 0,
-    /** A committed fullscreen swipe reports its target mode here. */
+    /** Committed fullscreen swipe → target mode. */
     onFullscreenSwipe: (Boolean) -> Unit = {},
-    /** Downward exit restores the state preceding fullscreen entry. */
+    /** Downward exit restores pre-fullscreen state. */
     onFullscreenSwipeRestore: () -> Unit = { onFullscreenSwipe(false) },
     onContentFullscreenPull: (Boolean) -> Unit = {},
-    /** A committed embedded downward swipe asks for the mini player. */
+    /** Committed embedded downward swipe → mini player. */
     onMiniSwipe: () -> Unit = {},
     onMiniDragChanged: (Boolean) -> Unit = {},
     onMiniDragProgress: (Float) -> Unit = {},
     onMiniSwipeFinished: () -> Unit = {},
-    /** A local mini transition settled, including programmatic Back. Bounds are in window coordinates. */
+    /** Local mini transition settled (incl. programmatic Back); bounds in window coords. */
     onMiniSettled: (Rect) -> Unit = {},
-    /** A navigation handoff starts on the destination at the outgoing video bounds. */
+    /** Navigation handoff starts on destination at outgoing video bounds. */
     animateFromBounds: Rect? = null,
-    /** The destination window is visible and can present the collapse. */
+    /** Destination window visible; can present the collapse. */
     entryAnimationReady: Boolean = true,
     onBoundsChanged: (Rect) -> Unit = {},
     initialBounds: Rect? = null,
     entryKey: Int = 0,
     onReadyForDisplay: () -> Unit = {},
-    /** Shares the actual navigation clock with the surrounding page. */
+    /** Shares navigation clock with the surrounding page. */
     onEntryProgress: (Float) -> Unit = {},
-    /** Shares the picture's actual embedded/fullscreen geometry with the surrounding page. */
+    /** Shares picture geometry with the surrounding page. */
     onFullscreenProgress: (Float) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -192,9 +187,8 @@ fun MiniPlayerWindow(
     }
     val spec = MiniPlayerLayout.computeSpec(screenWidthDp, bottomInsetDp, widthOverrideDp)
     var measuredParentSize by remember { mutableStateOf(IntSize.Zero) }
-    // Effects must use the same bounds as restX/restY from this composition.
-    // A size callback can otherwise update the state before an effect starts,
-    // while its captured dock coordinates still belong to the zero-size frame.
+    // Effects must use this composition's restX/restY: a size callback can update
+    // state before an effect starts while its captured dock is still zero-size.
     val parentSize = measuredParentSize
     var dragX by remember { mutableFloatStateOf(with(density) { loaded.translationXDp.dp.toPx() }) }
     var dragY by remember { mutableFloatStateOf(with(density) { loaded.translationYDp.dp.toPx() }) }
@@ -202,13 +196,11 @@ fun MiniPlayerWindow(
     var originY by remember { mutableFloatStateOf(0f) }
     var pinchStartWidthDp by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    // The snap animation keeps writing dragX/dragY for its whole duration; a
-    // new grab during it must cancel the job, or the finish block yanks the
-    // window back to the old dock point and persists that.
+    // Snap keeps writing dragX/dragY; a new grab must cancel the job or the
+    // finish block yanks the window back to the old dock and persists it.
     var snapJob by remember { mutableStateOf<Job?>(null) }
-    // The window exits only after a release in the close target; then
-    // [onDismiss] tears the surface down (it leaves composition, so no
-    // drag/pinch/persist may run in between).
+    // Exit only after release in the close target; then onDismiss tears down
+    // the surface (leaves composition — no drag/pinch/persist in between).
     var dismissing by remember { mutableStateOf(false) }
     var dragAccepted by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
@@ -255,8 +247,8 @@ fun MiniPlayerWindow(
     var localMiniProgress by remember { mutableFloatStateOf(0f) }
     var entryPending by remember(entryKey) { mutableStateOf(initialBounds != null && !mini || animateFromBounds != null && mini) }
     var entryProgress by remember(entryKey) { mutableFloatStateOf(if (entryPending) 0f else 1f) }
-    // The animation clock can run ahead of the parent's last displayed frame.
-    // Back reverses that displayed frame, including its backdrop/label opacity.
+    // Animation clock can run ahead of the parent's last displayed frame; Back
+    // reverses that frame, including backdrop/label opacity.
     val publishedEntryProgress = remember(entryKey) { floatArrayOf(entryProgress) }
     var entryLaidOut by remember(entryKey) { mutableStateOf(false) }
     var entryDrawn by remember(entryKey) { mutableStateOf(false) }
@@ -311,7 +303,7 @@ fun MiniPlayerWindow(
         (parentSize.width + closeWidth) / 2f, closeBottom)
 
     fun persist(x: Float, y: Float) {
-        // Keep the normal dock for restoring watch/navigation or a new process.
+        // Persist the normal dock for restore after navigation or process death.
         store.save(spec.widthDp, snapMiniX(x) / density.density, y / density.density)
     }
 
@@ -320,12 +312,11 @@ fun MiniPlayerWindow(
         dragAccepted = false
         dragging = false
         closeArmed = false
-        // A layout change invalidates the snap's captured width and dock.
-        // In particular a pinch ending in the same frame must not let its
-        // older snap completion overwrite the new stored width.
+        // Layout change invalidates the snap's captured width/dock; a pinch ending
+        // this frame must not let an older snap completion overwrite the width.
         snapJob?.cancel()
         snapJob = null
-        // Other window modes must not clamp the saved placement to their bounds.
+        // Non-mini modes must not clamp the saved placement to their bounds.
         if (!mini) {
             collapsedSide = null
             return@LaunchedEffect
@@ -341,10 +332,8 @@ fun MiniPlayerWindow(
         val y = clampMiniY(dragY)
         dragX = x
         dragY = y
-        // A pinch drives a width change per frame: keep re-docking/clamping
-        // continuously, but persist only when no gesture holds the window —
-        // the drag/pinch end handler persists the final placement, so the
-        // store is not written on every pointer event.
+        // Pinch re-docks/clamps every frame but persists only when no gesture holds
+        // the window — the end handler writes the final placement, not each event.
         if (mini && pinchStartWidthDp == 0) persist(x, y)
     }
 
@@ -357,13 +346,12 @@ fun MiniPlayerWindow(
     val latestTarget by rememberUpdatedState(target)
     val parentOrientation = if (parentSize == IntSize.Zero) -1 else if (parentSize.width > parentSize.height) 1 else 0
     val targetReady = target.width > 0 && target.height > 0 && parentSize != IntSize.Zero
-    // Only a navigation/gesture or an actual rotation starts a new clock.
-    // System-bar and slot updates amend the destination within that clock.
+    // Only navigation/gesture or actual rotation starts a new clock; system-bar
+    // and slot updates amend the destination within that clock.
     LaunchedEffect(mini, fillsWindow, targetReady, parentOrientation, swiping, swipeRelease, fullscreenSwipeEnabled, entryKey, windowPositioned, placementRestored) {
         if (parentSize.width <= 0 || parentSize.height <= 0) return@LaunchedEffect
-        // Watch publishes its embedded player bounds after its first layout.
-        // Do not consume the origin or finish the page reveal against a
-        // temporary zero-height destination.
+        // Watch publishes embedded bounds after first layout; do not consume the
+        // origin or finish the page reveal against a temporary zero-height target.
         if (target.width <= 0 || target.height <= 0) return@LaunchedEffect
         if ((!mini && initialBounds != null || mini && animateFromBounds != null) && !windowPositioned) return@LaunchedEffect
         if (mini && animateFromBounds != null && (!windowPositioned || !placementRestored)) return@LaunchedEffect
@@ -374,8 +362,8 @@ fun MiniPlayerWindow(
         awaitingFullscreen = null
         val changed = previousMini != mini
         val windowChanged = previousFillsWindow != fillsWindow
-        // Android owns orientation changes. Insets settling during the same
-        // orientation instead retarget the current picture transition.
+        // Android owns orientation; same-orientation inset settling retargets the
+        // current picture transition instead.
         val parentChanged = previousParentSize != parentSize
         val sameOrientation = (previousParentSize.width > previousParentSize.height) == (parentSize.width > parentSize.height)
         val rotatedDuringMotion = parentChanged && !sameOrientation && transitionRunning &&
@@ -394,20 +382,20 @@ fun MiniPlayerWindow(
         val displayed = displayedViewport[0]
         val previousFrame = if ((windowChanged || changed || rotatedDuringMotion) && transitionRunning && displayed.width > 0f && displayed.height > 0f)
             displayed else viewport
-        // The live Surface stays attached. Carry its visible rectangle into the
-        // new window coordinates instead of snapping to the fullscreen/slot endpoint.
+        // Live Surface stays attached: carry its visible rect into the new window
+        // coords rather than snapping to the fullscreen/slot endpoint.
         val from = if (rotatedDuringMotion) Rect(
             previousFrame.left * parentSize.width / oldParentSize.width,
             previousFrame.top * parentSize.height / oldParentSize.height,
             previousFrame.right * parentSize.width / oldParentSize.width,
             previousFrame.bottom * parentSize.height / oldParentSize.height,
         ) else previousFrame
-        // The animation clock can be one frame ahead of layout. Reversing from
-        // that future rectangle would first move farther in the old direction.
+        // Animation clock can be one frame ahead of layout; reversing from that
+        // future rect would first move farther in the old direction.
         if (from != viewport) viewport = from
         suspend fun awaitDrawnFrame(target: () -> Rect): DrawnWindowFrame {
-            // A new request invalidates drawing even when the origin's bounds
-            // did not change. It belongs to this effect, not an older entry.
+            // A new request invalidates drawing even when the origin's bounds did not
+            // change; it belongs to this effect, not an older entry.
             val request = WindowDrawRequest(target)
             pendingDrawRequest = request
             return try {
@@ -430,8 +418,8 @@ fun MiniPlayerWindow(
             Animatable(startFraction).animateTo(1f, tween(
                 (clock.durationMs * (1f - startFraction)).roundToInt(), easing = androidx.compose.animation.core.LinearEasing,
             )) {
-                // A grab takes ownership immediately, before recomposition can
-                // cancel this effect on the next frame.
+                // A grab takes ownership immediately, before recomposition can cancel
+                // this effect on the next frame.
                 if (swiping) return@animateTo
                 clock.fraction = value
                 val progress = (clock.easing.transform(value) - startEased) / (1f - startEased).coerceAtLeast(.00001f)
@@ -451,8 +439,8 @@ fun MiniPlayerWindow(
         }
         if (changed && mini) {
             entryProgress = minOf(entryProgress, publishedEntryProgress[0])
-            // Keep this pending across layout/inset restarts. Back uses the
-            // same live Surface as a swipe, then navigates only after docking.
+            // Keep pending across layout/inset restarts; Back uses the same live Surface
+            // as a swipe, then navigates only after docking.
             miniSettlePending = true
             localMiniTransition = true
             localMiniProgress = if (swipeToMini) {
@@ -462,12 +450,12 @@ fun MiniPlayerWindow(
         val entering = entryPending && !fillsWindow &&
             (mini && animateFromBounds != null || !mini && initialBounds != null)
         entryPending = false
-        // Insets can settle after the destination's first layout. Keep a
-        // navigation collapse running across that resize instead of docking it.
+        // Insets can settle after first layout; keep a navigation collapse running
+        // across that resize instead of docking it.
         if (!entering && !mini && pictureSwipe && (!swipeStartedFullscreen || fillsWindow) &&
             fullscreenSwipeEnabled && transitionRunning) {
-            // Expand the window immediately, while preserving the picture's visible
-            // origin. Only its pixels travel to the normal fullscreen destination.
+            // Expand immediately while preserving the picture's visible origin; only
+            // its pixels travel to the normal fullscreen destination.
             val oldPictureWidth = FullscreenSwipeMotion.pictureWidth(from.width, from.height,
                 fullscreenSwipe.pictureAspectRatio, fullscreenSwipe.pictureResizeMode)
             val newPictureWidth = FullscreenSwipeMotion.pictureWidth(target.width, target.height,
@@ -497,10 +485,9 @@ fun MiniPlayerWindow(
             (changed || windowChanged || transitionRunning) && from.width > 0 && from.height > 0 &&
             (from != target || fullscreenSwipe.pictureScale != 1f ||
                 fullscreenSwipe.pictureTranslationX != 0f || fullscreenSwipe.pictureTranslationY != 0f)) {
-            // A mode reversal starts at the displayed rectangle. Layout changes
-            // during this flight keep its clock and the original video buffer.
-            // A confirmed downward exit restores the normal window on this same
-            // clock, carrying its held picture offset back into the embedded slot.
+            // Mode reversal starts at the displayed rect; layout changes during this
+            // flight keep its clock and the original video buffer. A confirmed
+            // downward exit restores the normal window on this same clock.
             transitionToMini = changed && mini
             transitionRunning = true
             val startScale = fullscreenSwipe.pictureScale
@@ -509,8 +496,8 @@ fun MiniPlayerWindow(
             val startProgress = entryProgress
             val startMiniProgress = localMiniProgress
             if (mini && localMiniTransition) {
-                // A settled Watch has entryProgress == 1 and no entry layout
-                // gate. Do not spend its Back clock before drawing the origin.
+                // Settled Watch has entryProgress == 1 and no entry layout gate; do not
+                // spend its Back clock before drawing the origin.
                 snapshotFlow { hostReady }.first { it }
                 awaitDrawnFrame { from }
             } else if (startProgress < 1f) snapshotFlow { entryDrawn && hostReady }.first { it }
@@ -531,8 +518,8 @@ fun MiniPlayerWindow(
                 fullscreenSwipe.pictureScale = startScale + (1f - startScale) * progress
                 fullscreenSwipe.pictureTranslationX = startTranslationX * (1f - progress)
                 fullscreenSwipe.pictureTranslationY = startTranslation * (1f - progress)
-                // Reversing an unfinished entry must never brighten/reveal the
-                // page while the video is already travelling back to mini.
+                // Reversing an unfinished entry must never brighten/reveal the page while
+                // the video is already travelling back to mini.
                 if (startProgress < 1f && !mini) entryProgress = startProgress + (1f - startProgress) * progress
                 if (mini && localMiniTransition) localMiniProgress = startMiniProgress + (1f - startMiniProgress) * progress
             }
@@ -540,11 +527,11 @@ fun MiniPlayerWindow(
             transitionRunning = true
             val origin = (if (mini) requireNotNull(animateFromBounds) else requireNotNull(initialBounds))
                 .translate(-windowOffset.x, -windowOffset.y)
-            // Publish the origin before animateTo waits for its first frame;
-            // a layout update in that gap must resume from this visible rect.
+            // Publish the origin before animateTo waits for its first frame; a layout
+            // update in that gap must resume from this visible rect.
             viewport = origin
-            // Layout alone can finish behind the outgoing activity. Start the
-            // clock only after drawing the origin in the destination window.
+            // Layout alone can finish behind the outgoing activity; start the clock
+            // only after drawing the origin in the destination window.
             snapshotFlow { entryDrawn && hostReady }.first { it }
             val duration = if (mini) MINI_ENTRY_DURATION_MS else WATCH_ENTRY_DURATION_MS
             travel(origin, duration) { entryProgress = it }
@@ -562,15 +549,15 @@ fun MiniPlayerWindow(
         val miniSettledFrame = if (mini && miniSettlePending) {
             var drawn: DrawnWindowFrame
             do {
-                // Insets may retarget the dock while Android is waiting to
-                // draw. Confirm the latest layout, without starting a new clock.
+                // Insets may retarget the dock while Android is waiting to draw; confirm
+                // the latest layout without starting a new clock.
                 drawn = awaitDrawnFrame { latestTarget }
                 currentCoroutineContext().ensureActive()
             } while (drawn.viewport != latestTarget)
             drawn
         } else null
-        // Either callback can hand the Surface to another host. Both must wait
-        // for the final dock to draw in this window, in their original order.
+        // Either callback can hand the Surface to another host; both must wait for
+        // the final dock to draw in this window, in their original order.
         if (mini && miniSwipeCommitted) {
             miniSwipeCommitted = false
             onMiniSwipeFinished()
@@ -588,8 +575,8 @@ fun MiniPlayerWindow(
     }
 
     LaunchedEffect(target, parentSize, windowOffset) {
-        // Dragging/docking while idle still tracks layout immediately. Do not
-        // overwrite a mode change before its transition effect claims it.
+        // Idle dragging/docking still tracks layout immediately; do not overwrite
+        // a mode change before its transition effect claims it.
         if (!transitionRunning && !swiping && !entryPending && previousMini == mini &&
             previousFillsWindow == fillsWindow && targetReady) {
             viewport = target
@@ -601,8 +588,8 @@ fun MiniPlayerWindow(
     val revealingSource = mini && animateFromBounds != null ||
         (swipeToMini || localMiniTransition) && (swiping || mini || transitionRunning)
     // Read in this composition scope: the Box below can recompose its moving
-    // viewport independently. Reading only inside SideEffect would leave the
-    // surrounding page at progress zero while the video already expands.
+    // viewport independently; SideEffect-only reads would leave the page at
+    // progress zero while the video already expands.
     val reportedEntryProgress = if (mini && !previousMini) minOf(entryProgress, publishedEntryProgress[0]) else entryProgress
     val fullscreenProgress = if (mini || revealingSource || entryProgress < 1f) 0f else
         ((viewport.height - embeddedBounds.height) / (fullscreenBounds.height - embeddedBounds.height).coerceAtLeast(1f)).coerceIn(0f, 1f)
@@ -662,8 +649,8 @@ fun MiniPlayerWindow(
                     fullscreenSwipe.pictureScale = swipeOriginScale + FullscreenSwipeMotion.pictureZoom(directed, embeddedBounds.height, density.density)
                 }
             } else {
-                // The container expands with a content pull and contracts on a
-                // fullscreen swipe along the same path. Player entry keeps its zoom.
+                // Container expands with a content pull and contracts on a fullscreen
+                // swipe along the same path; player entry keeps its zoom.
                 val progress = FullscreenSwipeMotion.progress(directed, swipeTravelPx(), density.density)
                 viewport = lerp(swipeOrigin, if (swipeStartedFullscreen) embeddedBounds else fullscreenBounds, progress)
                 fullscreenSwipe.pictureScale = swipeOriginScale + (1f - swipeOriginScale) * progress
@@ -758,10 +745,9 @@ fun MiniPlayerWindow(
                 }
             }
         }
-        // A plain tap also fires begin(): cancelling the snap here would
-        // freeze a mid-flight docking animation (end(false) does not resume
-        // it). The snap is cancelled on the first real DRAG move instead —
-        // see dragFromStart.
+        // A plain tap also fires begin(): cancelling the snap here would freeze a
+        // mid-flight dock (end(false) does not resume it). Cancel on the first
+        // real DRAG move instead — see dragFromStart.
         handle.begin = {
             if (mini && !dismissing && !transitionRunning) {
                 collapseCandidate = null
@@ -775,9 +761,8 @@ fun MiniPlayerWindow(
         }
         handle.dragFromStart = fun(dx, dy) {
             if (!mini || !dragAccepted || parentSize.width <= 0 || dismissing || transitionRunning) return
-            // First drag move: cancel the in-flight snap and re-anchor the
-            // origin to the CURRENT (mid-animation) position, so the drag
-            // does not jump from a stale pre-cancel origin.
+            // First drag move: cancel the in-flight snap and re-anchor origin to the
+            // CURRENT mid-animation position so the drag does not jump.
             if (snapJob != null) {
                 snapJob?.cancel()
                 snapJob = null
@@ -786,7 +771,7 @@ fun MiniPlayerWindow(
             }
             dragging = true
             val rawX = originX + dx
-            // Restoring an already folded window stays attached to the finger.
+            // Restoring a folded window stays attached to the finger.
             val resistedX = if (collapsedSide != null) rawX else GestureResistance.beyondBounds(rawX,
                 -restX, (parentSize.width - widthPx - restX).coerceAtLeast(-restX), 128f * density.density)
             dragX = resistedX.coerceIn(collapsedX(MiniPlayerLayout.CollapsedSide.LEFT),
@@ -795,7 +780,7 @@ fun MiniPlayerWindow(
                 parentSize.width, dx, dy, MiniPlayerLayout.COLLAPSE_THRESHOLD_DP * density.density)
             if (edgeThreshold.crossed(if (collapseCandidate != null) 1f else 0f, 1f))
                 haptics.perform(HapticsController.Event.GESTURE_THRESHOLD)
-            // Partial off-screen movement lets every window size reach the bottom target.
+            // Partial off-screen travel lets every window size reach the bottom target.
             dragY = (originY + dy).coerceIn(topMarginPx - restY,
                 maxOf(topMarginPx - restY, closeBounds.center.y - restY - heightPx / 2))
             val hit = MiniPlayerLayout.hitsCloseTarget(restX + dragX + widthPx / 2,
@@ -831,8 +816,8 @@ fun MiniPlayerWindow(
             snapJob?.cancel()
             val x = settledMiniX(dragX)
             val y = clampMiniY(dragY)
-            // A released drag should immediately continue toward its dock,
-            // rather than visibly stopping to accelerate from rest again.
+            // Released drag continues toward its dock rather than stopping and
+            // accelerating from rest again.
             val snapSpec = tween<Float>(motionDuration(220, motionScale), easing = LinearOutSlowInEasing)
             snapJob = scope.launch {
                 val ax = Animatable(dragX)
@@ -907,13 +892,11 @@ fun MiniPlayerWindow(
                     }
                 }
             }
-            // Wait until the parent reports its size. With restX and restY still
-            // at 0, the window would appear at the parent's top-left corner
-            // before moving to its dock.
+            // Wait until the parent reports its size; with restX/restY still 0 the
+            // window would appear at the top-left before moving to its dock.
             if (parentSize.width > 0 && parentSize.height > 0 && viewport.width > 0 && viewport.height > 0) {
-                // Card entry scales its content from the destination layout. Other
-                // modes keep their native aspect layout; the video buffer is fixed
-                // independently by SurfaceHolder, including at the landing frame.
+                // Card entry scales from the destination layout; other modes keep native
+                // aspect. SurfaceHolder fixes the video buffer independently.
                 val rounding = if (localMiniTransition && mini) {
                     1f - entryProgress * (1f - localMiniProgress)
                 } else if (!mini && initialBounds != null && entryProgress < 1f && !revealingSource) {
@@ -922,9 +905,8 @@ fun MiniPlayerWindow(
                     ((embeddedBounds.width - viewport.width) / (embeddedBounds.width - widthPx).coerceAtLeast(1f)).coerceIn(0f, 1f)
                 } else 0f
                 val corners = RoundedCornerShape((MiniPlayerLayout.CORNER_DP * rounding).dp)
-                // Only card entry scales from a known destination layout. A
-                // fullscreen/mini release must use its current native bounds in
-                // this composition, before the animation effect starts.
+                // Only card entry scales from a known destination layout; fullscreen/mini
+                // release must use current native bounds before the effect starts.
                 val contentSize = IntSize(embeddedBounds.width.roundToInt(), embeddedBounds.height.roundToInt())
                 val scaleCardEntry = !mini && initialBounds != null && entryProgress < 1f &&
                     !fillsWindow && !revealingSource && contentSize.width > 0 && contentSize.height > 0
@@ -937,8 +919,7 @@ fun MiniPlayerWindow(
                         .size(with(density) { frameViewport.width.coerceAtLeast(1f).toDp() }, with(density) { frameViewport.height.coerceAtLeast(1f).toDp() })
                         .testTag("player-window")
                         .onGloballyPositioned {
-                            // The viewport can recompose this child without
-                            // rerunning the outer window's SideEffect.
+                            // Viewport can recompose this child without rerunning the outer SideEffect.
                             val bounds = it.boundsInWindow()
                             laidOutFrame[0] = DrawnWindowFrame(frameViewport, bounds)
                             onBoundsChanged(bounds)

@@ -96,7 +96,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
             if (deleteClosed(file)) { total -= length; if (!critical(file)) ordinary -= length }
         }
     }
-    /** Returns dropped rows if protected active segments leave no room. */
+    /** Dropped-row count when protected active segments leave no room. */
     fun append(records: List<DiagnosticEvent>, priority: Boolean, deadline: () -> Boolean = { false }): Int = locked(deadline) {
         var dropped = 0
         val initial = files()
@@ -144,7 +144,7 @@ class DiagnosticFiles(private val directory: File, private val clock: () -> Long
 object DiagnosticRedaction {
     @Volatile private var salt = UUID.randomUUID().toString()
     private val errorIds = WeakHashMap<Throwable, String>()
-    /** One private installation salt allows identifiers to correlate across auxiliary processes. */
+    /** One private installation salt lets identifiers correlate across auxiliary processes. */
     fun initialize(directory: File) = synchronized(errorIds) {
         runCatching {
             directory.mkdirs()

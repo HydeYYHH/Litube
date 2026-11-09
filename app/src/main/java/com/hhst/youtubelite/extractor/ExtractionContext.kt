@@ -34,9 +34,8 @@ interface EngineDiagnostics {
 }
 
 /**
- * Immutable per-task extraction state: session snapshot, transport, budget and
- * cancellation. Handed to the challenge solver and the poToken minter so their
- * requests share the same fences as resolution itself.
+ * Immutable per-task extraction state: session, transport, budget, cancellation.
+ * Challenge solver and poToken minter share the same fences as resolution.
  */
 class ExtractionContext(
     val session: YoutubeWebSession,

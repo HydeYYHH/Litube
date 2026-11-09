@@ -106,7 +106,6 @@ fun GestureOverlays(
     }
 }
 
-/** Glass pill wrapper shared by every gesture overlay. */
 @Composable
 private fun GesturePill(
     modifier: Modifier = Modifier,
@@ -138,7 +137,7 @@ private fun arrowPhase(forward: Boolean, animate: Boolean): Animatable<Float, An
     return phase
 }
 
-/** Two triangles illuminate in the seek direction, with no per-frame path allocation. */
+/** Paths prebuilt per density so the draw phase allocates nothing. */
 @Composable
 private fun DirectionalArrows(forward: Boolean, phase: State<Float>, animate: Boolean) {
     val density = LocalDensity.current
@@ -165,7 +164,6 @@ private fun DirectionalArrows(forward: Boolean, phase: State<Float>, animate: Bo
     }
 }
 
-/** Side oval and a fresh ripple for each tap; arrows keep running across accumulated seeks. */
 @Composable
 private fun DoubleTapSeekOverlay(state: GestureUi.DoubleTapSeek, modifier: Modifier = Modifier) {
     val label = PlayerUi.offsetHint(state.accumMs)
@@ -202,7 +200,6 @@ private fun DoubleTapSeekOverlay(state: GestureUi.DoubleTapSeek, modifier: Modif
     }
 }
 
-/** Long-press speed banner: steady label and flowing arrows. */
 @Composable
 private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     val animate = animationsEnabled()
@@ -216,7 +213,7 @@ private fun SpeedHoldOverlay(modifier: Modifier = Modifier) {
     }
 }
 
-/** Signed seek offset; the time bar carries the target position. */
+/** Shows only the signed offset; the time bar carries the target position. */
 @Composable
 private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modifier) {
     val deltaLabel = PlayerUi.offsetHint(state.deltaMs)
@@ -226,10 +223,8 @@ private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modi
 }
 
 /**
- * Volume/brightness: a vertical rail on the opposite edge from the
- * gesture (left for volume, right for brightness) so the hand does not
- * cover the feedback. Fill uses scaleY so the track does not relayout
- * on every percent tick.
+ * Volume/brightness rail sits on the opposite edge from the gesture so the hand does
+ * not cover the feedback; fill uses scaleY so ticks don't relayout the track.
  */
 @Composable
 private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = Modifier) {
@@ -283,9 +278,8 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
 }
 
 /**
- * Sponsor pre-skip countdown: tapping anywhere cancels the pending jump.
- * The 48 dp touch minimum wraps the box invisibly; [onVisualHeight] reports
- * the drawn card height so subtitles clear the visible bounds only.
+ * Sponsor pre-skip countdown; tapping anywhere cancels. The 48 dp touch minimum wraps
+ * the box invisibly — [onVisualHeight] reports drawn height so subtitles clear visible bounds only.
  */
 @Composable
 fun SponsorCountdownCard(
@@ -294,9 +288,8 @@ fun SponsorCountdownCard(
     modifier: Modifier = Modifier,
     onVisualHeight: (Int) -> Unit = {},
 ) {
-    // Presence is gated by the caller (countdown != null). The tag sits on
-    // the wrapping box so tests read the full touch layout, not the centered
-    // visual.
+    // Caller gates presence; the tag sits on the touch box so tests read the full
+    // touch layout, not the centered visual.
     val cancelLabel = stringResource(R.string.cancel)
     Box(modifier.testTag("player-sponsor-countdown")
         .clickable(onClickLabel = cancelLabel, onClick = onCancel)

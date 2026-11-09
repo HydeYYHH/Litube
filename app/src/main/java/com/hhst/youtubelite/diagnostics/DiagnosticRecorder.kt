@@ -3,7 +3,7 @@ package com.hhst.youtubelite.diagnostics
 import java.util.ArrayDeque
 import java.util.UUID
 
-/** Bounded, platform-independent flight recorder. The sink must enqueue, never perform IO. */
+/** Bounded, platform-independent flight recorder; the sink must enqueue, never perform IO. */
 internal class DiagnosticRecorder(
     private val process: String,
     private val pid: Int,

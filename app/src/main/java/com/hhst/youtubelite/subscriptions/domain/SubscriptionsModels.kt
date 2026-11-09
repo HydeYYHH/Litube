@@ -24,9 +24,8 @@ sealed interface SubscriptionsContent {
     data object Loading : SubscriptionsContent
     data class SignedOut(val prompt: com.hhst.youtubelite.library.domain.SignInPrompt) : SubscriptionsContent
     /**
-     * A filtered page can come back empty while the server still has more; [emptyAutoLoads]
-     * counts the bounded automatic continuations in that case. Past the bound the screen
-     * offers an explicit Load more instead of paging forever on its own.
+     * A filtered page can be empty while the server still has more; [emptyAutoLoads]
+     * bounds the automatic continuations — past the bound the screen offers Load more.
      */
     data class Feed(
         val page: SubscriptionsPage,

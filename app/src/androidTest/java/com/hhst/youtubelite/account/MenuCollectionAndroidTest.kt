@@ -23,8 +23,8 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 
 /**
- * Read-only signed-in menu census (menuServiceItemRenderer rows only).
- * Never writes token material, cookies or authorization values.
+ * Read-only signed-in menu census (menuServiceItemRenderer rows only);
+ * never writes token material, cookies or authorization values.
  */
 class MenuCollectionAndroidTest {
 
@@ -354,7 +354,7 @@ class MenuCollectionAndroidTest {
         return records
     }
 
-    /** Desensitized row identity: structure and sizes only, never token material. */
+    /** Desensitized row identity: structure/sizes only, never token material. */
     private fun signature(record: JSONObject): String = listOf(
         record.optString("iconType", ""),
         record.optInt("tokenCount"),
@@ -441,7 +441,7 @@ class MenuCollectionAndroidTest {
         return item.optString("iconType").takeIf(String::isNotBlank)
     }
 
-    /** (path, length, uiActions key) for every feedback token under the endpoint payload. */
+    /** (path, length, uiActions key) for every feedback token under the payload. */
     private fun tokenPaths(node: Any?, path: String = "", uiActions: String? = null):
         List<Triple<String, Int, String?>> = when (node) {
             is JSONObject -> {
@@ -462,7 +462,7 @@ class MenuCollectionAndroidTest {
             else -> emptyList()
         }
 
-    /** Read-only census of the Watch related rail across TV, WEB and MWEB contexts; never records token material or URLs. */
+    /** Read-only Watch related-rail census across TV/WEB/MWEB; never records token material or URLs. */
     @Test fun compareWatchReadContextsAndContinuationCapabilities() = runBlocking(Dispatchers.IO) {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1" && args.getString("menuCollection") == "1")
@@ -550,7 +550,7 @@ class MenuCollectionAndroidTest {
         assertTrue("A continuation page was never read", tvSecond != null)
     }
 
-    /** Records feedback endpoint and menu shapes across watch contexts; never writes token values, titles or URLs. */
+    /** Records feedback endpoint/menu shapes across watch contexts; never writes token values, titles or URLs. */
     @Test fun recordFeedbackEndpointShapesAcrossWatchContexts() = runBlocking(Dispatchers.IO) {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("network") == "1" && args.getString("menuCollection") == "1")

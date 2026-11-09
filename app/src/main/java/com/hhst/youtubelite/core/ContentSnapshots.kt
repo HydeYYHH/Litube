@@ -13,14 +13,14 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.serializer
 
 /**
- * Bounded on-disk snapshots of account content for instant paint, one file per
- * (kind, account, query). Writes are atomic (temp file + rename), payloads are versioned
- * and row-capped, and a read only answers when version, query and age still match.
+ * Bounded on-disk snapshots of account content for instant paint: atomic
+ * writes, versioned row-capped payloads, answered only while version, query
+ * and age still match.
  *
- * Snapshots carry rows only — never cursors or tokens. A caller paints the rows and lets
- * the live load establish pagination state, so an expired continuation can never surface
- * as live. Rows are keyed by account: private content stays scoped to the account that
- * produced it.
+ * Snapshots carry rows only — never cursors or tokens: a caller paints the
+ * rows and the live load establishes pagination, so an expired continuation
+ * can never surface as live. Rows are keyed by account: private content stays
+ * scoped to the account that produced it.
  */
 class ContentSnapshots(
     private val directory: File,

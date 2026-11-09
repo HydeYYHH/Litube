@@ -24,8 +24,8 @@ import org.koin.core.context.GlobalContext
 
 /**
  * Explicit public-network experiment: -e network 1 -e mscLiveComments 1.
- * Cold means an empty Watch result cache, not a new DNS/TLS connection. All
- * variants reuse the same client/pool; no performance threshold is asserted.
+ * Cold = empty Watch result cache (variants share one client/pool);
+ * no performance threshold is asserted.
  */
 class MscLiveCommentsAndroidTest {
     private lateinit var probe: MscLiveNetworkProbe
@@ -87,8 +87,7 @@ class MscLiveCommentsAndroidTest {
                         val shared = SharedWatchReads()
                         val repository = MediaCommentsRepository(probe.client, shared)
                         if (variant == "shared_watch") {
-                            // This cost belongs to Watch, and is reported separately rather
-                            // than silently charging it to a supposedly faster cold opening.
+                            // Reported separately rather than charged to a supposedly faster cold opening.
                             val opened = observe("${label}_watch_prefetch", {
                                 probe.client.readIdempotent { ctx, http ->
                                     shared.read(videoId, ctx, http, fresh = false) { id, session, transport ->

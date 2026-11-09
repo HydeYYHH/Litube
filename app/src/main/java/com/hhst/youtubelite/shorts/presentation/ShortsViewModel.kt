@@ -254,7 +254,7 @@ class ShortsViewModel(
         if (index < 0) return
         val request = generation
         // Only after a real frame: two bounded metadata reads overlap the current
-        // short and survive a swipe onto their item. Media bytes still warm one ahead.
+        // short and survive a swipe onto their item; media bytes warm one ahead.
         items.drop(index + 1).take(METADATA_LOOKAHEAD).forEach { item ->
             if (item.id in upcomingHydration || hydration[item.id] is Hydration.Running ||
                 hydration[item.id] == Hydration.Done && item.id in state.details ||
@@ -313,8 +313,8 @@ class ShortsViewModel(
                 })),
                 details = (state.details + (itemId to detail)).entries.toList().takeLast(MAX_DETAILS)
                     .associateTo(LinkedHashMap()) { it.key to it.value },
-                // The server's subscription state feeds the map; the local click
-                // write only lands after the same server confirms the change.
+                // Server subscription state feeds the map; a local click write
+                // only lands after the same server confirms the change.
                 subscriptions = if (detail.subscribed != null && detail.item.channelId.isNotBlank() &&
                     detail.item.channelId !in state.subscriptionsPending && detail.item.channelId !in state.subscriptions)
                     state.subscriptions + (detail.item.channelId to detail.subscribed)
@@ -393,8 +393,8 @@ class ShortsViewModel(
         upcomingHydration.clear()
         hydration.clear()
         consumedCursors.clear()
-        // Initial entry can claim preparation started while browsing. Explicit
-        // retries still discard obsolete work; identity changes cancel above.
+        // Initial entry can claim preparation started while browsing; explicit
+        // retries discard obsolete work, identity changes cancel above.
         if (generation > 0) preloader?.cancel()
         readyItemId = null
         val request = ++generation

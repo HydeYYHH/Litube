@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
-/** Called on the owning scope's thread. Only the latest request can publish; loads remain serial. */
+/** On the owning scope's thread; only the latest request can publish, loads stay serial. */
 internal class LatestArtworkRequest<K : Any, V : Any>(
     private val scope: CoroutineScope,
     private val load: suspend (K) -> V?,

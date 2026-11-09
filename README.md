@@ -10,7 +10,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/version-v4-C71C3A?style=flat-square" alt="Litube v4">
+    <img src="https://img.shields.io/badge/version-v4.0.0-C71C3A?style=flat-square" alt="Litube v4.0.0">
     <img src="https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square" alt="Android 7.0 or later">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-596273?style=flat-square" alt="GPL v3 license"></a>
   </p>
@@ -51,27 +51,23 @@ Get APKs and release notes from [GitHub Releases](https://github.com/HydeYYHH/li
 
 | Release | Milestone |
 | --- | --- |
-| [v1](https://github.com/HydeYYHH/litube/releases/tag/v1.4.9)<br>`2025-02` | **The start of our journey**<br>A lightweight WebView client with ad blocking, background playback, downloads, and playback progress memory. |
-| [v2](https://github.com/HydeYYHH/litube/releases/tag/v2.0.0)<br>`2026-01` | **Playback and downloads**<br>Added native Media3 playback, NewPipe-based stream extraction, picture-in-picture, and a download manager while keeping YouTube's web interface. |
-| [v3](https://github.com/HydeYYHH/litube/releases/tag/v3.0.0)<br>`2026-10` | **A Kotlin rewrite**<br>Rebuilt the app with Kotlin and Jetpack Compose, reworking playback and downloads while retaining WebView-based browsing. |
-| [v4](https://github.com/HydeYYHH/litube/tree/v4)<br>`2026-11` | **Native browsing**<br>Replaced WebView browsing with native Compose screens and [MediaServiceCore](https://github.com/HydeYYHH/MediaServiceCore), bringing anonymous and signed-in accounts together with the Media3 player and download system. |
+| [v1](https://github.com/HydeYYHH/litube/releases/tag/v1.4.9)<br>`2025-02` | **The start of our journey**<br>A lightweight WebView client with ad blocking, background playback and downloads. |
+| [v2](https://github.com/HydeYYHH/litube/releases/tag/v2.0.0)<br>`2026-01` | **Playback and downloads**<br>Added native Media3 player, NewPipe-based stream extraction, picture-in-picture, and a download manager while keeping YouTube's web interface. |
+| [v3](https://github.com/HydeYYHH/litube/releases/tag/v3.0.0)<br>`2026-10` | **A Kotlin rewrite**<br>Rebuilt the app with Kotlin and Jetpack Compose, reworking player and downloader while keeping WebView-based browsing. |
+| [v4.0.0](https://github.com/HydeYYHH/litube/releases)<br>`2026-11` | **Native browsing**<br>Replaced WebView browsing with native Compose screens and [MediaServiceCore](https://github.com/HydeYYHH/MediaServiceCore), bringing anonymous and signed-in accounts together with the Media3 player and download system. |
 
 ## Build from source
 
 Use **JDK 21**, **Android SDK Platform 36**, and **Build Tools 36.0.0** to match the CI environment. The repository includes a **Gradle 8.11.1** wrapper.
 
-Clone the v4 branch with its required submodules:
+Clone the v4 branch:
 
 ```sh
-git clone --branch v4 --recurse-submodules https://github.com/HydeYYHH/litube.git
+git clone --branch v4 https://github.com/HydeYYHH/litube.git
 cd litube
 ```
 
-If you already have a checkout, initialize the submodule before building:
-
-```sh
-git submodule update --init --recursive
-```
+Gradle downloads MediaServiceCore v1.0.0 from JitPack using the version pinned in `gradle/libs.versions.toml`.
 
 Set `ANDROID_HOME` to your Android SDK directory, or set `sdk.dir` in an untracked `local.properties` file. Then build the debug APK:
 
@@ -83,13 +79,15 @@ On Windows, replace `./gradlew` with `.\gradlew.bat` in these commands.
 
 The debug APK is saved to `app/build/outputs/apk/debug/app-debug.apk`. Debug builds use the application ID `com.hhst.litube.debug`; release builds use `com.hhst.litube`.
 
+To build the release APK, run `./gradlew :app:assembleRelease`. The unsigned APK is saved to `app/build/outputs/apk/release/app-release-unsigned.apk`; sign it with your release key before distribution.
+
 <details>
 <summary><strong>Tests and verification</strong></summary>
 
 Run unit tests and Android lint checks:
 
 ```sh
-./gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug
+./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
 Build the instrumented test APK:

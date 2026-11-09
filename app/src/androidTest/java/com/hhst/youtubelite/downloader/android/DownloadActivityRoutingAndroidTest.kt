@@ -21,8 +21,8 @@ import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 /**
- * DownloadActivity intent routing. Batch names and task titles differ so the detail
- * header and its row are distinct texts.
+ * DownloadActivity intent routing. Batch names and task titles differ so the
+ * detail header and its row are distinct texts.
  */
 @RunWith(AndroidJUnit4::class)
 class DownloadActivityRoutingAndroidTest {
@@ -80,7 +80,7 @@ class DownloadActivityRoutingAndroidTest {
         ActivityScenario.launch<DownloadActivity>(DownloadActivity.intent(context)).use { scenario ->
             var instance: DownloadActivity? = null
             scenario.onActivity { instance = it }
-            // Both sends may land before or after the collector attaches; the conflated
+            // Both sends may land before/after the collector attaches; the conflated
             // channel must retain the latest either way.
             scenario.onActivity { deliver(it, older) }
             scenario.onActivity { deliver(it, newer) }

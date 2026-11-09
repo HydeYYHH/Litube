@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">iyo %1$d xiriiriye dheeraad ah</item>
+        <item quantity="other">iyo %1$d xiriiriye oo dheeraad ah</item>
+    </plurals>
+</resources>

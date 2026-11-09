@@ -64,9 +64,9 @@ object UrlPolicy {
     fun shouldInject(url: String?): Boolean = isAllowedUrl(url) && !isLoginUrl(url) && !isTrafficChallenge(url) &&
         hostOf(url!!)?.lowercase(Locale.ROOT)?.let { isYoutubeHost(it) || it == "youtu.be" } == true
 
-    // Login hosts match exactly: regional Google sign-in domains are
-    // enumerated from https://www.google.com/supported_domains because a
-    // prefix match would admit lookalikes such as accounts.google.co.zz.
+    // Login hosts match exactly: regional Google sign-in domains are enumerated from
+    // https://www.google.com/supported_domains because a prefix match would admit
+    // lookalikes such as accounts.google.co.zz.
     private val LOGIN_HOSTS = setOf(
         "accounts.google", "accounts.youtube.com", "consent.google.com", "consent.youtube.com",
     ) + (

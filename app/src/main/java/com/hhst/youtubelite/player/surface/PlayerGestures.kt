@@ -35,10 +35,8 @@ interface GestureCallbacks {
     fun onWindowSwipeProgress(dx: Float, dy: Float) { onFullscreenSwipeProgress(dy) }
     fun onFullscreenSwipeCancel() {}
     /**
-     * Vertical center-zone drag released. Returns true when a host consumed
-     * the release (an interpolating window decides commit/cancel from the
-     * shared travel progress and [velocityPxPerSec]); false falls back to the
-     * fixed-fraction toggle in the tracker.
+     * Vertical center-zone drag released. True when a host consumed the release
+     * (interpolating window decides commit/cancel); false falls back to the tracker's fixed-fraction toggle.
      */
     fun onFullscreenSwipeRelease(distancePx: Float, velocityPxPerSec: Float): Boolean = false
     /** Finger up: overlays (edge sliders) clear. */
@@ -57,12 +55,9 @@ private class TapGuard {
 }
 
 /**
- * Player gesture layer:
- * tap → toggle controls; double-tap thirds → ±10 s / play-pause; long-press → 2x;
- * horizontal drag → live seek scrub; vertical drag in zones → brightness/volume;
- * center vertical swipe → fullscreen toggle.
- *
- * Every gesture is gated by [zoneEnabled] (extension prefs, embedded/fullscreen).
+ * Player gesture layer: tap → toggle controls; double-tap thirds → ±10 s / play-pause;
+ * long-press → 2x; horizontal drag → live seek scrub; vertical zones → brightness/volume;
+ * center vertical swipe → fullscreen. Every gesture gated by [zoneEnabled].
  */
 fun Modifier.playerGestures(
     callbacks: GestureCallbacks,
@@ -153,9 +148,8 @@ private suspend fun AwaitPointerEventScope.trackDrag(
     try {
     while (true) {
         // While undecided, race the next event against the long-press timeout.
-        // A non-positive timeout must not be passed to withTimeoutOrNull.
-        // It returns immediately without suspending and spins the main thread
-        // when long-press is disabled or after the touch slop.
+        // A non-positive timeout must not be passed to withTimeoutOrNull — it returns
+        // immediately without suspending and spins the main thread.
         val event = if (!longPressResolved && !dragResolved && !zooming) {
             val remaining = LONG_PRESS_MS - (SystemClock.uptimeMillis() - startTime)
             if (remaining <= 0L) {
@@ -284,9 +278,8 @@ private suspend fun AwaitPointerEventScope.trackDrag(
         }
         dragMode == GestureMath.DragMode.SEEK ->
             callbacks.onSeekCommit(GestureMath.seekOffsetMs(totalDx, width))
-        // Fullscreen swipe (or Shorts feed switch) for center-zone / feed
-        // vertical drags. A disabled brightness/volume zone must not re-route
-        // into a fullscreen toggle, but a vertical feed still switches video.
+        // Fullscreen swipe (or Shorts feed switch) for center-zone / feed vertical drags.
+        // A disabled brightness/volume zone must not re-route into fullscreen; a feed still switches video.
         dragMode == GestureMath.DragMode.NONE && rawMode == GestureMath.DragMode.NONE &&
             (verticalFeed || zoneEnabled(GestureMath.GestureZone.FULLSCREEN_SWIPE)) &&
             abs(totalDy) > abs(totalDx) -> {

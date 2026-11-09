@@ -4,9 +4,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 
 /**
- * Media3 1.10 single-item players do not advertise next/previous. The app
- * queue must add those commands when it can navigate, and remove them when
- * it cannot — not only trim a wrapped player that already claimed them.
+ * Media3 1.10 single-item players do not advertise next/previous. The app queue must
+ * add those commands when it can navigate and remove them when it cannot — not only
+ * trim a wrapped player that already claimed them.
  */
 @UnstableApi
 object PlaybackQueueCommands {

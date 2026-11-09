@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 /**
- * Thin facade over [DownloadCoordinator]. UI must not talk to Worker/Service/DB.
+ * Thin facade over [DownloadCoordinator]: UI must not talk to Worker/Service/DB.
  * Catalog preview and prefs live here so composables never call those either.
  */
 class DownloadViewModel(
@@ -124,9 +124,9 @@ class DownloadViewModel(
     }
 
     /**
-     * Final confirm only. Opening the sheet or changing preview options must
-     * not call this. A new [submissionId] is minted here so process-death
-     * restore cannot replay a submit.
+     * Final confirm only — opening the sheet or changing preview options must
+     * not call this. Mints a new [submissionId] so process-death restore cannot
+     * replay a submit.
      */
     suspend fun confirmSingle(request: DownloadRequest, persistPrefs: Boolean = true): EnqueueResult {
         if (persistPrefs) prefs.setLastConfig(request.config)

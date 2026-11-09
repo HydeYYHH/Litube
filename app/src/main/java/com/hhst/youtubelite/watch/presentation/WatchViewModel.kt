@@ -530,7 +530,6 @@ class WatchViewModel(
         const val UNCONFIRMED_SAVE = "The server did not confirm this change. Please refresh before trying again."
     }
 
-    /** Copyable failure notice for an account write, carrying the sanitized report. */
     private fun report(operation: String, error: Exception, videoId: String? = null,
         message: String? = null): AppNotice =
         com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error,

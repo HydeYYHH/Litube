@@ -3,8 +3,8 @@ package com.hhst.youtubelite.player.engine
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 
 /**
- * Recovery belongs to one explicit play/retry, across its source generations.
- * The engine's main thread owns this state; it performs all IO and player changes.
+ * Recovery belongs to one explicit play/retry across its source generations; the
+ * engine's main thread owns this state and performs all IO and player changes.
  */
 internal class PlaybackAttempt(val videoId: String) {
     val diagnosticRoot = DiagnosticContext(videoId = videoId)

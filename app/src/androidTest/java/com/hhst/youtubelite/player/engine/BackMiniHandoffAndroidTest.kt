@@ -85,7 +85,7 @@ class BackMiniHandoffAndroidTest {
         lateinit var previous: MiniPlayerStore.State
         instrumentation.runOnMainSync {
             previous = store.load()
-            // Force each host to apply its top-edge clamp rather than relying on a placement left by another test or a prior drag.
+            // Force each host to apply its top-edge clamp rather than a placement left by another test or drag.
             store.save(0, 0f, -10_000f)
         }
         try {

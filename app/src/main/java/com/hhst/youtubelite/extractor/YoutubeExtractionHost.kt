@@ -220,8 +220,8 @@ class YoutubeExtractionHost(
     }
 
     /**
-     * Captures this identity's web configuration while browsing. Direct clients need no player
-     * script; fallbacks initialize their solver on demand rather than competing with startup.
+     * Captures this identity's web configuration while browsing. Direct clients need
+     * no player script; fallbacks init their solver on demand, not at startup.
      */
     override fun warm(videoId: String) {
         if (videoId.isBlank()) return

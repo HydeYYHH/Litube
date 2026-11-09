@@ -1,10 +1,9 @@
 package com.hhst.youtubelite.player.datasource
 
 /**
- * The video foreground playback currently owns. Speculative warming for that same video stands
- * down: on a slow link a background prefetch that keeps reading competes with the player for the
- * same bytes, and the first frame pays for it. Warming other targets is unaffected, and the
- * extraction result stays claimable, so playback still joins the work already done.
+ * Video foreground playback currently owns. Speculative warming for that same video stands
+ * down: on a slow link a background prefetch competes with the player for the same bytes and
+ * the first frame pays. Warming other targets is unaffected; playback still joins existing work.
  */
 internal object PlaybackClaim {
     @Volatile

@@ -56,9 +56,7 @@ data class RecoveredSource(
     val exhausted: Boolean,
 )
 
-/**
- * Independent OkHttp download client: own Call, dispatcher budget, working files.
- */
+/** Independent OkHttp download client: own Call, dispatcher budget, working files. */
 class DownloadTransportImpl(
     private val client: OkHttpClient,
     private val cookies: DownloadCookieSource = NoCookies,
@@ -163,8 +161,8 @@ class DownloadTransportImpl(
                             current = recovered.source
                             plan = DownloadRequestFactory.fromSource(current)
                             if (recovered.needsRedownload || identityChanged) {
-                                // The refreshed object is not proven to be the same
-                                // media: old chunks must never be spliced into it.
+                                // Refreshed object is not proven same media: old chunks must never
+                                // be spliced into it.
                                 dest.delete()
                                 kept.clear()
                                 fullFallback = true
@@ -178,7 +176,7 @@ class DownloadTransportImpl(
                             sleeper.sleep(wait)
                         }
                         // Retrying the same rejected URL cannot repair a permanent request error.
-                        // 403 has its identity recovery above; 408/425 may succeed on a later read.
+                        // 403 has identity recovery above; 408/425 may succeed on a later read.
                         httpStatus != null && httpStatus in 400..499 && httpStatus != 408 && httpStatus != 425 -> return result
                         result.reason == "ENOSPC" -> return result
                         result.reason == "fallback-full" -> {
@@ -486,9 +484,8 @@ class DownloadTransportImpl(
                     if (rangeMode == DownloadRangeMode.NONE && knownTotal != null &&
                         knownTotal > 0L && received != knownTotal
                     ) {
-                        // A non-ranged response must carry the whole trusted
-                        // object; short or overlong bodies must not read as
-                        // Completed. Deterministic → terminal.
+                        // Non-ranged response must carry the whole trusted object; short or
+                        // overlong bodies must not read as Completed. Deterministic → terminal.
                         return WriteOutcome.Failed("length-mismatch")
                     }
                     if (knownTotal != null && requestedStart == 0L && expectedCount == null && received == 0L) {

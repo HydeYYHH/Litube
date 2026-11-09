@@ -1,5 +1,7 @@
 package com.hhst.youtubelite.home.presentation
 
+import com.hhst.youtubelite.ui.design.reasonResources
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -52,8 +54,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 
 /** Stateless rendering boundary; local state is limited to saved scroll/focus state. */
-// The warm collector belongs to LaunchedEffect and is cancelled on key changes or
-// disposal. Lint follows HomeActivity's one-time deferred setup through onResume.
+// The warm collector belongs to LaunchedEffect and is cancelled on key changes
+// or disposal; the lint follows HomeActivity's deferred setup through onResume.
 @android.annotation.SuppressLint("RepeatOnLifecycleWrongUsage")
 @Composable
 fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Modifier = Modifier,
@@ -179,7 +181,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                             // Pull moves the feed rows only; the chrome stack keeps its place.
                             Column(Modifier.fillMaxSize().graphicsLayer { translationY = pull }) {
                             if (content.refreshFailed) Box(Modifier.graphicsLayer { translationY = (96f + chipExtraHeight.value - chromeTravel * chromeOffset) * density }) {
-                                RetryRow("Couldn't refresh. Try again.") { onAction(HomeAction.Refresh) }
+                                RetryRow(stringResource(R.string.ui_couldn_t_refresh_try_again)) { onAction(HomeAction.Refresh) }
                             }
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(HomeLayout.columns(width)), state = grid,
@@ -191,7 +193,7 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                                 item(span = { GridItemSpan(maxLineSpan) }) {
                                     when (content.append) {
                                         AppendState.Loading -> Box(Modifier.fillMaxWidth().padding(top = 80.dp, bottom = 12.dp), contentAlignment = Alignment.Center) { LoadingSpinner() }
-                                        AppendState.Failed -> RetryRow("Something went wrong. Tap to retry.") { onAction(HomeAction.LoadNext) }
+                                        AppendState.Failed -> RetryRow(stringResource(R.string.ui_something_went_wrong_tap_to_retry)) { onAction(HomeAction.LoadNext) }
                                         AppendState.Idle -> if (content.page.nextKey != null && content.automaticPagingPaused) {
                                             Box(Modifier.fillMaxWidth().padding(vertical = 16.dp).testTag("home-load-more"), contentAlignment = Alignment.Center) {
                                                 PillButton(stringResource(R.string.load_more)) { onAction(HomeAction.LoadNext) }
@@ -245,9 +247,9 @@ fun HomeScreen(state: HomeUiState, onAction: (HomeAction) -> Unit, modifier: Mod
                     onNewPlaylist = { onAction(HomeAction.OpenNewPlaylist) },
                 )
                 is HomeOverlay.Feedback -> FeedbackSheet(
-                    title = overlay.kind.title,
+                    title = stringResource(overlay.kind.labelResource),
                     reasons = overlay.kind.reasons.mapIndexed { index, reason ->
-                        FeedbackReason(reason, "feedback-reason-$index")
+                        FeedbackReason(reason, "feedback-reason-$index", overlay.kind.reasonResources[index])
                     },
                     onDismiss = { onAction(HomeAction.CloseOverlay) },
                     onSelect = { onAction(HomeAction.FeedbackReason(it.label)) },
@@ -325,7 +327,7 @@ private fun HomeBottomBar(signedIn: Boolean, onAction: (HomeAction) -> Unit, ava
                         HomeDestination.Home -> AppIcon.Home; HomeDestination.Shorts -> AppIcon.Shorts
                         HomeDestination.Subscriptions -> AppIcon.Subscriptions; HomeDestination.You -> AppIcon.You
                     })
-                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
+                    AppText(stringResource(destination.labelResource), size = 11, line = 14, maxLines = 1)
                 }
             }
         }
@@ -401,9 +403,9 @@ private fun EmptyHome(content: HomeContent.Empty, showTools: Boolean, wide: Bool
 private fun ErrorHome(onAction: (HomeAction) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("home-error"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
-        AppText("Please try again.", modifier = Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
-        PillButton("Retry") { onAction(HomeAction.Refresh) }
+        AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
+        AppText(stringResource(R.string.ui_please_try_again), modifier = Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
+        PillButton(stringResource(R.string.retry)) { onAction(HomeAction.Refresh) }
     }
 }
 
@@ -419,7 +421,7 @@ internal fun PillButton(label: String, onClick: () -> Unit) {
 private fun RetryRow(label: String, retry: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         AppText(label, Modifier.weight(1f), color = DesignTokens.Secondary)
-        PillButton("Retry", retry)
+        PillButton(stringResource(R.string.retry), retry)
     }
 }
 

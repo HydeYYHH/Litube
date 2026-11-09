@@ -93,7 +93,7 @@ fun SettingsDataScreen(
         }
     }
 
-    /** Reads at most [maxChars]; null when the file is oversized or unreadable. */
+    /** Reads at most [maxChars]; null when oversized or unreadable. */
     suspend fun readBoundedText(context: android.content.Context, uri: android.net.Uri,
         maxChars: Int = 512 * 1024): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching {

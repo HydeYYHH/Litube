@@ -17,7 +17,7 @@ import com.hhst.youtubelite.ui.design.DesignTokens
 
 internal sealed interface DescriptionSegment {
     data class Plain(val text: String) : DescriptionSegment
-    /** `0:42`, `12:34`, `1:02:03` chapter mark pointing into the current video. */
+    /** Chapter mark (m:ss / h:mm:ss) pointing into the current video. */
     data class Timestamp(val text: String, val seconds: Long) : DescriptionSegment
     /** [text] is what the description displays; [url] is what the click routes. */
     data class Link(val text: String, val url: String) : DescriptionSegment
@@ -96,11 +96,6 @@ internal fun timestampSeconds(value: String): Long? {
     return seconds.takeIf { it >= 0 }
 }
 
-/**
- * The expanded watch description. Timestamps seek the current video through
- * [onTimestamp], links reach the routing boundary through [onLink]; selection
- * and copy stay enabled and links keep their link semantics.
- */
 @Composable
 internal fun WatchDescription(
     text: String,

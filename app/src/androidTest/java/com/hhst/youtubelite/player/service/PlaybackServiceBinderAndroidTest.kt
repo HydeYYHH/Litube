@@ -72,7 +72,7 @@ class PlaybackServiceBinderAndroidTest {
                 }
                 assertNull("A binder retained after onDestroy must be detached", retainedBinder.getService())
 
-                // Keep the binder strongly reachable, just like the native root in the leak trace.
+                // Keep the binder strongly reachable, like the native root in the leak trace.
                 val collectedDeadline = SystemClock.elapsedRealtime() + 5_000
                 while (watchedService.get().get() != null && SystemClock.elapsedRealtime() < collectedDeadline) {
                     instrumentation.waitForIdleSync()

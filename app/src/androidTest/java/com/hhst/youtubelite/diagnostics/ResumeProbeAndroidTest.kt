@@ -50,7 +50,7 @@ class ResumeProbeAndroidTest {
             report.put("has_currentVideoEndpoint", body.contains("\"currentVideoEndpoint\""))
         }
         // Same probe against the player endpoint: checkpoints may ride on the player
-        // response instead of the watch-next response depending on the client.
+        // response instead of watch-next depending on the client.
         val playerBody = AtomicReference<String>()
         val playerHttp = GlobalContext.get().get<OkHttpClient>().newBuilder()
             .addInterceptor { chain ->

@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.subscriptions
 
+import com.hhst.youtubelite.ui.design.labelResource
+import com.hhst.youtubelite.R
+import androidx.compose.ui.res.stringResource
 import com.hhst.youtubelite.ui.observeAccountChanges
 
 import android.content.Context
@@ -198,13 +201,13 @@ class SubscriptionsActivity : com.hhst.youtubelite.ui.ContentActivity() {
                 } else FeedMenuKind.Video.actions
                 MenuBottomSheet(
                     items = menuActions.map { action ->
-                        MenuSheetItem(action.icon(), action.label)
+                        MenuSheetItem(action.icon(), stringResource(action.labelResource))
                     },
                     onDismiss = { subscriptionsViewModel.onAction(SubscriptionsAction.CloseOverlay) },
                     onSelect = { index ->
                         subscriptionsViewModel.onAction(SubscriptionsAction.MenuSelected(menuActions[index]))
                     },
-                    paneTitle = "Video actions",
+                    paneTitle = stringResource(R.string.ui_video_actions),
                     header = if (state.menuLoading || state.menuFailed) ({
                         Box(Modifier.fillMaxSize().height(48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
                             if (state.menuLoading) Box(Modifier.testTag("subscriptions-menu-loading")) {

@@ -44,8 +44,8 @@ class MediaDesiredStateTimeoutOwnershipTest {
                 when (reads.incrementAndGet()) {
                     1 -> post(identity.postId, "initial").toResponseBody()
                     2 -> {
-                        // Return headers first. Blocking inside the interceptor itself would
-                        // let OkHttp reject the cancelled call before MediaClient receives it.
+                        // Return headers first; blocking inside the interceptor would
+                        // let OkHttp reject the cancelled call before MediaClient sees it.
                         delayedBody(post(identity.postId, "timed-out"), firstReadThread, releaseFirst)
                     }
                     else -> post(identity.postId, "current").toResponseBody()
@@ -57,8 +57,8 @@ class MediaDesiredStateTimeoutOwnershipTest {
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("fixture")
                 .body(reply).build()
         }.build()) {
-            // Before the fix this final generation check follows the late observer's
-            // assignment. Cancellation now prevents reaching it, so the wait is bounded.
+            // Before the fix this generation check followed the late observer's assignment;
+            // cancellation now prevents reaching it, so the wait is bounded.
             if (Thread.currentThread() === firstReadThread.get() && releaseFirst.count == 0L)
                 firstWorkerFinished.countDown()
             context

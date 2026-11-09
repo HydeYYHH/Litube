@@ -119,7 +119,7 @@ class TransportRecoveryAndroidTest {
                 if (persistent) {
                     assertFalse(engine.snapshot.value.prepared)
                     assertNotNull(engine.snapshot.value.error)
-                    // The offline CI lane disables Wi-Fi and mobile data; its message takes precedence over the timeout injected by this local transport fixture.
+                    // Offline CI disables Wi-Fi/mobile data; its message takes precedence over the local fixture timeout.
                     val connected = AndroidDiagnosticState.networkSnapshot()["connected"] as? Boolean
                     val expectedMessage = if (connected == false) R.string.player_network_offline
                         else R.string.player_network_timeout

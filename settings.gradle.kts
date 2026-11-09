@@ -28,4 +28,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "litube"
 include(":app")
-include(":media-core")

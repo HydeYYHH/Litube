@@ -42,18 +42,17 @@ object PipAutoEnter {
     fun suppress(): Handle {
         suppressCount.incrementAndGet()
         noteLegacyLaunch()
-        // Push auto-enter off without forgetting lastEligible so restore can
-        // re-enable when ENABLE_PIP / player eligibility still wants it.
+        // Push auto-enter off without forgetting lastEligible, so restore can
+        // re-enable it if ENABLE_PIP / player eligibility still wants PiP.
         host.get()?.let { pushParams(it, autoEnter = false) }
         return Handle { restore() }
     }
 
     /**
-     * A short hold for an in-app navigation transition: the source activity
-     * keeps auto-PiP off while the destination starts up. Released as soon
-     * as any other activity resumes — the handoff ends when the destination
-     * owns the screen, not when the source comes back — plus on the source's
-     * own resume or destroy (the [Handle] returned here).
+     * A short hold for an in-app navigation transition: auto-PiP stays off
+     * while the destination starts up. Released as soon as any other activity
+     * resumes (the destination owns the screen, not the source coming back),
+     * plus on the source's own resume or destroy (the returned [Handle]).
      */
     fun suppressForNavigation(owner: Activity): Handle {
         synchronized(handoffs) { handoffs.add(owner) }
@@ -110,7 +109,7 @@ object PipAutoEnter {
 
     fun apply(activity: Activity, autoEnter: Boolean, aspect: Rational? = null, actions: List<RemoteAction>? = null) {
         // While an overlay holds suppress, PlaybackActivity.syncPipParams still
-        // calls apply(false). Keep lastEligible as the unsuppressed desire.
+        // calls apply(false); keep lastEligible as the unsuppressed desire.
         if (!isSuppressed()) {
             lastEligible = autoEnter
         }

@@ -12,13 +12,10 @@ import com.hhst.youtubelite.extension.PreferenceKeys
 import com.hhst.youtubelite.player.engine.PlaybackNotificationController
 
 /**
- * Binds the engine to [PlaybackService] and forwards playback state to the
- * notification. The service is started foreground on first load; the
- * connection stays for the app lifetime (the service stops itself on hide).
- *
- * When the background-play extension is disabled, no notification is shown.
- * The activity already pauses playback in that case, so a leftover paused
- * notification would be misleading.
+ * Forwards playback state to [PlaybackService]; the connection stays for the
+ * app lifetime (the service stops itself on hide). When background-play is
+ * disabled no notification is shown — the activity already pauses playback,
+ * so a leftover paused notification would be misleading.
  */
 @UnstableApi
 class ServiceNotificationController(
@@ -66,8 +63,8 @@ class ServiceNotificationController(
 
         override fun onBindingDied(name: ComponentName?) {
             // The service process died: the binding is dead but still counted,
-            // so bound must be cleared or every later onLoaded queues in
-            // pendingLoad forever with no notification and no MediaSession.
+            // so bound must be cleared or later onLoaded calls queue in
+            // pendingLoad forever with no notification or MediaSession.
             runCatching { context.unbindService(connection) }
             bound = false
             service = null
@@ -117,7 +114,7 @@ class ServiceNotificationController(
             bound = false
         } else {
             // startForegroundService may have succeeded while bindService
-            // failed: nothing holds the service reference then, so stop the
+            // failed: nothing holds the service reference, so stop the
             // placeholder foreground service here or it outlives playback.
             runCatching { context.stopService(Intent(context, PlaybackService::class.java)) }
         }

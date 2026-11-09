@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">жана дагы %1$d шилтеме</item>
+        <item quantity="other">жана дагы %1$d шилтеме</item>
+    </plurals>
+</resources>

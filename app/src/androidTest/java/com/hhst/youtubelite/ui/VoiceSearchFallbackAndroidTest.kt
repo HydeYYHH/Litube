@@ -9,7 +9,6 @@ import com.hhst.youtubelite.home.data.HomeScenario
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/** The voice entry must never crash the host: system resolver, in-process recognizer, or a toast. */
 class VoiceSearchFallbackAndroidTest {
     @Test fun voiceSearchNeverCrashesTheHostWhateverPathTheDeviceTakes() {
         val scenario = ActivityScenario.launch<HomeActivity>(

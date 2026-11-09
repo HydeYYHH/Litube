@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.post.presentation
 
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.design.appPaneTitle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,7 +42,7 @@ fun PostImageViewer(
     }
     Box(
         Modifier.fillMaxSize().background(Color.Black)
-            .testTag("post-image-viewer").semantics { paneTitle = "Post image" },
+            .testTag("post-image-viewer").appPaneTitle(R.string.ui_post_image),
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             Box(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 56.dp),
@@ -56,7 +59,7 @@ fun PostImageViewer(
             size = 14, line = 20, color = Color.White,
         )
         AppIconButton(
-            AppIcon.Close, "Close image viewer", color = Color.White,
+            AppIcon.Close, stringResource(R.string.ui_close_image_viewer), color = Color.White,
             diameter = 48.dp,
             modifier = Modifier.align(Alignment.TopEnd).padding(end = 4.dp, top = 4.dp)
                 .testTag("post-image-viewer-close"),

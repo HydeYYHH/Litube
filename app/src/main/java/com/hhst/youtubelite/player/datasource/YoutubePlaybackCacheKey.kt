@@ -5,14 +5,10 @@ import java.security.MessageDigest
 import java.util.Base64
 
 /**
- * Byte-cache identity for googlevideo `/videoplayback` URLs.
- *
- * Two schemes coexist, one per call site, and their prefixes never collide:
- * - [of] keys by the extractor's opaque resource identity ("yt:v4:…"). Rotating
- *   `sig` / `expire` / `pot` / `rn` are omitted so a 403 URL refresh still hits
- *   previously cached bytes.
- * - [ofQuery] keys by raw `/videoplayback` query parameters ("yt:v2:…"); [VERSION]
- *   isolates pre-v2 `yt:id:itag` entries.
+ * Byte-cache identity for googlevideo `/videoplayback` URLs. Two schemes coexist, prefixes never collide:
+ * - [of] keys by the extractor's opaque resource identity ("yt:v4:…"); rotating
+ *   `sig`/`expire`/`pot`/`rn` are omitted so a 403 refresh still hits cached bytes.
+ * - [ofQuery] keys by raw query parameters ("yt:v2:…"); [VERSION] isolates pre-v2 entries.
  */
 object YoutubePlaybackCacheKey {
     fun of(format: Format): String {

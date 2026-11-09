@@ -3,9 +3,9 @@ package com.hhst.youtubelite.player.datasource
 import com.hhst.youtubelite.extractor.Format
 
 /**
- * Menu-merge rules for the on-demand audio-catalog supplement. A selected source
- * sometimes exposes fewer named tracks than the service provides; a bounded catalog
- * read on menu open discovers the rest without touching running media.
+ * Menu-merge rules for the on-demand audio-catalog supplement. A selected source sometimes
+ * exposes fewer named tracks than the service provides; a bounded catalog read on menu open
+ * discovers the rest without touching running media.
  */
 object AudioCatalogSupplement {
 

@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.ui.design
 
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,7 +34,7 @@ fun BrowseNavigationBar(tag: String, signedIn: Boolean = false, onSelect: (Brows
                         BrowseDestination.Subscriptions -> AppIcon.Subscriptions
                         BrowseDestination.You -> AppIcon.You
                     })
-                    AppText(destination.label, size = 11, line = 14, maxLines = 1)
+                    AppText(stringResource(destination.labelResource), size = 11, line = 14, maxLines = 1)
                 }
             }
         }

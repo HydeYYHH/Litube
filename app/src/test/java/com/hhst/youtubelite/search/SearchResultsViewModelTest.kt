@@ -338,16 +338,16 @@ class SearchResultsViewModelTest {
     }
 
     @Test fun stackedLockupMatchesTheSampledPhoneAndTabletAnchors() {
-        // 390 × 844: the sampled cover bleeds to both edges, keeps a 16:9 box and carries a 48px menu.
+        // 390 × 844: sampled cover bleeds both edges, keeps a 16:9 box, 48px menu.
         assertTrue(SearchResultsLayout.fullBleed(390f))
         assertEquals(390f, SearchResultsLayout.stackedThumbnailWidth(390f), 0.01f)
         assertEquals(218.875f, SearchResultsLayout.stackedThumbnailHeight(390f), 0.01f)
         assertEquals(0f, SearchResultsLayout.stackedThumbnailRadius(390f), 0.01f)
         assertEquals(48f, SearchResultsLayout.stackedMenuSize(390f), 0.01f)
         assertEquals(0f, SearchResultsLayout.listTopInset(390f), 0.01f)
-        // 390 × 844: text starts after the 12px inset, the 40px avatar and the 12px gap.
+        // 390 × 844: text starts after the 12px inset, 40px avatar and 12px gap.
         assertEquals(278f, 390f - 12f - 40f - 12f - SearchResultsLayout.stackedMenuSize(390f), 0.01f)
-        // 600 × 960 and 840 × 1000: a 12px inset cover of an exact 16:9 box with a 40px menu.
+        // 600 × 960 and 840 × 1000: 12px inset cover of an exact 16:9 box with a 40px menu.
         for (width in listOf(600f, 840f)) {
             assertFalse(SearchResultsLayout.fullBleed(width))
             assertEquals(width - 24f, SearchResultsLayout.stackedThumbnailWidth(width), 0.01f)
@@ -385,7 +385,6 @@ class SearchResultsViewModelTest {
         assertEquals(8f, SearchResultsLayout.BadgeInset, 0.01f)
     }
 
-
     @Test fun restoredEmptyStateUsesTheRestoredQuery() {
         val vm = SearchResultsViewModel(FixtureSearchRepository(), SavedStateHandle(mapOf("query" to "saved")),
             "intent", SearchScenario.Empty)
@@ -418,7 +417,6 @@ class SearchResultsViewModelTest {
         restored.onAction(SearchAction.CloseSearch)
         assertEquals("next", restored.uiState.value.query)
     }
-
 
     @Test fun narrowLandscapeAndSquareWindowsKeepTheirOwnGeometry() {
         assertEquals(445.5f, SearchResultsLayout.stackedThumbnailHeight(900f, 844f), 0.01f)

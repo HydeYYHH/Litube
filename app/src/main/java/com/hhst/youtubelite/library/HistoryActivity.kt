@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.library
 
+import com.hhst.youtubelite.ui.design.labelResource
+import androidx.compose.ui.res.stringResource
+import com.hhst.youtubelite.R
 import com.hhst.youtubelite.ui.observeAccountChanges
 
 import android.content.Context
@@ -171,18 +174,18 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
             }
             if (state.overlay is LibraryOverlay.Menu) {
                 MenuBottomSheet(
-                    items = HistoryMenuAction.entries.map { action -> MenuSheetItem(action.icon(), action.label) },
+                    items = HistoryMenuAction.entries.map { action -> MenuSheetItem(action.icon(), stringResource(action.labelResource)) },
                     onDismiss = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
                     onSelect = { index -> historyViewModel.onAction(LibraryAction.MenuSelected(HistoryMenuAction.entries[index])) },
-                    paneTitle = "History actions",
+                    paneTitle = stringResource(R.string.ui_history_actions),
                 )
             }
             if (state.overlay == LibraryOverlay.ManageHistory && !state.confirmClear) {
                 MenuBottomSheet(
                     items = listOf(
-                        MenuSheetItem(AppIcon.Pause, "Pause watch history"),
-                        MenuSheetItem(AppIcon.Play, "Resume watch history"),
-                        MenuSheetItem(AppIcon.Delete, "Clear watch history"),
+                        MenuSheetItem(AppIcon.Pause, stringResource(R.string.ui_pause_watch_history)),
+                        MenuSheetItem(AppIcon.Play, stringResource(R.string.ui_resume_watch_history)),
+                        MenuSheetItem(AppIcon.Delete, stringResource(R.string.ui_clear_watch_history_2)),
                     ),
                     onDismiss = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
                     onSelect = { index ->
@@ -193,23 +196,23 @@ class HistoryActivity : com.hhst.youtubelite.ui.ContentActivity() {
                         }
                     },
                     tag = "history-manage-sheet",
-                    paneTitle = "History settings",
+                    paneTitle = stringResource(R.string.a11y_history_settings),
                 )
             }
             if (state.overlay == LibraryOverlay.ManageHistory && state.confirmClear) {
                 com.hhst.youtubelite.ui.components.AppAlertDialog(
                     onDismissRequest = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
-                    title = { androidx.compose.material3.Text("Clear watch history?") },
-                    text = { androidx.compose.material3.Text("Your watch history will be cleared on this account. This can't be undone.") },
+                    title = { androidx.compose.material3.Text(stringResource(R.string.ui_clear_watch_history)) },
+                    text = { androidx.compose.material3.Text(stringResource(R.string.ui_your_watch_history_will_be_cleared_on_this_account_this_can_t_be_undon)) },
                     confirmButton = {
                         com.hhst.youtubelite.ui.components.AppTextButton(
                             onClick = { historyViewModel.onAction(LibraryAction.ConfirmClearHistory) },
-                        ) { androidx.compose.material3.Text("Clear") }
+                        ) { androidx.compose.material3.Text(stringResource(R.string.ui_clear)) }
                     },
                     dismissButton = {
                         com.hhst.youtubelite.ui.components.AppTextButton(
                             onClick = { historyViewModel.onAction(LibraryAction.CloseOverlay) },
-                        ) { androidx.compose.material3.Text("Cancel") }
+                        ) { androidx.compose.material3.Text(stringResource(R.string.cancel)) }
                     },
                 )
             }

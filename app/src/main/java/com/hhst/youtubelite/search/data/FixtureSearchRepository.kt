@@ -38,7 +38,6 @@ class FixtureSearchRepository(private val scenario: SearchScenario = SearchScena
             SearchChannel("studio", "Blender Studio", "@BlenderStudio", "577K subscribers", "sintel"),
             SearchChannel("northlight", "Northlight Films", "@northlight", "428K subscribers", "dream"),
         )
-        /** Fixed English sample; metadata is synthetic and every asset is bundled locally. */
         fun sampleResults() = listOf(
             SearchResult("harbour", "City light trails — a night walk through the old harbour",
                 "Northlight Films", "northlight", "1.4M views", "3 weeks ago", "8:12", "dream", progress = 0.35f, uploadedDays = 21),

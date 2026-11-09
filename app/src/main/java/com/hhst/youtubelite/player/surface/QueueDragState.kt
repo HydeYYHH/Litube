@@ -89,9 +89,9 @@ internal class QueueDragState(
     }
 
     /**
-     * [owner] is the queue owner at release time: when it differs from the one
-     * captured at drag start the identity switched mid-drag and the commit is
-     * cancelled — the dragged index never lands in another owner's list.
+     * [owner] is the queue owner at release time: a mismatch with drag-start
+     * means the identity switched mid-drag, so the commit is cancelled —
+     * the dragged index never lands in another owner's list.
      */
     fun finish(source: List<QueueItem>, owner: QueueOwner?, cancelled: Boolean, onMove: (Int, Int, QueueOwner?) -> Unit) {
         val key = draggingKey ?: return

@@ -60,9 +60,8 @@ class DownloadSheetActivity : ComponentActivity() {
                     val r = result ?: return@LaunchedEffect
                     val snack = DownloadPresentation.snackbarFor(r)
                     val message = if (snack.kind == SnackbarKind.NO_NEW_TASKS) none else addedMessage
-                    // An action label makes the M3 default Indefinite, which would
-                    // hold this activity open until tapped; Short keeps the View
-                    // action available while still auto-dismissing.
+                    // An action label makes M3 default Indefinite, holding this activity open
+                    // until tapped; Short keeps the View action while auto-dismissing.
                     val outcome = snackbar.showSnackbar(
                         message,
                         actionLabel = viewLabel,

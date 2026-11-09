@@ -132,19 +132,19 @@ private fun LibraryList(listState: LazyListState, content: LibraryContent.Ready,
         }
         when {
             page.historyFailed -> item(key = "history-failed") {
-                ShelfRetry("Couldn't load history", historyRetrying) { onAction(LibraryAction.RetryHistoryShelf) }
+                ShelfRetry(stringResource(R.string.ui_couldn_t_load_history), historyRetrying) { onAction(LibraryAction.RetryHistoryShelf) }
             }
             page.history.isNotEmpty() -> {
-                item(key = "history-header") { ShelfHeader("History") { onAction(LibraryAction.OpenHistory) } }
+                item(key = "history-header") { ShelfHeader(stringResource(R.string.download_history)) { onAction(LibraryAction.OpenHistory) } }
                 item(key = "history-shelf") { HistoryShelf(page.history) { onAction(LibraryAction.OpenVideo(it)) } }
             }
         }
         when {
             page.playlistsFailed -> item(key = "playlists-failed") {
-                ShelfRetry("Couldn't load playlists", playlistsRetrying) { onAction(LibraryAction.RetryPlaylistsShelf) }
+                ShelfRetry(stringResource(R.string.ui_couldn_t_load_playlists), playlistsRetrying) { onAction(LibraryAction.RetryPlaylistsShelf) }
             }
             page.playlists.isNotEmpty() -> {
-                item(key = "playlists-header") { ShelfHeader("Playlists") { onAction(LibraryAction.OpenPlaylists) } }
+                item(key = "playlists-header") { ShelfHeader(stringResource(R.string.ui_playlists)) { onAction(LibraryAction.OpenPlaylists) } }
                 item(key = "playlists-shelf") { PlaylistShelf(page.playlists) { onAction(LibraryAction.OpenPlaylist(it)) } }
             }
         }
@@ -157,7 +157,7 @@ private fun ShelfRetry(message: String, loading: Boolean, onRetry: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         AppText(message, Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
         if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-        else PillButton("Retry", onRetry)
+        else PillButton(stringResource(R.string.retry), onRetry)
     }
 }
 
@@ -187,7 +187,7 @@ private fun ShelfHeader(label: String, onSeeAll: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         AppText(label, Modifier.weight(1f), size = 16, line = 22, weight = FontWeight.Medium)
         Box(Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onSeeAll).padding(horizontal = 12.dp, vertical = 6.dp)) {
-            AppText("View all", size = 14, line = 20, weight = FontWeight.Medium)
+            AppText(stringResource(R.string.ui_view_all), size = 14, line = 20, weight = FontWeight.Medium)
         }
     }
 }
@@ -200,7 +200,7 @@ fun HistoryScreen(state: HistoryUiState, onAction: (LibraryAction) -> Unit, onBa
         val width = maxWidth.value
         Column(Modifier.fillMaxSize()) {
         CollapsingAppBar(appBar) {
-            LibrarySubPageBar("History", onBack, onAction, trailing = if (!state.live) null else ({
+            LibrarySubPageBar(stringResource(R.string.download_history), onBack, onAction, trailing = if (!state.live) null else ({
             AppIconButton(AppIcon.More, stringResource(R.string.a11y_history_settings), diameter = 48.dp,
                 modifier = Modifier.testTag("history-manage")) { onAction(LibraryAction.OpenManageHistory) }
         }))
@@ -275,7 +275,7 @@ fun CollectionScreen(state: CollectionUiState,
     val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     Column(modifier.fillMaxSize().background(DesignTokens.Background).testTag("playlists-screen").nestedScroll(appBar.connection)) {
         CollapsingAppBar(appBar) {
-            LibrarySubPageBar("Playlists", onBack, onAction)
+            LibrarySubPageBar(stringResource(R.string.ui_playlists), onBack, onAction)
 
             }
             RefreshableContent(value = state, refreshing = state.content == CollectionContent.Loading,
@@ -348,8 +348,8 @@ internal fun LibraryAppendRow(append: com.hhst.youtubelite.home.domain.AppendSta
         com.hhst.youtubelite.home.domain.AppendState.Failed -> Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("library-append-failed"),
             verticalAlignment = Alignment.CenterVertically) {
-            AppText("Couldn't load more entries.", Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
-            AppText("Retry", Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onRetry)
+            AppText(stringResource(R.string.ui_couldn_t_load_more_entries), Modifier.weight(1f), size = 14, line = 20, color = DesignTokens.Secondary)
+            AppText(stringResource(R.string.retry), Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onRetry)
                 .padding(horizontal = 12.dp, vertical = 6.dp), size = 14, line = 20, weight = FontWeight.Medium)
         }
         com.hhst.youtubelite.home.domain.AppendState.Idle -> Spacer(Modifier.height(1.dp))

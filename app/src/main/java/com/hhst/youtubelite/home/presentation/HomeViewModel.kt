@@ -98,8 +98,7 @@ class HomeViewModel(
         val seedGeneration = generation
         val account = accountKey()
         val chip = _state.value.selectedChip
-        // Snapshot read/parse never blocks the main thread; it still paints well
-        // ahead of the network load, and never over a live result.
+        // Snapshot seeding paints ahead of the network load and never over a live result.
         viewModelScope.launch {
             val rows = withContext(seedDispatcher) {
                 store.read("home", account, chip, FeedItem.Video::class.java)
@@ -158,14 +157,11 @@ class HomeViewModel(
     private fun refreshInFlight() = loadJob?.isActive == true
 
     /**
-     * Foreground entry refreshes quietly at most once per report signal or staleness
-     * window, on both a feed and an empty home (a real watch may have created the
-     * first recommendations). An existing feed/empty card keeps its rows, query and
-     * scroll; a busy load merges the signal as a pending revision instead of
+     * Quiet refresh at most once per report signal or staleness window, on feed and
+     * empty alike; a busy load merges the signal as a pending revision instead of
      * discarding it — the finished request consumes it.
      */
     fun onForeground() {
-        // Adopt the signal even while busy: the finished request re-checks it.
         val signal = reportSignal?.invoke() ?: -1L
         if (signal > lastSeenReportSignal) {
             if (lastSeenReportSignal >= 0) pendingReportRevision = true
@@ -180,8 +176,7 @@ class HomeViewModel(
                     load(append = false)
                 }
             }
-            // Staleness alone must not disturb an honest empty state; a real
-            // watch signal may. Loading/Failed keep their own retry paths.
+            // Staleness must not disturb an honest empty state; only a real watch signal refreshes it.
             is HomeContent.Empty ->
                 if (pendingReportRevision && loadJob?.isActive != true) {
                     pendingReportRevision = false
@@ -372,9 +367,8 @@ class HomeViewModel(
     }
 
     /**
-     * The host reports the verification screen finished with RESULT_OK. The read
-     * retries once with the current identity — never automatically on another
-     * failure, so no request loop can form.
+     * Verification finished (RESULT_OK): retry once with the current identity, never
+     * automatically on another failure, so no request loop can form.
      */
     fun verificationCompleted(challengeUrl: String? = uiState.value.verification?.challengeUrl) {
         if (challengeUrl == null || uiState.value.verification?.challengeUrl != challengeUrl) return
@@ -609,8 +603,8 @@ class HomeViewModel(
     }
 
     /**
-     * One shared directory read per channel, capped and cached there; a stale application
-     * is identity-safe because it only rewrites rows still missing their avatar.
+     * One shared, cached directory read per channel; a stale application is identity-safe
+     * because it only rewrites rows still missing their avatar.
      */
     private fun fillMissingAvatars(items: List<FeedItem>) {
         val directory = avatars ?: return
@@ -701,8 +695,8 @@ class HomeViewModel(
                 currentCoroutineContext().ensureActive()
                 if (requestGeneration != generation) return@launch
                 liveResultReceived = true
-                // Prepare the web session and solver for the top card while the user is still
-                // browsing, so opening it does not pay the watch-page read on the tap path.
+                // Warm the top card's session/solver while the user browses so opening
+                // it does not pay the watch-page read on the tap path.
                 if (!append) (page.items.firstOrNull { it is FeedItem.Video } as? FeedItem.Video)?.id?.let(warm)
                 if (!append) lastFeedLoadedAtMs = now()
                 val currentFeed = _state.value.content as? HomeContent.Feed
@@ -737,7 +731,7 @@ class HomeViewModel(
                 val feed = _state.value.content as? HomeContent.Feed ?: feed
                 if (error.failure.isTrafficChallenge()) {
                     // Keep a working feed browsable and surface the challenge as a banner;
-                    // a first-load challenge becomes the state the card renders over.
+                    // a first-load challenge becomes the card's own state.
                     _state.update { state -> state.copy(
                         content = if (feed != null) feed.copy(refreshing = false,
                             append = if (append) AppendState.Failed else AppendState.Idle, refreshFailed = false)
@@ -761,9 +755,8 @@ class HomeViewModel(
     }
 
     /**
-     * A progress signal that arrived while a request was in flight merges as a
-     * pending revision and is consumed here — one quiet re-check, never discarded.
-     * A traffic challenge is excluded: its banner owns the retry.
+     * Consumes a signal merged while a request was in flight — one quiet re-check,
+     * never discarded. Traffic challenges excluded: their banner owns the retry.
      */
     private fun consumePendingRevisionAfterLoad() {
         if (!pendingReportRevision) return

@@ -38,7 +38,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 
-/** Same real stream and production engine; injected failure is explicitly optional. */
+/** Same real stream and production engine; injected failure is optional. */
 class HlsRecoveryExperimentAndroidTest {
     @get:Rule val activity=ActivityScenarioRule(ExtractionTestActivity::class.java)
     @Test fun compareRecovery() = runBlocking(Dispatchers.IO) {

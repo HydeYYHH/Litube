@@ -31,13 +31,13 @@ class ExplorePaginationAndroidTest {
         launch(ExploreScenario.Paged)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("explore-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("explore-item-music-bunny").assertIsDisplayed()
-        // Reaching the last loaded item puts the tail on screen, which asks for page two.
+        // Reaching the last loaded item puts the tail on screen → asks for page two.
         compose.onNodeWithTag("explore-list").performScrollToNode(hasTestTag("explore-item-music-live"))
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("explore-item-music-bunny-p2").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("explore-list").performScrollToNode(hasTestTag("explore-item-music-live-p2"))
         compose.onNodeWithTag("explore-item-music-live-p2").assertIsDisplayed()
         compose.waitForIdle()
-        // The canned page carried no cursor: no spinner, no retry, no third page.
+        // Canned page carried no cursor: no spinner, no retry, no third page.
         compose.onAllNodesWithTag("explore-tail-loading").assertCountEquals(0)
         compose.onAllNodesWithTag("explore-tail-retry").assertCountEquals(0)
         compose.onAllNodesWithTag("explore-item-music-bunny-p3").assertCountEquals(0)
@@ -47,8 +47,8 @@ class ExplorePaginationAndroidTest {
         launch(ExploreScenario.Sections)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("explore-sections").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("explore-section-0-title").assertIsDisplayed()
-        // The shelf tail fires on its own once visible: on wide windows it is already on screen
-        // and the append may finish before a scroll finds the tile, so the scroll is best-effort.
+        // Shelf tail fires once visible: on wide windows it is already on screen and
+        // the append may finish before a scroll finds the tile, so scroll is best-effort.
         runCatching { compose.onNodeWithTag("explore-carousel-0").performScrollToNode(hasTestTag("explore-shelf-0-tail")) }
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("explore-item-music-bunny-s0-1").fetchSemanticsNodes().isNotEmpty() }
         listOf("music-bunny-s0-1", "music-dream-s0-1").forEach { id ->
@@ -62,7 +62,7 @@ class ExplorePaginationAndroidTest {
     @Test fun sectionedPageTailAppendsANewShelfBelow() {
         launch(ExploreScenario.Sections)
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("explore-sections").fetchSemanticsNodes().isNotEmpty() }
-        // The page tail sits below both shelves and asks for the next page once visible.
+        // Page tail sits below both shelves and asks for the next page once visible.
         compose.onNodeWithTag("explore-sections").performScrollToIndex(4)
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("explore-section-2-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("explore-section-2-title").assertIsDisplayed()

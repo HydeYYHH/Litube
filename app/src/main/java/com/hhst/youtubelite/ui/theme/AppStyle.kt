@@ -12,7 +12,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** User-selectable appearance; System follows the OS dark-mode setting. */
 enum class ThemeMode(val label: String) { System("System"), Light("Light"), Dark("Dark") }
 
 object AppAppearance {
@@ -23,7 +22,6 @@ object AppAppearance {
         private set
     private val listeners = mutableListOf<() -> Unit>()
 
-    /** Publishes a persisted mode change; every Compose theme entry recomposes. */
     fun update(value: ThemeMode) {
         mode = value
         dark = when (value) {

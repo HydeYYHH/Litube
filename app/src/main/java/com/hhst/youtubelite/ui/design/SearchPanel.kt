@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.ui.design
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
 import androidx.compose.foundation.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -96,7 +97,7 @@ internal fun SearchPanel(
     Column(Modifier.fillMaxWidth().graphicsLayer {
         alpha = reveal.value
         translationY = -4.dp.toPx() * (1f - reveal.value)
-    }.background(DesignTokens.Background).testTag("search-overlay").semantics { paneTitle = "Search YouTube" }) {
+    }.background(DesignTokens.Background).testTag("search-overlay").appPaneTitle(R.string.a11y_search_youtube)) {
         Row(Modifier.fillMaxWidth().height(toolbarHeight).background(
             if (DesignTokens.Background == Color.White) Color(0xFFF1F1F1) else DesignTokens.Surface), verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(AppIcon.Back, stringResource(R.string.a11y_back), onClick = close, modifier = Modifier.testTag("search-panel-back"))
@@ -107,7 +108,7 @@ internal fun SearchPanel(
                     textStyle = DesignTokens.text(15, 22), singleLine = true, cursorBrush = SolidColor(DesignTokens.Ink),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); onSubmit(query) }),
-                    decorationBox = { inner -> Box { if (query.isEmpty()) AppText("Search YouTube", size = 15, line = 22, color = DesignTokens.Secondary); inner() } })
+                    decorationBox = { inner -> Box { if (query.isEmpty()) AppText(stringResource(R.string.a11y_search_youtube), size = 15, line = 22, color = DesignTokens.Secondary); inner() } })
                 if (query.isNotEmpty()) Box(Modifier.size(50.dp, 16.dp).clickable(role = Role.Button) {
                     onQueryChanged(""); focus.requestFocus(); keyboard?.show()
                 }.appDescription(R.string.a11y_clear_search).padding(start = 8.dp, end = 26.dp)) { AppIcon(AppIcon.Close, Modifier.size(16.dp)) }

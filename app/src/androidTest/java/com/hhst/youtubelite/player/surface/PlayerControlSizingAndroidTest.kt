@@ -30,7 +30,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
-/** Exercise the real chrome and popup routing; no network or playback timing is involved. */
+/** Real chrome and popup routing; no network or playback timing. */
 class PlayerControlSizingAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<PlayerTestActivity>()
     private val calls = mutableMapOf<String, Int>()
@@ -206,7 +206,7 @@ class PlayerControlSizingAndroidTest {
             val oldSpeed = calls["onSpeed"] ?: 0
             compose.onNodeWithText("1.5x").performScrollTo().performTouchInput { click() }
             compose.runOnIdle { assertEquals(oldSpeed + 1, calls["onSpeed"]) }
-            // Chapters and skippable segments live in the info band behind the chapter chip; with neither present the entry stays hidden.
+            // Chapters/segments live behind the chapter chip; with neither present the entry stays hidden.
             compose.onNodeWithTag("player-chapter-entry").assertDoesNotExist()
             compose.waitForIdle()
         }
@@ -323,7 +323,7 @@ class PlayerControlSizingAndroidTest {
             rects.zipWithNext().forEach { (a, b) -> assertTrue("Top targets overlap", a.right <= b.left + 1) }
             button(compose.onNodeWithContentDescription(compose.activity.getString(R.string.action_fullscreen)), frame, density)
             compose.onNodeWithText("1:11:12").assertIsDisplayed()
-            Thread.sleep(200) // SurfaceView and vector redraw follow the platform frame clock.
+            Thread.sleep(200) // SurfaceView/vector redraw follow the platform frame clock.
             compose.waitForIdle()
             DeviceEvidence.captureScene("controls-fullscreen-font${(scale * 10).toInt()}")
         }

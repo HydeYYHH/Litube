@@ -85,8 +85,7 @@ internal class VodManifestCache(private val now: () -> Long = System::currentTim
                 if (hit == null && whole) {
                     capture = ByteArrayOutputStream()
                 }
-                // Joining is part of this open, rather than an extra budget before it.
-                // Speculative callers already carry their own absolute deadline.
+                // Joining is part of this open, not extra budget before it; speculative callers carry their own deadline.
                 val upstreamSpec = if (hit == null && deadline == null && lookup.waitedMs > 0)
                     dataSpec.buildUpon().setCustomData(ManifestJoinWait(lookup.waitedMs, dataSpec.customData)).build()
                 else dataSpec
@@ -125,8 +124,7 @@ internal class VodManifestCache(private val now: () -> Long = System::currentTim
         }
     }
     companion object {
-        // A normal VOD playlist can exceed 256 KiB. Share the document bound with
-        // speculative reads, while retaining the existing total cache budget.
+        // A normal VOD playlist can exceed 256 KiB; share the document bound with speculative reads.
         const val MAX_DOCUMENT_BYTES = 1024 * 1024
         private const val MAX_CACHE_BYTES = 1024 * 1024
     }

@@ -3,9 +3,8 @@ package com.hhst.youtubelite.core
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Process-global [android.webkit.WebView.pauseTimers] / [android.webkit.WebView.resumeTimers]
- * are shared by every WebView. Occupancy is who currently needs timers running
- * (browser foreground, PoToken mint). Count 0 pauses; count > 0 resumes.
+ * [android.webkit.WebView.pauseTimers]/[resumeTimers] are process-global and shared
+ * by every WebView; occupancy tracks who needs timers running. Count 0 pauses, > 0 resumes.
  */
 interface WebViewTimerClock {
     /** Timer changes must not wait for another thread. */

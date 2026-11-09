@@ -45,9 +45,9 @@ class HomeScreenAndroidTest {
     }
 
     @Test fun firstVisitIsNativeAndDoesNotStartNetworkingOrLegacyRuntime() {
-        // A previous suite class may have started the media runtime in this shared
-        // process; the contract is that opening this page does not start it, and
-        // first-visit traffic stays zero when the runtime is genuinely cold.
+        // A previous suite class may have started the media runtime in this shared process;
+        // the contract is that opening this page does not start it, and first-visit traffic
+        // stays zero when the runtime is genuinely cold.
         val runtimeStartedBefore = (ApplicationProvider.getApplicationContext<Context>() as App).mediaRuntimeStarted
         val sent = TrafficStats.getUidTxBytes(Process.myUid())
         val received = TrafficStats.getUidRxBytes(Process.myUid())

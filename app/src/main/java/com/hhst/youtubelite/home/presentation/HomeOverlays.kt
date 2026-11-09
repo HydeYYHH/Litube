@@ -1,5 +1,8 @@
 package com.hhst.youtubelite.home.presentation
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
+import com.hhst.youtubelite.ui.design.labelResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -40,11 +43,11 @@ internal fun VideoMenu(onAction: (HomeAction) -> Unit, kind: FeedMenuKind = Feed
     signedIn: Boolean = false, video: FeedItem.Video? = null, state: HomeOverlay.Menu? = null) {
     val rows = kind.visibleActions(live, signedIn, video)
     MenuBottomSheet(
-        items = rows.map { MenuSheetItem(it.icon(), it.label) },
+        items = rows.map { MenuSheetItem(it.icon(), stringResource(it.labelResource)) },
         onDismiss = { onAction(HomeAction.CloseOverlay) },
         onSelect = { index -> onAction(HomeAction.MenuSelected(rows[index])) },
         tag = "video-menu",
-        paneTitle = "Video actions",
+        paneTitle = stringResource(R.string.ui_video_actions),
         header = if (state?.loading == true || state?.failed == true) ({
             Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
                 if (state.loading) Box(Modifier.testTag("home-menu-loading")) { LoadingSpinner() }
@@ -80,19 +83,19 @@ internal fun MixMenu(onAction: (HomeAction) -> Unit, live: Boolean = false) {
         val widthLimit = minOf(362.dp, (maxWidth - margin * 2).coerceAtLeast(0.dp))
         Column(Modifier.widthIn(min = if (maxWidth >= 330.dp) minOf(256.dp, widthLimit) else 0.dp, max = widthLimit).width(IntrinsicSize.Max)
             .heightIn(max = (maxHeight - margin * 2).coerceAtLeast(0.dp)).clip(RoundedCornerShape(8.dp)).background(DesignTokens.Background)
-            .testTag("mix-menu").semantics { paneTitle = "Mix actions" }
+            .testTag("mix-menu").appPaneTitle(R.string.ui_mix_actions)
             .verticalScroll(rememberScrollState()).padding(3.dp)) {
             FeedMenuKind.Mix.visibleActions(live).forEach { action ->
                 Box(Modifier.padding(vertical = 3.dp).fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) {
                     onAction(HomeAction.MenuSelected(action))
                 }.padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.CenterStart) {
-                    AppText(action.label, size = 16, line = 22)
+                    AppText(stringResource(action.labelResource), size = 16, line = 22)
                 }
             }
             Box(Modifier.padding(vertical = 3.dp).fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) {
                 onAction(HomeAction.CloseOverlay)
             }.padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.CenterStart) {
-                AppText("Cancel", size = 16, line = 22)
+                AppText(stringResource(R.string.cancel), size = 16, line = 22)
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.channel.presentation
 
+import com.hhst.youtubelite.ui.design.appPaneTitle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -59,7 +60,7 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
         .then(drag.panelModifier)
         .clip(RoundedCornerShape(topStart = if (square) 0.dp else 12.dp, topEnd = if (square) 0.dp else 12.dp))
         .background(DesignTokens.Background).pointerInput(Unit) { detectTapGestures {} }
-        .semantics { paneTitle = "About ${profile.name}" }.testTag("channel-about-panel")) {
+        .appPaneTitle(R.string.download_size_estimate, profile.name).testTag("channel-about-panel")) {
         Column(Modifier.fillMaxWidth().then(drag.handleModifier).testTag("channel-about-drag-header")) {
         Box(Modifier.fillMaxWidth().height(12.dp).padding(top = 8.dp), contentAlignment = Alignment.TopCenter) {
             if (!square) Box(Modifier.size(40.dp, 4.dp).background(DesignTokens.Ink.copy(alpha = .15f), RoundedCornerShape(4.dp)))
@@ -72,12 +73,12 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
         Box(Modifier.fillMaxWidth().height(1.dp).background(DesignTokens.NavigationDivider))
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 12.dp).testTag("channel-about-content")) {
             Spacer(Modifier.height(16.dp))
-            AboutHeading("Description", headingSize, headingLine)
+            AboutHeading(stringResource(R.string.video_description), headingSize, headingLine)
             Spacer(Modifier.height(12.dp))
             AppText(profile.fullDescription, size = 14, line = 20)
             if (profile.links.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                AboutHeading("Links", headingSize, headingLine)
+                AboutHeading(stringResource(R.string.ui_links), headingSize, headingLine)
                 Spacer(Modifier.height(12.dp))
                 profile.links.forEach { link ->
                     Column(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 40.dp, bottom = 8.dp)
@@ -89,7 +90,7 @@ fun ChannelAboutPanel(profile: ChannelProfile, width: Float, height: Float, onAc
                 }
             }
             Spacer(Modifier.height(16.dp))
-            AboutHeading("More info", headingSize, headingLine)
+            AboutHeading(stringResource(R.string.ui_more_info), headingSize, headingLine)
             Spacer(Modifier.height(12.dp))
             val details = listOf(AppIcon.Globe to profile.canonicalUrl.removePrefix("https://"), AppIcon.Globe to profile.country,
                 AppIcon.Info to profile.joined, AppIcon.Audience to profile.subscribers, AppIcon.VideoOutline to profile.videoCount, AppIcon.Trending to profile.views)

@@ -10,16 +10,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 
 /**
- * Coalesces equivalent core Watch reads across the page, resume, chapter and comment
- * consumers. Concurrent callers with the same identity, client profile, visitor,
- * video and locale share one in-flight network response; completed responses are
- * reused only by non-fresh callers within a short window. Different identities
- * never share anything, and fresh account-progress reads never reuse a
- * completed response.
+ * Coalesces equivalent Watch reads: identical keys share one in-flight response;
+ * completed responses serve only non-fresh callers within a short window; different
+ * identities never share and fresh reads never reuse a completed response.
  *
- * Blocking by design: the consumers already run blocking core reads on bounded
- * workers, and an in-flight owner always holds its own worker before any
- * joiner blocks, so waiting joiners cannot starve the read they await.
+ * Blocking by design: consumers already run blocking reads on bounded workers and an
+ * owner always holds a worker before joiners block, so joiners cannot starve the
+ * read they await.
  */
 class SharedWatchReads(
     private val maxAgeMs: Long = 15_000L,
@@ -29,7 +26,6 @@ class SharedWatchReads(
     private data class Key(val identity: String, val videoId: String, val language: String, val region: String,
         val oauth: Boolean, val visitor: String?, val visitorCookie: String?, val webIdentity: String?)
 
-    /** A settled response available to non-fresh readers. */
     private data class Cached(val result: ReadResult<WatchPage>, val completedAt: Long)
 
     private val lock = Any()
@@ -42,9 +38,8 @@ class SharedWatchReads(
     }
 
     /**
-     * Runs or joins one Watch read. The first caller executes [load] on its own
-     * transport and permit; joiners await the same response. A joiner whose
-     * owner failed becomes the new owner and reads again.
+     * Runs or joins one Watch read: the first caller loads on its own transport and
+     * permit; a joiner whose owner failed becomes the new owner.
      */
     fun read(
         videoId: String,
@@ -69,9 +64,8 @@ class SharedWatchReads(
                 if (!fresh) {
                     cache[key]?.takeIf { clock() - it.completedAt < maxAgeMs }?.let { return it.result }
                 }
-                // Any identical in-flight read is this instant's data either way,
-                // so a fresh caller joins it too; only completed results respect
-                // the freshness rule above.
+                // An identical in-flight read is this instant's data either way, so a
+                // fresh caller joins it too; only completed results respect freshness.
                 val existing = inFlight[key]
                 owner = existing == null
                 deferred = existing ?: CompletableDeferred<ReadResult<WatchPage>>()
@@ -95,8 +89,7 @@ class SharedWatchReads(
                 throw error
             }
             if (!result.ok) {
-                // Failed responses are not shareable state: every joiner either
-                // retries as a new owner or surfaces the same failure.
+                // Failures aren't shareable state: joiners either retry as new owners or surface the same failure.
                 val error = result.error ?: com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(
                     com.liskovsoft.youtubeapi.videoinfo.V2.RequestFailure.PARSE, "missing_response")
                 synchronized(lock) {

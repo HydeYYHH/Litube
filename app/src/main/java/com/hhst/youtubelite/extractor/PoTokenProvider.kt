@@ -40,8 +40,8 @@ class PoTokenProvider(
     private val tokens = LinkedHashMap<String, PoTokenMinter.Token>(128, .75f, true)
 
     init { reaper.scheduleWithFixedDelay({ synchronized(lock) {
-        // The minter is bound to the integrity token's own lifetime (refreshAt), so keeping it for a
-        // few minutes spares a ~1 s BotGuard initialization when the next video needs a token.
+        // Minter is bound to the integrity token's lifetime (refreshAt); keeping it a few
+        // minutes spares a ~1 s BotGuard init for the next video.
         if (runtime != null && System.currentTimeMillis() - lastUsed >= MINTER_IDLE_MS) releaseMinter()
     } }, 60, 60, TimeUnit.SECONDS) }
 
@@ -93,8 +93,7 @@ class PoTokenProvider(
                 it.evaluate(bundle + "\n'loaded'", remaining(), context)
             }
         }
-        // kotlinx configuration objects are immutable, so the challenge markers are
-        // stripped at the use sites instead of being removed from the captured config.
+        // kotlinx config objects are immutable, so challenge markers are stripped at use sites.
         fun pairedChallenge(config: JsonObject): JsonObject? {
             if (config.containsKey("_BG_CHALLENGE")) {
                 return config["_BG_CHALLENGE"] as? JsonObject
@@ -180,7 +179,7 @@ class PoTokenProvider(
 
 }
 
-/** GenerateIT's refresh threshold and fallback are optional; a two-item reply is valid. */
+/** GenerateIT refresh threshold/fallback are optional; a two-item reply is valid. */
 @kotlinx.serialization.Serializable
 internal data class PoIntegrity(
     val integrityToken: String,

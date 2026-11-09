@@ -8,7 +8,7 @@ data class PlaylistSummary(
     val videoCount: Int?,
     val artwork: String,
     val views: String,
-    /** Days since the last update; null when the source does not say. Never fabricate zero. */
+    /** Days since last update; null when unknown. Never fabricate zero. */
     val updatedDays: Int?,
     val accent: Long = 0xFF2D4F72,
     val videoCountText: String? = null,
@@ -31,17 +31,17 @@ data class PlaylistEntry(
 )
 
 data class PlaylistPage(val summary: PlaylistSummary, val description: String, val entries: List<PlaylistEntry>,
-    /** Server continuation for the next entry page; null when the list ended or is unknown. */
+    /** Server continuation; null when the list ended or is unknown. */
     val nextKey: String? = null)
 
 data class PlaylistAppendPage(val entries: List<PlaylistEntry>, val nextKey: String?)
 
 object PlaylistLimits {
-    /** YouTube's own playlist browse cap; enumeration stops here and says so. */
+    /** YouTube's playlist browse cap; enumeration stops here and says so. */
     const val MAX_ENTRIES = 1000
 }
 
-/** A bounded full enumeration behind Play all/Shuffle/batch download; cancelled with its job. */
+/** Bounded full enumeration behind Play all/Shuffle/batch download; cancelled with its job. */
 sealed interface PlaylistEnumeration {
     data object Idle : PlaylistEnumeration
     data class Running(val loaded: Int, val total: Int?) : PlaylistEnumeration
@@ -51,7 +51,7 @@ sealed interface PlaylistEnumeration {
 interface PlaylistRepository {
     suspend fun playlist(id: String): PlaylistPage?
 
-    /** Further entries after [cursor]; null cursor on the response means the list ended. */
+    /** Further entries after [cursor]; a null cursor on the response means the list ended. */
     suspend fun playlistNext(id: String, cursor: String): PlaylistAppendPage? = null
 }
 
@@ -72,9 +72,9 @@ sealed interface PlaylistOverlay {
 data class PlaylistUiState(
     val playlistId: String,
     val content: PlaylistContent = PlaylistContent.Loading,
-    /** Independent append state for the entries list; a failed append keeps loaded rows. */
+    /** Independent append state; a failed append keeps loaded rows. */
     val append: com.hhst.youtubelite.home.domain.AppendState = com.hhst.youtubelite.home.domain.AppendState.Idle,
-    /** Full enumeration behind the batch actions (Play all, Shuffle, Download). */
+    /** Full enumeration behind Play all / Shuffle / Download. */
     val enumeration: PlaylistEnumeration = PlaylistEnumeration.Idle,
     val overlay: PlaylistOverlay = PlaylistOverlay.None,
     val query: String = "",

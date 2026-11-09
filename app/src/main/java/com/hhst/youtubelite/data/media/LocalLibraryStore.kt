@@ -13,8 +13,8 @@ class LocalLibraryStore(private val store: AuthStore,
     private val json = Json { ignoreUnknownKeys = true }
     private data class Collection(val id: String, val title: String, val description: String, val videos: List<HistoryEntry>)
     private data class Data(val history: List<HistoryEntry> = emptyList(), val collections: List<Collection> = emptyList(), val paused: Boolean = false)
-    // Older payloads may predate fields, so parse through nullable mirrors and
-    // normalize once into the domain types.
+    // Older payloads may predate fields; parse through nullable mirrors and
+    // normalize once into domain types.
     @Serializable private data class StoredEntry(
         val id: String? = null, val videoId: String? = null, val title: String? = null,
         val author: String? = null, val channelId: String? = null, val artwork: String? = null,
@@ -65,8 +65,8 @@ class LocalLibraryStore(private val store: AuthStore,
             }
         }
     }.getOrNull() ?: run {
-        // Corrupt or unreadable payload: keep a bounded recovery copy instead of
-        // letting the next write silently erase the only remaining evidence.
+        // Corrupt/unreadable payload: keep a bounded recovery copy so the next
+        // write cannot silently erase the only remaining evidence.
         store.read(KEY)?.let { raw ->
             if (raw.length <= RECOVERY_BACKUP_CHARS) store.write(KEY_RECOVERY, raw)
             com.hhst.youtubelite.diagnostics.AppLog.event(
@@ -77,8 +77,8 @@ class LocalLibraryStore(private val store: AuthStore,
     }
 
     @Synchronized fun history() = HistoryPage(data.history.map { entry ->
-        // Local removal is keyed by videoId (see [remove]); entries persisted
-        // before the removal token existed still need a usable handle.
+        // Local removal is keyed by videoId; entries persisted before the removal
+        // token existed still need a usable handle.
         entry.copy(removeToken = entry.removeToken ?: entry.videoId)
     })
     @Synchronized fun paused() = data.paused
@@ -101,9 +101,8 @@ class LocalLibraryStore(private val store: AuthStore,
 
     /**
      * Undoes exactly one [remove]: puts the entry back relative to its former
-     * neighbours. Entries recorded or removed after the delete are left alone;
-     * if the same video is present again (re-watched), the fresh record wins
-     * and the undo is a no-op.
+     * neighbours. Entries recorded/removed after the delete are left alone; if
+     * the same video is present again (re-watched), the fresh record wins.
      */
     @Synchronized fun restore(removed: RemovedHistoryEntry) {
         if (data.history.any { it.videoId == removed.entry.videoId }) return
@@ -114,8 +113,8 @@ class LocalLibraryStore(private val store: AuthStore,
         when {
             prevIdx >= 0 -> history.add(prevIdx + 1, removed.entry)
             nextIdx >= 0 -> history.add(nextIdx, removed.entry)
-            // Both neighbours are gone (also removed since): the recorded index
-            // is the only position evidence left, clamped to the current size.
+            // Both neighbours are gone: the recorded index is the only position
+            // evidence left, clamped to the current size.
             else -> history.add(removed.index.coerceAtMost(history.size), removed.entry)
         }
         save(data.copy(history = history.take(500)))
@@ -172,8 +171,8 @@ class LocalLibraryStore(private val store: AuthStore,
             try {
                 persist(snapshot)
             } catch (error: Exception) {
-                // Keep the failed revision dirty for the next flush — unless a
-                // newer snapshot arrived while we were writing, which wins.
+                // Keep the failed revision dirty for the next flush — unless a newer
+                // snapshot arrived while we were writing, which wins.
                 pending.updateAndGet { current ->
                     if (snapshot.revision > persistedRevision.get() &&
                         (current == null || snapshot.revision > current.revision)) snapshot else current
@@ -200,10 +199,10 @@ class LocalLibraryStore(private val store: AuthStore,
         const val WATCH_LATER = "local:watch-later"
         private const val KEY = "device-library:data"
         private const val KEY_RECOVERY = "device-library:recovery"
-        /** Recovery copy cap: big enough for forensic value, small enough for one prefs entry. */
+        /** Recovery copy cap: forensic value vs one prefs entry size. */
         private const val RECOVERY_BACKUP_CHARS = 256 * 1024
 
-        /** Production writer: one daemon thread, so callers never marshal the library inline. */
+        /** Production writer: one daemon thread so callers never marshal the library inline. */
         fun backgroundWriter(): java.util.concurrent.Executor =
             java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
                 Thread(runnable, "device-library-writer").apply { isDaemon = true }

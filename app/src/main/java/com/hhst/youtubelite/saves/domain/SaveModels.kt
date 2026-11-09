@@ -4,8 +4,8 @@ package com.hhst.youtubelite.saves.domain
 data class SavePlaylist(val id: String, val title: String)
 
 /**
- * What the save sheet hands back to its host. The host decides how the request is
- * recorded; selecting a target never mutates the local fixture or shows a saved badge.
+ * What the save sheet hands back to its host. The host decides how the request is recorded;
+ * selecting a target never mutates the local fixture or shows a saved badge.
  */
 sealed interface SaveDestination {
     data object WatchLater : SaveDestination

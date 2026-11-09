@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.library.presentation
 
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,9 +49,9 @@ internal fun LibraryMessageCard(title: String, message: String, tag: String, act
             .background(DesignTokens.Background, RoundedCornerShape(12.dp))
             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
-            AppText(title, size = 24, line = 32, weight = FontWeight.Black, align = androidx.compose.ui.text.style.TextAlign.Center)
+            AppText(libraryMessageText(title), size = 24, line = 32, weight = FontWeight.Black, align = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(12.dp))
-            AppText(message, size = 14, line = 20, color = DesignTokens.Secondary, align = androidx.compose.ui.text.style.TextAlign.Center)
+            AppText(libraryMessageText(message), size = 14, line = 20, color = DesignTokens.Secondary, align = androidx.compose.ui.text.style.TextAlign.Center)
             if (action != null) {
                 Spacer(Modifier.height(20.dp))
                 action()
@@ -85,9 +86,9 @@ internal fun LibrarySkeleton(tag: String) {
 internal fun LibraryError(tag: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag(tag).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
-        AppText("Please try again.", Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
-        PillButton("Retry", onRetry)
+        AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
+        AppText(stringResource(R.string.ui_please_try_again), Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
+        PillButton(stringResource(R.string.retry), onRetry)
     }
 }
 
@@ -98,7 +99,7 @@ internal fun LibraryRowItem(row: LibraryRow, icon: AppIcon, onOpen: () -> Unit) 
         verticalAlignment = Alignment.CenterVertically) {
         AppIcon(icon)
         Spacer(Modifier.width(24.dp))
-        AppText(if (row == LibraryRow.Queue) androidx.compose.ui.res.stringResource(com.hhst.youtubelite.R.string.queue) else row.label, size = 14, line = 22)
+        AppText(stringResource(row.labelResource), size = 14, line = 22)
     }
 }
 
@@ -133,7 +134,7 @@ internal fun HistoryCard(entry: HistoryEntry, compact: Boolean, onOpen: () -> Un
 
 private fun Modifier.semanticsLabel(label: String) = this.then(Modifier.semantics { contentDescription = label })
 
-/** Horizontal shelf of playlist covers; geometry follows the shorts shelf card width. */
+/** Card width mirrors the shorts shelf so library shelves stay aligned. */
 @Composable
 internal fun PlaylistShelf(playlists: List<PlaylistSummary>, onOpen: (String) -> Unit) {
     LazyRow(Modifier.fillMaxWidth().testTag("library-playlists-shelf"),
@@ -176,4 +177,19 @@ internal fun HistoryShelf(entries: List<HistoryEntry>, onOpen: (String) -> Unit)
             }
         }
     }
+}
+
+@Composable
+private fun libraryMessageText(text: String): String = when (text) {
+    "Don't miss new videos" -> stringResource(R.string.ui_don_t_miss_new_videos)
+    "Sign in to see updates from your favorite YouTube channels" -> stringResource(R.string.ui_sign_in_to_see_updates_from_your_favorite_youtube_channels)
+    "Keep track of what you watch" -> stringResource(R.string.ui_keep_track_of_what_you_watch)
+    "Watch and like videos to see your history here." -> stringResource(R.string.ui_watch_and_like_videos_to_see_your_history_here)
+    "Keep your favorite videos together" -> stringResource(R.string.ui_keep_your_favorite_videos_together)
+    "Sign in to create and manage playlists." -> stringResource(R.string.ui_sign_in_to_create_and_manage_playlists)
+    "No videos" -> stringResource(R.string.ui_no_videos)
+    "Videos you watch will show up here." -> stringResource(R.string.ui_videos_you_watch_will_show_up_here)
+    "No playlists" -> stringResource(R.string.ui_no_playlists)
+    "Playlists you create will show up here." -> stringResource(R.string.ui_playlists_you_create_will_show_up_here)
+    else -> text
 }

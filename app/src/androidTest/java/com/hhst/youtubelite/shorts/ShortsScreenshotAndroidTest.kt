@@ -71,8 +71,8 @@ class ShortsScreenshotAndroidTest {
         compose.onNodeWithText("Subscribe").assertIsDisplayed()
         val channel = compose.onNodeWithTag("short-channel-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, channel.left, 0.5f)
-        // The shared SubscribeButton's 48dp touch target makes the bottom-anchored channel row
-        // 8dp taller than the old 40dp pill row; the block stays bottom-anchored, so the title keeps its 808f top.
+        // The shared SubscribeButton's 48dp touch target makes the bottom-anchored
+        // channel row 8dp taller than the old 40dp pill row; the title keeps its 808f top.
         assertEquals(752f, channel.top, 0.5f)
         val title = compose.onNodeWithTag("short-title-short-1").fetchSemanticsNode().boundsInRoot
         assertEquals(16f, title.left, 0.5f)

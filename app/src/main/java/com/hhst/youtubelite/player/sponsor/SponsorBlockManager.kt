@@ -15,12 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Call
 import okhttp3.Request
 
-/**
- * SponsorBlock client: fetches skip segments and reports them to the engine.
- *
- * API: `https://sponsor.ajay.app/api/skipSegments/<sha256(videoId)[0..4)>`
- * with categories driven by extension prefs.
- */
+/** API: `https://sponsor.ajay.app/api/skipSegments/<sha256(videoId)[0..4)>`, categories driven by extension prefs. */
 class SponsorBlockManager(
     private val http: OkHttpClient,
     private val prefs: ExtensionManager,
@@ -60,7 +55,6 @@ class SponsorBlockManager(
     /** In-flight call; a newer [load] cancels the superseded one outright. */
     private var currentCall: Call? = null
 
-    /** Fetches segments for [videoId]; no-op when every category is disabled. */
     @Synchronized
     fun load(videoId: String, diagnosticContext: DiagnosticContext? = null) {
         val id = VideoId.parse(videoId) ?: return

@@ -34,7 +34,6 @@ internal data class PrefetchDeadline(val elapsedRealtimeMs: Long)
 /** Time already spent joining a speculative manifest, charged to the normal open budget. */
 internal data class ManifestJoinWait(val elapsedMs: Long, val customData: Any?)
 
-/** Media3 and cast consume the extractor's session, client, method and bounded range plan. */
 @UnstableApi
 class YoutubeHttpDataSource private constructor(
     private val callFactory: Call.Factory,
@@ -160,10 +159,9 @@ class YoutubeHttpDataSource private constructor(
                 else window.expectedBytes.takeIf { it >= 0 } ?: plan.chunkLimit
         }
 
-        // A 200 to a Range-header request is the full representation, so the
-        // body starts at byte 0 and the caller still needs [dataSpec.position]
-        // skipped. The `&range=` query already sliced that window; skipping
-        // again would drop the first `position` bytes of the chunk.
+        // A 200 to a Range-header request is the full representation, so the body starts
+        // at byte 0 and [dataSpec.position] still needs skipping — but the `&range=` query
+        // already sliced that window; skipping again would drop its first bytes.
         val bytesToSkip = skipBytesOnOpen(
             responseCode,
             dataSpec.position,
@@ -190,10 +188,10 @@ class YoutubeHttpDataSource private constructor(
             }
         }
 
-        // An HLS server may ignore our optional Range header and return the entire object.
-        // Its Content-Length proves EOF even when the plan does not know the segment length.
-        // Treating a larger prefetch budget as the response length reopens the same segment at
-        // EOF (and can cache its prefix again as if it were the tail).
+        // An HLS server may ignore our optional Range header and return the entire object;
+        // its Content-Length proves EOF even when the plan does not know the segment length.
+        // Treating a larger prefetch budget as the response length reopens the same segment
+        // at EOF (and can cache its prefix again as if it were the tail).
         if (activePlan?.range == MediaRange.NONE && responseCode == 200 && !rangeQueryApplied &&
             resp.header("Content-Range") == null && !compressed) {
             resp.body?.contentLength()?.takeIf { it >= 0 }?.let { total ->
@@ -307,9 +305,8 @@ class YoutubeHttpDataSource private constructor(
     }
 
     /**
-     * Resolves [location] (absolute, network-path, root- or path-relative) against
-     * [baseUrl] per RFC 3986 — OkHttp's `HttpUrl.resolve` covers all the
-     * forms googlevideo hands back, including query-only and dot-segment refs.
+     * Resolves [location] against [baseUrl] per RFC 3986; OkHttp's `HttpUrl.resolve`
+     * covers the forms googlevideo hands back, including query-only and dot-segment refs.
      */
     private fun resolveRedirect(baseUrl: String, location: String): String? =
         baseUrl.toHttpUrlOrNull()?.resolve(location.trim())?.toString()
@@ -375,10 +372,9 @@ class YoutubeHttpDataSource private constructor(
         val diagnostic = customData as? DiagnosticContext
         val tagged = if (diagnostic != null) DiagnosticNetwork.tag(request, diagnostic) else request
         val call = callFactory.newCall(tagged)
-        // A tiny DASH init/index read cannot make useful progress while its TLS handshake
-        // hangs. Bound only these initial reads; ordinary media chunks keep their full budget.
-        // Let the existing finite transport recovery own a timeout without altering identity.
-        // Legacy sources without a plan must obey the same transport bound.
+        // A tiny DASH init/index read cannot progress while its TLS handshake hangs:
+        // bound only these initial reads; ordinary chunks keep their full budget.
+        // Legacy sources without a plan obey the same transport bound.
         val spec = dataSpec
         val initialRead = spec != null && spec.position == 0L && spec.length in 1L..65_536L
         if (initialRead) {
@@ -523,12 +519,6 @@ class YoutubeHttpDataSource private constructor(
         /** media3's C.LENGTH_UNSET is the int -1; this is the long form used by DataSpec lengths. */
         private const val LENGTH_UNSET: Long = C.LENGTH_UNSET.toLong()
 
-        /**
-         * Bytes to discard from a 200 body before the caller-requested offset.
-         *
-         * [rangeQueryApplied] means the request used a `range=` query,
-         * so a 200 body is already the requested slice and must not be skipped.
-         */
         internal fun skipBytesOnOpen(
             responseCode: Int,
             position: Long,

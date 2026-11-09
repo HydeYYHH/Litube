@@ -26,7 +26,7 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
         const val MOVIES = "PL6B3937A5D230E335"
         const val STUDIO = "PLav47HAVZMjnTFVZL-aImCQIC0uLZtNCz"
 
-        /** The personal lists the site identifies by fixed ids. */
+        /** Personal lists the site identifies by fixed ids. */
         const val WATCH_LATER = "WL"
         const val LIKED = "LL"
 
@@ -50,7 +50,7 @@ class FixturePlaylistRepository(private val scenario: PlaylistScenario = Playlis
 
 enum class PlaylistScenario(val argument: String) {
     Content("content"), Empty("empty"), Loading("loading"), Error("error"), Unavailable("unavailable"),
-    /** First page plus one server continuation, for the append and enumeration tests. */
+    /** First page plus one server continuation for append/enumeration tests. */
     Paged("paged");
 
     companion object { fun parse(value: String?) = entries.firstOrNull { it.argument == value } ?: Content }

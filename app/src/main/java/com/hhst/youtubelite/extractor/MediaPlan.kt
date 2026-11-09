@@ -6,17 +6,13 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.playerUserAgent
 
 enum class MediaProtocol { HTTPS, DASH, HLS }
 
-/** How a byte window is expressed on the wire. */
 enum class MediaRange { HEADER, QUERY, NONE }
 
 enum class MediaRejection(val code: String) {
     FORBIDDEN("http_403"), INVALID_BODY("invalid_media_body"), UNAVAILABLE("manifest_unavailable"),
 }
 
-/**
- * Playback-capable clients, their Innertube identity and request posture.
- * Names match the protocol values used by the player endpoints.
- */
+/** Names match the protocol values used by the player endpoints. */
 enum class StreamClient(
     val clientName: String,
     val clientId: Int,

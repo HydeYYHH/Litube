@@ -152,7 +152,6 @@ data class PlaybackSnapshot(
     val chapters: List<Chapter> = emptyList(),
     /** Quality actually rendering (from the selected track); null = unknown. */
     val activeQuality: String? = null,
-    /** True while the text renderer carries subtitles (menu highlight state). */
     val subtitleEnabled: Boolean = false,
     val videoFormat: Format? = null,
     val audioFormat: Format? = null,
@@ -204,55 +203,28 @@ interface PlaybackApi {
     fun currentCastSource(): CastSource?
     /** Materialize file formats only when a receiver actually needs them. */
     suspend fun prepareCastSource(): CastSource? = currentCastSource()
-    /**
-     * Best single-file (muxed) source for DLNA renderers, which cannot take a
-     * separate A/V pair; null when the current video has no muxed format.
-     */
+    /** Best muxed source for DLNA renderers (they cannot take a separate A/V pair); null when none. */
     fun currentMuxedCastSource(): CastSource?
     suspend fun prepareMuxedCastSource(): CastSource? = currentMuxedCastSource()
     /** Re-extracts and returns a fresh URL for a published cast track. */
     fun refreshCastUrl(token: String, videoId: String? = null, itag: Int? = null): String?
     fun backupCastUrl(token: String, videoId: String?, itag: Int?, failedProfile: String?): String? = null
-    /**
-     * While [delegate] is non-null, commands and snapshot follow it.
-     * Passing null detaches. Returns true when local media has already
-     * diverged from the receiver (recast in flight) — the caller must not
-     * seek/play the local player to the receiver's position.
-     */
+    /** Commands/snapshot follow [delegate] while non-null; null detaches. Returns true when local media already diverged from the receiver (recast in flight) — the caller must not seek/play local to the receiver's position. */
     fun attachCastPlayer(delegate: Player?): Boolean
-    /** Queue nav buttons on the playback notification. */
     fun setQueueNavigation(hasNext: Boolean, hasPrevious: Boolean)
     /** User cancelled the pending sponsor skip (suppress that segment). */
     fun cancelSponsorSkip()
-    /** User tapped the countdown card: skip the pending segment now. */
     fun skipSponsorNow()
-    /** Manual skip via the chip while inside a suppressed segment. */
     fun skipSponsorChipSegment()
-    /**
-     * Drops in-flight load/rebuild work so a close cannot be undone by a
-     * late prepare. Does not clear the current media; [stop] does that.
-     * [pausePlayback] false keeps the active player rolling (Cast TV) while
-     * still fencing late local loads.
-     */
+    /** Drops in-flight load/rebuild work so a close cannot be undone by a late prepare. Does not clear current media ([stop] does); [pausePlayback] false keeps the active player rolling (Cast TV) while still fencing late local loads. */
     fun cancelPending(pausePlayback: Boolean = true)
     /** Called when the current item ends (drives queue/playlist auto-advance). */
     var onEnded: (() -> Unit)?
-    /**
-     * Receiver hit a playback error while delegating. The engine has already
-     * detached and resumed local playback from the receiver's last position;
-     * the host must end the Cast session (stopCasting + endSession) and
-     * surface the failure hint.
-     */
+    /** Receiver hit a playback error while delegating: engine already detached and resumed local playback; the host must end the Cast session and surface the failure hint. */
     var onCastError: (() -> Unit)?
-    /**
-     * Local quality/audio rebuild produced a Cast-incompatible published
-     * track set: the host should load a new manifest on the receiver.
-     */
+    /** Local quality/audio rebuild produced a Cast-incompatible published track set: the host should load a new manifest on the receiver. */
     var onCastManifestReload: (() -> Unit)?
-    /**
-     * A successful playback response arrived: short-lived reporting endpoints
-     * (watch-time URLs) ride on it and belong to the session owner, not the UI.
-     */
+    /** A successful playback response's short-lived reporting endpoints (watch-time URLs) belong to the session owner, not the UI. */
     var onWatchContext: ((videoId: String, tracking: PlayerTracking?, sessionGeneration: Long) -> Unit)?
     var onWatchBoundary: ((PlaybackSnapshot, Long) -> Unit)?
         get() = null
@@ -620,8 +592,6 @@ class PlaybackEngine(
             }
         }
     }
-
-    // 250 ms skip check + position publish; persistence at ~1 Hz.
 
     private val ticker = object : Runnable {
         private var persistTick = 0
@@ -1004,7 +974,6 @@ class PlaybackEngine(
         player.setVideoSurfaceView(surface)
     }
 
-    /** Receiver while attached, else local. */
     private fun activePlayer(): Player = castPlayer ?: player
 
     override fun playOrPause() {
@@ -1163,11 +1132,9 @@ class PlaybackEngine(
     }
 
     /**
-     * Quality change. The menu entries mirror `currentTracks`, so a pick is a
-     * pure track-selection change — instantaneous, keeps position and buffer —
-     * on any multi-track source (synthetic pool, remote DASH, HLS). Only when
-     * the source carries no choice (single representation / muxed / live /
-     * pre-prepare) does it fall back to a full rebuild.
+     * Quality change. A pick is a pure track-selection change (instantaneous,
+     * keeps position/buffer) on multi-track sources; full rebuild only when
+     * the source carries no choice (single rep / muxed / live / pre-prepare).
      */
     override fun setQuality(label: String?) {
         if (castPlayer != null && !localDivergedFromReceiver()) {
@@ -1207,11 +1174,8 @@ class PlaybackEngine(
     }
 
     /**
-     * Pins the video track selector to [label]'s height.
-     * Returns false when the current source
-     * carries no supported video track and a rebuild is needed.
-     *
-     * Receiver selections are handled before this local track override.
+     * Pins the video track selector to [label]'s height; false when the source
+     * has no supported video track and a rebuild is needed.
      */
     private fun switchQualityByTrack(label: String): Boolean {
         val height = StreamSelection.parseHeight(label)
@@ -1235,9 +1199,7 @@ class PlaybackEngine(
         val format: MediaFormat,
     )
 
-    /**
-     * Align missing qualities to supported tracks using the resolver's fallback policy.
-     */
+    /** Align missing qualities to supported tracks using the resolver's fallback policy. */
     private fun findVideoTrack(height: Int, fps: Int): VideoTrackRef? {
         val candidates = mutableListOf<VideoTrackRef>()
         for (group in player.currentTracks.groups) {
@@ -1252,9 +1214,8 @@ class PlaybackEngine(
     }
 
     /**
-     * Drops every video constraint (overrides + size bounds). "Auto" pick, and
-     * the first step of any rebuild: a leftover pin from the previous source
-     * must not steer the new one.
+     * Drops every video constraint (overrides + size bounds). First step of any
+     * rebuild: a leftover pin from the previous source must not steer the new one.
      */
     private fun clearVideoConstraints() {
         trackSelector.parameters = trackSelector.parameters.buildUpon()
@@ -1343,8 +1304,6 @@ class PlaybackEngine(
     private fun publishRenditionAudio() {
         val entries = playerAudioEntries()
         val choices = AudioTrackIdentity.renditionChoices(entries)
-        // A DASH source has a single audio track, so this stays empty and the
-        // extractor menu is left alone. HLS exposes one row per rendition.
         if (choices.isEmpty()) return
         val key = _snapshot.value.audioTrackKey
         val renditionKey = AudioTrackIdentity.renditionFor(entries, currentStream?.formats.orEmpty(), audioPreference)
@@ -1485,10 +1444,9 @@ class PlaybackEngine(
     }
 
     /**
-     * The user opened the audio menu while the selected source exposed fewer named
-     * tracks than the service can provide (intermittent client answers). One bounded
-     * catalog read per video, on demand only, never on the playback path; discovered
-     * rows merge into the open menu without touching the running media.
+     * The user opened the audio menu while the source exposed fewer named
+     * tracks than the service can provide (intermittent client answers). One
+     * bounded catalog read per video, on demand only, never on the playback path.
      */
     override fun onAudioMenuOpened() {
         val snapshot = _snapshot.value
@@ -2060,7 +2018,6 @@ class PlaybackEngine(
 
     private fun recoveryReason(error: PlaybackException): RecoveryReason? = PlaybackRecovery.classify(error)
 
-    /** The original request URI of a refused media response. */
     private fun failingUri(error: PlaybackException): Uri? {
         val seen = mutableSetOf<Throwable>()
         var cause: Throwable? = error

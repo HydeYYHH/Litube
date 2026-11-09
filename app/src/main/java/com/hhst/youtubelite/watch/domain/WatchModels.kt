@@ -22,9 +22,9 @@ data class WatchVideo(
     val subscribed: Boolean = false,
     val avatar: String? = null,
     val commentsStatus: WatchCommentsStatus = WatchCommentsStatus.Ready,
-    /** Playback-tracking endpoints for watch-time reporting; fixtures leave it null. */
+    /** Playback-tracking endpoints; fixtures leave it null. */
     val tracking: com.liskovsoft.youtubeapi.videoinfo.V2.PlayerTracking? = null,
-    /** Live-chat continuation for live streams; fixtures leave it null so goldens stay put. */
+    /** Live-chat continuation; fixtures leave it null so goldens stay put. */
     val chatKey: String? = null,
     val sessionGeneration: Long? = null,
     /** A failed discovery read can be retried; it does not mean the host disabled chat. */
@@ -84,9 +84,9 @@ data class WatchUiState(
     val relatedFailed: Boolean = false,
     val menuLoading: Boolean = false,
     val menuFailed: Boolean = false,
-    /** Production mode: report/recommendation rows without server tokens hide. Fixtures keep the recorded layouts. */
+    /** Production: report/recommendation rows without server tokens hide; fixtures keep recorded layouts. */
     val live: Boolean = false,
-    /** Card summary painted while the page read is in flight; cleared once real content lands. */
+    /** Card summary painted while the page read is in flight. */
     val provisional: WatchProvisional? = null,
     /** Set when the page read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
@@ -209,8 +209,8 @@ sealed interface WatchAction {
 enum class WatchRelatedVariant { Phone, Grid, List, Stacked, SidebarCompact, SidebarWide }
 
 /**
- * Geometry sampled from the mobile watch page (CSS px used as dp).
- * Every formula here is pinned in `docs/visual/home-measurements.md`.
+ * Geometry sampled from the mobile watch page (CSS px as dp); formulas pinned in
+ * `docs/visual/home-measurements.md`.
  */
 object WatchLayout {
     const val TopBarHeight = 0f

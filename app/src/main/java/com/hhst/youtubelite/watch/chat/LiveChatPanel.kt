@@ -137,16 +137,16 @@ private fun LiveChatSurface(
                 }
                 LiveChatContent.Failed -> Column(Modifier.fillMaxSize().testTag("live-chat-failed").padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
-                    AppText("Couldn't load the chat", size = 14, line = 20, color = DesignTokens.Secondary)
+                    AppText(stringResource(R.string.ui_couldn_t_load_the_chat), size = 14, line = 20, color = DesignTokens.Secondary)
                     Spacer(Modifier.height(8.dp))
-                    AppText("Retry", Modifier.clickable { onAction(LiveChatAction.Retry) }.testTag("live-chat-retry").padding(8.dp),
+                    AppText(stringResource(R.string.retry), Modifier.clickable { onAction(LiveChatAction.Retry) }.testTag("live-chat-retry").padding(8.dp),
                         size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)
                 }
                 is LiveChatContent.Ready -> {
                     if (content.messages.isEmpty()) {
                         Box(Modifier.fillMaxSize().testTag("live-chat-empty"), contentAlignment = Alignment.Center) {
                             AppText(
-                                if (state.replay) stringResource(R.string.chat_replay_empty) else "Say hello in the chat",
+                                if (state.replay) stringResource(R.string.chat_replay_empty) else stringResource(R.string.ui_say_hello_in_the_chat),
                                 size = 14, line = 20, color = DesignTokens.Secondary,
                             )
                         }
@@ -183,7 +183,7 @@ private fun LiveChatSurface(
                 Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-ended"),
                 size = 14, line = 20, color = DesignTokens.Secondary)
             state.content !is LiveChatContent.Ready -> Unit
-            state.signedIn && !state.canSend -> AppText("Posting is unavailable for this chat",
+            state.signedIn && !state.canSend -> AppText(stringResource(R.string.ui_posting_is_unavailable_for_this_chat),
                 Modifier.fillMaxWidth().padding(16.dp).testTag("live-chat-readonly"),
                 size = 14, line = 20, color = DesignTokens.Secondary)
             state.signedIn -> {
@@ -193,7 +193,7 @@ private fun LiveChatSurface(
                         .background(DesignTokens.Surface, RoundedCornerShape(18.dp))
                         .padding(horizontal = 14.dp, vertical = 8.dp)) {
                         if (state.draft.isEmpty()) {
-                            AppText("Chat publicly…", size = 14, line = 20, color = DesignTokens.Secondary)
+                            AppText(stringResource(R.string.ui_chat_publicly), size = 14, line = 20, color = DesignTokens.Secondary)
                         }
                         BasicTextField(state.draft, { onAction(LiveChatAction.DraftChanged(it)) },
                             Modifier.fillMaxWidth().testTag("live-chat-input"),
@@ -213,7 +213,7 @@ private fun LiveChatSurface(
                         .testTag("live-chat-posting-restriction"), size = 14, line = 20, color = DesignTokens.Secondary)
                 }
             }
-            else -> AppText("Sign in to join the chat",
+            else -> AppText(stringResource(R.string.ui_sign_in_to_join_the_chat),
                 Modifier.fillMaxWidth().clickable { onAction(LiveChatAction.SignIn) }
                     .testTag("live-chat-signin").padding(16.dp),
                 size = 14, line = 20, weight = FontWeight.Medium, color = AppStyle.Action)

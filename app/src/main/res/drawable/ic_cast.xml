@@ -4,8 +4,8 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Scaled to ~75% canvas span so the solid cast glyph matches the visual
-         weight of the neighboring thin-stroke player icons. -->
+    <!-- Scaled to ~75% canvas span so the solid cast glyph matches the
+         visual weight of neighboring thin-stroke player icons. -->
     <group
         android:scaleX="0.82"
         android:scaleY="0.82"

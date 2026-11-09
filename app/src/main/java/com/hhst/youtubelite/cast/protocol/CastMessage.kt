@@ -3,9 +3,8 @@
 package com.hhst.youtubelite.cast.protocol
 
 /**
- * One CASTV2 protocol message - the single protobuf message type the whole Cast v2 wire protocol
- * uses (protocol reference: thibauts/node-castv2); byte-level encoding lives in [CastMessageCodec].
- *
+ * One CASTV2 protocol message — the single protobuf type the Cast v2 wire protocol uses
+ * (reference: thibauts/node-castv2); encoding lives in [CastMessageCodec].
  * Proto shape (field numbers are the wire contract):
  * ```
  *   1: protocol_version (enum, always 0 = CASTV2_1_0)
@@ -42,13 +41,11 @@ class CastMessage(
     }
 
     companion object {
-        /** The only protocol version that exists. */
         const val PROTOCOL_VERSION_CASTV2_1_0 = 0
 
         const val PAYLOAD_TYPE_STRING = 0
         const val PAYLOAD_TYPE_BINARY = 1
 
-        /** The message shape actually sent: a UTF-8 JSON payload. */
         fun utf8(sourceId: String, destinationId: String, namespace: String, payloadUtf8: String) =
             CastMessage(
                 protocolVersion = PROTOCOL_VERSION_CASTV2_1_0,

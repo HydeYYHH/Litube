@@ -9,7 +9,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
-/** The library page follows the session identity: signed in shows the account lane, anonymous hides it. */
+/** Library page follows the session identity: signed in shows the account lane, anonymous hides it. */
 class LibraryIdentityAndroidTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 

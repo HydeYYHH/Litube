@@ -1,6 +1,5 @@
 package com.hhst.youtubelite.extension
 
-/** Boolean/long/string store used by [ExtensionManager]. */
 interface PrefStore {
     fun contains(key: String): Boolean
     fun getBool(key: String, default: Boolean): Boolean

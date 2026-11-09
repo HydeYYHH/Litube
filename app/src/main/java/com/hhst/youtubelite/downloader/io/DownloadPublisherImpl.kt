@@ -48,9 +48,8 @@ data class PublishTarget(
 private class PublishNameCollision : IOException("publish-name-collision")
 
 /**
- * Crash-safe publish: register → create target → write+verify → complete →
- * success state (caller) → delete temp. Incomplete ops are reconciled so a
- * retry does not create a duplicate file.
+ * Crash-safe publish: register → create → write+verify → complete → success → delete temp.
+ * Incomplete ops are reconciled so a retry does not create a duplicate file.
  */
 class DownloadPublisherImpl(
     private val backend: PublishBackend,
@@ -58,7 +57,7 @@ class DownloadPublisherImpl(
     private val workDir: File? = null,
 ) : DownloadPublisher {
 
-    /** publishId → created target; lets a same-process retry reconcile instead of duplicating. */
+    /** publishId → created target; same-process retry reconciles instead of duplicating. */
     private val inFlight = ConcurrentHashMap<String, String>()
 
     override fun delete(uri: String): DeleteResult = backend.delete(uri)
@@ -98,8 +97,7 @@ class DownloadPublisherImpl(
         } catch (t: Throwable) {
             AppLog.event(AppLog.Category.DOWNLOADER, "publish_io_failed", mapOf("phase" to "publish", "source_bytes" to request.source.length()),
                 t, context = coroutineContext[DiagnosticCoroutineContext]?.diagnostic)
-            // The half-written target stays registered: the retry reconciles
-            // (verify → complete, or delete → recreate) instead of duplicating.
+            // Half-written target stays registered: the retry reconciles (verify→complete or delete→recreate).
             if (FileIntegrity.isNoSpace(t)) PublishResult.Failed("ENOSPC")
             else PublishResult.Failed(t.message ?: "publish")
         }
@@ -124,8 +122,7 @@ class DownloadPublisherImpl(
             try {
                 backend.complete(target)
             } catch (_: PublishNameCollision) {
-                // The recorded URI cannot change during completion. Keep the
-                // other final file and register a new reservation on this retry.
+                // Recorded URI cannot change during completion; keep the other final file and re-reserve.
                 discardIncomplete(existing)
                 inFlight.remove(request.publishId, existing)
                 return null
@@ -146,8 +143,7 @@ class DownloadPublisherImpl(
 }
 
 /**
- * File-backed publisher used on API 24–28 and in JVM tests. Writes into a
- * dedicated directory, fsyncs, then rename-publishes.
+ * File-backed publisher for API 24–28 and JVM tests: dedicated directory, fsync, rename-publish.
  */
 class LocalPublishBackend(
     private val outputDir: File,
@@ -243,8 +239,7 @@ class LocalPublishBackend(
 
     private fun finalFile(uri: String): File? {
         val name = if (uri.startsWith(uriPrefix)) {
-            // Old in-progress records used an unescaped filename. In particular,
-            // literal "%20" and "#" must survive this compatibility path.
+            // Old in-progress records used an unescaped filename; literal "%20" and "#" must survive.
             uri.removePrefix(uriPrefix)
         } else {
             val parsed = runCatching { URI(uri) }.getOrNull() ?: return null

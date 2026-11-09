@@ -72,9 +72,9 @@ class PlayerDataSource private constructor(
         else DefaultHlsDataSourceFactory(live)
 
     /**
-     * The cache-backed media source for [plan]'s HLS stream, built by the same
-     * factory playback reads through, so prefetched segment heads key exactly
-     * as playback's `hls:v1:` keys. Null without an HLS media factory.
+     * Cache-backed source for [plan]'s HLS stream, built by the same factory
+     * playback reads through so prefetched segment heads key exactly as
+     * playback's `hls:v1:` keys. Null without an HLS media factory.
      */
     fun vodHlsMedia(plan: MediaRequestPlan?): CacheDataSource? = plan?.let { hlsMediaFactory?.invoke(it) }
     companion object {

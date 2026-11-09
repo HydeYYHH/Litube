@@ -28,9 +28,8 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.transportError
 import java.io.IOException
 
 /**
- * Bridges the app's challenge and poToken infrastructure to the core playback
- * session. Adapters publish the active task through a thread-local so the
- * synchronous core path stays cancellable and diagnostics stay bound.
+ * Adapters publish the active task through a thread-local so the synchronous
+ * core path stays cancellable and diagnostics stay bound.
  */
 class MscPlayback(
     private val solver: SignatureSolver,

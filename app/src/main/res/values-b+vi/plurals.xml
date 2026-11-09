@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="other">và %1$d liên kết khác</item>
+    </plurals>
+</resources>

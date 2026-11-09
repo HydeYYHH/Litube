@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">og %1$d lenke til</item>
+        <item quantity="other">og %1$d lenker til</item>
+    </plurals>
+</resources>

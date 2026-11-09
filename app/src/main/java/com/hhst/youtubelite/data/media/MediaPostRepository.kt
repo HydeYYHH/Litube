@@ -28,10 +28,7 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.performPostCommand
 import com.liskovsoft.youtubeapi.videoinfo.V2.updatedPost
 import kotlinx.coroutines.CancellationException
 
-/**
- * Raw post documents (browse responses and the /post page) parse inside MSC common;
- * this repository only maps the shared PostItem rows onto the app's post domain.
- */
+/** Parsing lives in MSC common; this repository only maps shared PostItem rows onto the app's post domain. */
 class MediaPostRepository(private val client: MediaClient,
     private val webContext: (RequestContext) -> RequestContext? = { it.takeIf { it.webSession?.signedIn == true } },
 ) : PostRepository, PostActions {

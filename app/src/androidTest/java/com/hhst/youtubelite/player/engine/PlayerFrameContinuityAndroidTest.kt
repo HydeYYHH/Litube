@@ -205,7 +205,8 @@ class PlayerFrameContinuityAndroidTest {
             check(visible.intersect(Rect(windowOrigin[0], windowOrigin[1],
                 windowOrigin[0] + decor.width, windowOrigin[1] + decor.height)) &&
                 visible.intersect(Rect(1, 1, metrics.widthPixels - 1, metrics.heightPixels - 1)))
-            // Starting 400px above the embedded center can leave the screen; start near the visible bottom, every event in bounds.
+            // Starting 400px above the embedded center can leave the screen;
+            // start near the visible bottom so every event stays in bounds.
             val fromY = if (up) visible.bottom - minOf(32f, visible.height() * .1f)
                 else visible.exactCenterY()
             val travel = if (up) maxOf(400f, decor.height * .18f) else visible.height() * .25f
@@ -329,7 +330,8 @@ class PlayerFrameContinuityAndroidTest {
             }
         }, "fullscreen-record-output").apply { isDaemon = true; start() }
 
-        // UiAutomation uses Runtime.exec(String), not a shell parser: the -c argument must be whitespace-free and the inner shell receives the full script.
+        // UiAutomation uses Runtime.exec(String), not a shell parser: the -c
+        // argument must be whitespace-free; the inner shell gets the full script.
         // executeShellCommandRw would simplify stdin but only exists from API 31.
         private fun executeScript(script: String): ParcelFileDescriptor {
             val encoded = Base64.encodeToString(script.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
@@ -511,7 +513,8 @@ class PlayerFrameContinuityAndroidTest {
             val firstBlue = blueCounts.indexOfFirst { it > MIN_PICTURE_SAMPLES }
             val lastBlue = blueCounts.indexOfLast { it > MIN_PICTURE_SAMPLES }
             assertTrue("$label recording never contains the decoded blue picture: $video", firstBlue >= 0)
-            // Encoded frame times are compared on the elapsed clock: recorder startup and muxer flush latency cannot create false coverage.
+            // Encoded frame times are compared on the elapsed clock: recorder
+            // startup and muxer flush latency cannot create false coverage.
             val marginNs = BLUE_MARGIN_MS * 1_000_000L
             assertTrue("$label first encoded frame must precede the action by 250ms: $summary",
                 elapsed.first() <= actionStartNs - marginNs)

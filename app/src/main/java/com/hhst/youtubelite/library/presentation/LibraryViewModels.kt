@@ -480,7 +480,7 @@ class HistoryViewModel(
         }
     }
 
-    /** Appends the next history page; a failure keeps the loaded entries. */
+    /** On failure the loaded entries stay; only the append state reports failure. */
     private fun loadHistoryNext() {
         val ready = _uiState.value.content as? HistoryContent.Ready ?: return
         val cursor = ready.page.nextKey ?: return
@@ -793,7 +793,7 @@ class CollectionViewModel(
         }
     }
 
-    /** Appends the next collection page; a failure keeps the loaded rows. */
+    /** On failure the loaded rows stay; only the append state reports failure. */
     private fun loadCollectionNext() {
         val ready = _uiState.value.content as? CollectionContent.Ready ?: return
         val cursor = ready.nextKey ?: return

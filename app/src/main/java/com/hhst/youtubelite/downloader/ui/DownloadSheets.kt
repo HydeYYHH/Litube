@@ -81,8 +81,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Batch rows have no per-video catalog, so the subtitle picker offers common
- * language codes. Language-only keys keep the selector's fallback
- * (human captions first); per-track precision stays on the single-video sheet.
+ * language codes. Language-only keys keep the selector's fallback (human captions
+ * first); per-track precision stays on the single-video sheet.
  */
 private val BatchSubtitleLanguages =
     listOf("en", "ja", "ko", "zh", "zh-Hant", "de", "fr", "es", "pt", "ru", "tr", "hi", "ar")

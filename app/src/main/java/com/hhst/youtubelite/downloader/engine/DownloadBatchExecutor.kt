@@ -68,9 +68,8 @@ class DownloadBatchExecutor(
     }
 
     /**
-     * Late arrivals: a task queued (resume, retry, first transfer finishing)
-     * while this run was already in flight must be picked up here, because
-     * duplicate enqueues for the batch are collapsed to the running worker.
+     * Late arrivals (resume/retry/first transfer finishing while this run was in flight)
+     * must be picked up here: duplicate enqueues for the batch collapse to the running worker.
      */
     private suspend fun drain(
         batchId: String,
@@ -125,8 +124,7 @@ class DownloadBatchExecutor(
     private suspend fun finalizeOne(taskId: String) {
         val snap = repository.transact { snapshot(taskId) } ?: return
         if (!runnable(snap.task)) return
-        // Stage admission: a batch mate still in TRANSFER must never be
-        // finalized — its bytes are not on disk yet.
+        // Stage admission: a batch mate still in TRANSFER must never be finalized — bytes are not on disk yet.
         if (!needsFinalizeOnly(snap.task)) return
         engine.runFinalize(taskId)
     }

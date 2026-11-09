@@ -10,12 +10,9 @@ import org.koin.dsl.koinApplication
 import org.koin.test.check.checkModules
 
 /**
- * Runtime guard for the DI graph: every appModule definition must resolve.
- * Type-checking cannot catch a positional `get()` that silently retargets
- * after a constructor param list changes (the 4.0 F-batch removed
- * ContentSnapshots' gson param and its Koin get() started resolving the
- * clock lambda, which only crashed at first HomeActivity launch); this
- * resolves the whole graph instead.
+ * Runtime guard: every appModule definition must resolve. Type-checking cannot catch a
+ * positional `get()` that silently retargets after a constructor param list changes;
+ * this resolves the whole graph instead.
  */
 @RunWith(AndroidJUnit4::class)
 class KoinGraphAndroidTest {

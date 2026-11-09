@@ -91,7 +91,6 @@ data class LibraryUiState(
     val query: String = "",
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
-    /** Pending local-history removal the user can still undo. */
     val undo: RemovedHistoryEntry? = null,
     val historyRetrying: Boolean = false,
     val playlistsRetrying: Boolean = false,
@@ -108,7 +107,6 @@ data class HistoryUiState(
     val confirmClear: Boolean = false,
     /** Set when a read came back as a `/sorry` traffic challenge. */
     val verification: com.hhst.youtubelite.core.VerificationRequired? = null,
-    /** Pending local-history removal the user can still undo. */
     val undo: RemovedHistoryEntry? = null,
 )
 
@@ -173,7 +171,6 @@ sealed interface LibraryAction {
     data class OpenPlaylist(val playlistId: String) : LibraryAction
     data class OpenMenu(val videoId: String) : LibraryAction
     data class MenuSelected(val action: HistoryMenuAction) : LibraryAction
-    /** Restores the entry recorded by the last local-history removal. */
     data object UndoHistoryRemove : LibraryAction
     data object DismissUndo : LibraryAction
     data object OpenManageHistory : LibraryAction

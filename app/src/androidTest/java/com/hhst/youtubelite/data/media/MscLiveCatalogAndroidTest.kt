@@ -38,8 +38,7 @@ class MscLiveCatalogAndroidTest {
         assumeTrue(arguments.getString("network") == "1" && arguments.getString("mscLiveCatalog") == "1")
         val trials = (arguments.getString("liveCatalogTrials")?.toIntOrNull() ?: 2).coerceIn(1, 2)
         val query = "blender open movie"
-        // A deliberately separate epoch prevents MediaHomeRepository from remembering this
-        // experiment's anonymous visitor in the application's persisted MediaSession.
+        // Separate epoch so MediaHomeRepository cannot remember this experiment's visitor.
         val appGeneration = MediaSession.snapshot().generation
         val identity = AtomicReference(RequestContext(language = "en", region = "US", generation = -700_001))
         val base = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
@@ -61,12 +60,11 @@ class MscLiveCatalogAndroidTest {
                     .put("anonymousCookiePresent", context.visitorCookie != null).put("signedIn", context.signedIn) }
                 bootstrapped?.let(identity::set)
 
-                // Availability/shape comes first so a slow or blocked search cannot hide
-                // the Sports empty-feed regression this live run is also diagnosing.
+                // Availability/shape first so a slow search cannot hide the Sports empty-feed regression.
                 measureHomeAndExplore(probe, observations)
 
-                // A separate, small diagnostic chain exposes the actual server filter state.
-                // Its body inspection is excluded from the performance comparisons below.
+                // Separate diagnostic chain for server filter state; body inspection
+                // is excluded from the performance comparisons below.
                 inspectSearchFilters(probe, observations, query)
                 repeat(trials) { iteration ->
                     val order = if (iteration % 2 == 0) listOf(true, false) else listOf(false, true)
@@ -74,8 +72,7 @@ class MscLiveCatalogAndroidTest {
                     for (reuse in order) {
                         val shared = MediaSearchRepository(probe.client)
                         val start = probe.report().getJSONArray("samples").length()
-                        // ThisYear removes Channels/Playlists from the live server panel.
-                        // Compare the supported app transition; Videos is a separate core
+                        // ThisYear removes Channels/Playlists; Videos is a separate core
                         // capability below because the app has no Videos filter enum.
                         val stages = listOf(SearchFilters(), SearchFilters(uploaded = SearchUploadDate.ThisYear))
                         for ((index, filters) in stages.withIndex()) {
@@ -113,8 +110,8 @@ class MscLiveCatalogAndroidTest {
                         .put("interpretation", "Only successful matched stages are compared; unsupported or failed later stages retain earlier evidence. Public wall time is descriptive."))
                 }
 
-                // Change profile/epoch while retaining the real anonymous visitor. Both
-                // dimensions must invalidate the old panel, without inventing visitor data.
+                // Change profile/epoch while retaining the real visitor; both must
+                // invalidate the old panel without inventing visitor data.
                 val search = MediaSearchRepository(probe.client)
                 val beforeProfile = identity.get()
                 val seed = observe(probe, observations, "search.profile.seed", { search.search(query, SearchFilters()) }) {
@@ -239,8 +236,8 @@ class MscLiveCatalogAndroidTest {
 
     private fun shapeObserver(http: HttpClient, observations: JSONArray, label: String) = object : HttpClient {
         override fun execute(request: HttpRequest): HttpReply = http.execute(request).also { reply ->
-            // The core already owns this string. Only explicit diagnostic samples parse it
-            // again; measured cold/opened reads retain the production parsing path.
+            // Core already owns this string; only diagnostic samples parse it again —
+            // measured reads retain the production parsing path.
             val root = runCatching { JSONObject(reply.body) }.getOrNull()
             val renderers = sortedMapOf<String, Int>()
             fun visit(value: Any?) {

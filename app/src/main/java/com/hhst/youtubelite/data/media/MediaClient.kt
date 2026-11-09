@@ -76,17 +76,16 @@ class MediaClient private constructor(
     }
 
     /**
-     * One bounded retry for idempotent GET-shaped reads whose first attempt failed
-     * with a network-shaped transport error (DNS, connect, TLS, timeout, reset).
-     * Cancellation, auth, HTTP status and parse failures are never retried, and a
-     * session change between attempts still aborts through the generation check.
+     * One bounded retry for idempotent GET-shaped reads on network-shaped transport errors
+     * (DNS, connect, TLS, timeout, reset). Cancellation, auth, HTTP status and parse
+     * failures are never retried; a session change aborts via the generation check.
      */
     suspend fun <T> readIdempotent(block: (RequestContext, HttpClient) -> T): T {
         var session: RequestContext? = null
         return try {
             read { context, http ->
-                // Capture on the first worker admission, then start the actual read there.
-                // A separate capture-only task would send it back behind queued slow reads.
+                // Capture identity on first worker admission; a capture-only task would
+                // queue behind slow reads.
                 session = context
                 block(context, http)
             }
@@ -116,7 +115,7 @@ class MediaClient private constructor(
         val calls = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Call, Boolean>())
         val future = workers.submit {
             try {
-                // Resolved on the worker: the session lambda may block on an OAuth token
+                // Resolved on the worker: the session lambda may block on OAuth token
                 // refresh, which must never run on the calling (possibly main) thread.
                 val current = context()
                 val session = captured ?: current
@@ -128,9 +127,8 @@ class MediaClient private constructor(
                 val value = try {
                     block(session, transport)
                 } catch (error: IOException) {
-                    // A raw IO failure inside the read logic (not the transport lambda's
-                    // own deliberate protocol errors) normalizes into the shared
-                    // classified MediaException so callers never see bare sockets.
+                    // Raw IO inside the read logic (not deliberate protocol errors)
+                    // normalizes into MediaException so callers never see bare sockets.
                     if (error is MediaException) throw error
                     throw MediaException(transportError(error))
                 }
@@ -198,16 +196,16 @@ class MediaClient private constructor(
                     }
                     HttpReply(response.code, source?.readUtf8().orEmpty(), headers)
                 }
-                // A body source may finish after its caller has timed out or switched
-                // identity. Do not let the parser publish that retired response.
+                // A body may finish after the caller timed out or switched identity;
+                // do not let the parser publish that retired response.
                 if (cancelled.get() || Thread.currentThread().isInterrupted) throw InterruptedException()
                 if (session.generation != context().generation)
                     throw MediaException(RequestError(RequestFailure.AUTH, "session_changed"))
                 if (cancelled.get() || Thread.currentThread().isInterrupted) throw InterruptedException()
                 return reply
             } catch (error: IOException) {
-                // This exception class and an untouched body jointly prove no mutation
-                // was delivered. Unknown IO, TLS policy and all sent bodies stay one-shot.
+                // This exception class plus an untouched body prove no mutation was
+                // delivered; unknown IO, TLS policy and sent bodies stay one-shot.
                 val unsentConnectionFailure = error is UnknownHostException || error is ConnectException ||
                     error is NoRouteToHostException || error is PortUnreachableException
                 if (!singleAttemptWrites || body == null || bodyStarted.get() || recoveries > 0 || !unsentConnectionFailure)
@@ -223,15 +221,14 @@ class MediaClient private constructor(
         const val MAX_RESPONSE_BYTES = 8L * 1024 * 1024
         const val RETRY_DELAY_MS = 250L
 
-        // Network-shaped transport codes from the core classifier; "transport_protocol",
-        // "transport_failed" and cancellation keep their single-attempt semantics.
+        // Network-shaped transport codes; "transport_protocol", "transport_failed"
+        // and cancellation keep single-attempt semantics.
         val RETRYABLE_TRANSPORT_CODES = setOf(
             "transport_dns", "transport_connect", "transport_tls", "transport_timeout",
             "transport_unreachable", "transport_socket", "transport_io")
 
-        // Admission suspends callers before submission; no blocking work falls back to them.
-        // Shared across clients: artwork and metadata repair can otherwise fill all four
-        // workers together even though each caller has its own concurrency limit.
+        // Admission suspends callers before submission. Shared across clients so
+        // artwork/metadata repair cannot fill all four workers despite per-caller limits.
         val backgroundReads = Semaphore(2)
         val pendingReads = Semaphore(20)
         val workers = java.util.concurrent.ThreadPoolExecutor(4, 4, 30L, java.util.concurrent.TimeUnit.SECONDS,

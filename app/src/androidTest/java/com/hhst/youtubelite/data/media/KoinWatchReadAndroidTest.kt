@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-/** Run this class in its own instrumentation, without launching an Activity. */
+/** Own instrumentation run, without launching an Activity. */
 class KoinWatchReadAndroidTest {
     @Test fun productionFactorySharesWatchAndCommentsAcrossFiveTrials() = runBlocking<Unit> {
         Loopback().use { fixture ->
@@ -163,13 +163,13 @@ class KoinWatchReadAndroidTest {
     }
 }
 
-/** Uses the target APK's factories. Only the transport/context dependency is replaced. */
+/** Uses the target APK's factories; only the transport/context dependency is replaced. */
 internal class ProductionContentGraph(client: MediaClient) : AutoCloseable {
     private val koin = GlobalContext.get()
     private val overrides = module { single { client } }
     val sources: ContentRepositories
     init {
-        // Loading the same Module alone retains its cached SingleInstanceFactory values.
+        // Loading the same Module alone retains cached SingleInstanceFactory values.
         koin.unloadModules(listOf(appModule))
         try {
             koin.loadModules(listOf(appModule, overrides))

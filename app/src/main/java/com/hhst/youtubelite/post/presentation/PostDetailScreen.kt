@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.post.presentation
 
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -80,14 +81,14 @@ fun PostDetailScreen(
                     items = PostMenuAction.entries.map { action ->
                         MenuSheetItem(
                             icon = AppIcon.Report,
-                            label = action.label,
+                            label = stringResource(action.labelResource),
                             tag = "post-detail-menu-${action.name.lowercase()}",
                         )
                     },
                     onDismiss = { onAction(PostDetailAction.CloseOverlay) },
                     onSelect = { index -> onAction(PostDetailAction.MenuSelected(PostMenuAction.entries[index])) },
                     tag = "post-detail-menu",
-                    paneTitle = "Post actions",
+                    paneTitle = stringResource(R.string.a11y_post_actions),
                 )
                 is PostDetailOverlay.Image -> PostImageViewer(
                     images = state.post?.images.orEmpty(),
@@ -117,7 +118,7 @@ private fun PostDetailTopBar(
     onAction: (PostDetailAction) -> Unit,
     onBack: () -> Unit,
 ) {
-    val title = state.post?.text?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "Post"
+    val title = state.post?.text?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() } ?: stringResource(R.string.ui_post)
     Row(
         Modifier.fillMaxWidth().heightIn(min = PostLayout.DetailToolbar.dp).background(DesignTokens.Background)
             .testTag("post-detail-topbar"),
@@ -135,7 +136,7 @@ private fun PostDetailTopBar(
             com.hhst.youtubelite.ui.design.ActionProgress()
         }
         if (!state.live) AppIconButton(
-            AppIcon.More, "Post actions",
+            AppIcon.More, stringResource(R.string.a11y_post_actions),
             modifier = Modifier.testTag("post-detail-more"),
             diameter = 48.dp,
         ) { onAction(PostDetailAction.OpenMenu) }
@@ -231,7 +232,7 @@ private fun PostFeedbackRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconButton(
-            AppIcon.Like, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) "Unlike post" else "Like post",
+            AppIcon.Like, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Like) stringResource(R.string.ui_unlike_post) else stringResource(R.string.a11y_like_post),
             modifier = Modifier.testTag("post-detail-like").semantics { selected = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like },
             diameter = 40.dp, enabled = !pending,
             pending = pendingAction == PostDetailAction.Like,
@@ -240,7 +241,7 @@ private fun PostFeedbackRow(
         ) { onAction(PostDetailAction.Like) }
         AppText(likes, Modifier.widthIn(min = 40.dp), size = 14, line = 20)
         AppIconButton(
-            AppIcon.Dislike, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike) "Remove dislike" else "Dislike post",
+            AppIcon.Dislike, if (rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike) stringResource(R.string.ui_remove_dislike) else stringResource(R.string.a11y_dislike_post),
             modifier = Modifier.testTag("post-detail-dislike").semantics { selected = rating == com.hhst.youtubelite.watch.domain.VideoRating.Dislike },
             diameter = 40.dp, enabled = !pending,
             pending = pendingAction == PostDetailAction.Dislike,
@@ -266,7 +267,7 @@ private fun PostDetailFailed(onAction: (PostDetailAction) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        AppText("This post could not be loaded.", size = 16, line = 22, color = DesignTokens.Secondary)
+        AppText(stringResource(R.string.ui_this_post_could_not_be_loaded), size = 16, line = 22, color = DesignTokens.Secondary)
         Spacer(Modifier.height(12.dp))
         Box(
             Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(18.dp))
@@ -275,7 +276,7 @@ private fun PostDetailFailed(onAction: (PostDetailAction) -> Unit) {
                 .padding(horizontal = 20.dp).testTag("post-detail-retry"),
             contentAlignment = Alignment.Center,
         ) {
-            AppText("Retry", size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
+            AppText(stringResource(R.string.retry), size = 14, line = 20, weight = FontWeight.Medium, color = DesignTokens.Background)
         }
     }
 }

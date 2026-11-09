@@ -126,7 +126,7 @@ class SearchResultsScreenAndroidTest {
         compose.onNodeWithTag("search-thumb-${first.id}").performClick()
         host.onActivity { assertEquals(SearchNavigationRequest.Watch(first.id), it.lastNavigationRequest) }
         awaitNode("watch-screen")
-        // Send the system Back key across activity hosts.
+        // System Back key, not scenario.goBack: navigation crosses activity hosts.
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitResultsList()
         compose.onNodeWithTag("search-results-list").assertIsDisplayed()
@@ -134,7 +134,6 @@ class SearchResultsScreenAndroidTest {
         host.onActivity { assertEquals(SearchNavigationRequest.Channel(first.channelId), it.lastNavigationRequest) }
         awaitNode("channel-page")
         awaitNode("channel-home-list")
-        // Send the system Back key across activity hosts.
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         awaitNode("search-results-list")
         compose.onNodeWithTag("search-results-list").assertIsDisplayed()
@@ -334,7 +333,8 @@ class SearchResultsScreenAndroidTest {
         host.onActivity { activity = it }
         compose.onNodeWithTag("search-nav-Home").performClick()
         awaitNode("home-screen")
-        // Navigation may finish and destroy the results host before the assertion; read the captured host on main instead of resuming it via ActivityScenario.
+        // Navigation may finish and destroy the results host before the assertion;
+        // read the captured host on main instead of resuming it via ActivityScenario.
         compose.runOnIdle {
             assertEquals(SearchNavigationRequest.Destination(SearchDestination.Home), activity.lastNavigationRequest)
             assertTrue(activity.isFinishing || activity.isDestroyed)
@@ -395,7 +395,9 @@ class SearchResultsScreenAndroidTest {
         awaitNode("search-input")
         compose.onNodeWithTag("search-input").assertTextEquals("draft")
         compose.onNodeWithTag("search-panel-back").performClick()
-        // The close updates state synchronously, but the overlay leaves the semantics tree one frame; older APIs can serve the assert from the pre-close tree.
+        // The close updates state synchronously, but the overlay leaves the
+        // semantics tree one frame; older APIs can serve the assert from the
+        // pre-close tree.
         compose.waitUntil(5_000) { nodeCount("search-overlay") == 0 }
         compose.onNodeWithTag("search-overlay").assertDoesNotExist()
         compose.onNodeWithTag("search-query").assertTextEquals("open movie")
@@ -418,8 +420,9 @@ class SearchResultsScreenAndroidTest {
     }
 
     @Test fun resultsPageIsNativeAndStartsNoNetworkOrLegacyRuntime() {
-        // A previous suite class may have started the media runtime in this shared process; the contract is
-        // that opening this page does not start it, and first-visit traffic stays zero when genuinely cold.
+        // A previous suite class may have started the media runtime in this shared
+        // process; the contract is that opening this page does not start it, and
+        // first-visit traffic stays zero when genuinely cold.
         val runtimeStartedBefore = (ApplicationProvider.getApplicationContext<Context>() as App).mediaRuntimeStarted
         val sent = TrafficStats.getUidTxBytes(Process.myUid())
         val received = TrafficStats.getUidRxBytes(Process.myUid())

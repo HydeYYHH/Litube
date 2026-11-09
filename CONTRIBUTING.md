@@ -1,7 +1,7 @@
 # Contributing to Litube
 
-Use JDK 21 and the Android SDK. Initialize the `external/mediaservicecore` submodule as described
-in the [README](README.md) before building.
+Use JDK 21 and the Android SDK as described in the [README](README.md).
+Gradle resolves the pinned MediaServiceCore release from JitPack.
 
 ## Code organization
 
@@ -76,7 +76,7 @@ corresponding pagination history too.
 Run the regression suites relevant to the behavior, then the project checks:
 
 ```sh
-./gradlew :media-core:test :app:testDebugUnitTest :app:lintDebug
+./gradlew :app:testDebugUnitTest :app:lintDebug
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 ```
 
@@ -95,6 +95,6 @@ interleavings. Avoid timing thresholds and assertions that merely repeat the
 implementation. Pure formatting and documentation edits do not need new tests.
 
 Describe the problem, resulting behavior, validation and remaining limits in the
-pull request. Keep unrelated cleanup separate. Changes inside
-`external/mediaservicecore` belong to the submodule: review its diff as well as the
-application diff when preparing a contribution.
+pull request. Keep unrelated cleanup separate. Develop and test core changes in the
+[MediaServiceCore repository](https://github.com/HydeYYHH/MediaServiceCore), publish a release,
+then update the pinned `msc` version in `gradle/libs.versions.toml`.

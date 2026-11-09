@@ -95,8 +95,7 @@ class SearchResultsViewModel(
         if (changed) {
             sessionEpoch++
             writes.reset()
-            // The old account's save targets, deferred menu reads and in-flight writes
-            // must not survive the switch.
+            // The old account's in-flight jobs and save targets must not survive the switch.
             actionJob?.cancel(); actionJob = null
             menuJob?.cancel()
             feedbackJob?.cancel(); feedbackJob = null
@@ -129,9 +128,8 @@ class SearchResultsViewModel(
             SearchAction.AutomaticLoadMore -> loadMore(automatic = true)
             SearchAction.OpenSearch -> editSearch(true, uiState.value.query)
             SearchAction.CloseSearch -> editSearch(false, uiState.value.draftQuery)
-            // Stale IME composition events can outlive the closed panel (after
-            // recreation on older APIs); a draft change never re-opens a closed
-            // search overlay — the panel only exists while the overlay is open.
+            // Stale IME events can outlive the closed panel (older APIs); a draft
+            // change must never re-open a closed search overlay.
             is SearchAction.QueryChanged -> if (uiState.value.searchOpen) editSearch(true, action.query)
             is SearchAction.SubmitSearch -> {
                 val query = action.query.trim()
@@ -223,7 +221,6 @@ class SearchResultsViewModel(
         load()
     }
 
-    /** Copyable failure notice for an account write, carrying the sanitized report. */
     private fun report(operation: String, error: Exception, channelId: String): AppNotice =
         com.hhst.youtubelite.diagnostics.writeFailureNotice(operation, error, mapOf("channel_id" to channelId))
 
@@ -233,9 +230,8 @@ class SearchResultsViewModel(
     }
 
     /**
-     * Reads the open card's own get_panel endpoint so its feedback rows carry real tokens.
-     * Cards without an endpoint already carry inline tokens; nothing is preloaded for cards
-     * whose menu has not been opened.
+     * Reads the open card's own get_panel endpoint so its feedback rows carry real tokens;
+     * cards without an endpoint carry inline tokens and unopened menus are never preloaded.
      */
     private fun loadMenu(videoId: String) {
         val state = _state.value
@@ -279,7 +275,6 @@ class SearchResultsViewModel(
         }
     }
 
-    /** Sends the card's classified feedback token and removes the card from the current results. */
     private fun sendFeedback(videoId: String, action: SearchVideoMenuAction) {
         if (feedbackJob?.isActive == true) return
         val state = _state.value
@@ -438,9 +433,8 @@ class SearchResultsViewModel(
             .forEach { row ->
                 val task = viewModelScope.launch(parent, start = CoroutineStart.LAZY) rowRead@{
                     try {
-                        // The transport owns its bounded retry. A successful /player
-                        // response can legitimately omit an optional display field;
-                        // repeating the same request does not provide another source.
+                        // No local retry: the transport owns bounded retry, and a
+                        // successful /player response can legitimately omit an optional field.
                         val response = metadataSlots.withPermit { repository.metadata(row) }
                         if (generation != requestGeneration) return@rowRead
                         val resolved = row.withMissingDisplayFrom(response)
@@ -486,8 +480,8 @@ class SearchResultsViewModel(
                 _state.value.filters.type != SearchResultType.Shorts && row.age.isBlank())
 
     /**
-     * One shared directory read per channel, capped and cached there; the rewrite only
-     * touches rows still missing their avatar, so a stale application is identity-safe.
+     * One shared, cached directory read per channel; the rewrite only touches rows
+     * still missing their avatar, so a stale application is identity-safe.
      */
     private fun fillMissingAvatars(page: com.hhst.youtubelite.search.domain.SearchPage) {
         val directory = avatars ?: return

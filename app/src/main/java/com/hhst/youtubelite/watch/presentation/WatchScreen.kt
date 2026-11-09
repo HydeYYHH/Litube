@@ -2,6 +2,8 @@
 
 package com.hhst.youtubelite.watch.presentation
 
+import com.hhst.youtubelite.ui.design.reasonResources
+import com.hhst.youtubelite.ui.design.labelResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -160,12 +162,12 @@ internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit
     when (val overlay = state.overlay) {
         is WatchOverlay.ItemMenu -> MenuBottomSheet(
             items = watchVideoMenuActions(state.live, (state.content as? WatchContent.Ready)?.page?.related?.firstOrNull { it.id == overlay.videoId }).map {
-                MenuSheetItem(it.icon(), it.label, "watch-menu-${it.name}")
+                MenuSheetItem(it.icon(), stringResource(it.labelResource), "watch-menu-${it.name}")
             },
             onDismiss = { onAction(WatchAction.CloseOverlay) },
             onSelect = { index -> onAction(WatchAction.MenuAction(watchVideoMenuActions(state.live, (state.content as? WatchContent.Ready)?.page?.related?.firstOrNull { it.id == overlay.videoId })[index])) },
             tag = "watch-video-menu",
-            paneTitle = "Video actions",
+            paneTitle = stringResource(R.string.ui_video_actions),
             fillWatchHeight = false,
             header = if (state.menuLoading || state.menuFailed) ({
                 Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
@@ -200,9 +202,9 @@ internal fun WatchVideoMenu(state: WatchUiState, onAction: (WatchAction) -> Unit
             onNewPlaylist = { onAction(WatchAction.OpenNewPlaylist) },
         )
         is WatchOverlay.Feedback -> FeedbackSheet(
-            title = overlay.kind.title,
+            title = stringResource(overlay.kind.labelResource),
             reasons = overlay.kind.reasons.mapIndexed { index, reason ->
-                FeedbackReason(reason, "feedback-reason-$index")
+                FeedbackReason(reason, "feedback-reason-$index", overlay.kind.reasonResources[index])
             },
             onDismiss = { onAction(WatchAction.CloseOverlay) },
             onSelect = { onAction(WatchAction.FeedbackReason(it.label)) },
@@ -302,13 +304,13 @@ private fun RelatedFooter(state: WatchUiState, onAction: (WatchAction) -> Unit) 
         androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), color = DesignTokens.Ink, strokeWidth = 2.dp)
     }
     if (state.relatedFailed) Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("watch-related-retry")
-        .clickable { onAction(WatchAction.LoadRelated) }, contentAlignment = Alignment.Center) { AppText("Retry") }
+        .clickable { onAction(WatchAction.LoadRelated) }, contentAlignment = Alignment.Center) { AppText(stringResource(R.string.retry)) }
 }
 
 /**
- * Paints the tapped card's known fields while the page read is in flight. Unknown
- * slots stay blank rather than guessed, and no control is rendered that cannot act
- * yet; the real metadata block replaces this without a full-page reset.
+ * Paints the tapped card's known fields while the page read is in flight; unknown
+ * slots stay blank, no inert controls render, and the real block replaces this
+ * without a full-page reset.
  */
 @Composable
 private fun WatchProvisionalHeader(known: WatchProvisional) {
@@ -322,7 +324,7 @@ private fun WatchProvisionalHeader(known: WatchProvisional) {
                     if (known.live) {
                         Box(Modifier.padding(end = 8.dp).background(DesignTokens.Red, RoundedCornerShape(2.dp))
                             .padding(horizontal = 4.dp)) {
-                            AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
+                            AppText(stringResource(R.string.player_live), size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
                         }
                     }
                     if (known.views.isNotBlank()) AppText(known.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
@@ -415,9 +417,9 @@ private fun WatchError(onAction: (WatchAction) -> Unit) {
         Modifier.fillMaxWidth().padding(24.dp).testTag("watch-error"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
+        AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
         AppText(
-            "Please try again.",
+            stringResource(R.string.ui_please_try_again),
             Modifier.padding(top = 8.dp, bottom = 20.dp),
             color = DesignTokens.Secondary,
         )
@@ -427,7 +429,7 @@ private fun WatchError(onAction: (WatchAction) -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
-            AppText("Retry", weight = FontWeight.Medium)
+            AppText(stringResource(R.string.retry), weight = FontWeight.Medium)
         }
     }
 }
@@ -489,17 +491,15 @@ private fun WatchMetaRow(video: WatchVideo, state: WatchUiState, onAction: (Watc
     ) {
         if (video.live) {
             Box(Modifier.padding(end = 8.dp).background(DesignTokens.Red, RoundedCornerShape(2.dp)).padding(horizontal = 4.dp).testTag("watch-live-badge")) {
-                AppText("LIVE", size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
+                AppText(stringResource(R.string.player_live), size = 12, line = 18, weight = FontWeight.Medium, color = Color.White)
             }
         }
         if (video.handle.isNotBlank()) AppText(video.handle, Modifier.padding(end = 8.dp), size = 12, line = 18, weight = FontWeight.Medium)
         if (video.views.isNotBlank()) AppText(video.views, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         if (!video.live && video.age.isNotBlank()) AppText(video.age, Modifier.padding(end = 8.dp), size = 12, line = 18, color = DesignTokens.Secondary)
         AppText(
-            "more",
-            Modifier.testTag("watch-more").semantics {
-                contentDescription = if (state.descriptionExpanded) "Show less" else "Show more"
-            }.clickable(role = Role.Button) { onAction(WatchAction.ToggleDescription) },
+            stringResource(R.string.ui_more),
+            Modifier.testTag("watch-more").appDescription(if (state.descriptionExpanded) R.string.ui_show_less else R.string.ui_show_more).clickable(role = Role.Button) { onAction(WatchAction.ToggleDescription) },
             size = 12,
             line = 18,
             weight = FontWeight.Medium,
@@ -527,14 +527,14 @@ private fun WatchActionBar(video: WatchVideo, pending: Boolean, pendingAction: W
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("watch-actions")
             .padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf(
-                Triple(AppIcon.Like, "Like this video", WatchAction.Like),
-                Triple(AppIcon.Dislike, "Dislike this video", WatchAction.Dislike),
-                Triple(AppIcon.Download, "Download", WatchAction.Download),
-                Triple(AppIcon.QueueAdd, "Add to queue", WatchAction.Queue),
-                Triple(AppIcon.Bookmark, "Save", WatchAction.Save),
-                Triple(AppIcon.OpenWith, "Open with", WatchAction.OpenWith),
-                Triple(AppIcon.Share, "Share", WatchAction.Share),
-                Triple(AppIcon.Report, "Report", WatchAction.Report),
+                Triple(AppIcon.Like, stringResource(R.string.ui_like_this_video), WatchAction.Like),
+                Triple(AppIcon.Dislike, stringResource(R.string.ui_dislike_this_video), WatchAction.Dislike),
+                Triple(AppIcon.Download, stringResource(R.string.download), WatchAction.Download),
+                Triple(AppIcon.QueueAdd, stringResource(R.string.add_to_queue), WatchAction.Queue),
+                Triple(AppIcon.Bookmark, stringResource(R.string.comments_composer_save), WatchAction.Save),
+                Triple(AppIcon.OpenWith, stringResource(R.string.open_with), WatchAction.OpenWith),
+                Triple(AppIcon.Share, stringResource(R.string.share), WatchAction.Share),
+                Triple(AppIcon.Report, stringResource(R.string.ui_report), WatchAction.Report),
             // Report's submission needs a feedback token the page never carries; it hides in production.
             ).filter { !live || it.third != WatchAction.Report }.forEachIndexed { index, (icon, description, action) ->
                 WatchSlotButton(icon, description,
@@ -588,8 +588,8 @@ private fun WatchSlotButton(
 private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
     val liveChat = video.live && !video.chatKey.isNullOrBlank()
     val chatFailed = video.live && video.chatLookupFailed
-    // A current live stream without a chat continuation has no usable chat: the
-    // card says so instead of offering an ordinary comments panel in its place.
+    // A live stream without a chat continuation has no usable chat: show the
+    // unavailable card, not an ordinary comments panel.
     val chatUnavailable = video.live && video.chatKey.isNullOrBlank() && !chatFailed
     Column(
         Modifier.fillMaxWidth().testTag("watch-comments").heightIn(min = WatchLayout.CommentsSectionHeight.dp).padding(bottom = 13.dp),
@@ -611,7 +611,7 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                 Row(Modifier.heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     AppText(if (video.live) {
                         stringResource(R.string.chat_live)
-                    } else "Comments", size = 14, line = 20, weight = FontWeight.Medium)
+                    } else stringResource(R.string.comments_title), size = 14, line = 20, weight = FontWeight.Medium)
                     Spacer(Modifier.width(4.dp))
                     if (!video.live) AppText(video.commentCount, size = 14, line = 20, color = DesignTokens.Secondary)
                 }
@@ -626,10 +626,10 @@ private fun WatchComments(video: WatchVideo, onAction: (WatchAction) -> Unit) {
                         chatFailed -> stringResource(R.string.chat_load_failed)
                         chatUnavailable -> stringResource(R.string.chat_unavailable)
                         else -> when (video.commentsStatus) {
-                            WatchCommentsStatus.Loading -> "Loading comments…"
-                            WatchCommentsStatus.Empty -> "No comments yet"
-                            WatchCommentsStatus.Disabled -> "Comments are turned off"
-                            WatchCommentsStatus.Failed -> "Couldn't load comments. Tap to view."
+                            WatchCommentsStatus.Loading -> stringResource(R.string.ui_loading_comments)
+                            WatchCommentsStatus.Empty -> stringResource(R.string.ui_no_comments_yet_2)
+                            WatchCommentsStatus.Disabled -> stringResource(R.string.ui_comments_are_turned_off_2)
+                            WatchCommentsStatus.Failed -> stringResource(R.string.ui_couldn_t_load_comments_tap_to_view)
                             WatchCommentsStatus.Ready -> video.topComment.text
                         }
                     }, Modifier.weight(1f).testTag("watch-comment-preview"), size = 14, line = 20, maxLines = 2)

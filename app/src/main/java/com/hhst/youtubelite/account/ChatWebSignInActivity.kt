@@ -33,7 +33,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import org.koin.android.ext.android.inject
 
-/** Opened only after a send attempt. Its cookies are isolated from playback and normal login. */
+/** Opened only after a send attempt; cookies isolated from playback and normal login. */
 class ChatWebSignInActivity : ComponentActivity() {
     private var web: WebView? = null
     private val timers: WebViewTimerOccupancy by inject()

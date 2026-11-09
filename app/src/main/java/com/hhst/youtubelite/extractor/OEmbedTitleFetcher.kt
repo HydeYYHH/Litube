@@ -10,8 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * Fetches the original (untranslated) video title via the locale-agnostic
- * oEmbed endpoint.
+ * Fetches the original (untranslated) video title via the locale-agnostic oEmbed endpoint.
  */
 class OEmbedTitleFetcher(
     client: OkHttpClient,
@@ -40,8 +39,7 @@ class OEmbedTitleFetcher(
             if (System.currentTimeMillis() - failedAt < FAILURE_TTL_MS) return null
             failures.remove(id, failedAt)
         }
-        // Losers of a concurrent first lookup skip this round and re-check the caches on their
-        // next call instead of issuing a duplicate request.
+        // Concurrent first-lookup losers skip this round and re-check caches instead of duplicating the request.
         if (!inFlight.add(id)) return null
         try {
             val title = runCatching {

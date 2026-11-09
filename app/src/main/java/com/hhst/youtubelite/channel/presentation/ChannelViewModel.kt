@@ -513,7 +513,7 @@ class ChannelViewModel(
                             val ready = it.shorts as? ChannelSection.Ready ?: return@update it
                             @Suppress("UNCHECKED_CAST")
                             val added = appended.first as List<ChannelShort>
-                            // order is the loaded-sequence index: renumber so page-local
+                            // order is the loaded-sequence index; renumber so page-local
                             // indices from each append cannot interleave the local sorts.
                             val merged = (ready.value + added).distinctBy { s -> s.id }
                                 .mapIndexed { index, short -> short.copy(order = index) }
@@ -705,8 +705,8 @@ class ChannelViewModel(
                     verification = com.hhst.youtubelite.core.trafficChallenge(error) ?: it.verification) }
                 if (retained != null) {
                     notices.trySend(AppNotice.Message("Couldn't refresh channel. Try again."))
-                    // The page refresh cancelled section reads. Resume only the
-                    // visible section if it had not produced content yet.
+                    // Page refresh cancelled section reads; resume only the visible
+                    // section if it had not produced content yet.
                     ensureSectionLoaded(_state.value.selectedTab)
                 }
             } catch (_: Exception) {
@@ -714,8 +714,8 @@ class ChannelViewModel(
                 _state.update { it.copy(content = retained ?: ChannelContent.Failed) }
                 if (retained != null) {
                     notices.trySend(AppNotice.Message("Couldn't refresh channel. Try again."))
-                    // The page refresh cancelled section reads. Resume only the
-                    // visible section if it had not produced content yet.
+                    // Page refresh cancelled section reads; resume only the visible
+                    // section if it had not produced content yet.
                     ensureSectionLoaded(_state.value.selectedTab)
                 }
             }
@@ -723,9 +723,8 @@ class ChannelViewModel(
     }
 
     /**
-     * The host reports the verification screen finished with RESULT_OK. The channel
-     * retries once with the current identity — never automatically on another
-     * failure, so no request loop can form.
+     * Verification finished (RESULT_OK): retry once with the current identity, never
+     * automatically on another failure, so no request loop can form.
      */
     fun verificationCompleted(challengeUrl: String? = _state.value.verification?.challengeUrl) {
         if (challengeUrl == null || _state.value.verification?.challengeUrl != challengeUrl) return

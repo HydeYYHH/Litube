@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Exclude in-progress download state so Auto Backup cannot clobber Room rows
-  or temp files, and the sealed credential store (media-auth) so tokens never
-  travel in a backup; AndroidKeyStore keys are not backed up either, so a
-  restored ciphertext would be undecryptable anyway.
+  or temp files, and media-auth so tokens never travel in a backup; AndroidKeyStore
+  keys are not backed up either, so restored ciphertext would be undecryptable.
   Paths: DownloadBackupExcludes
 -->
 <full-backup-content>

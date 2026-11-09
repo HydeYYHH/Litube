@@ -12,9 +12,9 @@ import java.util.TimeZone
 import java.util.UUID
 
 /**
- * Copyable, sanitized outcome report for a failed account write. Carries the operation,
- * an outcome class derived from the server reply shape, the HTTP status and a reason;
- * tokens, cookies and authorization values never enter the text.
+ * Copyable, sanitized outcome report for a failed account write: operation, outcome
+ * class derived from the server reply shape, HTTP status and reason; tokens, cookies
+ * and authorization values never enter the text.
  */
 data class ActionFailureReport(val id: String, val operation: String, val summary: String, val text: String) {
     companion object {

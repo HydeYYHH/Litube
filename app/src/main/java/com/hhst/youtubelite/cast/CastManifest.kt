@@ -7,15 +7,13 @@ import com.hhst.youtubelite.core.Markup
 import com.hhst.youtubelite.extractor.Format
 
 /**
- * DASH MPD for Chromecast / dash.js. Each Representation points at the local proxy
- * `/stream/<token>` endpoint. With a sidx [ChunkIndex] present, emits a `SegmentList` with
- * explicit `?seg=START-END` URLs — the Chromecast default receiver cannot parse sidx itself,
- * so per-segment URLs are what make seek and segment addressing work. Otherwise falls back to
- * `BaseURL + SegmentBase + indexRange` and lets the receiver parse sidx itself.
+ * DASH MPD for Chromecast / dash.js. With a sidx [ChunkIndex], emits SegmentList with explicit
+ * `?seg=START-END` URLs — the default receiver cannot parse sidx itself. Otherwise falls back
+ * to BaseURL + SegmentBase + indexRange for the receiver to parse.
  */
 object CastManifest {
 
-    /** ~4 h at 5 s per segment; longer videos fall back to SegmentBase. */
+    /** ~4 h at 5 s/segment; longer videos fall back to SegmentBase. */
     private const val MAX_SEGMENT_LIST_ENTRIES = 3000
 
     fun usableSegmentIndex(index: ChunkIndex?): Boolean =
@@ -53,9 +51,9 @@ object CastManifest {
         index: ChunkIndex?,
         generation: Long,
     ): String? {
-        // Unusable without byte ranges: no init segment and no sidx → the receiver cannot locate any media.
+        // Unusable without byte ranges: no init segment and no sidx → receiver cannot locate media.
         if (!format.hasDashRanges) return null
-        // Container mime drives decoder choice; a mismatched container (webm/opus as audio/mp4) is MEDIA_ERR_DECODE on receivers.
+        // Container mime drives decoder choice; a mismatched container is MEDIA_ERR_DECODE on receivers.
         val mime = Markup.xml(format.mimeType.ifBlank {
             if (format.audioOnly) "audio/mp4" else "video/mp4"
         })
@@ -82,11 +80,9 @@ object CastManifest {
                 append(" value=\"${if (format.audioChannels > 0) format.audioChannels else 2}\"/>")
             }
             if (index != null && usableSegmentIndex(index)) {
-                // Run-length repetition keeps the <S> entry count low for uniform durations.
-                // Only the FIRST <S> group carries the first segment's presentation time — a
-                // missing t continues from the previous entry, so writing t on any later group
-                // would break the timeline. Some transcodes start the media timeline at a non-zero
-                // tfdt, and an implied t=0 desyncs receiver seek/period mapping; t=0 stays omitted.
+                // Run-length keeps <S> count low. Only the FIRST <S> group carries presentation time:
+                // a missing t continues from the previous entry, so a later t would break the timeline.
+                // Non-zero tfdt transcodes would desync seek/period under an implied t=0; t=0 stays omitted.
                 val eptUs = index.timesUs[0]
                 val firstTUs = if (eptUs != 0L) eptUs else null
                 append("<SegmentList timescale=\"1000000\"")

@@ -128,9 +128,8 @@ class BackgroundDownloadScheduler(
             (ScheduleReasons.isUserInitiated(reason) || reason.isEmpty()) &&
             !repair
         if (!userOk) {
-            // UIDT re-registration requires a user interaction. A
-            // constraint recovery (network restore) must not strand queued
-            // tasks: resume them through WorkManager instead.
+            // UIDT re-registration requires user interaction; constraint recovery
+            // must not strand queued tasks — resume them through WorkManager.
             enqueueTransfer(batchId)
             bind(ctx.taskIds, DownloadWorkNames.transfer(batchId), backend = "wm", kind = DownloadWorkKind.TRANSFER)
             return

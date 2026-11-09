@@ -139,7 +139,7 @@ class Extractor(
 
     /**
      * One coordinated fresh extraction per video/session; playback and download join it.
-     * Captures configuration again and clears the complete token/minter context.
+     * Recaptures configuration and clears the complete token/minter context.
      */
     fun extractFresh(urlOrId: String, playbackPriority: Boolean = true, diagnosticContext: DiagnosticContext? = null): Extraction {
         val id = VideoId.parse(urlOrId)
@@ -199,9 +199,9 @@ class Extractor(
 }
 
 /**
- * One in-flight [Extractor.extract] for a video id. Identity (not the video
- * id) is what [Extractor] removes from the request table, so a later extract
- * cannot be cleared by an older request's completion or invalidation.
+ * One in-flight [Extractor.extract] for a video id. [Extractor] removes by identity
+ * (not the video id), so a later extract cannot be cleared by an older request's
+ * completion or invalidation.
  */
 private class Inflight(
     val id: String,
@@ -241,8 +241,8 @@ private class Inflight(
     fun start() {
         extraction.metadata.start()
         extraction.stream.start()
-        // Chapters share the Watch read with playback; scheduling behind the stream promise
-        // keeps speculative work off the foreground path (Promise.await/start is idempotent).
+        // Chapters share the Watch read with playback; scheduling behind the
+        // stream promise keeps speculative work off the foreground path.
         extraction.stream.whenDone { extraction.chapters.start() }
     }
 
@@ -365,9 +365,9 @@ private class StreamWriteDisabledCache(
 }
 
 /**
- * [Cache] view that drops stream reads and writes whose [epoch] is no longer
- * current. Check and mutate happen under [StreamEpochGuard.withLock] so an
- * invalidation cannot land between the freshness test and the inner write.
+ * [Cache] view that drops stream reads/writes whose [epoch] is stale. Check and
+ * mutate happen under [StreamEpochGuard.withLock] so an invalidation cannot land
+ * between the freshness test and the inner write.
  */
 internal class EpochGuardedCache(
     private val inner: Cache,
@@ -397,11 +397,10 @@ internal class EpochGuardedCache(
 
 /**
  * Monotonic per-video epoch counter guarding stream writes after an
- * invalidation. Epochs start at 0 and entries are only created by [bump];
- * they are never reclaimed, so a settled sibling can never make an older
- * still-in-flight extraction look fresh again (its absent-default epoch of
- * 0 would otherwise match its own). The map therefore grows by one Long
- * per invalidated video id.
+ * invalidation. Entries are only created by [bump] and never reclaimed, so a
+ * settled sibling cannot make an older still-in-flight extraction look fresh
+ * again (its absent-default epoch of 0 would otherwise match its own). The map
+ * grows by one Long per invalidated video id.
  */
 internal class StreamEpochGuard {
     private val epochs = ConcurrentHashMap<String, Long>()

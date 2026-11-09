@@ -119,7 +119,7 @@ class PlayerUiTest {
 
     @Test
     fun playerTopOffset_windowSpaceIsInsetPlusReportedPageTop() {
-        // The overlay sits above the inset-padded WebView: window space = inset + page-relative player top.
+        // Overlay sits above the inset-padded WebView: window space = inset + page-relative player top.
         assertEquals(80, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = 48, insetTopDp = 32))
         assertEquals(32, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = 0, insetTopDp = 32))
         assertEquals(80, PlayerUi.playerTopOffsetDp(fullscreen = false, reportedTopDp = null, insetTopDp = 32))

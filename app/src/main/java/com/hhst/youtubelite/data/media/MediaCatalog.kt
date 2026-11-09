@@ -14,9 +14,8 @@ import com.liskovsoft.youtubeapi.videoinfo.V2.loadMenu
 import com.liskovsoft.youtubeapi.videoinfo.V2.MenuEndpoint
 import com.liskovsoft.youtubeapi.videoinfo.V2.ledgerScope
 
-// Metadata joins drop blank parts so a missing half cannot leave an orphaned separator;
-// the avatar is null (not "") when the response did not carry one, which is the signal
-// the shared avatar directory enriches from.
+// Blank halves are dropped so a missing part cannot leave an orphaned separator; a missing
+// avatar is null (not "") — that is the signal the shared avatar directory enriches from.
 internal fun MediaItem.feedVideo() = FeedItem.Video(id, title.orEmpty(), author.orEmpty(),
     listOfNotNull(viewCount, published).filter(String::isNotBlank).joinToString(" · "), thumbnail.orEmpty(),
     duration.orEmpty(), channelId.orEmpty(), live, progressPercent?.div(100f), avatar = authorThumbnail?.takeIf(String::isNotBlank),
@@ -24,7 +23,6 @@ internal fun MediaItem.feedVideo() = FeedItem.Video(id, title.orEmpty(), author.
     dontRecommendToken = dontRecommendToken(),
     menuEndpoint = menuEndpoint?.let { FeedMenuEndpoint(it.panelId, it.params) }, short = kind == "short")
 
-/** The card's own feedback token for a menu operation the server classified semantically. */
 internal fun MediaItem.notInterestedToken(): String? =
     actions.firstOrNull { it.kind == MenuActionKind.NotInterested }?.kindToken
 internal fun MediaItem.dontRecommendToken(): String? =
@@ -34,10 +32,9 @@ internal fun MediaItem.playlistSummary() = PlaylistSummary(id.removePrefix("VL")
     channelId.orEmpty(), null, thumbnail.orEmpty(), "", null, videoCountText = videoCountText)
 
 /**
- * LRU cache of resolved get_panel capabilities, shared by the home and search repositories.
- * Entries are partitioned by identity (account, on-behalf channel, generation) and card, and
- * expire after 60s; a lookup also purges entries from other identities so a stale session's
- * tokens can never be served to the current one.
+ * LRU of resolved get_panel capabilities, partitioned by identity (account, on-behalf channel,
+ * generation) and card, 60s TTL; a lookup purges other identities so stale-session tokens
+ * can never be served to the current one.
  */
 internal class DeferredMenuCache(private val now: () -> Long = System::currentTimeMillis) {
     data class Key(val account: String?, val channel: String?, val generation: Long, val videoId: String,
@@ -144,9 +141,8 @@ class MediaHomeRepository(private val client: MediaClient,
 
 /**
  * Server order, shelf by shelf: consecutive shorts fold into one inline rail identified by
- * its first video, so a rail keeps its identity across refreshes and appended rails cannot
- * collide with a fixed id. Mix and Post containers appear only when the parse produced one,
- * which the home document never does — none are fabricated to fill the layout.
+ * its first video so rails keep identity across refreshes and appended rails cannot collide.
+ * Mix/Post containers appear only when the parse produced one — never fabricated.
  */
 internal fun homeFeed(items: List<MediaItem>): List<FeedItem> {
     val feed = ArrayList<FeedItem>()
@@ -201,8 +197,7 @@ class MediaSearchRepository(private val client: MediaClient,
         var page = loadSearch(query, context, direct, http = http).requireValue()
         var anonymousFallback = page.anonymousFallback
         if (direct == null) {
-            // A cold search, reset or unproven transition follows the existing recipe.
-            // Each response carries cumulative params for the next selected option.
+            // Cold search / reset / unproven transition: each response carries cumulative params for the next option.
             for (label in listOfNotNull(filters.uploaded.label(), filters.type.label())) {
                 val filter = page.filters.firstOrNull { it.matches(label) }
                     ?: throw MediaException(com.liskovsoft.youtubeapi.videoinfo.V2.RequestError(

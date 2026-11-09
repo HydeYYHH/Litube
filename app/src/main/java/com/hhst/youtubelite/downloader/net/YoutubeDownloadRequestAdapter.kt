@@ -26,9 +26,7 @@ enum class DownloadCookiePolicy {
     NONE,
 }
 
-/**
- * Downloads retain the core plan without persisting its credentials or reconstructing its profile.
- */
+/** Retains the core plan without persisting its credentials or reconstructing its profile. */
 data class YoutubeDownloadRequestPlan(
     val method: DownloadHttpMethod,
     val url: String,

@@ -23,9 +23,8 @@ import kotlinx.coroutines.CancellationException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Fills download metadata and selection during RESOLVE. Does not start the
- * transfer itself. Request plans are produced so transport can run later on an
- * independent HTTP client / working directory.
+ * Fills download metadata and selection during RESOLVE; does not start the transfer.
+ * Request plans are produced so transport can run later on an independent HTTP client.
  */
 class DownloadResolverImpl(
     private val coordinator: DownloadCoordinator,
@@ -109,8 +108,8 @@ class DownloadResolverImpl(
         val previous = sourcesOf(taskId, generation).firstOrNull { it.resourceIdentity == identity }
         val ok = recoverForbidden(taskId, generation)
         val snapshot = repository.transact { snapshot(taskId)?.takeIf { it.task.accepts(generation) } } ?: return null
-        // Strict identity match only: falling back to the first source could
-        // hand an audio refresh a video URL and splice foreign bytes.
+        // Strict identity match only: a first-source fallback could hand an audio
+        // refresh a video URL and splice foreign bytes.
         val next = sourcesOf(taskId, generation).firstOrNull { identity == null || it.resourceIdentity == identity }
             ?: previous?.let { old -> sourcesOf(taskId, generation).firstOrNull { it.assetKind == old.assetKind && it.componentKind == old.componentKind } }
             ?: return RecoveredSource(
@@ -169,8 +168,8 @@ class DownloadResolverImpl(
         if (!coordinator.reportResolved(task.id, generation, updates)) {
             return if (task.userCancelled) DownloadResolveOutcome.Cancelled else DownloadResolveOutcome.Stale
         }
-        // Serialize this check and cache publication with pause/resume transactions.
-        // The work above may suspend; an old result must not replace a newer plan.
+        // Serialize this check and cache publication with pause/resume transactions;
+        // an old suspended result must not replace a newer plan.
         val committed = repository.transact {
             if (getTask(task.id)?.accepts(generation) != true) return@transact false
             sources[task.id] = ResolvedSources(generation, resolvedSources)

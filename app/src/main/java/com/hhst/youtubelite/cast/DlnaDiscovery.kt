@@ -62,8 +62,8 @@ internal class RealDlnaEngine(private val context: Context, private val onNetwor
         )).describe(location)
             ?: throw DlnaRequestException("description", location, detail = "No AVTransport service in device description")
         targetHost = renderer.control.host
-        // A newly selected receiver may deliberately be on another interface. Only a change
-        // during an existing session should notify the controller and tear that session down.
+        // A newly selected receiver may deliberately be on another interface; only a
+        // change during an existing session should tear that session down.
         val connection = transport(notifyNetworkChange = false)
         return connection.cast(renderer, url, title, mimeType)
     }

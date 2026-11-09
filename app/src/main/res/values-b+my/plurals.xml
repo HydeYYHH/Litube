@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="other">နှင့် နောက်ထပ် %1$d လင့်များ</item>
+    </plurals>
+</resources>

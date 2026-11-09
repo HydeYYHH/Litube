@@ -63,7 +63,7 @@ fun ShortsScreen(state: ShortsUiState, onAction: (ShortsAction) -> Unit, modifie
                 }
             }
             ShortsContent.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                AppText("No Shorts available", color = Color.White, size = 16, line = 22)
+                AppText(stringResource(R.string.ui_no_shorts_available), color = Color.White, size = 16, line = 22)
             }
             is ShortsContent.Ready -> ShortsPager(content.page.items, state.currentItemId, onAction, videoContent, isVideoReady, playbackControls, state, onSwipeStart, onSwipeCancel)
         }
@@ -170,7 +170,7 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
             // Live pages only reveal decoder output, including neighbors during a swipe.
             if (!showArtwork) Box(cover)
             else com.hhst.youtubelite.ui.design.Artwork(item.artwork,
-                cover.semantics { contentDescription = "Play ${item.title}" }, contentScale = ContentScale.Fit)
+                cover.appDescription(R.string.a11y_play_title, item.title), contentScale = ContentScale.Fit)
         }
         Box(Modifier.matchParentSize().background(
             Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
@@ -184,15 +184,15 @@ private fun ShortPage(item: ShortItem, onAction: (ShortsAction) -> Unit, videoCo
         Column(Modifier.align(Alignment.BottomEnd).width(railWidth)
             .padding(end = 8.dp, bottom = minOf(76.dp, maxHeight / 5))
             .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            RailAction(AppIcon.Like, "Like ${item.title}", item.likes,
+            RailAction(AppIcon.Like, stringResource(R.string.ui_like_1_s , item.title), item.likes,
                 tinted = rating == com.hhst.youtubelite.watch.domain.VideoRating.Like, pending = ratingPending,
                 onClick = { onAction(ShortsAction.Like(item.id)) })
             Spacer(Modifier.height(12.dp))
-            RailAction(AppIcon.Comment, "Comments for ${item.title}", item.comments, onClick = {
+            RailAction(AppIcon.Comment, stringResource(R.string.ui_comments_for_1_s , item.title), item.comments, onClick = {
                 onAction(ShortsAction.OpenComments(item.id))
             })
             Spacer(Modifier.height(12.dp))
-            RailAction(AppIcon.Share, "Share ${item.title}", "Share", onClick = { onAction(ShortsAction.Share(item.id)) })
+            RailAction(AppIcon.Share, stringResource(R.string.ui_share_1_s , item.title), stringResource(R.string.share), onClick = { onAction(ShortsAction.Share(item.id)) })
         }
         Column(Modifier.align(Alignment.BottomStart).padding(start = 16.dp, end = railWidth + 8.dp, bottom = 16.dp)
             .heightIn(max = (maxHeight - 48.dp).coerceAtLeast(0.dp)).verticalScroll(rememberScrollState())) {

@@ -36,7 +36,6 @@ import com.hhst.youtubelite.ui.design.AppIcon
 import com.hhst.youtubelite.ui.design.AppText
 import com.hhst.youtubelite.ui.design.DesignTokens
 
-/** Playback, gestures, content preferences and data tools. */
 @Composable
 fun AdvancedScreen(
     preferences: Map<String, Boolean>,
@@ -179,7 +178,6 @@ private fun SponsorBlockToggles(preferences: Map<String, Boolean>, onToggle: (St
     }
 }
 
-/** Haptic slider binding supplied by the host activity. */
 class HapticsSettings(
     initial: Int,
     private val commit: (Int) -> Unit,

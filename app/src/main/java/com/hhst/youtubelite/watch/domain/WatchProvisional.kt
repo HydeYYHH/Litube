@@ -7,9 +7,9 @@ import com.hhst.youtubelite.playlist.domain.PlaylistEntry
 import com.hhst.youtubelite.search.domain.SearchResult
 
 /**
- * Presentation-only summary a tapped card hands to the Watch page: the fields the
- * source list already resolved. No tokens, no account state, no counts the card
- * never showed; unknown slots load independently with the page read.
+ * Presentation-only summary a tapped card hands to Watch: fields the source list
+ * already resolved. No tokens/account state/counts the card never showed; unknown
+ * slots load independently with the page read.
  */
 data class WatchProvisional(
     val videoId: String,

@@ -95,7 +95,6 @@ class CastManifestTest {
         assertFalse(mpd.contains("<S d=\"1000000\" t="))
     }
 
-
     private fun video() = Format(
         url = "https://example.com/v",
         itag = 137,

@@ -304,10 +304,9 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
     }
 
     /**
-     * Media bytes are fetched from CDN URLs that were already issued and carry no account
-     * credentials. A page-configuration refresh (experiment flags, player URL, MWEB/WEB config
-     * switch) therefore must not abort a read in flight; only a different signed-in account or a
-     * different network route does, because those can invalidate the issued URL or its audience.
+     * Media bytes come from already-issued CDN URLs with no account credentials; page-config
+     * refresh must not abort an in-flight read. Only a different signed-in account or network
+     * route does, because those can invalidate the issued URL or its audience.
      */
     fun isMediaCurrent(session: YoutubeWebSession): Boolean =
         mediaInvalidationReason(session) == null
@@ -413,9 +412,9 @@ class YoutubeSessionProvider(context: Context, private val http: OkHttpClient,
         const val ORIGIN = "https://www.youtube.com"
 
         /**
-         * Account, visitor, player URL and experiment configuration belong to the session, not to one
-         * video. Identity changes (cookies, UA, route, account index, browser configuration) and explicit
-         * recovery already refresh it earlier, so this is only the upper bound for an unchanged session.
+         * Account/visitor/player-URL/experiment config belong to the session, not one video.
+         * Identity changes and explicit recovery already refresh it; this is only the upper
+         * bound for an unchanged session.
          */
         private const val CONFIG_TTL_MS = 15 * 60_000L
 

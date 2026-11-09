@@ -64,8 +64,8 @@ class YoutubeLoadSpeedAndroidTest {
         val records = mutableListOf<Map<String, Any>>()
         val demand = PlaybackDemand(720, null, false, setOf("avc", "vp9", "vp09", "hvc", "hev", "av01"))
         val leadMs = args.getString("prepareLeadMs", "0").toLong()
-        // Stands in for the browser document: "session" captures configuration only, "full" also
-        // initializes, and "media" additionally warms the rendition heads in the playback cache.
+        // Stands in for the browser document: "session" configures only, "full" also
+        // initializes, "media" additionally warms rendition heads in the playback cache.
         val preload = args.getString("preload", "none")
         val preloader = com.hhst.youtubelite.shorts.data.ShortsMediaPreloader(
             instrumentation.targetContext, extractor, GlobalContext.get().get<PlayerDataSource>(),
@@ -77,7 +77,7 @@ class YoutubeLoadSpeedAndroidTest {
             for (id in ids) {
                 preloader.cancel()
                 com.hhst.youtubelite.player.datasource.PlaybackClaim.videoId = null
-                // Clear BEFORE warming. Clearing after it invalidates the very extraction under test.
+                // Clear BEFORE warming; clearing after invalidates the extraction under test.
                 extractor.invalidateStream(id)
                 preloadMs = 0L
                 prefetchedBytes = 0L
@@ -99,8 +99,8 @@ class YoutubeLoadSpeedAndroidTest {
                 }
                 val preloadEvents = diagnostics.since(preloadMark).map(::eventFields)
                 for (replay in 0..if (args.getString("replay", "on") == "off") 0 else 1) {
-                    // Stands in for "watch something else, then come back": a gap longer than the
-                    // stream TTL must re-resolve, so the reopen cost is what the user actually pays.
+                    // Stands in for "watch something else, then come back": a gap longer than
+                    // the stream TTL must re-resolve, so reopen cost is what the user pays.
                     if (replay == 1 && reopenGapMs > 0) Thread.sleep(reopenGapMs)
                     val mark = diagnostics.mark()
                     val started = SystemClock.elapsedRealtime()

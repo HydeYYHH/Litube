@@ -39,8 +39,7 @@ data class DownloadComponentSource(
 )
 
 /**
- * Byte-range HTTP. Pause/cancel must drop the current request while keeping
- * verified chunks.
+ * Byte-range HTTP. Pause/cancel must drop the current request while keeping verified chunks.
  */
 interface DownloadTransport {
     fun cancelInFlight(taskId: String)
@@ -82,8 +81,8 @@ sealed class MuxResult {
 }
 
 /**
- * Production implementation is WorkManager (API 26–33) / UIDT (API 34+) plus
- * a network-free FinalizeWorker. JVM tests may keep an in-process scheduler.
+ * Production is WorkManager (API 26–33) / UIDT (API 34+) plus a network-free FinalizeWorker;
+ * JVM tests may keep an in-process scheduler.
  */
 interface DownloadScheduler {
     suspend fun schedule(taskId: String)
@@ -108,10 +107,7 @@ data class PublishRequest(
     val source: File,
     val existingUri: String? = null,
     val existingPhase: PublishPhase = PublishPhase.PENDING,
-    /**
-     * Called as soon as the backend target exists, before any bytes are
-     * copied, so the target URI is durable and a crash cannot orphan it.
-     */
+    /** Called as soon as the backend target exists, before any bytes are copied, so a crash cannot orphan it. */
     val onTargetCreated: (suspend (String) -> Unit)? = null,
 )
 

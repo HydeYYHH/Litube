@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.playlist.presentation
 
+import com.hhst.youtubelite.R
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -60,7 +61,6 @@ class PlaylistViewModel(
     private var paginationLoop = false
     private var sessionKey: Long? = null
 
-    /** The batch action waiting for the full enumeration to finish. */
     private var pendingBatch: PendingBatch? = null
 
     private sealed interface PendingBatch { data class Queue(val shuffle: Boolean) : PendingBatch; data object Download : PendingBatch }
@@ -70,10 +70,7 @@ class PlaylistViewModel(
         if (scenario == PlaylistScenario.Content || scenario == PlaylistScenario.Empty) load()
     }
 
-    /**
-     * Playlists are account-scoped (Watch later, Liked videos, private lists): a moved
-     * generation invalidates the whole page, its overlays and the open save sheet.
-     */
+    /** Playlists are account-scoped: a moved generation invalidates the page, overlays and save sheet. */
     fun updateSession(value: Boolean, key: Long? = null) {
         val changed = key != null && sessionKey != null && sessionKey != key
         sessionKey = key
@@ -203,18 +200,14 @@ class PlaylistViewModel(
         }
     }
 
-    /**
-     * The host reports the verification screen finished with RESULT_OK. The read
-     * retries once with the current identity — never automatically on another
-     * failure, so no request loop can form.
-     */
+    /** Retries once after RESULT_OK; never auto-retries another failure, so no request loop. */
     fun verificationCompleted(challengeUrl: String? = state.value.verification?.challengeUrl) {
         if (challengeUrl == null || state.value.verification?.challengeUrl != challengeUrl) return
         state.update { it.copy(verification = null) }
         load()
     }
 
-    /** Appends one server page; a failure keeps the loaded rows and offers a retry. */
+    /** Failure keeps the loaded rows and offers a retry. */
     private fun loadNext() {
         val ready = state.value.content as? PlaylistContent.Ready ?: return
         val cursor = ready.page.nextKey ?: return
@@ -236,8 +229,8 @@ class PlaylistViewModel(
                     val existing = (current.content as? PlaylistContent.Ready)?.page ?: return@update current
                     current.copy(content = PlaylistContent.Ready(existing.copy(
                         entries = (existing.entries + page.entries).distinctBy { it.id },
-                        // Stop browsing a loop while keeping this page's entries. It does
-                        // not prove the full list was loaded; batch actions check below.
+                        // Stop browsing a loop while keeping this page's entries;
+                        // batch actions still require a full confirmed list.
                         nextKey = nextKey,
                     )), append = nextAppend)
                 }
@@ -250,16 +243,15 @@ class PlaylistViewModel(
     }
 
     /**
-     * Batch actions keep their full-playlist semantics: when entries remain unloaded, a
-     * bounded, cancellable enumeration completes the list first. The action runs on the
-     * complete list or fails honestly — never on a silently truncated prefix.
+     * Batch actions keep full-playlist semantics: if entries remain unloaded, a bounded
+     * cancellable enumeration completes the list first, then the action runs on the
+     * complete list or fails — never on a truncated prefix.
      */
     private fun runBatch(action: PendingBatch) {
         val ready = state.value.content as? PlaylistContent.Ready ?: return
         if (ready.page.entries.isEmpty()) return
         if (enumerationJob?.isActive == true) return
-        // Full enumeration owns paging until it finishes. A repository may finish
-        // a cancelled append late; its ensureActive checks reject that response.
+        // Enumeration owns paging; a late cancelled-append response is rejected by ensureActive.
         appendJob?.cancel()
         appendJob = null
         state.update { it.copy(append = AppendState.Idle) }
@@ -294,9 +286,8 @@ class PlaylistViewModel(
                     emptyPages = if (merged.size == entries.size) emptyPages + 1 else 0
                     entries = merged
                     val next = page.nextKey
-                    // Only a null server continuation proves enumeration ended.
-                    // A loop must leave the loaded page retryable and must never
-                    // execute a batch action on an unconfirmed prefix.
+                    // Only a null server continuation proves enumeration ended; a loop
+                    // must leave the page retryable and never run a batch on a prefix.
                     if (next != null && !seenCursors.add(next)) throw java.io.IOException("playlist_cursor_loop")
                     cursor = next
                     if (cursor != null && emptyPages >= MAX_EMPTY_APPENDS) throw java.io.IOException("playlist_no_progress")
@@ -304,8 +295,7 @@ class PlaylistViewModel(
                 currentCoroutineContext().ensureActive()
                 if (requestGeneration != generation) return@launch
                 markComplete(entries)
-                if (capped) notices.trySend(AppNotice.Message(
-                    "This playlist exceeds the ${PlaylistLimits.MAX_ENTRIES}-item limit; the action uses the first ${entries.size} entries."))
+                if (capped) notices.trySend(AppNotice.LocalizedMessage(R.string.playlist_action_entry_limit, listOf(PlaylistLimits.MAX_ENTRIES, entries.size)))
                 currentCoroutineContext().ensureActive()
                 execute(pendingBatch)
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -319,7 +309,7 @@ class PlaylistViewModel(
         }
     }
 
-    /** Enumeration finished: the loaded count is now the whole truth. */
+    /** Loaded count becomes the whole truth. */
     private fun markComplete(entries: List<PlaylistEntry>) {
         state.update { current ->
             val ready = (current.content as? PlaylistContent.Ready) ?: return@update current

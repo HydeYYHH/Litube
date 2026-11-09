@@ -19,9 +19,9 @@ import kotlinx.serialization.json.longOrNull
 
 /**
  * The diagnostics schema's single kotlinx.serialization entry point. Field maps
- * arrive as JSON-shaped trees (strings, numbers, booleans, maps, lists, null),
- * so they ride a value serializer instead of reflection. Defaults are always
- * written, matching the historical record shape the archive reader classifies.
+ * are JSON-shaped trees, so they ride a value serializer instead of reflection.
+ * Defaults are always written, matching the historical record shape the archive
+ * reader classifies.
  */
 internal object DiagnosticJson {
     val json: Json = Json { encodeDefaults = true; ignoreUnknownKeys = true }

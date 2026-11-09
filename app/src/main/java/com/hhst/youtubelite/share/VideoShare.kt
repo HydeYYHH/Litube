@@ -3,9 +3,9 @@ package com.hhst.youtubelite.share
 import android.content.Intent
 
 /**
- * The mobile web shares a single URL through `navigator.share`. Local fixture ids are
- * list identities, so they are mapped to the public Blender videos they stand in for;
- * strings that are already valid YouTube ids are used unchanged.
+ * The mobile web shares a single URL through `navigator.share`. Local fixture
+ * ids are list identities, so they map to the public Blender videos they stand
+ * in for; strings that are already valid YouTube ids are used unchanged.
  */
 object VideoShare {
     private val fixtureIds = mapOf(

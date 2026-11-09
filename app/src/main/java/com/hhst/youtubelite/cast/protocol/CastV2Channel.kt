@@ -27,19 +27,15 @@ import javax.net.ssl.X509TrustManager
 import org.json.JSONObject
 
 /**
- * One CASTV2 socket to one receiver: TLS to port 8009, length-prefixed [CastMessage] frames both
- * ways, plus the two transport-level namespaces every session needs - virtual connections
- * (`CONNECT`/`CLOSE`) and the PING/PONG heartbeat. Everything app-level (receiver control,
- * media) lives above this in [CastV2Session].
+ * One CASTV2 socket per receiver: TLS to port 8009, length-prefixed frames, virtual
+ * connections (`CONNECT`/`CLOSE`) and the PING/PONG heartbeat; app-level logic lives in
+ * [CastV2Session].
  *
- * **Threading.** [open] and every send are serialized on a single writer executor, so any public
- * method is safe from any thread (including main - no network ever runs on the caller). Inbound
- * messages are decoded on a dedicated reader thread and dispatched to the [Listener] *on that
- * reader thread* - listeners must not block and must post to main themselves if they touch UI.
+ * Threading: sends serialize on one writer executor (any-thread safe); inbound messages
+ * dispatch on the reader thread — listeners must not block and must post to main for UI.
  *
- * **Lifecycle.** Exactly one terminal callback fires per channel: `onError` (socket died,
- * heartbeat timeout, handshake failure) or `onClosed` (local [close]). Close-during-callback
- * races collapse into that single terminal event; late messages after it are dropped silently.
+ * Lifecycle: exactly one terminal callback per channel (`onError` or `onClosed`);
+ * messages arriving after it are dropped silently.
  */
 class CastV2Channel(
     private val host: String,
@@ -77,8 +73,7 @@ class CastV2Channel(
         this.diagnostics = diagnostics
     }
 
-    /** Single thread for connect + all writes: free write synchronization and ordering
-     *  (a send queued right after [open] runs strictly after the handshake). */
+    /** Single writer thread gives free write ordering: a send queued after [open] runs after the handshake. */
     private val writer: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "CastV2Writer").apply { isDaemon = true }
     }
@@ -94,7 +89,6 @@ class CastV2Channel(
     @Volatile
     private var closeDeadline: ScheduledFuture<*>? = null
 
-    /** Destinations that received CONNECT; CLOSE goes to each of them on teardown. */
     private val connectedDestinations = ConcurrentHashMap.newKeySet<String>()
 
     /** Terminal-state latch: set by exactly one of [fail]/[close]; gates callbacks + sends. */
@@ -162,8 +156,8 @@ class CastV2Channel(
             authenticator.authenticate(socket, inStream, outStream)
             diagnostics.phase("device_auth_succeeded")
             synchronized(transportLock) {
-                // Authentication can finish after a local close aborted the
-                // provisional transport. Never restart its reader or heartbeat.
+                // Auth can finish after a local close aborted the transport;
+                // never restart its reader or heartbeat.
                 if (terminated.get()) return
                 socket.soTimeout = 0
                 lastInboundMs = SystemClock.elapsedRealtime()
@@ -257,7 +251,7 @@ class CastV2Channel(
         }
     }
 
-    /** Reply to an inbound PING with PONG. Some receivers probe the sender. An inbound PONG only counts as traffic. */
+    /** PONG replies because some receivers probe the sender; an inbound PONG only counts as traffic. */
     private fun handleHeartbeat(message: CastMessage) {
         try {
             val payload = JSONObject(message.payloadUtf8 ?: "{}")
@@ -282,9 +276,9 @@ class CastV2Channel(
     }
 
     /**
-     * Close locally: best-effort CLOSE to every connected destination, then kill the socket and
-     * both threads. A separate deadline aborts a blocked write, including the CLOSE itself.
-     * Idempotent; `onClosed` fires once (unless `onError` already did).
+     * Close locally: best-effort CLOSE to connected destinations, then kill socket and threads;
+     * a separate deadline aborts a blocked write (including the CLOSE itself). Idempotent;
+     * `onClosed` fires once unless `onError` already did.
      */
     fun close() {
         if (!terminated.compareAndSet(false, true)) return

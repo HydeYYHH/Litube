@@ -56,9 +56,11 @@ internal class DlnaTransport(private val client: OkHttpClient) {
 
     suspend fun play(): Boolean { action("Play", "<Speed>1</Speed>"); return true }
 
-    /** SetURI/Play can acknowledge before opening the media (notably Kodi). Track duration
-     * may legally be zero/NOT_IMPLEMENTED; track URIs can be omitted or rewritten by TVs.
-     * Prefer a matching track, with stable PLAYING as the fallback for incomplete metadata. */
+    /**
+     * SetURI/Play can acknowledge before opening the media (notably Kodi). Track duration
+     * may be zero/NOT_IMPLEMENTED; track URIs can be omitted or rewritten by TVs.
+     * Prefer a matching track, with stable PLAYING as the incomplete-metadata fallback.
+     */
     suspend fun awaitMediaReady(url: String, timeoutMs: Long = 20_000) {
         var observed: DLNACast.PlaybackState? = null
         val ready = withTimeoutOrNull(timeoutMs) {
@@ -85,8 +87,8 @@ internal class DlnaTransport(private val client: OkHttpClient) {
     }
     suspend fun pause(): Boolean { action("Pause"); return true }
 
-    /** Some renderers accept Pause before a late media-open/seek callback resumes playback.
-     * Confirm a stable paused state and retry only while the renderer still reports PLAYING. */
+    /** Some renderers accept Pause before a late media-open/seek resumes playback.
+     * Confirm a stable paused state; retry only while still PLAYING. */
     suspend fun pauseAndConfirm(): Boolean = withTimeout(4_000) {
         pause()
         var lastRequest = System.nanoTime()
@@ -187,8 +189,8 @@ internal class DlnaTransport(private val client: OkHttpClient) {
             "$parameters</u:$name></s:Body></s:Envelope>"
         val request = Request.Builder().url(target.control)
             .header("SOAPAction", "\"${target.serviceType}#$name\"")
-            // Many embedded renderers close SOAP sockets without advertising it. Do not reuse
-            // a description/SetURI socket for Play (or replay a POST after a stale-socket EOF).
+            // Many embedded renderers close SOAP sockets without advertising it; do not
+            // reuse a description/SetURI socket for Play (or replay after a stale-socket EOF).
             .header("Connection", "close")
             .post(body.toRequestBody("text/xml; charset=utf-8".toMediaType())).build()
         val (status, bytes) = read(request, name)

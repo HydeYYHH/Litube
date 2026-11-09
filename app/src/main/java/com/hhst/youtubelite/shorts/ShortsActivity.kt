@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.shorts
 
+import com.hhst.youtubelite.ui.design.labelResource
 import com.hhst.youtubelite.comments.presentation.bindCommentNotices
 import android.content.Context
 import android.content.Intent
@@ -481,13 +482,12 @@ class ShortsActivity : ComponentActivity() {
                 if (fixtures) {
                     val actions = FeedMenuKind.Short.actions
                     MenuBottomSheet(
-                        items = actions.map { action -> MenuSheetItem(action.icon(), action.label) },
+                        items = actions.map { action -> MenuSheetItem(action.icon(), stringResource(action.labelResource)) },
                         onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
                         onSelect = { index -> shortsViewModel.onAction(ShortsAction.MenuSelected(actions[index])) },
-                        paneTitle = "Shorts actions",
+                        paneTitle = stringResource(R.string.ui_shorts_actions),
                     )
                 } else if (menuItemId != null) {
-                    // Rows carry the live player value; nothing here fakes state.
                     val rows = shortsMenuRows(state.details[menuItemId]?.description)
                     MenuBottomSheet(
                         items = rows.map { action ->
@@ -496,7 +496,7 @@ class ShortsActivity : ComponentActivity() {
                         },
                         onDismiss = { shortsViewModel.onAction(ShortsAction.CloseMenu) },
                         onSelect = { index -> onShortsMenuSelected(rows[index], menuItemId) },
-                        paneTitle = "Shorts actions",
+                        paneTitle = stringResource(R.string.ui_shorts_actions),
                     )
                 }
             }

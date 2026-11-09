@@ -68,7 +68,7 @@ class SharedInteractionAndroidTest {
     }
 
     @Test fun dismissalMovesTheSheetAndFadesBeforeRemovingIt() {
-        // With "remove animations" (animator scale 0) the sheet closes instantly; the mid-flight assertions only apply to the animated path.
+        // With "remove animations" (animator scale 0) the sheet closes instantly; mid-flight assertions only apply to the animated path.
         val motion = readMotionScale(compose.activity.contentResolver)
         var dismissed = 0
         compose.setContent {
@@ -132,7 +132,7 @@ class SharedInteractionAndroidTest {
         }
         assertCompact(6)
 
-        // A shorter viewport must keep the player clear and the remaining actions reachable.
+        // A shorter viewport must keep the player clear and remaining actions reachable.
         compose.runOnIdle { availableHeight = 160; rowCount = 20 }
         val viewport = compose.onNodeWithTag("menu-viewport").fetchSemanticsNode().boundsInRoot
         val sheet = compose.onNodeWithTag("video-menu").fetchSemanticsNode().boundsInRoot

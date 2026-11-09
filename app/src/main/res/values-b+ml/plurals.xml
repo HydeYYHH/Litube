@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">കൂടാതെ ഒരു ലിങ്ക് കൂടി</item>
+        <item quantity="other">കൂടാതെ %1$d ലിങ്കുകൾ കൂടി</item>
+    </plurals>
+</resources>

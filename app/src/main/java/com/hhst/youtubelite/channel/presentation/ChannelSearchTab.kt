@@ -72,7 +72,7 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
                         decorationBox = { field ->
                             Column {
                                 Box(Modifier.fillMaxWidth().padding(start = 2.dp, top = 1.dp, bottom = 4.dp)) {
-                                    if (query.isEmpty()) AppText("Search channel", size = 15, line = 20, color = DesignTokens.Secondary)
+                                    if (query.isEmpty()) AppText(stringResource(R.string.ui_search_channel), size = 15, line = 20, color = DesignTokens.Secondary)
                                     field()
                                 }
                                 Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF737373)))
@@ -91,17 +91,17 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
         }
         when (results) {
             is ChannelSection.Loading -> item {
-                AppText("Searching…", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-loading"), color = DesignTokens.Secondary)
+                AppText(stringResource(R.string.cast_searching), Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-loading"), color = DesignTokens.Secondary)
             }
             is ChannelSection.Failed -> item {
-                AppText("Search failed. Tap to retry.",
+                AppText(stringResource(R.string.ui_search_failed_tap_to_retry),
                     Modifier.fillMaxWidth().padding(24.dp).clip(RoundedCornerShape(8.dp))
                         .clickable { onAction(ChannelAction.RetrySearch) }.padding(4.dp).testTag("channel-search-failed"),
                     color = DesignTokens.Secondary)
             }
             else -> {
                 if (videos.isEmpty() && playlists.isEmpty()) item {
-                    AppText("No results found", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
+                    AppText(stringResource(R.string.ui_no_results_found), Modifier.fillMaxWidth().padding(24.dp).testTag("channel-search-empty"), color = DesignTokens.Secondary)
                 }
                 items(videos, key = { it.id }, contentType = { "video" }) { video -> ChannelSearchVideoRow(video, page.profile.name, width, height, onAction) }
             }
@@ -110,9 +110,9 @@ internal fun ChannelSearchTab(page: ChannelPage, width: Float, height: Float, li
             Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-search-append"), contentAlignment = Alignment.Center) {
                 when (append) {
                     com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                        AppText("Loading…", color = DesignTokens.Secondary)
+                        AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                     com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                        AppText("Couldn't load more results. Tap to retry.",
+                        AppText(stringResource(R.string.ui_couldn_t_load_more_results_tap_to_retry),
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadSearchNext) }.padding(8.dp),
                             color = DesignTokens.Secondary)
                     else -> Unit

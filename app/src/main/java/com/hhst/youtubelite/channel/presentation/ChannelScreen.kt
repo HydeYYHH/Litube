@@ -1,4 +1,6 @@
 package com.hhst.youtubelite.channel.presentation
+import androidx.compose.ui.res.pluralStringResource
+import com.hhst.youtubelite.ui.design.labelResource
 import com.hhst.youtubelite.ui.design.CollapsingAppBar
 import com.hhst.youtubelite.ui.design.rememberAppBarCollapseState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -132,8 +134,8 @@ fun ChannelScreen(
             }
             var previousTab by rememberSaveable { mutableStateOf(state.selectedTab) }
             // A tab keeps its exact index/offset once visited; only a FIRST visit
-            // inherits the outgoing tab's header collapse. The channel is fixed per
-            // activity instance, so these sets never leak across channels.
+            // inherits the outgoing tab's header collapse. The channel is fixed
+            // per activity instance, so these sets never leak across channels.
             val visitedTabs = rememberSaveable(
                 saver = androidx.compose.runtime.saveable.listSaver<MutableList<ChannelTab>, ChannelTab>(
                     save = { it.toList() }, restore = { it.toMutableList() }),
@@ -237,8 +239,8 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
     subscribePending: Boolean = false,
 ) {
     val viewport = rememberUpdatedState(width)
-    // "Last video added" only exists when the source carries update dates; otherwise the
-    // control would present server order as a sort it cannot perform.
+    // "Last video added" only exists when the source carries update dates;
+    // otherwise the control would present server order as a sort it cannot perform.
     val rows = (playlists as? ChannelSection.Ready)?.value.orEmpty()
     val canSortByUpdate = remember(rows) { rows.any { it.updatedDays != null } }
     val sorted = remember(rows, sort) {
@@ -251,7 +253,7 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
         if (canSortByUpdate) item {
             val fieldHeight = maxOf(50.dp, with(androidx.compose.ui.platform.LocalDensity.current) { 14.sp.toDp() } + 28.dp)
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp).horizontalScroll(rememberScrollState())) {
-                SelectField("channel-playlist-sort", sort, ChannelPlaylistSort.entries, { it.label }, 176f, fieldHeight) {
+                SelectField("channel-playlist-sort", sort, ChannelPlaylistSort.entries, { stringResource(it.labelResource) }, 176f, fieldHeight) {
                     onAction(ChannelAction.SortPlaylists(it))
                 }
                 Spacer(Modifier.height(1.dp))
@@ -261,7 +263,7 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
         when (playlists) {
             is ChannelSection.Ready -> {
                 if (rows.isEmpty()) item {
-                    AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+                    AppText(stringResource(R.string.ui_this_channel_has_no_playlists), Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
                 }
                 items(sorted, key = { it.id }, contentType = { "playlist" }) { playlist ->
                     com.hhst.youtubelite.playlist.presentation.ChannelPlaylistRow(playlist,
@@ -270,7 +272,7 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
                 }
             }
             ChannelSection.Empty -> item {
-                AppText("This channel has no playlists", Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
+                AppText(stringResource(R.string.ui_this_channel_has_no_playlists), Modifier.fillMaxWidth().padding(24.dp).testTag("channel-playlists-empty"), color = DesignTokens.Secondary)
             }
             else -> item { ChannelTabStatus(ChannelTab.Playlists, playlists, onAction) }
         }
@@ -278,9 +280,9 @@ private fun ChannelPlaylistsTab(page: ChannelPage, width: Float, height: Float, 
             Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-playlists-append"), contentAlignment = Alignment.Center) {
                 when (append) {
                     com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                        AppText("Loading…", color = DesignTokens.Secondary)
+                        AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                     com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                        AppText("Couldn't load more playlists. Tap to retry.",
+                        AppText(stringResource(R.string.ui_couldn_t_load_more_playlists_tap_to_retry),
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadPlaylistsNext) }.padding(8.dp),
                             color = DesignTokens.Secondary)
                     else -> Unit
@@ -298,12 +300,12 @@ private fun ChannelTabStatus(tab: ChannelTab, section: ChannelSection<*>, onActi
         contentAlignment = Alignment.Center) {
         if (section is ChannelSection.Failed) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                AppText("Couldn't load this tab.", color = DesignTokens.Secondary)
+                AppText(stringResource(R.string.ui_couldn_t_load_this_tab), color = DesignTokens.Secondary)
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.clip(RoundedCornerShape(8.dp)).background(DesignTokens.Surface)
                     .clickable(role = Role.Button) { onAction(ChannelAction.RetrySection(tab)) }
                     .testTag("channel-$key-retry").padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    AppText("Retry", weight = FontWeight.Medium)
+                    AppText(stringResource(R.string.retry), weight = FontWeight.Medium)
                 }
             }
         } else CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 2.5.dp, color = DesignTokens.Secondary)
@@ -403,7 +405,7 @@ internal fun ChannelTabBar(selected: ChannelTab, onAction: (ChannelAction) -> Un
                         }.testTag("channel-tab-${tab.name}").semantics { this.selected = isSelected }
                         .clickable(role = Role.Tab) { onAction(ChannelAction.SelectTab(tab)) },
                         contentAlignment = Alignment.Center) {
-                        AppText(tab.label, size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,
+                        AppText(stringResource(tab.labelResource), size = 16, line = 22, weight = FontWeight.Medium, maxLines = 1,
                             color = if (isSelected) DesignTokens.Ink else DesignTokens.Secondary)
                     }
                     Spacer(Modifier.width(ChannelLayout.TabsGap.dp))
@@ -522,9 +524,9 @@ private fun ChannelVideosTab(
                 Box(Modifier.fillMaxWidth().padding(16.dp).testTag("channel-videos-append"), contentAlignment = Alignment.Center) {
                     when (append) {
                         com.hhst.youtubelite.home.domain.AppendState.Loading ->
-                            AppText("Loading…", color = DesignTokens.Secondary)
+                            AppText(stringResource(R.string.ui_loading), color = DesignTokens.Secondary)
                         com.hhst.youtubelite.home.domain.AppendState.Failed ->
-                            AppText("Couldn't load more videos. Tap to retry.",
+                            AppText(stringResource(R.string.ui_couldn_t_load_more_videos_tap_to_retry),
                                 Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction(ChannelAction.LoadVideosNext) }.padding(8.dp),
                                 color = DesignTokens.Secondary)
                         else -> Unit
@@ -702,7 +704,7 @@ private fun ChannelIdentity(page: ChannelPage, width: Float) {
 private fun ChannelName(name: String, width: Float) {
     val size = ChannelLayout.nameFontSize(width)
     // Barlow Semi Condensed SemiBold (SIL OFL 1.1) ships as a static cut: no
-    // variation settings, and no width-axis squeeze carried over from the old font.
+    // variation settings, no width-axis squeeze from the old font.
     val family = remember(size) { FontFamily(Font(R.font.barlow_semicondensed, FontWeight.SemiBold)) }
     BasicText(name, Modifier.fillMaxWidth().testTag("channel-name"),
         style = DesignTokens.text(size.toInt(), ChannelLayout.nameLineHeight(width).toInt(), FontWeight.SemiBold).copy(fontFamily = family),
@@ -763,7 +765,7 @@ private fun ChannelLinks(profile: ChannelProfile, width: Float, onAction: (Chann
         val extra = profile.links.size - 1
         if (extra > 0) {
             Spacer(Modifier.width(4.dp))
-            AppText("and $extra more link" + if (extra > 1) "s" else "",
+            AppText(pluralStringResource(R.plurals.channel_more_links, extra, extra),
                 size = fontSize, line = lineHeight, weight = FontWeight.Medium, maxLines = 1)
         }
     }
@@ -796,7 +798,7 @@ private fun ChannelSubscribe(wide: Boolean, onAction: (ChannelAction) -> Unit, s
 private fun ChannelNoVideos() {
     Column(Modifier.fillMaxWidth().testTag("channel-empty").padding(top = 48.dp, start = 24.dp, end = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
-        AppText("This channel has no videos.", color = DesignTokens.Secondary, align = TextAlign.Center)
+        AppText(stringResource(R.string.ui_this_channel_has_no_videos), color = DesignTokens.Secondary, align = TextAlign.Center)
     }
 }
 
@@ -845,12 +847,12 @@ private fun ChannelFailed(onAction: (ChannelAction) -> Unit) {
             .heightIn(min = maxHeight).padding(24.dp).testTag("channel-error"),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center) {
-            AppText("Something went wrong", size = 20, line = 28, weight = FontWeight.Bold)
-            AppText("Please try again.", Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
+            AppText(stringResource(R.string.ui_something_went_wrong), size = 20, line = 28, weight = FontWeight.Bold)
+            AppText(stringResource(R.string.ui_please_try_again), Modifier.padding(top = 8.dp, bottom = 20.dp), color = DesignTokens.Secondary)
             Box(Modifier.clip(CircleShape).background(DesignTokens.Surface)
                 .clickable(role = Role.Button) { onAction(ChannelAction.Retry) }
                 .padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-                AppText("Retry", weight = FontWeight.Medium)
+                AppText(stringResource(R.string.retry), weight = FontWeight.Medium)
             }
         }
     }

@@ -31,9 +31,9 @@ import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 /**
- * API 31+ auto-PiP: WatchActivity.setPictureInPictureParams(setAutoEnterEnabled) must stay
- * off while DownloadActivity / sheet / share trampolines hold [PipAutoEnter.suppress], then
- * restore from [PreferenceKeys.ENABLE_PIP]. Player eligibility is applied through the real
+ * API 31+ auto-PiP: setAutoEnterEnabled must stay off while DownloadActivity /
+ * sheet / share trampolines hold [PipAutoEnter.suppress], then restore from
+ * [PreferenceKeys.ENABLE_PIP]. Player eligibility is applied through the real
  * [PipAutoEnter] host (no live media stream).
  */
 @RunWith(AndroidJUnit4::class)
@@ -165,9 +165,9 @@ class DownloadPipAutoEnterAndroidTest {
     }
 
     /**
-     * Prefer the live [PictureInPictureParams] getter. Some API 33 emulator
-     * images do not echo [PictureInPictureParams.isAutoEnterEnabled]; then the
-     * successful [Activity.setPictureInPictureParams] request is the proof.
+     * Prefer the live [PictureInPictureParams] getter: some API 33 emulator
+     * images do not echo [PictureInPictureParams.isAutoEnterEnabled], and then
+     * the successful [Activity.setPictureInPictureParams] request is the proof.
      */
     private fun autoEnterOn(activity: Activity): Boolean {
         if (PipAutoEnter.isAutoEnterEnabled(activity)) return true

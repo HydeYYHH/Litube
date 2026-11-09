@@ -4,12 +4,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Pure gesture math for the player surface (no Android deps, fully testable).
- *
- * Zone model:
- * - left 35% → brightness, right 35% → volume, center → fullscreen swipe
- * - horizontal drag anywhere → seek scrub (±120 s full-width)
- * - double-tap thirds → −10 s / play-pause / +10 s
+ * Pure gesture math for the player surface (no Android deps).
+ * Zone model: left 35% brightness, right 35% volume, center fullscreen swipe;
+ * horizontal drag seek scrub (±120 s full-width); double-tap thirds −10/play-pause/+10.
  */
 object GestureMath {
 
@@ -23,9 +20,8 @@ object GestureMath {
     const val DOUBLE_TAP_SEEK_MS = 10_000L
 
     /**
-     * Minimal vertical velocity estimate (px/s, sign follows y-down). Only the
-     * samples inside [windowMs] before the last point count, so a slow hold
-     * before release cannot masquerade as a fling.
+     * Minimal vertical velocity (px/s, y-down). Only samples inside [windowMs]
+     * before the last point count, so a slow hold before release is not a fling.
      */
     class VelocityTracker(private val windowMs: Long = 100L) {
         private val times = LongArray(16)
@@ -48,7 +44,7 @@ object GestureMath {
             count++
         }
 
-        /** Signed px/s over the trailing window; 0 when no movement is sampled. */
+        /** Signed px/s over the trailing window; 0 when no movement sampled. */
         fun velocityY(): Float {
             if (count < 2) return 0f
             val lastTime = times[count - 1]
@@ -61,12 +57,9 @@ object GestureMath {
     }
 
     /**
-     * Suppresses the tap that follows a zoom or long-press release. The tap
-     * detector and the drag tracker are sibling pointerInput handlers and the
-     * tap side sees the up event first, so a stationary hold cannot cancel it
-     * by consuming events — the tap fires shortly after release. Must be
-     * longer than the double-tap window the tap detector waits out. Also used
-     * by the queue sheet's drag-release tap guard.
+     * Suppresses the tap after zoom/long-press release: sibling pointerInput
+     * handlers see up on the tap side first, so a hold cannot cancel via
+     * consumption. Must exceed the double-tap wait window. Also guards queue-sheet drag-release taps.
      */
     const val TAP_SUPPRESS_MS = 400L
 
@@ -100,7 +93,7 @@ object GestureMath {
         return -dy / height * VOLUME_FACTOR
     }
 
-    /** Chooses the drag mode once the touch slop is exceeded. */
+    /** Chooses drag mode once touch slop is exceeded. */
     fun resolveDragMode(
         dx: Float,
         dy: Float,

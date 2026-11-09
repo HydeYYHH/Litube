@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.watch.chat
 
+import com.hhst.youtubelite.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hhst.youtubelite.data.media.MediaClient
@@ -275,7 +276,7 @@ class LiveChatViewModel(
         if (!state.canSend) return
         val params = sendParams ?: return
         if (text.length > MAX_MESSAGE_LENGTH) {
-            notices.trySend(AppNotice.Message("Messages are limited to $MAX_MESSAGE_LENGTH characters."))
+            notices.trySend(AppNotice.LocalizedMessage(R.string.chat_message_character_limit, listOf(MAX_MESSAGE_LENGTH)))
             return
         }
         val gateway = gateway ?: return

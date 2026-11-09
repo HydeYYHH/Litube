@@ -26,10 +26,9 @@ private fun SubtitleStyle.Background.alpha(): Float = when (this) {
 }
 
 /**
- * Subtitle cue overlay: styled text, placed by the caller via
- * [SubtitleStyle.verticalBias] / [SubtitleStyle.horizontal].
- * Each cue line hugs its own background; the column is width-constrained by
- * the caller so long lines wrap instead of running off-screen.
+ * Placed by the caller via [SubtitleStyle.verticalBias] / [SubtitleStyle.horizontal].
+ * The caller width-constrains the column so long lines wrap instead of running
+ * off-screen; each cue line hugs its own background.
  */
 @Composable
 fun SubtitleOverlay(

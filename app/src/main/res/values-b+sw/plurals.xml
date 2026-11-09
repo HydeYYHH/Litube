@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="channel_more_links">
+        <item quantity="one">na kiungo %1$d zaidi</item>
+        <item quantity="other">na viungo %1$d zaidi</item>
+    </plurals>
+</resources>

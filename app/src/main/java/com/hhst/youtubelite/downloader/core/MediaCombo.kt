@@ -6,10 +6,7 @@ import androidx.media3.common.MimeTypes
 
 /**
  * Media3 MP4/M4A combo matrix for the downloader mux path.
- *
- * [Status.ENABLED] means Mp4Muxer lists the MIME as muxable and this tree proved
- * extract and/or remux. [Status.GATED] means the muxer claims support but extract
- * /mux/playback has not yet been proven on a representative sample.
+ * ENABLED = muxable and proven extract/remux; GATED = muxer claims support but unproven.
  */
 object MediaCombo {
 
@@ -26,7 +23,7 @@ object MediaCombo {
         // Minimum acceptance combo (itag 18 / 137+140).
         Entry("MP4", MimeTypes.VIDEO_H264, MimeTypes.AUDIO_AAC,
             if (provenAvcAac) Status.ENABLED else Status.GATED),
-        // Audio-only MP4 (m4a) via Mp4Muxer AAC track.
+        // Audio-only m4a via Mp4Muxer AAC track.
         Entry("M4A", null, MimeTypes.AUDIO_AAC,
             if (provenAacM4a) Status.ENABLED else Status.GATED),
         Entry("MP4", MimeTypes.VIDEO_H265, MimeTypes.AUDIO_AAC, Status.GATED),
